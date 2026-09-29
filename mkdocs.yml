@@ -1,0 +1,50 @@
+site_name: notefeed
+site_description: Post markdown notes over HTTP, read them back as RSS.
+site_url: https://marceltov.github.io/notefeed/
+repo_url: https://github.com/Marceltov/notefeed
+repo_name: Marceltov/notefeed
+edit_uri: edit/main/docs/
+
+# docs/superpowers/ holds local working notes (gitignored); never publish them.
+exclude_docs: |
+  superpowers/
+
+theme:
+  name: material
+  font:
+    text: Atkinson Hyperlegible Next
+    code: Atkinson Hyperlegible Mono
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+  features:
+    - content.code.copy
+    - navigation.footer
+    - search.highlight
+
+extra_css:
+  - stylesheets/extra.css
+
+markdown_extensions:
+  - admonition
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.highlight
+  - pymdownx.superfences
+  - pymdownx.details
+
+nav:
+  - Home: index.md

@@ -8,3 +8,7 @@ docs
 *.md
 .env*
 *.tsbuildinfo
+mkdocs.yml
+requirements-docs.txt
+.venv-docs
+site
