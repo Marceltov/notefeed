@@ -153,3 +153,14 @@ describe("bodyAfterTitle", () => {
     expect(bodyAfterTitle("intro\n# Heading\nx")).toBe("intro\n# Heading\nx");
   });
 });
+
+describe("extractTitle and bodyAfterTitle skip fenced code", () => {
+  const md = "Backup done\n\n```sh\n# run this\n```";
+  test("title ignores # inside a fence", () => {
+    expect(extractTitle(md)).toBe("Backup done");
+    expect(extractTitle("~~~\n# no\n~~~\n# Real")).toBe("Real");
+  });
+  test("body keeps the fence", () => {
+    expect(bodyAfterTitle(md)).toBe("```sh\n# run this\n```");
+  });
+});

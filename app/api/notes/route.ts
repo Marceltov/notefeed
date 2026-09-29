@@ -18,7 +18,12 @@ export async function POST(req: Request) {
   // ponytail: reads the whole body before the size check when there's no Content-Length; only token holders get here.
   const bytes = await req.arrayBuffer();
   if (bytes.byteLength > MAX_BYTES) return error(413, "note exceeds 100 KB");
-  const text = new TextDecoder("utf-8", { ignoreBOM: true }).decode(bytes);
+  let text: string;
+  try {
+    text = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(bytes);
+  } catch {
+    return error(400, "body must be UTF-8");
+  }
 
   let markdown = text;
   if (isJson) {

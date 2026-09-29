@@ -78,3 +78,9 @@ test("keeps a leading BOM byte-for-byte", async () => {
   const { id } = await res.json();
   expect(await readFile(join(dir, `${id}.md`), "utf8")).toBe("﻿# Bom\r\n");
 });
+
+test("400 for a body that is not UTF-8, and nothing written", async () => {
+  const latin1 = new Uint8Array([0x23, 0x20, 0x43, 0x61, 0x66, 0xe9]); // "# Café" in Latin-1
+  expect((await post(latin1, { "content-type": "text/plain" })).status).toBe(400);
+  expect(await readdir(dir)).toEqual([]);
+});

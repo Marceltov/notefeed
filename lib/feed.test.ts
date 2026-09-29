@@ -38,3 +38,12 @@ test("links are absolute", () => {
 test("pubDate is RFC 822", () => {
   expect(xml).toContain("<pubDate>Tue, 29 Sep 2026 14:05:12 GMT</pubDate>");
 });
+
+test("strips XML-forbidden control characters", () => {
+  const out = renderFeed(
+    [{ id: "20260929T140512Z-red", title: "\x1b[31mred", markdown: "\x1b[31mred\x1b[0m\ttab\r\nok", createdAt: new Date() }],
+    { title: "t", baseUrl: "https://x.test" },
+  );
+  expect(out).not.toMatch(/[\x00-\x08\x0B\x0C\x0E-\x1F￾￿]/);
+  expect(out).toContain("[31mred[0m\ttab\r\nok");
+});

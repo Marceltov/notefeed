@@ -1,11 +1,15 @@
 // RSS 2.0, written by hand. Descriptions carry the raw markdown in CDATA.
 import type { Note } from "./notes";
 
+// XML 1.0 forbids most C0 controls (e.g. ANSI color codes from scripts); one would break the whole feed.
+// Stripped on output only — the .md file keeps the original bytes.
+const xmlSafe = (s: string) => s.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\uFFFE\uFFFF]/g, "");
+
 const escapeXml = (s: string) =>
-  s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&apos;" })[c]!);
+  xmlSafe(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&apos;" })[c]!);
 
 // "]]>" would end the section early; split it across two CDATA sections.
-const cdata = (s: string) => `<![CDATA[${s.replaceAll("]]>", "]]]]><![CDATA[>")}]]>`;
+const cdata = (s: string) => `<![CDATA[${xmlSafe(s).replaceAll("]]>", "]]]]><![CDATA[>")}]]>`;
 
 export function renderFeed(notes: Note[], opts: { title: string; baseUrl: string }): string {
   const items = notes.map((n) => {

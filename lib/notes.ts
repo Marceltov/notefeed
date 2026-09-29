@@ -38,8 +38,8 @@ export async function createNote(markdown: string, now = new Date()): Promise<No
   await mkdir(/*turbopackIgnore: true*/ dir, { recursive: true });
   const base = `${idStamp(now)}-${slugify(extractTitle(markdown))}`;
   const tmp = join(dir, `.${randomBytes(6).toString("hex")}.tmp`);
-  await writeFile(/*turbopackIgnore: true*/ tmp, markdown);
   try {
+    await writeFile(/*turbopackIgnore: true*/ tmp, markdown);
     // link() fails with EEXIST instead of overwriting, so the final name appears atomically and exclusively.
     for (let n = 1; ; n++) {
       const id = n === 1 ? base : `${base}-${n}`;

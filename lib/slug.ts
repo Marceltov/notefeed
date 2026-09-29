@@ -1,9 +1,22 @@
 // Pure helpers shared by the server (lib/notes.ts) and the compose box preview.
 
+const lines = (markdown: string) => markdown.replace(/^﻿/, "").split(/\r?\n/);
+
+// Index of the first `# ` heading outside ``` / ~~~ fences (a `# comment` in a shell snippet is not a title), or -1.
+function headingIndex(ls: string[]): number {
+  let fence = false;
+  for (let i = 0; i < ls.length; i++) {
+    if (/^\s*(```|~~~)/.test(ls[i])) fence = !fence;
+    else if (!fence && /^#\s+/.test(ls[i])) return i;
+  }
+  return -1;
+}
+
 export function extractTitle(markdown: string): string {
-  const lines = markdown.replace(/^﻿/, "").split(/\r?\n/);
-  const heading = lines.find((l) => /^#\s+/.test(l));
-  const line = heading ?? lines.find((l) => l.trim() !== "") ?? "";
+  const ls = lines(markdown);
+  const h = headingIndex(ls);
+  const heading = h === -1 ? undefined : ls[h];
+  const line = heading ?? ls.find((l) => l.trim() !== "") ?? "";
   return line
     .replace(/^\s*(?:(?:#{1,6}|[>*+-]|\d+\.)\s*)+/, "")
     .replace(/[*_`]/g, "")
@@ -30,9 +43,10 @@ export function idStamp(now: Date): string {
 
 /** The note without the line its title came from, so lists don't repeat the title. */
 export function bodyAfterTitle(markdown: string): string {
-  const lines = markdown.replace(/^﻿/, "").split(/\r?\n/);
-  const first = lines.findIndex((l) => l.trim() !== "");
+  const ls = lines(markdown);
+  const first = ls.findIndex((l) => l.trim() !== "");
   if (first === -1) return "";
-  const titleIsFirst = /^#\s+/.test(lines[first]) || !lines.some((l) => /^#\s+/.test(l));
-  return titleIsFirst ? lines.slice(first + 1).join("\n").trim() : markdown.trim();
+  const h = headingIndex(ls);
+  const titleIsFirst = h === first || h === -1;
+  return titleIsFirst ? ls.slice(first + 1).join("\n").trim() : markdown.trim();
 }
