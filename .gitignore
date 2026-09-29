@@ -44,3 +44,6 @@ next-env.d.ts
 /.superpowers/
 /.playwright-mcp/
 !.env.example
+
+# Superpowers specs/plans are local working notes; decisions are recorded as ADRs (/ccp:ship-pr).
+/docs/superpowers/
