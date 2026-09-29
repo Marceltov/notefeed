@@ -13,6 +13,7 @@ export class EmptyNoteError extends Error {}
 
 const ID_RE = /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z-[a-z0-9-]+$/;
 
+// DATA_DIR is only known at runtime; turbopackIgnore stops the build from tracing the whole repo.
 const dataDir = () => process.env.DATA_DIR || "/data";
 
 export function isValidId(id: string): boolean {
@@ -34,30 +35,30 @@ export async function createNote(markdown: string, now = new Date()): Promise<No
   if (Buffer.byteLength(markdown, "utf8") > MAX_BYTES) throw new NoteTooLargeError("Note exceeds 100 KB");
 
   const dir = dataDir();
-  await mkdir(dir, { recursive: true });
+  await mkdir(/*turbopackIgnore: true*/ dir, { recursive: true });
   const base = `${idStamp(now)}-${slugify(extractTitle(markdown))}`;
   const tmp = join(dir, `.${randomBytes(6).toString("hex")}.tmp`);
-  await writeFile(tmp, markdown);
+  await writeFile(/*turbopackIgnore: true*/ tmp, markdown);
   try {
     // link() fails with EEXIST instead of overwriting, so the final name appears atomically and exclusively.
     for (let n = 1; ; n++) {
       const id = n === 1 ? base : `${base}-${n}`;
       try {
-        await link(tmp, join(dir, `${id}.md`));
+        await link(/*turbopackIgnore: true*/ tmp, join(dir, `${id}.md`));
         return toNote(id, markdown);
       } catch (e) {
         if ((e as NodeJS.ErrnoException).code !== "EEXIST") throw e;
       }
     }
   } finally {
-    await unlink(tmp).catch(() => {});
+    await unlink(/*turbopackIgnore: true*/ tmp).catch(() => {});
   }
 }
 
 export async function listNotes(limit = 50): Promise<Note[]> {
   let files: string[];
   try {
-    files = await readdir(dataDir());
+    files = await readdir(/*turbopackIgnore: true*/ dataDir());
   } catch (e) {
     if ((e as NodeJS.ErrnoException).code === "ENOENT") return [];
     throw e;
@@ -68,13 +69,13 @@ export async function listNotes(limit = 50): Promise<Note[]> {
     .sort()
     .reverse()
     .slice(0, limit);
-  return Promise.all(ids.map(async (id) => toNote(id, await readFile(join(dataDir(), `${id}.md`), "utf8"))));
+  return Promise.all(ids.map(async (id) => toNote(id, await readFile(/*turbopackIgnore: true*/ join(dataDir(), `${id}.md`), "utf8"))));
 }
 
 export async function getNote(id: string): Promise<Note | null> {
   if (!isValidId(id)) return null;
   try {
-    return toNote(id, await readFile(join(dataDir(), `${id}.md`), "utf8"));
+    return toNote(id, await readFile(/*turbopackIgnore: true*/ join(dataDir(), `${id}.md`), "utf8"));
   } catch (e) {
     if ((e as NodeJS.ErrnoException).code === "ENOENT") return null;
     throw e;

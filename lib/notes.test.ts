@@ -10,7 +10,7 @@ import {
   isValidId,
   listNotes,
 } from "./notes";
-import { extractTitle, idStamp, slugify } from "./slug";
+import { bodyAfterTitle, extractTitle, idStamp, slugify } from "./slug";
 
 let dir: string;
 beforeEach(async () => {
@@ -138,5 +138,18 @@ describe("getNote", () => {
     const note = await getNote(created.id);
     expect(note?.markdown).toBe("# Hi\nthere");
     expect(note?.title).toBe("Hi");
+  });
+});
+
+describe("bodyAfterTitle", () => {
+  test("drops the heading used as title", () => {
+    expect(bodyAfterTitle("# Backup finished\nnas-01 ok")).toBe("nas-01 ok");
+  });
+  test("drops the first line when it was the title", () => {
+    expect(bodyAfterTitle("\n\nCert renewed\nmore")).toBe("more");
+    expect(bodyAfterTitle("Cert renewed")).toBe("");
+  });
+  test("keeps everything when the title heading is further down", () => {
+    expect(bodyAfterTitle("intro\n# Heading\nx")).toBe("intro\n# Heading\nx");
   });
 });

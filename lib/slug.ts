@@ -27,3 +27,12 @@ export function slugify(title: string): string {
 export function idStamp(now: Date): string {
   return now.toISOString().replace(/[-:]/g, "").replace(/\.\d+Z$/, "Z");
 }
+
+/** The note without the line its title came from, so lists don't repeat the title. */
+export function bodyAfterTitle(markdown: string): string {
+  const lines = markdown.replace(/^﻿/, "").split(/\r?\n/);
+  const first = lines.findIndex((l) => l.trim() !== "");
+  if (first === -1) return "";
+  const titleIsFirst = /^#\s+/.test(lines[first]) || !lines.some((l) => /^#\s+/.test(l));
+  return titleIsFirst ? lines.slice(first + 1).join("\n").trim() : markdown.trim();
+}
