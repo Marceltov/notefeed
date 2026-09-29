@@ -1,0 +1,25 @@
+import { afterEach, expect, test } from "vitest";
+import { publicUrl } from "./url";
+
+afterEach(() => {
+  delete process.env.PUBLIC_URL;
+});
+
+test("PUBLIC_URL wins, without trailing slash", () => {
+  process.env.PUBLIC_URL = "https://notes.example/";
+  expect(publicUrl(new Headers({ host: "x" }))).toBe("https://notes.example");
+});
+
+test("forwarded headers come next", () => {
+  const h = new Headers({ "x-forwarded-proto": "https", "x-forwarded-host": "notes.lan, proxy", host: "internal:3000" });
+  expect(publicUrl(h)).toBe("https://notes.lan");
+});
+
+test("falls back to Host over http", () => {
+  expect(publicUrl(new Headers({ host: "localhost:3000" }))).toBe("http://localhost:3000");
+});
+
+test("empty PUBLIC_URL counts as unset", () => {
+  process.env.PUBLIC_URL = "";
+  expect(publicUrl(new Headers({ host: "localhost:3000" }))).toBe("http://localhost:3000");
+});
