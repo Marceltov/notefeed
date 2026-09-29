@@ -1,0 +1,17 @@
+services:
+  notefeed:
+    image: ghcr.io/marceltov/notefeed:latest
+    build: .
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      NOTEFEED_TOKEN: ${NOTEFEED_TOKEN:?Set NOTEFEED_TOKEN in .env}
+      PUBLIC_URL: ${PUBLIC_URL:-}
+      NOTEFEED_TITLE: ${NOTEFEED_TITLE:-}
+      TZ: ${TZ:-UTC}
+    volumes:
+      - notefeed-data:/data
+
+volumes:
+  notefeed-data:

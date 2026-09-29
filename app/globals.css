@@ -1,0 +1,73 @@
+@import "tailwindcss";
+
+/* Carbon-copy palette: see spec "UI design". */
+:root {
+  --paper: #f2f3f0;
+  --ink: #1e2130;
+  --carbon: #4b3fa8;
+  --rule: #d6d9df;
+  --muted: #686d7a;
+  --error: #b3261e;
+  --on-carbon: #ffffff;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper: #15161b;
+    --ink: #e4e5eb;
+    --carbon: #a99dff;
+    --rule: #2a2c35;
+    --muted: #9a9eab;
+    --error: #ff8a80;
+    --on-carbon: #15161b;
+    color-scheme: dark;
+  }
+}
+
+@theme inline {
+  --color-paper: var(--paper);
+  --color-ink: var(--ink);
+  --color-carbon: var(--carbon);
+  --color-rule: var(--rule);
+  --color-muted: var(--muted);
+  --color-error: var(--error);
+  --color-on-carbon: var(--on-carbon);
+  --font-sans: var(--font-atkinson);
+  --font-mono: var(--font-atkinson-mono);
+}
+
+body {
+  background: var(--paper);
+  color: var(--ink);
+}
+
+:focus-visible {
+  outline: 2px solid var(--carbon);
+  outline-offset: 2px;
+}
+
+/* Rendered markdown. Kept quiet so the notes, not the chrome, carry the page. */
+.md > * + * { margin-top: 0.6em; }
+.md h1, .md h2, .md h3 { font-weight: 700; line-height: 1.3; }
+.md h1 { font-size: 1.25rem; }
+.md h2 { font-size: 1.125rem; }
+.md a { color: var(--carbon); text-decoration: underline; text-underline-offset: 2px; }
+.md ul { list-style: disc; padding-left: 1.25em; }
+.md ol { list-style: decimal; padding-left: 1.25em; }
+.md blockquote { border-left: 2px solid var(--rule); padding-left: 0.75em; color: var(--muted); }
+.md code { font-family: var(--font-mono); font-size: 0.9em; }
+.md pre { font-family: var(--font-mono); font-size: 0.875rem; overflow-x: auto; padding: 0.75em 0; border-block: 1px solid var(--rule); }
+.md table { border-collapse: collapse; }
+.md th, .md td { border: 1px solid var(--rule); padding: 0.25em 0.5em; text-align: left; }
+.md hr { border: 0; border-top: 1px solid var(--rule); }
+
+/* The one motion: a just-posted note arrives with a carbon tint that fades. */
+@keyframes arrive {
+  from { background: color-mix(in srgb, var(--carbon) 16%, transparent); }
+  to { background: transparent; }
+}
+.arrived { animation: arrive 1.5s ease-out; }
+@media (prefers-reduced-motion: reduce) {
+  .arrived { animation: none; }
+}
