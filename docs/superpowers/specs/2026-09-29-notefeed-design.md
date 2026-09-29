@@ -1,7 +1,7 @@
 # notefeed — design
 
 Date: 2026-09-29
-Status: draft, awaiting review
+Status: approved
 
 ## Purpose
 
@@ -48,14 +48,15 @@ getNote(id: string): Promise<Note | null>
 - Collision (same second, same slug): append `-2`, `-3`, … Never overwrite (create with exclusive flag).
 - Atomic write: write to a temp file in `DATA_DIR`, then rename.
 - `getNote` validates `id` against `^\d{8}T\d{6}Z-[a-z0-9-]+$` before touching disk; invalid → `null`. This blocks path traversal.
-- `listNotes` reads the directory, sorts filenames descending (the id format sorts chronologically), reads only the first `limit` files.
+- Size limit (100 KB, UTF-8 bytes) is enforced inside `createNote`, so the API and the UI server action share it. The API route also checks early to return `413`.
+- `listNotes` reads the directory, keeps only filenames matching the id pattern plus `.md` (skips temp files), sorts descending (the id format sorts chronologically), reads only the first `limit` files.
 
 ## Auth — `lib/auth.ts`
 
-One shared secret, `NOTEFEED_TOKEN` (required; the app refuses to start without it).
+One shared secret, `NOTEFEED_TOKEN` (required; `instrumentation.ts` `register()` checks it at server start and exits with a clear error if missing).
 
 - API: `Authorization: Bearer <token>`, compared in constant time.
-- UI: `/login` form takes the token; on success sets an httpOnly, `SameSite=Lax` cookie holding an HMAC of a fixed string keyed by the token (not the raw token). `Secure` when the request is HTTPS. Middleware redirects unauthenticated UI requests to `/login`; it skips `/login`, `/feed.xml`, `/api/*` (bearer-checked in the handler) and `/_next/*` static assets. `/logout` clears the cookie.
+- UI: `/login` form takes the token; on success sets an httpOnly, `SameSite=Lax` cookie holding an HMAC of a fixed string keyed by the token (not the raw token). `Secure` when the request is HTTPS. Middleware redirects unauthenticated UI requests to `/login`; it skips `/login`, `/feed.xml`, `/api/*` (bearer-checked in the handler) and `/_next/*` static assets. `/logout` clears the cookie. The HMAC uses Web Crypto (`crypto.subtle`) so the same code runs in middleware (edge runtime) and in Node.
 - Changing the token invalidates all sessions.
 - `/feed.xml` and `/login` are public.
 
@@ -82,7 +83,7 @@ One shared secret, `NOTEFEED_TOKEN` (required; the app refuses to start without 
 |---|---|---|
 | `NOTEFEED_TOKEN` | — (required) | Shared secret for API and UI login |
 | `DATA_DIR` | `/data` | Where `.md` files live |
-| `PUBLIC_URL` | derived from request | Absolute base URL for feed links |
+| `PUBLIC_URL` | derived from request (`X-Forwarded-Proto`/`X-Forwarded-Host`, else `Host`) | Absolute base URL for feed links |
 | `NOTEFEED_TITLE` | `notefeed` | Feed/channel title |
 
 ## Errors
