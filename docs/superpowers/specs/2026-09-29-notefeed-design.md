@@ -43,7 +43,7 @@ getNote(id: string): Promise<Note | null>
 
 - File: `$DATA_DIR/<id>.md`, content byte-for-byte as posted.
 - `id` = `YYYYMMDDTHHMMSSZ-<slug>` (UTC), e.g. `20260929T140512Z-backup-finished`. `createdAt` is parsed from the id; no frontmatter, no sidecar files.
-- Slug: title lowercased, non-alphanumerics collapsed to `-`, max 50 chars, `note` if empty.
+- Slug: title NFKD-normalized with diacritics dropped (`Über` → `uber`), lowercased, non-alphanumerics collapsed to `-`, max 50 chars, `note` if empty.
 - Title: first `# ` heading, else first non-empty line with leading markdown markers stripped; trimmed to 100 chars.
 - Collision (same second, same slug): append `-2`, `-3`, … Never overwrite (create with exclusive flag).
 - Atomic write: write to a temp file in `DATA_DIR`, then rename.
@@ -56,7 +56,7 @@ getNote(id: string): Promise<Note | null>
 One shared secret, `NOTEFEED_TOKEN` (required; `instrumentation.ts` `register()` checks it at server start and exits with a clear error if missing).
 
 - API: `Authorization: Bearer <token>`, compared in constant time.
-- UI: `/login` form takes the token; on success sets an httpOnly, `SameSite=Lax` cookie holding an HMAC of a fixed string keyed by the token (not the raw token). `Secure` when the request is HTTPS. Middleware redirects unauthenticated UI requests to `/login`; it skips `/login`, `/feed.xml`, `/api/*` (bearer-checked in the handler) and `/_next/*` static assets. `/logout` clears the cookie. The HMAC uses Web Crypto (`crypto.subtle`) so the same code runs in middleware (edge runtime) and in Node.
+- UI: `/login` form takes the token; on success sets an httpOnly, `SameSite=Lax` cookie holding an HMAC of a fixed string keyed by the token (not the raw token). `Secure` when the request is HTTPS. Middleware redirects unauthenticated UI requests to `/login`; it skips `/login`, `/feed.xml`, `/api/*` (bearer-checked in the handler) and `/_next/*` static assets. `/logout` clears the cookie. The gate is Next 16's `proxy.ts`, which runs on Node, so `node:crypto` is used throughout.
 - Changing the token invalidates all sessions.
 - `/feed.xml` and `/login` are public.
 
@@ -93,7 +93,7 @@ One shared secret, `NOTEFEED_TOKEN` (required; `instrumentation.ts` `register()`
 | Missing/wrong bearer token | `401` |
 | Empty body (after trim) | `400` |
 | Body > 100 KB | `413` |
-| Unsupported content type | `415` |
+| Unsupported content type | `415` (accepted: none, `text/markdown`, `text/plain`, `application/json`, and `application/x-www-form-urlencoded` as raw text, because that is what `curl --data-binary` sends) |
 | Unknown or invalid note id | `404` |
 | Disk write failure | `500`; no partial file left behind |
 
