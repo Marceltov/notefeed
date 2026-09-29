@@ -111,8 +111,9 @@ A private inbox read by one operator a few times a day; mostly script-sent notes
 ## Packaging and CI
 
 - Multi-stage `Dockerfile`: `node:22-alpine` build → standalone runtime, non-root user, `VOLUME /data`, port 3000.
+- `compose.yaml` for one-command deploy: service `notefeed`, `image: ghcr.io/marceltov/notefeed:latest` with `build: .` as fallback, `restart: unless-stopped`, port `3000:3000`, `NOTEFEED_TOKEN` required (`${NOTEFEED_TOKEN:?…}`, read from `.env`), optional `PUBLIC_URL`/`NOTEFEED_TITLE`, named volume `notefeed-data:/data` (a named volume inherits the image's `/data` ownership, so the non-root user can write). Empty env values count as unset.
 - `.github/workflows/ci.yml`: on push/PR run lint, type-check, `vitest`; on `main` also build and push `ghcr.io/marceltov/notefeed:latest` and `:sha-<short>`.
-- `README.md`: what it is, `docker run`/compose example, curl example, env table, and a note that exposing it publicly behind a reverse proxy is fine because auth is built in.
+- `README.md`: what it is, `docker compose up -d` quick start (with `.env`), `docker run` alternative, curl example, env table, and a note that exposing it publicly behind a reverse proxy is fine because auth is built in.
 
 ## Testing
 
@@ -127,4 +128,4 @@ Manual smoke test before release: `docker run`, curl a note, see it in `/feed.xm
 
 ## Out of scope for this repo
 
-Deployment to a specific host (compose file, proxy rules, dashboard widget config) lives in the operator's own infrastructure repo.
+Host-specific deployment (reverse-proxy rules, dashboard widget config, host paths) lives in the operator's own infrastructure repo.
