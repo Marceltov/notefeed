@@ -43,7 +43,7 @@ getNote(id: string): Promise<Note | null>
 
 - File: `$DATA_DIR/<id>.md`, content byte-for-byte as posted.
 - `id` = `YYYYMMDDTHHMMSSZ-<slug>` (UTC), e.g. `20260929T140512Z-backup-finished`. `createdAt` is parsed from the id; no frontmatter, no sidecar files.
-- Slug: title NFKD-normalized with diacritics dropped (`Über` → `uber`), lowercased, non-alphanumerics collapsed to `-`, max 50 chars, `note` if empty.
+- Slug: title NFKD-normalized with diacritics dropped (`Café` → `cafe`), lowercased, non-alphanumerics collapsed to `-`, max 50 chars, `note` if empty.
 - Title: first `# ` heading, else first non-empty line with leading markdown markers stripped; trimmed to 100 chars.
 - Collision (same second, same slug): append `-2`, `-3`, … Never overwrite (create with exclusive flag).
 - Atomic write: write to a temp file in `DATA_DIR`, then rename.
