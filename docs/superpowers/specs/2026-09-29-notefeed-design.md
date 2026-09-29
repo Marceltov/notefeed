@@ -71,6 +71,17 @@ One shared secret, `NOTEFEED_TOKEN` (required; `instrumentation.ts` `register()`
 | `POST /api/notes` | Body `text/markdown`/`text/plain`, or JSON `{"markdown": "..."}` → `201 {"id","url"}` | bearer |
 | `GET /feed.xml` | RSS 2.0, newest 50 | public |
 
+## UI design
+
+A private inbox read by one operator a few times a day; mostly script-sent notes. Main job: post fast, scan what arrived. Idea: a note *is* a file, so the compose box shows the filename it will become.
+
+- **Layout:** one left-aligned column, max ~68ch. Header: wordmark `notefeed`, then **Feed** and **Log out** at the right. Compose box, then under it "Saves as `<id>.md`" (live, from `extractTitle`/`slugify` in the browser) and a **Post note** button. Below: notes as a log grouped by day ("Today", "Yesterday", `Sep 27`), time `HH:MM` in a left gutter, title links to `/n/<id>`, body rendered. No cards, no boxes around notes; rows separated by space. `/n/<id>`: same column, date + time, rendered note, link back. `/login`: wordmark, one token field, **Log in**.
+- **Type:** Atkinson Hyperlegible Next for everything; Atkinson Hyperlegible Mono only for real filenames and code (the "Saves as" line, code blocks, the curl example). Both via `next/font/google`. Sentence case throughout, no all-caps labels.
+- **Color (light / dark):** paper `#F2F3F0` / `#15161B`, ink `#1E2130` / `#E4E5EB`, carbon violet `#4B3FA8` / `#A99DFF` (button, filename, links), rule `#D6D9DF` / `#2A2C35`, muted `#686D7A` / `#9A9EAB`, error `#B3261E` / `#FF8A80`. Follows `prefers-color-scheme`.
+- **Motion:** one moment — a just-posted note appears at the top with a carbon tint that fades out over ~1.5 s. None under `prefers-reduced-motion`.
+- **Copy:** empty list → "No notes yet. Write one above, or post from a script:" + the real curl command. Login error → "That token doesn't match `NOTEFEED_TOKEN`." Empty post → "Note is empty". Oversize → "Note exceeds 100 KB".
+- **Floor:** works at 375 px, visible keyboard focus, AA contrast in both schemes.
+
 ## Feed
 
 - RSS 2.0, `<channel>` title from `NOTEFEED_TITLE` (default `notefeed`), link = `PUBLIC_URL`.
