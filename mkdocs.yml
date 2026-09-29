@@ -45,6 +45,13 @@ markdown_extensions:
   - pymdownx.highlight
   - pymdownx.superfences
   - pymdownx.details
+  - pymdownx.keys
 
 nav:
   - Home: index.md
+  - Posting notes: posting.md
+  - Web UI: web-ui.md
+  - The feed: feed.md
+  - Configuration: configuration.md
+  - Reverse proxy: reverse-proxy.md
+  - Operations: operations.md
