@@ -8,7 +8,10 @@ import { resetRateLimitsForTests } from "@/lib/limits";
 
 let cookie: string | undefined;
 vi.mock("next/headers", () => ({
-  cookies: async () => ({ get: (n: string) => (n === SESSION_COOKIE && cookie ? { value: cookie } : undefined) }),
+  cookies: async () => ({
+    get: (n: string) => (n === SESSION_COOKIE && cookie ? { value: cookie } : undefined),
+    set: (n: string, v: string) => void (n === SESSION_COOKIE && (cookie = v)),
+  }),
   headers: async () => new Headers({ host: "localhost:3000" }),
 }));
 vi.mock("next/navigation", () => ({
@@ -16,7 +19,7 @@ vi.mock("next/navigation", () => ({
     throw new Error(`REDIRECT ${to}`);
   },
 }));
-const { postNoteAction } = await import("./actions");
+const { loginAction, postNoteAction } = await import("./actions");
 
 let dir: string;
 beforeEach(async () => {
@@ -77,4 +80,26 @@ test("caps apply", async () => {
 
 test("empty note", async () => {
   expect(await postNoteAction("backups", null, form("  "))).toBe("Note is empty");
+});
+
+const login = (password: string, next?: string) => {
+  const f = new FormData();
+  f.set("password", password);
+  if (next !== undefined) f.set("next", next);
+  return loginAction(null, f);
+};
+
+test("login returns to the page in next", async () => {
+  process.env.NOTEFEED_PASSWORD = "pw";
+  await expect(login("pw", "/backups?x=1")).rejects.toThrow("REDIRECT /backups?x=1");
+});
+
+test.each([undefined, "//evil.example", "https://evil.example", "/\\evil.example"])("login with next=%j lands on /", async (next) => {
+  process.env.NOTEFEED_PASSWORD = "pw";
+  await expect(login("pw", next)).rejects.toThrow(/^REDIRECT \/$/);
+});
+
+test("a wrong password stays on the login page", async () => {
+  process.env.NOTEFEED_PASSWORD = "pw";
+  expect(await login("nope", "/backups")).toMatch(/doesn't match/);
 });
