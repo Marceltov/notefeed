@@ -23,18 +23,18 @@ services:
       # NOTEFEED_TITLE: notefeed
       # TZ: Europe/Berlin
     volumes:
-      - notefeed-data:/data
-
-volumes:
-  notefeed-data:
+      - ./data:/data  # your notes, as plain .md files
 ```
 
-**2. Create the token and start it:**
+**2. Create the data folder and the token, then start it:**
 
 ```sh
+mkdir data   # notefeed writes notes as the owner of this folder, so they're yours
 echo "NOTEFEED_TOKEN=$(openssl rand -hex 32)" > .env
 docker compose up -d
 ```
+
+Your notes are plain files in `data`, owned by you: read them, grep them, or commit them to git (see [Operations](operations.md#keeping-notes-in-git)).
 
 notefeed now runs on <http://localhost:3000>. Log in with the token, or post your first note from a shell:
 

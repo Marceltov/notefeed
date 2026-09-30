@@ -88,7 +88,7 @@ jobs:
           ## Install
 
           ```yaml
-          # compose.yaml — set NOTEFEED_TOKEN in .env (e.g. openssl rand -hex 32)
+          # compose.yaml
           services:
             notefeed:
               image: ghcr.io/marceltov/notefeed:__VERSION__
@@ -100,13 +100,12 @@ jobs:
                 # PUBLIC_URL: https://notes.example.com
                 # TZ: Europe/Berlin
               volumes:
-                - notefeed-data:/data
-
-          volumes:
-            notefeed-data:
+                - ./data:/data
           ```
 
           ```bash
+          mkdir data   # notes are written as the owner of this folder
+          echo "NOTEFEED_TOKEN=$(openssl rand -hex 32)" > .env
           docker compose up -d
           ```
 
