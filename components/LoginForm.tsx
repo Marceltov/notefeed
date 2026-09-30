@@ -7,13 +7,13 @@ export function LoginForm() {
   const [error, action, pending] = useActionState(loginAction, null);
   return (
     <form action={action} className="max-w-sm">
-      <label htmlFor="token" className="mb-1 block text-sm text-muted">
-        Token
+      <label htmlFor="password" className="mb-1 block text-sm text-muted">
+        Password
       </label>
       <div className="flex gap-2">
         <input
-          id="token"
-          name="token"
+          id="password"
+          name="password"
           type="password"
           autoComplete="current-password"
           required

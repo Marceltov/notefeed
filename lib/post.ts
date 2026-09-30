@@ -29,13 +29,9 @@ async function readCapped(req: Request): Promise<Uint8Array | null> {
   }
 }
 
-export async function handlePost(req: Request, feed: string): Promise<Response> {
-  // Before anything touches the disk: a locked instance must not create the feed directory.
-  if (!bearerOk(req.headers.get("authorization"))) return error(401, "missing or wrong password");
-  const bad = checkFeed(feed);
-  if (bad) return error(400, bad === "reserved" ? "feed name is reserved" : "invalid feed name");
-
-  const wait = rateLimit(clientIp(req.headers));
+// Rate limit and optional caps, shared with the compose box's server action. null → go ahead.
+export async function checkLimits(feed: string, headers: Headers): Promise<Response | null> {
+  const wait = rateLimit(clientIp(headers));
   if (wait !== null) return Response.json({ error: "rate limit exceeded" }, { status: 429, headers: { "Retry-After": String(wait) } });
 
   // ponytail: caps are checked, not locked; concurrent posts can overshoot by a few.
@@ -44,6 +40,17 @@ export async function handlePost(req: Request, feed: string): Promise<Response> 
   const exists = maxFeeds || maxNotes ? await feedExists(feed) : true;
   if (maxFeeds && !exists && (await listFeeds()).length >= maxFeeds) return error(507, "feed limit reached");
   if (maxNotes && exists && (await countNotes(feed)) >= maxNotes) return error(507, "note limit reached");
+  return null;
+}
+
+export async function handlePost(req: Request, feed: string): Promise<Response> {
+  // Before anything touches the disk: a locked instance must not create the feed directory.
+  if (!bearerOk(req.headers.get("authorization"))) return error(401, "missing or wrong password");
+  const bad = checkFeed(feed);
+  if (bad) return error(400, bad === "reserved" ? "feed name is reserved" : "invalid feed name");
+
+  const limited = await checkLimits(feed, req.headers);
+  if (limited) return limited;
 
   const type = (req.headers.get("content-type") ?? "").split(";")[0].trim().toLowerCase();
   const isJson = type === "application/json";

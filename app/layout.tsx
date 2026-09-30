@@ -6,8 +6,7 @@ const sans = Atkinson_Hyperlegible_Next({ variable: "--font-atkinson", subsets: 
 const mono = Atkinson_Hyperlegible_Mono({ variable: "--font-atkinson-mono", subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "notefeed",
-  alternates: { types: { "application/rss+xml": "/feed.xml" } },
+  title: { default: "notefeed", template: "%s · notefeed" },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
