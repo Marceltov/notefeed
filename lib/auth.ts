@@ -1,9 +1,12 @@
-// Single shared secret (NOTEFEED_TOKEN): bearer for the API, HMAC cookie for the UI.
+// Optional instance password (NOTEFEED_PASSWORD): bearer for POST, HMAC cookie for the UI.
+// Unset or empty → the instance is open and every check passes.
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 
 export const SESSION_COOKIE = "nf_session";
 
-const token = () => process.env.NOTEFEED_TOKEN ?? "";
+const password = () => process.env.NOTEFEED_PASSWORD ?? "";
+
+export const locked = () => password() !== "";
 
 // Hash both sides so lengths match and timingSafeEqual never throws.
 function safeEqual(a: string, b: string): boolean {
@@ -11,19 +14,22 @@ function safeEqual(a: string, b: string): boolean {
   return timingSafeEqual(h(a), h(b));
 }
 
-export function tokenMatches(candidate: string): boolean {
-  return token() !== "" && safeEqual(candidate, token());
+// False when unlocked: there is no password to match.
+export function passwordMatches(candidate: string): boolean {
+  return locked() && safeEqual(candidate, password());
 }
 
 export function bearerOk(authorization: string | null): boolean {
+  if (!locked()) return true;
   const m = /^Bearer (.+)$/.exec(authorization ?? "");
-  return m !== null && tokenMatches(m[1]);
+  return m !== null && passwordMatches(m[1]);
 }
 
 export function sessionValue(): string {
-  return createHmac("sha256", token()).update("notefeed-session").digest("hex");
+  return createHmac("sha256", password()).update("notefeed-session").digest("hex");
 }
 
 export function sessionOk(cookie: string | undefined): boolean {
-  return token() !== "" && cookie !== undefined && safeEqual(cookie, sessionValue());
+  if (!locked()) return true;
+  return cookie !== undefined && safeEqual(cookie, sessionValue());
 }

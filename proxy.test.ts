@@ -1,26 +1,106 @@
 import { NextRequest } from "next/server";
 import { afterEach, beforeEach, expect, test } from "vitest";
-import { proxy } from "./proxy";
+import { SESSION_COOKIE, sessionValue } from "./lib/auth";
+import { config, proxy } from "./proxy";
 
 beforeEach(() => {
-  process.env.NOTEFEED_TOKEN = "s3cret";
+  delete process.env.NOTEFEED_PASSWORD;
 });
 afterEach(() => {
   delete process.env.PUBLIC_URL;
 });
 
+const req = (path: string, init: { method?: string; headers?: Record<string, string> } = {}) =>
+  new NextRequest(`http://localhost:3000${path}`, { method: init.method, headers: { host: "localhost:3000", ...init.headers } });
+const rewrite = (res: Response) => res.headers.get("x-middleware-rewrite");
+const isNext = (res: Response) => res.headers.get("x-middleware-next") === "1";
+
+test("POST /<feed> is rewritten to the notes route", () => {
+  expect(rewrite(proxy(req("/backups", { method: "POST" })))).toBe("http://localhost:3000/api/feeds/backups/notes");
+});
+
+test("one trailing slash is stripped", () => {
+  // Next's default trailing-slash redirect (308) normally runs before the proxy; this covers it if it doesn't.
+  expect(rewrite(proxy(req("/backups/", { method: "POST" })))).toBe("http://localhost:3000/api/feeds/backups/notes");
+});
+
+test("server actions (next-action header) are never rewritten", () => {
+  const res = proxy(req("/backups", { method: "POST", headers: { "next-action": "abc" } }));
+  expect(rewrite(res)).toBeNull();
+  expect(isNext(res)).toBe(true);
+});
+
+test("no-JS server action forms (multipart) are never rewritten", () => {
+  const res = proxy(req("/backups", { method: "POST", headers: { "content-type": "multipart/form-data; boundary=x" } }));
+  expect(rewrite(res)).toBeNull();
+});
+
+test.each(["/", "/a/b", "/backups/x/", "/backups//"])("POST %s (not one segment) is not rewritten", (p) => {
+  expect(rewrite(proxy(req(p, { method: "POST" })))).toBeNull();
+});
+
+test("GET /<feed> is not rewritten", () => {
+  const res = proxy(req("/backups"));
+  expect(rewrite(res)).toBeNull();
+  expect(isNext(res)).toBe(true);
+});
+
+test("encoded traversal: %2e%2e normalizes to / (not rewritten); a%2Fb stays encoded for the handler to reject", () => {
+  expect(rewrite(proxy(req("/%2e%2e", { method: "POST" })))).toBeNull();
+  const target = rewrite(proxy(req("/a%2Fb", { method: "POST" })))!;
+  expect(target).toBe("http://localhost:3000/api/feeds/a%2Fb/notes");
+  // Next decodes the [feed] param; handlePost rejects "a/b" (see lib/post.test.ts).
+  expect(decodeURIComponent(new URL(target).pathname.split("/")[3])).toBe("a/b");
+});
+
+test("locked: pages without a session redirect to the absolute public /login", () => {
+  process.env.NOTEFEED_PASSWORD = "pw";
+  const res = proxy(req("/backups"));
+  expect(res.status).toBe(307);
+  expect(res.headers.get("location")).toBe("http://localhost:3000/login");
+});
+
+test("locked: a valid session cookie passes", () => {
+  process.env.NOTEFEED_PASSWORD = "pw";
+  expect(isNext(proxy(req("/backups", { headers: { cookie: `${SESSION_COOKIE}=${sessionValue()}` } })))).toBe(true);
+});
+
+test("locked: a server action POST without a session is redirected", () => {
+  process.env.NOTEFEED_PASSWORD = "pw";
+  expect(proxy(req("/backups", { method: "POST", headers: { "next-action": "abc" } })).status).toBe(307);
+});
+
+test.each(["/r/x/feed.xml", "/login", "/_next/static/x.js", "/api/feeds/backups/notes"])("locked: %s passes", (p) => {
+  process.env.NOTEFEED_PASSWORD = "pw";
+  expect(isNext(proxy(req(p)))).toBe(true);
+});
+
+test("locked: POST /<feed> is still rewritten (the handler checks the bearer)", () => {
+  process.env.NOTEFEED_PASSWORD = "pw";
+  expect(rewrite(proxy(req("/backups", { method: "POST" })))).toBe("http://localhost:3000/api/feeds/backups/notes");
+});
+
+test("matcher skips /r/ and /_next/", () => {
+  const re = new RegExp(`^${config.matcher}$`);
+  for (const p of ["/r/x/feed.xml", "/_next/static/x.js", "/favicon.ico"]) expect(re.test(p)).toBe(false);
+  for (const p of ["/", "/backups", "/login", "/rabbit"]) expect(re.test(p)).toBe(true);
+});
+
 // Next's proxy runtime rejects a relative Location ("Invalid URL" → 500), so it must be absolute
 // and point at the public address, not the internal one.
 test("redirects to the public /login behind a reverse proxy", () => {
-  const req = new NextRequest("http://internal:3000/n/x", {
-    headers: { "x-forwarded-proto": "https", "x-forwarded-host": "notes.example" },
-  });
-  const res = proxy(req);
+  process.env.NOTEFEED_PASSWORD = "pw";
+  const res = proxy(
+    new NextRequest("http://internal:3000/n/x", {
+      headers: { "x-forwarded-proto": "https", "x-forwarded-host": "notes.example" },
+    }),
+  );
   expect(res.status).toBe(307);
   expect(res.headers.get("location")).toBe("https://notes.example/login");
 });
 
 test("PUBLIC_URL wins for the redirect", () => {
+  process.env.NOTEFEED_PASSWORD = "pw";
   process.env.PUBLIC_URL = "https://notefeed.example.com";
   const res = proxy(new NextRequest("http://internal:3000/", { headers: { host: "internal:3000" } }));
   expect(res.headers.get("location")).toBe("https://notefeed.example.com/login");

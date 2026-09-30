@@ -2,12 +2,12 @@
 
 import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { SESSION_COOKIE, sessionOk, sessionValue, tokenMatches } from "@/lib/auth";
+import { SESSION_COOKIE, sessionOk, sessionValue, passwordMatches } from "@/lib/auth";
 import { EmptyNoteError, NoteTooLargeError, createNote } from "@/lib/notes";
 import { publicUrl } from "@/lib/url";
 
 export async function loginAction(_prev: string | null, form: FormData): Promise<string | null> {
-  if (!tokenMatches(String(form.get("token") ?? ""))) return "That token doesn't match NOTEFEED_TOKEN.";
+  if (!passwordMatches(String(form.get("token") ?? ""))) return "That token doesn't match NOTEFEED_TOKEN.";
   (await cookies()).set(SESSION_COOKIE, sessionValue(), {
     httpOnly: true,
     sameSite: "lax",

@@ -11,9 +11,11 @@ const escapeXml = (s: string) =>
 // "]]>" would end the section early; split it across two CDATA sections.
 const cdata = (s: string) => `<![CDATA[${xmlSafe(s).replaceAll("]]>", "]]]]><![CDATA[>")}]]>`;
 
-export function renderFeed(notes: Note[], opts: { title: string; baseUrl: string }): string {
+// Links go through the read id only, so the feed never reveals the (writable) feed name.
+export function renderFeed(notes: Note[], opts: { title: string; baseUrl: string; readId: string }): string {
+  const base = `${opts.baseUrl}/r/${opts.readId}`;
   const items = notes.map((n) => {
-    const url = `${opts.baseUrl}/n/${n.id}`;
+    const url = `${base}/${n.id}`;
     return `<item>
 <title>${escapeXml(n.title || n.id)}</title>
 <link>${url}</link>
@@ -26,7 +28,7 @@ export function renderFeed(notes: Note[], opts: { title: string; baseUrl: string
 <rss version="2.0">
 <channel>
 <title>${escapeXml(opts.title)}</title>
-<link>${opts.baseUrl}</link>
+<link>${base}</link>
 <description>${escapeXml(opts.title)}</description>
 ${items.join("\n")}
 </channel>

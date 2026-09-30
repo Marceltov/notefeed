@@ -11,7 +11,7 @@ const notes: Note[] = [
   },
   { id: "20260928T090000Z-plain", title: "Plain", markdown: "Plain", createdAt: new Date("2026-09-28T09:00:00Z") },
 ];
-const xml = renderFeed(notes, { title: "my feed", baseUrl: "https://x.test" });
+const xml = renderFeed(notes, { title: "my feed", baseUrl: "https://x.test", readId: "AbCdEfGhIjKlMnOpQrSt_-" });
 
 test("is an RSS 2.0 document", () => {
   expect(xml.startsWith('<?xml version="1.0" encoding="UTF-8"?>')).toBe(true);
@@ -29,10 +29,11 @@ test("keeps ]]> intact across CDATA sections", () => {
   expect(text).toBe(notes[0].markdown);
 });
 
-test("links are absolute", () => {
-  expect(xml).toContain("<link>https://x.test</link>");
-  expect(xml).toContain("<link>https://x.test/n/20260929T140512Z-a-b</link>");
-  expect(xml).toContain('<guid isPermaLink="true">https://x.test/n/20260929T140512Z-a-b</guid>');
+test("links are absolute and go through the read id", () => {
+  expect(xml).toContain("<link>https://x.test/r/AbCdEfGhIjKlMnOpQrSt_-</link>");
+  expect(xml).toContain("<link>https://x.test/r/AbCdEfGhIjKlMnOpQrSt_-/20260929T140512Z-a-b</link>");
+  expect(xml).toContain('<guid isPermaLink="true">https://x.test/r/AbCdEfGhIjKlMnOpQrSt_-/20260929T140512Z-a-b</guid>');
+  expect(xml).not.toContain("/n/");
 });
 
 test("pubDate is RFC 822", () => {
@@ -42,7 +43,7 @@ test("pubDate is RFC 822", () => {
 test("strips XML-forbidden control characters", () => {
   const out = renderFeed(
     [{ id: "20260929T140512Z-red", title: "\x1b[31mred", markdown: "\x1b[31mred\x1b[0m\ttab\r\nok", createdAt: new Date() }],
-    { title: "t", baseUrl: "https://x.test" },
+    { title: "t", baseUrl: "https://x.test", readId: "AbCdEfGhIjKlMnOpQrSt_-" },
   );
   expect(out).not.toMatch(/[\x00-\x08\x0B\x0C\x0E-\x1F￾￿]/);
   expect(out).toContain("[31mred[0m\ttab\r\nok");
