@@ -20,4 +20,4 @@ await client.post("# Disk at 91%", { feed: "alerts-q9x2m" }); // another feed, s
 
 The `notefeed` command reads `--url` / `--feed` / `--password`, or `NOTEFEED_URL` / `NOTEFEED_FEED` / `NOTEFEED_PASSWORD`. The library itself never reads the environment.
 
-Full documentation: https://notefeed.me/clients/
+Full documentation: https://docs.notefeed.me/clients/

@@ -2,7 +2,7 @@
 
 Post short markdown notes to a named feed — from a script over HTTP, or by hand in a small web UI — and read them back as RSS. Like [ntfy](https://ntfy.sh), but for notes: there are no accounts, a feed is just a name, and each note is a plain `.md` file on disk. Built as an inbox for dashboards like Glance and Dynacat, which can read RSS but have nowhere to post to.
 
-**Documentation: https://notefeed.me/**
+**Documentation: https://docs.notefeed.me/**
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/screenshot-dark.png">
@@ -39,7 +39,7 @@ Or with a client: `pip install notefeed` / `npm install notefeed`, then `notefee
 
 The answer includes the feed's `read_url`: a read-only RSS link to give to feed readers and dashboards. It doesn't reveal the feed name, and it can't post.
 
-To require a password for posting and the web UI, set `NOTEFEED_PASSWORD`. Read links stay open. See [Configuration](https://notefeed.me/configuration/).
+To require a password for posting and the web UI, set `NOTEFEED_PASSWORD`. Read links stay open. See [Configuration](https://docs.notefeed.me/configuration/).
 
 ## License
 

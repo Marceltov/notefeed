@@ -27,7 +27,7 @@ notefeed = "notefeed.cli:main"
 
 [project.urls]
 Homepage = "https://notefeed.me/"
-Documentation = "https://notefeed.me/clients/"
+Documentation = "https://docs.notefeed.me/clients/"
 Source = "https://github.com/Marceltov/notefeed"
 Issues = "https://github.com/Marceltov/notefeed/issues"
 Changelog = "https://github.com/Marceltov/notefeed/releases"

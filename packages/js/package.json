@@ -39,7 +39,7 @@
     "url": "git+https://github.com/Marceltov/notefeed.git",
     "directory": "packages/js"
   },
-  "homepage": "https://notefeed.me/clients/",
+  "homepage": "https://docs.notefeed.me/clients/",
   "bugs": {
     "url": "https://github.com/Marceltov/notefeed/issues"
   },
