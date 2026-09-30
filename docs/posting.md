@@ -11,7 +11,10 @@ curl -H "Authorization: Bearer $NOTEFEED_TOKEN" \
 notefeed stores the body exactly as sent, byte for byte, and answers `201 Created`:
 
 ```json
-{"id": "20260929T140512Z-backup-finished", "url": "https://notes.example.com/n/20260929T140512Z-backup-finished"}
+{
+  "id": "20260929T140512Z-backup-finished",
+  "url": "https://notes.example.com/n/20260929T140512Z-backup-finished"
+}
 ```
 
 !!! tip "Use `--data-binary`, not `-d`"

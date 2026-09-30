@@ -6,9 +6,22 @@ Post short markdown notes — from a script over HTTP, or by hand in a small web
 
 ## Quick start
 
-```sh
-cp .env.example .env        # set NOTEFEED_TOKEN to a long random secret
-docker compose up -d
+Save this as `compose.yaml`, then run `echo "NOTEFEED_TOKEN=$(openssl rand -hex 32)" > .env && docker compose up -d`:
+
+```yaml
+services:
+  notefeed:
+    image: ghcr.io/marceltov/notefeed:latest
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      NOTEFEED_TOKEN: ${NOTEFEED_TOKEN:?Set NOTEFEED_TOKEN in .env}
+    volumes:
+      - notefeed-data:/data
+
+volumes:
+  notefeed-data:
 ```
 
 Open http://localhost:3000 and log in with the token. Post from a script:

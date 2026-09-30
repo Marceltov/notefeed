@@ -2,7 +2,7 @@
 
 ## Where notes live
 
-Every note is a plain markdown file in `DATA_DIR` (`/data` in the container), named `<id>.md`. With the included `compose.yaml` that's the `notefeed-data` Docker volume. You can read, grep or copy the files directly.
+Every note is a plain markdown file in `DATA_DIR` (`/data` in the container), named `<id>.md`. With the quick start's `compose.yaml` that's the `notefeed-data` Docker volume, which Docker names `<folder>_notefeed-data` (`notefeed_notefeed-data` if the folder is called `notefeed`, as below). You can read, grep or copy the files directly.
 
 ## Backups
 
