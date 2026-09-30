@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { beforeEach, expect, test } from "vitest";
 import { readId, resetSecretForTests } from "./feeds";
 import { feedExists } from "./notes";
+import { resetRateLimitsForTests } from "./limits";
 import { handlePost } from "./post";
 
 const BASE = "http://localhost:3000";
@@ -13,6 +14,10 @@ beforeEach(async () => {
   process.env.DATA_DIR = dir;
   process.env.NOTEFEED_SECRET = "test-secret";
   resetSecretForTests();
+  resetRateLimitsForTests();
+  delete process.env.NOTEFEED_RATE_LIMIT;
+  delete process.env.NOTEFEED_MAX_FEEDS;
+  delete process.env.NOTEFEED_MAX_NOTES_PER_FEED;
   delete process.env.NOTEFEED_PASSWORD;
   delete process.env.PUBLIC_URL;
 });
@@ -180,4 +185,30 @@ test("a chunked body at the limit is accepted", async () => {
   );
   expect(res.status).toBe(201);
   expect(await file((await res.json()).id)).toBe("a".repeat(102400));
+});
+
+test("61st post in a minute is 429 with numeric Retry-After", async () => {
+  for (let i = 0; i < 60; i++) expect((await post(`n${i}`)).status).toBe(201);
+  const res = await post("one more");
+  expect(res.status).toBe(429);
+  expect(Number(res.headers.get("retry-after"))).toBeGreaterThanOrEqual(1);
+});
+
+test("NOTEFEED_MAX_FEEDS=1: second new feed 507, first feed still accepts", async () => {
+  process.env.NOTEFEED_MAX_FEEDS = "1";
+  expect((await post("a", {}, "one")).status).toBe(201);
+  const res = await post("b", {}, "two");
+  expect(res.status).toBe(507);
+  expect(await res.json()).toEqual({ error: "feed limit reached" });
+  expect((await post("c", {}, "one")).status).toBe(201);
+});
+
+test("NOTEFEED_MAX_NOTES_PER_FEED=2: third note 507, other feeds unaffected", async () => {
+  process.env.NOTEFEED_MAX_NOTES_PER_FEED = "2";
+  expect((await post("a", {}, "one")).status).toBe(201);
+  expect((await post("b", {}, "one")).status).toBe(201);
+  const res = await post("c", {}, "one");
+  expect(res.status).toBe(507);
+  expect(await res.json()).toEqual({ error: "note limit reached" });
+  expect((await post("d", {}, "two")).status).toBe(201);
 });

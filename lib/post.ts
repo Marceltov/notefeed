@@ -1,7 +1,8 @@
 // POST /<feed>: the body of the notes route, testable without Next's routing.
 import { bearerOk } from "./auth";
-import { checkFeed, readId } from "./feeds";
-import { EmptyNoteError, MAX_BYTES, NoteTooLargeError, createNote } from "./notes";
+import { checkFeed, listFeeds, readId } from "./feeds";
+import { clientIp, rateLimit } from "./limits";
+import { EmptyNoteError, MAX_BYTES, NoteTooLargeError, countNotes, createNote, feedExists } from "./notes";
 import { publicUrl } from "./url";
 
 // curl --data-binary sends x-www-form-urlencoded by default; treat it (and no type) as raw markdown.
@@ -33,6 +34,16 @@ export async function handlePost(req: Request, feed: string): Promise<Response> 
   if (!bearerOk(req.headers.get("authorization"))) return error(401, "missing or wrong password");
   const bad = checkFeed(feed);
   if (bad) return error(400, bad === "reserved" ? "feed name is reserved" : "invalid feed name");
+
+  const wait = rateLimit(clientIp(req.headers));
+  if (wait !== null) return Response.json({ error: "rate limit exceeded" }, { status: 429, headers: { "Retry-After": String(wait) } });
+
+  // ponytail: caps are checked, not locked; concurrent posts can overshoot by a few.
+  const maxFeeds = Number(process.env.NOTEFEED_MAX_FEEDS) || 0;
+  const maxNotes = Number(process.env.NOTEFEED_MAX_NOTES_PER_FEED) || 0;
+  const exists = maxFeeds || maxNotes ? await feedExists(feed) : true;
+  if (maxFeeds && !exists && (await listFeeds()).length >= maxFeeds) return error(507, "feed limit reached");
+  if (maxNotes && exists && (await countNotes(feed)) >= maxNotes) return error(507, "note limit reached");
 
   const type = (req.headers.get("content-type") ?? "").split(";")[0].trim().toLowerCase();
   const isJson = type === "application/json";
