@@ -20,6 +20,7 @@ beforeEach(async () => {
   delete process.env.NOTEFEED_MAX_NOTES_PER_FEED;
   delete process.env.NOTEFEED_PASSWORD;
   delete process.env.PUBLIC_URL;
+  delete process.env.NOTEFEED_TRUST_PROXY;
 });
 
 function post(body: BodyInit, headers: Record<string, string> = {}, feed = "test") {
@@ -139,6 +140,22 @@ test("locked: 401 without or with a wrong password, and the feed is not created"
 test("locked: 201 with the right bearer password", async () => {
   process.env.NOTEFEED_PASSWORD = "pw";
   expect((await post("# Hi", { "content-type": "text/plain", authorization: "Bearer pw" })).status).toBe(201);
+});
+
+test("locked: failed bearers are rate-limited per IP; then even the right one gets 429", async () => {
+  process.env.NOTEFEED_PASSWORD = "pw";
+  process.env.NOTEFEED_RATE_LIMIT = "3";
+  process.env.NOTEFEED_TRUST_PROXY = "1";
+  const from = (ip: string, authorization: string) =>
+    post("# Hi", { "content-type": "text/plain", authorization, "x-forwarded-for": ip });
+  for (let i = 0; i < 3; i++) expect((await from("1.1.1.1", "Bearer nope")).status).toBe(401);
+  for (const auth of ["Bearer nope", "Bearer pw"]) {
+    const res = await from("1.1.1.1", auth);
+    expect(res.status).toBe(429);
+    expect(Number(res.headers.get("retry-after"))).toBeGreaterThanOrEqual(1);
+  }
+  expect((await from("2.2.2.2", "Bearer pw")).status).toBe(201);
+  expect(await readdir(join(dir, "test"))).toHaveLength(1);
 });
 
 test("unlocked: any authorization header is ignored", async () => {

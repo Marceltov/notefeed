@@ -2,19 +2,23 @@
 
 import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { SESSION_COOKIE, sessionOk, sessionValue, passwordMatches } from "@/lib/auth";
+import { SESSION_COOKIE, passwordAttempt, sessionOk, sessionValue } from "@/lib/auth";
 import { checkFeed } from "@/lib/feeds";
 import { EmptyNoteError, NoteTooLargeError, createNote } from "@/lib/notes";
+import { clientIp } from "@/lib/limits";
 import { checkLimits } from "@/lib/post";
 import { publicUrl } from "@/lib/url";
 
 export async function loginAction(_prev: string | null, form: FormData): Promise<string | null> {
-  if (!passwordMatches(String(form.get("password") ?? ""))) return "That password doesn't match NOTEFEED_PASSWORD.";
+  const h = await headers();
+  const attempt = passwordAttempt(String(form.get("password") ?? ""), clientIp(h));
+  if (typeof attempt === "number") return `Too many attempts, try again in ${attempt} seconds.`;
+  if (attempt === "wrong") return "That password doesn't match NOTEFEED_PASSWORD.";
   (await cookies()).set(SESSION_COOKIE, sessionValue(), {
     httpOnly: true,
     sameSite: "lax",
     path: "/",
-    secure: publicUrl(await headers()).startsWith("https:"),
+    secure: publicUrl(h).startsWith("https:"),
     maxAge: 60 * 60 * 24 * 365,
   });
   redirect("/");

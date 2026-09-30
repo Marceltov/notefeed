@@ -1,5 +1,5 @@
 // POST /<feed>: the body of the notes route, testable without Next's routing.
-import { bearerOk } from "./auth";
+import { bearerAttempt } from "./auth";
 import { checkFeed, listFeeds, readId } from "./feeds";
 import { clientIp, rateLimit } from "./limits";
 import { EmptyNoteError, MAX_BYTES, NoteTooLargeError, countNotes, createNote, feedExists } from "./notes";
@@ -45,7 +45,9 @@ export async function checkLimits(feed: string, headers: Headers): Promise<Respo
 
 export async function handlePost(req: Request, feed: string): Promise<Response> {
   // Before anything touches the disk: a locked instance must not create the feed directory.
-  if (!bearerOk(req.headers.get("authorization"))) return error(401, "missing or wrong password");
+  const auth = bearerAttempt(req.headers.get("authorization"), clientIp(req.headers));
+  if (typeof auth === "number") return Response.json({ error: "too many attempts" }, { status: 429, headers: { "Retry-After": String(auth) } });
+  if (auth === "wrong") return error(401, "missing or wrong password");
   const bad = checkFeed(feed);
   if (bad) return error(400, bad === "reserved" ? "feed name is reserved" : "invalid feed name");
 
