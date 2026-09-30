@@ -80,6 +80,7 @@ EOF
 | `413` | The body is larger than 100 KB (102400 bytes) |
 | `415` | The content type is not one of those above |
 | `429` | Too many posts, or too many wrong passwords, from this client in the last minute. `Retry-After` says how many seconds to wait. See [Rate limits and caps](configuration.md#rate-limits-and-caps). |
+| `303` | Only for `POST /logout`: that's the web UI's log-out route, not a feed, so a script gets a redirect instead of an API error, and nothing is stored |
 | `500` | The note could not be written. No partial file is left behind. |
 | `507` | A cap is reached: a new feed when there are already `NOTEFEED_MAX_FEEDS` feeds, or a note to a feed that already has `NOTEFEED_MAX_NOTES_PER_FEED` notes |
 

@@ -96,9 +96,8 @@ jobs:
               ports:
                 - "3000:3000"
               environment:
-                TZ: Europe/Berlin
                 # PUBLIC_URL: https://notes.example.com
-                # NOTEFEED_PASSWORD: change-me   # optional: lock posting and the web UI
+                # NOTEFEED_PASSWORD: <openssl rand -hex 32>   # optional: lock posting and the web UI
               volumes:
                 - ./data:/data
           ```

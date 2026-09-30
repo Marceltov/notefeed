@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { beforeEach, describe, expect, test } from "vitest";
@@ -72,6 +72,11 @@ describe("feedForReadId", () => {
     expect(await feedForReadId("A".repeat(22))).toBeNull();
     expect(await feedForReadId("short")).toBeNull();
   });
+
+  test("picks the matching feed among several", async () => {
+    for (const f of ["alpha", "beta", "gamma"]) await createNote(f, "x");
+    for (const f of ["alpha", "beta", "gamma"]) expect(await feedForReadId(readId(f))).toBe(f);
+  });
 });
 
 describe("listFeeds", () => {
@@ -82,5 +87,11 @@ describe("listFeeds", () => {
     await mkdir(join(dir, "Bad Name"));
     await mkdir(join(dir, "api"));
     expect(await listFeeds()).toEqual(["alpha"]);
+  });
+
+  test("skips symlinks, even to a feed-like folder", async () => {
+    const outside = await mkdtemp(join(tmpdir(), "notefeed-outside-"));
+    await symlink(outside, join(dir, "linked"));
+    expect(await listFeeds()).toEqual([]);
   });
 });

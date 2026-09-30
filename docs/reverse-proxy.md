@@ -21,7 +21,7 @@ notes.example.com {
 }
 ```
 
-Caddy handles HTTPS and forwards the original `Host`, `X-Forwarded-Proto` and `X-Forwarded-Host`. It also sets `X-Forwarded-For` to the real client address, which is what `NOTEFEED_TRUST_PROXY=1` needs. Because the public address is `https`, the login cookie is marked `Secure`.
+Caddy handles HTTPS and forwards the original `Host`, `X-Forwarded-Proto` and `X-Forwarded-Host`. From Caddy 2.5 on, it also overwrites `X-Forwarded-For` with the real client address (older versions append it to whatever the client sent), which is what `NOTEFEED_TRUST_PROXY=1` needs. Because the public address is `https`, the login cookie is marked `Secure`.
 
 Keep port 3000 off the internet so only Caddy can reach it. In `compose.yaml`:
 
