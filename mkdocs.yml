@@ -8,6 +8,7 @@ edit_uri: edit/main/docs/
 # docs/superpowers/ holds local working notes (gitignored); never publish them.
 exclude_docs: |
   superpowers/
+  adr/
 
 theme:
   name: material
