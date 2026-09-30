@@ -12,7 +12,7 @@ let dir: string;
 beforeEach(async () => {
   dir = await mkdtemp(join(tmpdir(), "notefeed-post-"));
   process.env.DATA_DIR = dir;
-  process.env.NOTEFEED_SECRET = "test-secret";
+  process.env.NOTEFEED_SECRET = "test-secret-".padEnd(32, "x");
   resetSecretForTests();
   resetRateLimitsForTests();
   delete process.env.NOTEFEED_RATE_LIMIT;
@@ -119,10 +119,19 @@ test.each(["..", "a/b", decodeURIComponent("%2e%2e"), decodeURIComponent("a%2Fb"
   },
 );
 
-test("400 feed name is reserved", async () => {
-  const res = await post("# Hi", { "content-type": "text/plain" }, "login");
+// proxy.ts forwards every reserved name except logout here.
+test.each(["login", "mcp", "api", "health", "r"])("400 feed name is reserved (%s)", async (feed) => {
+  const res = await post("# Hi", { "content-type": "text/plain" }, feed);
   expect(res.status).toBe(400);
   expect(await res.json()).toEqual({ error: "feed name is reserved" });
+  expect(await written()).toEqual([]);
+});
+
+test("415 for multipart (curl -F), which proxy.ts forwards here; nothing written", async () => {
+  const form = new FormData();
+  form.set("markdown", "# Hi");
+  const res = await post(form);
+  expect(res.status).toBe(415);
   expect(await written()).toEqual([]);
 });
 

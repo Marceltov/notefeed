@@ -68,7 +68,7 @@ _FEED_RE = re.compile(r"[a-z0-9_-]{1,64}")
 
 def _check_feed(feed: str) -> str:
     if not _FEED_RE.fullmatch(feed):
-        raise ConfigError(f"invalid feed name {feed!r}: use 1-64 of a-z, 0-9, _ and -")
+        raise ConfigError("invalid feed name: use 1-64 of a-z, 0-9, _ and -")  # never echo the name: it is the write key
     return feed
 
 

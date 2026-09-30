@@ -32,10 +32,10 @@ docker compose up -d
 Open http://localhost:3000 and pick a feed name. Anyone who knows the name can read and post to that feed, so make it hard to guess. Post from a script:
 
 ```sh
-curl --data-binary @note.md http://localhost:3000/homelab-7f3k2
+curl --data-binary @note.md http://localhost:3000/homelab-7f3k2q9x4m8wz
 ```
 
-Or with a client: `pip install notefeed` / `npm install notefeed`, then `notefeed post "# Hello" --feed homelab-7f3k2`.
+Or with a client: `pip install notefeed` / `npm install notefeed`, then `notefeed post "# Hello" --feed homelab-7f3k2q9x4m8wz`.
 
 The answer includes the feed's `read_url`: a read-only RSS link to give to feed readers and dashboards. It doesn't reveal the feed name, and it can't post.
 

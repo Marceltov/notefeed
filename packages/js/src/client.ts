@@ -47,7 +47,7 @@ const ERRORS: Record<number, typeof NotefeedError> = {
 // Same rule as the server; reserved names still come back as a 400.
 function checkFeed(feed: string): string {
   if (!/^[a-z0-9_-]{1,64}$/.test(feed)) {
-    throw new ConfigError(`invalid feed name ${JSON.stringify(feed)}: use 1-64 of a-z, 0-9, _ and -`);
+    throw new ConfigError("invalid feed name: use 1-64 of a-z, 0-9, _ and -"); // never echo the name: it is the write key
   }
   return feed;
 }

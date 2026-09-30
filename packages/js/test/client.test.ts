@@ -78,6 +78,15 @@ describe("invalidFeedNameRaisesConfigError", () => {
   });
 });
 
+test("invalidFeedNameIsNotEchoed", async () => {
+  // The name is the write key: a near miss must not end up in CI logs.
+  const feed = "Homelab-7f3k2q9x4m8wz";
+  expect(() => new Client({ url: server.url, feed })).toThrow(/invalid feed name/);
+  expect(() => new Client({ url: server.url, feed })).not.toThrow(/7f3k2q9x4m8wz/);
+  const err = await new Client({ url: server.url }).post("x", { feed }).catch((e) => e);
+  expect(err.message).not.toContain("7f3k2q9x4m8wz");
+});
+
 test("passwordSentAsBearerOnlyWhenSet", async () => {
   await new Client({ url: server.url, feed: "inbox" }).post("x");
   await new Client({ url: server.url, feed: "inbox", password: "" }).post("x");

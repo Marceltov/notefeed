@@ -34,9 +34,9 @@ describe("readId", () => {
     expect(readId("b")).not.toBe(id);
   });
   test("depends on NOTEFEED_SECRET", () => {
-    process.env.NOTEFEED_SECRET = "s1";
+    process.env.NOTEFEED_SECRET = "1".repeat(32);
     const a = readId("a");
-    process.env.NOTEFEED_SECRET = "s2";
+    process.env.NOTEFEED_SECRET = "2".repeat(32);
     resetSecretForTests();
     expect(readId("a")).not.toBe(a);
   });
@@ -45,6 +45,23 @@ describe("readId", () => {
     expect((await stat(join(dir, ".secret"))).mode & 0o777).toBe(0o600);
     resetSecretForTests();
     expect(readId("a")).toBe(id);
+  });
+});
+
+describe("secret strength", () => {
+  test("an empty NOTEFEED_SECRET counts as unset", async () => {
+    process.env.NOTEFEED_SECRET = "";
+    readId("a");
+    expect((await stat(join(dir, ".secret"))).size).toBe(32);
+  });
+  test("a NOTEFEED_SECRET shorter than 32 characters is an error", () => {
+    process.env.NOTEFEED_SECRET = "x".repeat(31);
+    expect(() => readId("a")).toThrow(/NOTEFEED_SECRET.*32/);
+  });
+  test.each([0, 5, 31])("a %i-byte .secret is an error, and the file is left alone", async (n) => {
+    await writeFile(join(dir, ".secret"), "x".repeat(n));
+    expect(() => readId("a")).toThrow(/\.secret.*32/);
+    expect((await stat(join(dir, ".secret"))).size).toBe(n);
   });
 });
 

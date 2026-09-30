@@ -21,7 +21,7 @@ notes.example.com {
 }
 ```
 
-Caddy handles HTTPS and forwards the original `Host`, `X-Forwarded-Proto` and `X-Forwarded-Host`. It also sets `X-Forwarded-For` to the real client address, replacing any value the client sent, which is what `NOTEFEED_TRUST_PROXY=1` needs. Because the public address is `https`, the login cookie is marked `Secure`.
+Caddy handles HTTPS and forwards the original `Host`, `X-Forwarded-Proto` and `X-Forwarded-Host`. It also sets `X-Forwarded-For` to the real client address, which is what `NOTEFEED_TRUST_PROXY=1` needs. Because the public address is `https`, the login cookie is marked `Secure`.
 
 Keep port 3000 off the internet so only Caddy can reach it. In `compose.yaml`:
 
@@ -38,9 +38,9 @@ Any proxy works if it:
 
 - forwards the original `Host`, or sets `X-Forwarded-Host`
 - sets `X-Forwarded-Proto`
-- **overwrites** `X-Forwarded-For` with the client's address. A proxy that appends to the header the client sent (nginx's `$proxy_add_x_forwarded_for`, for example) lets clients pick their own rate-limit bucket. In nginx, use `proxy_set_header X-Forwarded-For $remote_addr;`.
+- sets `X-Forwarded-For` to the client's address, or appends it to the header the client sent (nginx's `$proxy_add_x_forwarded_for`, for example). notefeed uses the **last** entry, the one the proxy added, so values a client sends itself don't count.
 
-If you can't control `Host` and `X-Forwarded-Host` (for example with a CDN in front), `PUBLIC_URL` covers the links. If the proxy can't overwrite `X-Forwarded-For`, leave `NOTEFEED_TRUST_PROXY` unset and accept the shared rate limit.
+If you can't control `Host` and `X-Forwarded-Host` (for example with a CDN in front), `PUBLIC_URL` covers the links. If the proxy doesn't set `X-Forwarded-For`, leave `NOTEFEED_TRUST_PROXY` unset and accept the shared rate limit.
 
 !!! warning "Don't put forward auth in front"
     A login gate such as Authentik forward auth in front of notefeed would block feed readers and scripts. Use `NOTEFEED_PASSWORD` instead: it locks posting and the web UI and leaves read links open.

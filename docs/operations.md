@@ -7,10 +7,10 @@ Every feed is a folder in `DATA_DIR` (`/data` in the container), named after the
 ```
 data/
 ├── .secret                                  # behind the read links; back it up
-├── homelab-7f3k2/
+├── homelab-7f3k2q9x4m8wz/
 │   ├── 20260929T140512Z-backup-finished.md
 │   └── 20260930T081500Z-deploy-done.md
-└── alerts-q9x2m/
+└── alerts-q9x2m7hd4k1pv/
     └── 20260930T090210Z-disk-space-low.md
 ```
 
@@ -45,8 +45,8 @@ tar czf notefeed-notes.tgz -C data .
 Delete a note's file, or a feed's whole folder. It disappears from the web UI and the feed straight away.
 
 ```sh
-rm data/homelab-7f3k2/20260929T140512Z-backup-finished.md
-rm -r data/homelab-7f3k2
+rm data/homelab-7f3k2q9x4m8wz/20260929T140512Z-backup-finished.md
+rm -r data/homelab-7f3k2q9x4m8wz
 ```
 
 ## Upgrading
@@ -84,8 +84,8 @@ Notes are untouched by upgrades.
 - Old notes sit directly in `DATA_DIR` and are ignored now. Move them into a feed:
 
     ```sh
-    mkdir data/homelab-7f3k2
-    mv data/*.md data/homelab-7f3k2/
+    mkdir data/homelab-7f3k2q9x4m8wz
+    mv data/*.md data/homelab-7f3k2q9x4m8wz/
     ```
 
 ## Running from source

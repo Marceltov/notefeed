@@ -2,7 +2,7 @@
 
 ## The start page
 
-Open notefeed in a browser. The start page asks for a feed name and suggests a random one, such as `quiet-otter-x7k2`. Type a name (uppercase letters are lowered and spaces become `-`) and press **Open** to go to `/<name>`. There's no list of feeds: you only reach a feed by knowing its name.
+Open notefeed in a browser. The start page asks for a feed name and suggests a random one, such as `quiet-otter-x7k2p4m9qd8zr`. Type a name (uppercase letters are lowered and spaces become `-`) and press **Open** to go to `/<name>`. There's no list of feeds: you only reach a feed by knowing its name.
 
 !!! warning "Pick a hard-to-guess name"
     Anyone who knows a feed's name can read and post to it. Keep the suggested name or make up something as random.

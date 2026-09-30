@@ -22,13 +22,21 @@ export const resetSecretForTests = () => {
   cached = undefined;
 };
 
+// A short key makes read ids computable offline. Fail loudly instead of regenerating the key,
+// which would change every read link.
+function strong(key: Buffer, where: string): Buffer {
+  if (key.length < 32) throw new Error(`${where} must be at least 32 bytes (e.g. openssl rand -hex 32), got ${key.length}`);
+  return key;
+}
+
 // Sync because readId() is called while rendering; it runs once per process.
 function secret(): Buffer {
   if (cached) return cached;
-  if (process.env.NOTEFEED_SECRET) return (cached = Buffer.from(process.env.NOTEFEED_SECRET));
+  // An empty NOTEFEED_SECRET (e.g. compose's ${NOTEFEED_SECRET:-}) counts as unset.
+  if (process.env.NOTEFEED_SECRET) return (cached = strong(Buffer.from(process.env.NOTEFEED_SECRET), "NOTEFEED_SECRET"));
   const file = join(/*turbopackIgnore: true*/ dataDir(), ".secret");
   try {
-    return (cached = readFileSync(/*turbopackIgnore: true*/ file));
+    return (cached = strong(readFileSync(/*turbopackIgnore: true*/ file), file));
   } catch (e) {
     if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
   }
@@ -39,7 +47,7 @@ function secret(): Buffer {
     return (cached = s);
   } catch (e) {
     if ((e as NodeJS.ErrnoException).code !== "EEXIST") throw e;
-    return (cached = readFileSync(/*turbopackIgnore: true*/ file)); // another process won the race
+    return (cached = strong(readFileSync(/*turbopackIgnore: true*/ file), file)); // another process won the race
   }
 }
 

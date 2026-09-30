@@ -15,7 +15,7 @@ For Python and Node there are small client packages, both called `notefeed`. The
     ```sh
     npm install notefeed        # Node 20 or newer
     # or run the command without installing:
-    npx notefeed post "# Hello" --url https://notes.example.com --feed homelab-7f3k2
+    npx notefeed post "# Hello" --url https://notes.example.com --feed homelab-7f3k2q9x4m8wz
     ```
 
 ## From code
@@ -30,13 +30,13 @@ Create the client with the server's URL and, usually, a default feed. `post()` c
 
     client = Client(
         "https://notes.example.com",
-        feed="homelab-7f3k2",
+        feed="homelab-7f3k2q9x4m8wz",
         password=os.environ.get("MY_NOTEFEED_PASSWORD"),  # None: the instance is open
     )  # timeout=10 by default
     try:
         note = client.post("# Deploy done\nimmich v3.2.4 on host-2")
         print(note.id, note.url, note.read_url)
-        client.post("# Disk at 91%", feed="alerts-q9x2m")  # another feed
+        client.post("# Disk at 91%", feed="alerts-q9x2m7hd4k1pv")  # another feed
     except NotefeedError as e:
         print("notefeed failed:", e, e.status)
     ```
@@ -48,20 +48,20 @@ Create the client with the server's URL and, usually, a default feed. `post()` c
 
     const client = new Client({
       url: "https://notes.example.com",
-      feed: "homelab-7f3k2",
+      feed: "homelab-7f3k2q9x4m8wz",
       password: process.env.MY_NOTEFEED_PASSWORD, // undefined: the instance is open
     }); // timeoutMs: 10000 by default
     try {
       const note = await client.post("# Deploy done\nimmich v3.2.4 on host-2");
       console.log(note.id, note.url, note.readUrl);
-      await client.post("# Disk at 91%", { feed: "alerts-q9x2m" }); // another feed
+      await client.post("# Disk at 91%", { feed: "alerts-q9x2m7hd4k1pv" }); // another feed
     } catch (e) {
       if (e instanceof NotefeedError) console.error("notefeed failed:", e.message, e.status);
       else throw e;
     }
     ```
 
-The feed is `post()`'s feed if given, else the client's. With neither, `post()` raises `ConfigError` without sending anything. Feed names are checked on the client too (1–64 of `a`–`z`, `0`–`9`, `-`, `_`), so a typo fails with a clear `ConfigError` instead of a round trip. Reserved names still come back from the server as `400`.
+The feed is `post()`'s feed if given, else the client's. With neither, `post()` raises `ConfigError` without sending anything. Feed names are checked on the client too (1–64 of `a`–`z`, `0`–`9`, `-`, `_`), so a typo fails with a clear `ConfigError` instead of a round trip. Reserved names still come back from the server as `400` (`InvalidNoteError`), except `logout`, the web UI's log-out route: posting there stores nothing and fails with a plain `NotefeedError` ("unexpected response").
 
 A note has `id`, `url` (its page in the web UI) and `read_url` / `readUrl` (the feed's [read link](feed.md)).
 
@@ -80,11 +80,11 @@ The command takes its settings from flags, or else from these environment variab
 Prefer the environment variables for the password and the feed name: flag values are visible to other users of the machine in the process list.
 
 ```sh
-export NOTEFEED_URL=https://notes.example.com NOTEFEED_FEED=homelab-7f3k2
+export NOTEFEED_URL=https://notes.example.com NOTEFEED_FEED=homelab-7f3k2q9x4m8wz
 notefeed post "# Backup finished"          # the text as an argument
 backup.sh 2>&1 | notefeed post -           # from stdin
 notefeed post --file report.md             # from a file
-notefeed post "# Disk at 91%" --feed alerts-q9x2m
+notefeed post "# Disk at 91%" --feed alerts-q9x2m7hd4k1pv
 notefeed --version
 notefeed post --help
 ```

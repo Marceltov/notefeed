@@ -3,11 +3,12 @@ const WINDOW = 60_000;
 const hits = new Map<string, { start: number; count: number }>();
 
 // Next 16 has no request.ip, and base-server only fills x-forwarded-for from the socket when the
-// client did not send one (`??=`), so the header is spoofable. Trust it only behind a proxy.
+// client did not send one (`??=`), so the header is spoofable. Trust it only behind a proxy, and
+// take the last entry: the address the proxy saw (an appending proxy keeps the client's own values in front).
 // ponytail: without a proxy everyone shares one bucket; set NOTEFEED_TRUST_PROXY=1 behind one for per-IP limits.
 export function clientIp(headers: Headers): string {
   if (process.env.NOTEFEED_TRUST_PROXY !== "1") return "direct";
-  return headers.get("x-forwarded-for")?.split(",")[0].trim() || "direct";
+  return headers.get("x-forwarded-for")?.split(",").at(-1)?.trim() || "direct";
 }
 
 // Seconds to wait if `key` is over the limit, else null; `count` records this call.

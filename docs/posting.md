@@ -3,7 +3,7 @@
 Send the note's markdown to `POST /<feed>`:
 
 ```sh
-curl --data-binary @note.md https://notes.example.com/homelab-7f3k2
+curl --data-binary @note.md https://notes.example.com/homelab-7f3k2q9x4m8wz
 ```
 
 The feed is created by its first note; there's nothing to set up first. notefeed stores the body exactly as sent, byte for byte, and answers `201 Created`:
@@ -11,8 +11,8 @@ The feed is created by its first note; there's nothing to set up first. notefeed
 ```json
 {
   "id": "20260929T140512Z-backup-finished",
-  "url": "https://notes.example.com/homelab-7f3k2/20260929T140512Z-backup-finished",
-  "feed_url": "https://notes.example.com/homelab-7f3k2",
+  "url": "https://notes.example.com/homelab-7f3k2q9x4m8wz/20260929T140512Z-backup-finished",
+  "feed_url": "https://notes.example.com/homelab-7f3k2q9x4m8wz",
   "read_url": "https://notes.example.com/r/q2Zc9kD0bTnVx4LmAe7sWp/feed.xml"
 }
 ```
@@ -26,10 +26,10 @@ The feed is created by its first note; there's nothing to set up first. notefeed
 
 ## Feed names
 
-A feed name is 1 to 64 characters of `a`–`z`, `0`–`9`, `-` and `_`. Anything else is rejected with `400`. These names are taken by notefeed itself and are reserved: `r`, `api`, `login`, `logout`, `mcp`, `n`, `_next`, `static`, `health`.
+A feed name is 1 to 64 characters of `a`–`z`, `0`–`9`, `-` and `_`. Anything else is rejected with `400`. These names are taken by notefeed itself and are reserved: `r`, `api`, `login`, `logout`, `mcp`, `n`, `_next`, `static`, `health`. Posting to a reserved name answers `400`, except `logout`: that's the web UI's log-out route, which answers with a redirect and stores nothing. A trailing slash is fine: `POST /<feed>/` works like `POST /<feed>`.
 
 !!! warning "The name is the key"
-    Anyone who knows a feed's name can read it and post to it. Pick one that's hard to guess, like `homelab-7f3k2`, and share the read link instead of the name.
+    Anyone who knows a feed's name can read it and post to it. Pick one that's hard to guess, like `homelab-7f3k2q9x4m8wz`, and share the read link instead of the name.
 
 ## With a password
 
@@ -37,7 +37,7 @@ If the instance has a password (`NOTEFEED_PASSWORD`), send it as a bearer token:
 
 ```sh
 curl -H "Authorization: Bearer $NOTEFEED_PASSWORD" \
-  --data-binary @note.md https://notes.example.com/homelab-7f3k2
+  --data-binary @note.md https://notes.example.com/homelab-7f3k2q9x4m8wz
 ```
 
 Without a password set, the header isn't needed and is ignored.
@@ -51,13 +51,13 @@ Without a password set, the header isn't needed and is ignored.
 | `application/x-www-form-urlencoded` | raw markdown (what `curl --data-binary` sends by default) |
 | `application/json` | an object with a string field `markdown` |
 
-Any other content type is rejected with `415`. The body must be UTF-8.
+Any other content type is rejected with `415`, including `multipart/form-data` (`curl -F`). The body must be UTF-8.
 
 From Python or Node, use the [client libraries](clients.md) instead of building requests yourself. From other languages, JSON is often easier than a raw body:
 
 ```sh
 curl -H "Content-Type: application/json" \
-  --data-binary @- https://notes.example.com/homelab-7f3k2 <<'EOF'
+  --data-binary @- https://notes.example.com/homelab-7f3k2q9x4m8wz <<'EOF'
 {
   "markdown": "# Deploy done\nimmich v3.2.4 on host-2"
 }
@@ -76,6 +76,7 @@ EOF
 |---|---|
 | `400` | The feed name is invalid or reserved; the note is empty; the JSON is invalid or has no string `markdown`; the body is not UTF-8 |
 | `401` | The instance has a password and the `Authorization` header is missing or wrong |
+| `404` | No feed in the URL: `POST /`, for example from an empty variable in `$NOTEFEED_URL/$FEED` |
 | `413` | The body is larger than 100 KB (102400 bytes) |
 | `415` | The content type is not one of those above |
 | `429` | Too many posts, or too many wrong passwords, from this client in the last minute. `Retry-After` says how many seconds to wait. See [Rate limits and caps](configuration.md#rate-limits-and-caps). |
@@ -112,7 +113,7 @@ A backup job that reports how it went:
     if output=$(restic backup /srv 2>&1); then status="finished"; else status="FAILED"; fi
 
     printf '# Backup %s on %s\n\n```\n%s\n```\n' "$status" "$(hostname)" "$(tail -n 5 <<<"$output")" |
-      curl -fsS --data-binary @- https://notes.example.com/homelab-7f3k2 > /dev/null
+      curl -fsS --data-binary @- https://notes.example.com/homelab-7f3k2q9x4m8wz > /dev/null
     ```
 
 From a program, with the client libraries:
@@ -123,7 +124,7 @@ From a program, with the client libraries:
     import shutil
     from notefeed import Client
 
-    client = Client("https://notes.example.com", feed="homelab-7f3k2")
+    client = Client("https://notes.example.com", feed="homelab-7f3k2q9x4m8wz")
 
     usage = shutil.disk_usage("/srv")
     used = usage.used / usage.total
@@ -137,7 +138,7 @@ From a program, with the client libraries:
     import { statfs } from "node:fs/promises";
     import { Client } from "notefeed";
 
-    const client = new Client({ url: "https://notes.example.com", feed: "homelab-7f3k2" });
+    const client = new Client({ url: "https://notes.example.com", feed: "homelab-7f3k2q9x4m8wz" });
 
     const fs = await statfs("/srv");
     const used = 1 - fs.bavail / fs.blocks;

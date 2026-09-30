@@ -15,8 +15,9 @@ const CHARS = "abcdefghijklmnopqrstuvwxyz0123456789";
 // Uint32 % small n: bias under 1e-8, irrelevant here.
 const pick = <T>(xs: readonly T[] | string, r: number) => xs[r % xs.length];
 
+// 13 suffix chars: 36^13 ≈ 2^67, so a suggested name (the feed's key) can't be guessed online.
 export function suggestFeedName(): string {
-  const r = crypto.getRandomValues(new Uint32Array(6));
+  const r = crypto.getRandomValues(new Uint32Array(15));
   const suffix = Array.from(r.slice(2), (x) => pick(CHARS, x)).join("");
   return `${pick(ADJECTIVES, r[0])}-${pick(ANIMALS, r[1])}-${suffix}`;
 }

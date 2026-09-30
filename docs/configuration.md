@@ -10,7 +10,7 @@ notefeed is configured with environment variables. With Compose, set them under 
 | `NOTEFEED_RATE_LIMIT` | `60` | Posts per client per minute, and separately wrong passwords per client per minute. `0` turns the limit off. |
 | `NOTEFEED_MAX_FEEDS` | `0`: no limit | Most feeds on the instance. Posting to a new feed beyond it answers `507`. |
 | `NOTEFEED_MAX_NOTES_PER_FEED` | `0`: no limit | Most notes in one feed. Posting beyond it answers `507`. |
-| `NOTEFEED_SECRET` | random, kept in `DATA_DIR/.secret` | Secret the [read links](feed.md) are derived from. Changing it changes every read link. |
+| `NOTEFEED_SECRET` | random, kept in `DATA_DIR/.secret` | Secret the [read links](feed.md) are derived from, at least 32 characters (`openssl rand -hex 32`); notefeed refuses a shorter one, or a `.secret` file shorter than 32 bytes. Changing it changes every read link. |
 | `NOTEFEED_TITLE` | `notefeed` | Title of the RSS feed and of the read-only view. |
 | `DATA_DIR` | `/data` | Folder holding the feeds, one subfolder each. |
 | `TZ` | `UTC` | Time zone for the times shown in the web UI, e.g. `Europe/Berlin`. |
@@ -42,7 +42,7 @@ Each client may post `NOTEFEED_RATE_LIMIT` notes per minute (60 by default), fro
 !!! warning "Behind a reverse proxy, set `NOTEFEED_TRUST_PROXY=1`"
     notefeed can't see a client's IP on its own, so without `NOTEFEED_TRUST_PROXY` **all clients share one rate-limit bucket**. On an exposed instance, one busy script can then slow everyone down, and an attacker's wrong password guesses can lock the owner out of posting and logging in for up to a minute.
 
-    With `NOTEFEED_TRUST_PROXY=1`, the first address in `X-Forwarded-For` is the client. Set it only behind a proxy that **overwrites** `X-Forwarded-For` with the real client address, and never appends to one the client sent: otherwise clients can pick their own bucket. Caddy does this by default; see [Reverse proxy](reverse-proxy.md).
+    With `NOTEFEED_TRUST_PROXY=1`, the **last** address in `X-Forwarded-For` is the client: the address the proxy in front of notefeed saw. Anything a client puts in the header itself comes before it and is ignored, so a proxy that overwrites the header and one that appends to it both work. Set it only when that proxy sets `X-Forwarded-For` and clients can't reach notefeed directly. Caddy does this by default; see [Reverse proxy](reverse-proxy.md).
 
 On a public open instance, cap how much space strangers can take:
 

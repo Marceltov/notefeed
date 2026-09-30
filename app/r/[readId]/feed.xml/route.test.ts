@@ -9,7 +9,7 @@ import { GET } from "./route";
 const BASE = "http://localhost:3000";
 beforeEach(async () => {
   process.env.DATA_DIR = await mkdtemp(join(tmpdir(), "notefeed-rss-"));
-  process.env.NOTEFEED_SECRET = "test-secret";
+  process.env.NOTEFEED_SECRET = "test-secret-".padEnd(32, "x");
   resetSecretForTests();
   delete process.env.NOTEFEED_PASSWORD;
   delete process.env.NOTEFEED_TITLE;

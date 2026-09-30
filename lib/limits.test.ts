@@ -37,10 +37,12 @@ test("default is 60 per minute", () => {
   expect(rateLimit("a", 1)).not.toBeNull();
 });
 
-test("clientIp trusts x-forwarded-for only with NOTEFEED_TRUST_PROXY=1", () => {
-  const h = new Headers({ "x-forwarded-for": "1.2.3.4, 10.0.0.1" });
+test("clientIp trusts x-forwarded-for only with NOTEFEED_TRUST_PROXY=1, and takes the last entry", () => {
+  // The client sent 6.6.6.6; an appending proxy added the address it saw, 1.2.3.4.
+  const h = new Headers({ "x-forwarded-for": "6.6.6.6, 1.2.3.4" });
   expect(clientIp(h)).toBe("direct");
   process.env.NOTEFEED_TRUST_PROXY = "1";
   expect(clientIp(h)).toBe("1.2.3.4");
+  expect(clientIp(new Headers({ "x-forwarded-for": "5.6.7.8" }))).toBe("5.6.7.8");
   expect(clientIp(new Headers())).toBe("direct");
 });

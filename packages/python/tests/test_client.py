@@ -68,6 +68,15 @@ def test_invalid_feed_name_raises_config_error(server, feed):
     assert len(server.requests) == 0
 
 
+def test_invalid_feed_name_is_not_echoed(server):
+    # The name is the write key: a near miss must not end up in CI logs.
+    feed = "Homelab-7f3k2q9x4m8wz"
+    for call in (lambda: Client(server.url, feed=feed), lambda: Client(server.url).post("x", feed=feed)):
+        with pytest.raises(ConfigError, match="invalid feed name") as e:
+            call()
+        assert "7f3k2q9x4m8wz" not in str(e.value)
+
+
 def test_password_sent_as_bearer_only_when_set(server):
     Client(server.url, "inbox").post("x")
     Client(server.url, "inbox", password="").post("x")

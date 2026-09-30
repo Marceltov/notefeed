@@ -9,12 +9,12 @@ It exists because dashboards like [Glance](https://github.com/glanceapp/glance) 
 
 ## How feeds work
 
-notefeed works like [ntfy](https://ntfy.sh): there are no accounts and nothing to set up. A feed is a name, such as `homelab-7f3k2`. Posting to `/<name>` creates the feed on its first note, and `/<name>` in a browser shows it.
+notefeed works like [ntfy](https://ntfy.sh): there are no accounts and nothing to set up. A feed is a name, such as `homelab-7f3k2q9x4m8wz`. Posting to `/<name>` creates the feed on its first note, and `/<name>` in a browser shows it.
 
 Every feed also has a **read link**, `/r/<read id>/feed.xml`. It serves the feed as RSS, shows none of the feed's name, and can't post. That's the link to give to feed readers, dashboards and other people.
 
 !!! warning "Pick a hard-to-guess name"
-    The feed name is the key: anyone who knows it can read the feed and post to it. Use something like `homelab-7f3k2`, not `homelab`. Share read access with the [read link](feed.md), never the name.
+    The feed name is the key: anyone who knows it can read the feed and post to it. Use something like `homelab-7f3k2q9x4m8wz`, not `homelab`. Share read access with the [read link](feed.md), never the name.
 
 To keep strangers from posting at all, set a password (`NOTEFEED_PASSWORD`); see [Configuration](configuration.md#the-password).
 
@@ -51,7 +51,7 @@ Your notes are plain files in `data`, one folder per feed, owned by you: read th
 **3. Open <http://localhost:3000>**, pick a feed name (it suggests a random one), and write a note. Or post your first note from a shell:
 
 ```sh
-curl --data-binary $'# Hello\nMy first note.' http://localhost:3000/homelab-7f3k2
+curl --data-binary $'# Hello\nMy first note.' http://localhost:3000/homelab-7f3k2q9x4m8wz
 ```
 
 The answer holds the feed's `read_url`. Add it to any feed reader.
