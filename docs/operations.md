@@ -29,6 +29,16 @@ With the published image:
 docker compose pull && docker compose up -d
 ```
 
+Image tags on `ghcr.io/marceltov/notefeed`:
+
+| Tag | Moves on |
+|---|---|
+| `:latest` | every release and every change on `main` |
+| `:main` | every change on `main` |
+| `:X.Y.Z`, `:X.Y`, `:X` | releases (`:0.1` follows the newest 0.1.x) |
+
+To upgrade only on purpose, pin a version, e.g. `image: ghcr.io/marceltov/notefeed:0.1`. Each release is listed on [GitHub Releases](https://github.com/Marceltov/notefeed/releases) with its notes.
+
 Built from source:
 
 ```sh
