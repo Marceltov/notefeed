@@ -7,7 +7,7 @@ import { checkFeed } from "@/lib/feeds";
 import { EmptyNoteError, NoteTooLargeError, createNote } from "@/lib/notes";
 import { clientIp } from "@/lib/limits";
 import { checkLimits } from "@/lib/post";
-import { publicUrl } from "@/lib/url";
+import { publicUrl, safeNext } from "@/lib/url";
 
 export async function loginAction(_prev: string | null, form: FormData): Promise<string | null> {
   const h = await headers();
@@ -21,7 +21,7 @@ export async function loginAction(_prev: string | null, form: FormData): Promise
     secure: publicUrl(h).startsWith("https:"),
     maxAge: 60 * 60 * 24 * 365,
   });
-  redirect("/");
+  redirect(safeNext(form.get("next")));
 }
 
 // `feed` is bound by the compose box on the client, so it is untrusted like the form.
