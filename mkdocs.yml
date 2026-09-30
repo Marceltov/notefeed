@@ -51,6 +51,7 @@ markdown_extensions:
 
 nav:
   - Home: index.md
+  - Quick start: quick-start.md
   - Posting notes: posting.md
   - Client libraries: clients.md
   - Web UI: web-ui.md
