@@ -5,7 +5,7 @@
 #   scripts/dev.sh stop     # stop both
 #   scripts/dev.sh status   # show what's running and where
 #
-# App: http://localhost:$APP_PORT, token $NOTEFEED_TOKEN (default "dev"), notes in ./data.
+# App: http://localhost:$APP_PORT, notes in ./data (set NOTEFEED_PASSWORD to try the lock).
 # Docs: http://localhost:$DOCS_PORT/, via the pinned mkdocs-material image (no Python needed).
 # Both listen on all interfaces so you can open them from another machine on the LAN.
 set -euo pipefail
@@ -26,7 +26,7 @@ start() {
     echo "app already running"
   else
     # setsid gives next dev its own process group, so stop can end it and its workers together.
-    NOTEFEED_TOKEN=${NOTEFEED_TOKEN:-dev} DATA_DIR=./data \
+    DATA_DIR=./data \
       setsid node_modules/.bin/next dev -p "$APP_PORT" -H 0.0.0.0 > .dev/app.log 2>&1 < /dev/null &
     echo $! > "$PIDFILE"
     echo "app starting (log: .dev/app.log)"
@@ -54,7 +54,7 @@ stop() {
 }
 
 status() {
-  if app_running; then echo "app:  http://localhost:$APP_PORT (token: ${NOTEFEED_TOKEN:-dev})"; else echo "app:  stopped"; fi
+  if app_running; then echo "app:  http://localhost:$APP_PORT"; else echo "app:  stopped"; fi
   if docs_running; then echo "docs: http://localhost:$DOCS_PORT/"; else echo "docs: stopped"; fi
 }
 

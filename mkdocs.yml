@@ -54,7 +54,7 @@ nav:
   - Posting notes: posting.md
   - Client libraries: clients.md
   - Web UI: web-ui.md
-  - The feed: feed.md
+  - Read links and RSS: feed.md
   - Configuration: configuration.md
   - Reverse proxy: reverse-proxy.md
   - Operations: operations.md

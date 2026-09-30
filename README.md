@@ -1,17 +1,17 @@
 # notefeed
 
-Post short markdown notes — from a script over HTTP, or by hand in a small web UI — and read them back as an RSS feed. Each note is a plain `.md` file on disk. Built as an inbox for dashboards like Glance and Dynacat, which can read RSS but have nowhere to post to.
+Post short markdown notes to a named feed — from a script over HTTP, or by hand in a small web UI — and read them back as RSS. Like [ntfy](https://ntfy.sh), but for notes: there are no accounts, a feed is just a name, and each note is a plain `.md` file on disk. Built as an inbox for dashboards like Glance and Dynacat, which can read RSS but have nowhere to post to.
 
 **Documentation: https://notefeed.me/**
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/screenshot-dark.png">
-  <img alt="The notefeed web UI: a compose box above notes grouped by day" src="docs/assets/screenshot-light.png">
+  <img alt="A notefeed feed page: a compose box, the feed's read link, and notes grouped by day" src="docs/assets/screenshot-light.png">
 </picture>
 
 ## Quick start
 
-Save this as `compose.yaml`, then create the data folder and the token, and start it:
+Save this as `compose.yaml`, create the data folder, and start it:
 
 ```yaml
 services:
@@ -20,27 +20,26 @@ services:
     restart: unless-stopped
     ports:
       - "3000:3000"
-    environment:
-      NOTEFEED_TOKEN: ${NOTEFEED_TOKEN:?Set NOTEFEED_TOKEN in .env}
     volumes:
       - ./data:/data
 ```
 
 ```sh
 mkdir data   # notes are written as the owner of this folder
-echo "NOTEFEED_TOKEN=$(openssl rand -hex 32)" > .env
 docker compose up -d
 ```
 
-Open http://localhost:3000 and log in with the token. Post from a script:
+Open http://localhost:3000 and pick a feed name. Anyone who knows the name can read and post to that feed, so make it hard to guess. Post from a script:
 
 ```sh
-curl -H "Authorization: Bearer $NOTEFEED_TOKEN" --data-binary @note.md http://localhost:3000/api/notes
+curl --data-binary @note.md http://localhost:3000/homelab-7f3k2
 ```
 
-Or with a client: `pip install notefeed` / `npm install notefeed`, then `notefeed post "# Hello"`.
+Or with a client: `pip install notefeed` / `npm install notefeed`, then `notefeed post "# Hello" --feed homelab-7f3k2`.
 
-Read the feed at http://localhost:3000/feed.xml.
+The answer includes the feed's `read_url`: a read-only RSS link to give to feed readers and dashboards. It doesn't reveal the feed name, and it can't post.
+
+To require a password for posting and the web UI, set `NOTEFEED_PASSWORD`. Read links stay open. See [Configuration](https://notefeed.me/configuration/).
 
 ## License
 
