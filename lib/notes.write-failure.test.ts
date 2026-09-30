@@ -19,6 +19,6 @@ test("a failed write leaves no partial file behind", async () => {
   const { createNote } = await import("./notes");
   const dir = await mkdtemp(join(tmpdir(), "notefeed-fail-"));
   process.env.DATA_DIR = dir;
-  await expect(createNote("# Hi")).rejects.toThrow("no space");
-  expect(await readdir(dir)).toEqual([]);
+  await expect(createNote("test", "# Hi")).rejects.toThrow("no space");
+  expect(await readdir(join(dir, "test"))).toEqual([]);
 });
