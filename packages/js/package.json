@@ -2,7 +2,7 @@
   "name": "notefeed",
   "version": "0.3.0",
   "description": "Client and CLI for notefeed, a self-hosted inbox for markdown notes that you read back as RSS.",
-  "license": "(Apache-2.0 OR GPL-2.0-only)",
+  "license": "Apache-2.0",
   "author": "Marcel Bruckner",
   "keywords": [
     "notefeed",

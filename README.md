@@ -44,6 +44,7 @@ Read the feed at http://localhost:3000/feed.xml.
 
 ## License
 
-notefeed is dual-licensed under the [Apache License 2.0](LICENSE) and the [GPLv2 License](LICENSE.GPLv2), like ntfy. You may use it under either.
+- **The notefeed server** (the web app and the Docker image) is licensed under the [GNU Affero General Public License v3.0](LICENSE). You can self-host it for free, for yourself or your company. If you run a modified version as a service for others, you must publish your changes under the same license.
+- **The client packages** (`packages/python`, `packages/js`) are licensed under the [Apache License 2.0](packages/js/LICENSE), so any app or script can use them.
 
 Versions up to and including 0.2.x were released under the MIT License.
