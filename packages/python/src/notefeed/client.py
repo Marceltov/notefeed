@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import http.client
 import json
 import os
+import re
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
@@ -52,7 +54,10 @@ def _setting(value: str | None, env: str) -> str:
 class Client:
     def __init__(self, url: str | None = None, token: str | None = None, timeout: float = 10.0):
         self.url = _setting(url, "NOTEFEED_URL").rstrip("/")
-        self.token = _setting(token, "NOTEFEED_TOKEN")
+        self.token = _setting(token, "NOTEFEED_TOKEN").strip()
+        if re.search(r"[\x00-\x1f\x7f]", self.token):
+            # Never echo the value: it would end up in terminals and CI logs.
+            raise ConfigError("NOTEFEED_TOKEN contains invalid characters")
         self.timeout = timeout
 
     def post(self, markdown: str) -> Note:
@@ -70,7 +75,7 @@ class Client:
                 status, text = res.status, res.read().decode("utf-8", errors="replace")
         except urllib.error.HTTPError as e:
             raise _http_error(e) from None
-        except (urllib.error.URLError, OSError) as e:
+        except (urllib.error.URLError, http.client.HTTPException, OSError) as e:
             reason = getattr(e, "reason", e)
             raise NotefeedError(f"could not reach {self.url}: {reason}") from None
         try:
@@ -85,7 +90,7 @@ def _http_error(e: urllib.error.HTTPError) -> NotefeedError:
     try:
         message = json.loads(text)["error"]
     except (ValueError, KeyError, TypeError):
-        message = f"HTTP {e.code}: {text[:200].strip()}"
+        message = f"HTTP {e.code}: {' '.join(text[:200].split())}"
     return _ERRORS.get(e.code, NotefeedError)(message, status=e.code)
 
 

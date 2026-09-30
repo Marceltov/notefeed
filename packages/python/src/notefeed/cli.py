@@ -44,8 +44,13 @@ def _read(args: argparse.Namespace) -> str:
                 return f.read().decode("utf-8")
         except OSError as e:
             raise _UsageError(f"cannot read {args.file}: {e.strerror}") from None
+        except UnicodeDecodeError:
+            raise _UsageError(f"{args.file} is not UTF-8") from None
     if args.text == "-":
-        return sys.stdin.buffer.read().decode("utf-8")
+        try:
+            return sys.stdin.buffer.read().decode("utf-8")
+        except UnicodeDecodeError:
+            raise _UsageError("stdin is not UTF-8") from None
     if args.text is None:
         raise _UsageError('give the note text, "-" for stdin, or --file PATH')
     return args.text

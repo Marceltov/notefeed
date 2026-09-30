@@ -90,3 +90,36 @@ test("version", async () => {
   expect(await main(["--version"], t.io)).toBe(0);
   expect(t.out.stdout.trim()).toBe("notefeed 0.1.0");
 });
+
+test("fileNotUtf8Exits2", async () => {
+  const f = join(mkdtempSync(join(tmpdir(), "nf-")), "latin1.md");
+  writeFileSync(f, Buffer.from([0x23, 0x20, 0x43, 0x61, 0x66, 0xe9, 0x0a]));
+  const t = io();
+  expect(await main(["post", "--file", f, "--url", server.url, "--token", "t"], t.io)).toBe(2);
+  expect(t.out.stderr).toContain("not UTF-8");
+  expect(server.requests).toEqual([]);
+});
+
+test("stdinNotUtf8Exits2", async () => {
+  const t = io();
+  t.io.stdin = Readable.from([Buffer.from([0x23, 0x20, 0x43, 0x61, 0x66, 0xe9, 0x0a])]);
+  expect(await main(["post", "-", "--url", server.url, "--token", "t"], t.io)).toBe(2);
+  expect(t.out.stderr).toContain("not UTF-8");
+  expect(server.requests).toEqual([]);
+});
+
+test("listItemText", async () => {
+  expect(await main(["post", "- buy milk", "--url", server.url, "--token", "t"], io().io)).toBe(0);
+  expect(server.requests[0].body.toString()).toBe("- buy milk");
+});
+
+test("help", async () => {
+  const t = io();
+  expect(await main(["post", "--help"], t.io)).toBe(0);
+  expect(t.out.stdout).toContain("usage: notefeed post");
+});
+
+test("explicitDoubleDashStillWorks", async () => {
+  expect(await main(["post", "--url", server.url, "--token", "t", "--", "- buy milk"], io().io)).toBe(0);
+  expect(server.requests[0].body.toString()).toBe("- buy milk");
+});

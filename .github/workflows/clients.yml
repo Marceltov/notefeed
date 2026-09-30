@@ -8,6 +8,9 @@ on:
   pull_request:
     paths: [packages/**, .github/workflows/clients.yml]
 
+permissions:
+  contents: read
+
 jobs:
   python:
     runs-on: ubuntu-latest
@@ -63,6 +66,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: pypi
     permissions:
+      contents: read
       id-token: write
     steps:
       - uses: actions/checkout@v4
@@ -73,10 +77,14 @@ jobs:
       - uses: pypa/gh-action-pypi-publish@v1.14.2
         with:
           packages-dir: packages/python/dist
+          # Re-running a release whose npm half failed must not fail on the files already on PyPI.
+          skip-existing: true
 
   publish-npm:
     needs: check-version
     runs-on: ubuntu-latest
+    # NPM_TOKEN lives in this environment (not as a repo secret), so only release runs can read it.
+    environment: npm
     permissions:
       contents: read
       id-token: write

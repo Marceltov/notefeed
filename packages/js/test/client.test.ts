@@ -99,3 +99,37 @@ test("nonJsonSuccessBody", async () => {
   expect(err.status).toBe(200);
   expect(err.message).toContain("not a notefeed");
 });
+
+test("tokenWhitespaceStripped", async () => {
+  await new Client({ url: server.url, token: "tok\r\n" }).post("x");
+  expect(server.requests[0].headers.authorization).toBe("Bearer tok");
+});
+
+test("tokenControlCharsRejectedWithoutEcho", () => {
+  let err: unknown;
+  try {
+    new Client({ url: "http://x", token: "sec\nret" });
+  } catch (e) {
+    err = e;
+  }
+  expect(err).toBeInstanceOf(ConfigError);
+  expect((err as Error).message).toContain("invalid characters");
+  expect((err as Error).message).not.toMatch(/sec|ret/);
+});
+
+test("nonHttpReply", async () => {
+  const { createServer } = await import("node:net");
+  const srv = createServer((s) => s.once("data", () => s.end("SSH-2.0-OpenSSH_9.6\r\n")));
+  await new Promise<void>((r) => srv.listen(0, "127.0.0.1", r));
+  const port = (srv.address() as { port: number }).port;
+  const err = await new Client({ url: `http://127.0.0.1:${port}`, token: "t" }).post("x").catch((e) => e);
+  expect(err).toBeInstanceOf(NotefeedError);
+  expect(err.status).toBeNull();
+  srv.close();
+});
+
+test("htmlErrorBodyCollapsed", async () => {
+  server.reply(502, "<html>\n  <body>bad gateway</body>\n</html>\n", "text/html");
+  const err = await new Client({ url: server.url, token: "t" }).post("x").catch((e) => e);
+  expect(err.message).toBe("HTTP 502: <html> <body>bad gateway</body> </html>");
+});

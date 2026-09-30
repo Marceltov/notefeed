@@ -83,3 +83,41 @@ def test_non_json_success_body(server):
     assert type(e.value) is NotefeedError
     assert e.value.status == 200
     assert "not a notefeed" in str(e.value)
+
+
+def test_token_whitespace_stripped(server):
+    Client(server.url, "tok\r\n").post("x")
+    assert server.requests[0]["headers"]["Authorization"] == "Bearer tok"
+
+
+def test_token_control_chars_rejected_without_echo():
+    with pytest.raises(ConfigError) as e:
+        Client("http://x", "sec\nret")
+    assert "invalid characters" in str(e.value)
+    assert "sec" not in str(e.value) and "ret" not in str(e.value)
+
+
+def test_non_http_reply():
+    import socket
+    import threading
+
+    srv = socket.create_server(("127.0.0.1", 0))
+
+    def banner():
+        conn, _ = srv.accept()
+        conn.recv(65536)
+        conn.sendall(b"SSH-2.0-OpenSSH_9.6\r\n")
+        conn.close()
+
+    threading.Thread(target=banner, daemon=True).start()
+    with pytest.raises(NotefeedError) as e:
+        Client(f"http://127.0.0.1:{srv.getsockname()[1]}", "t").post("x")
+    assert e.value.status is None
+    srv.close()
+
+
+def test_html_error_body_collapsed(server):
+    server.reply(502, "<html>\n  <body>bad gateway</body>\n</html>\n", "text/html")
+    with pytest.raises(NotefeedError) as e:
+        Client(server.url, "t").post("x")
+    assert str(e.value) == "HTTP 502: <html> <body>bad gateway</body> </html>"

@@ -57,3 +57,23 @@ def test_version(capsys):
     except SystemExit as e:
         assert e.code == 0
     assert capsys.readouterr().out.strip().endswith("0.1.0")
+
+
+def test_file_not_utf8_exits_2(server, capsys, tmp_path):
+    f = tmp_path / "latin1.md"
+    f.write_bytes(b"# Caf\xe9\n")
+    assert main(["post", "--file", str(f), "--url", server.url, "--token", "t"]) == 2
+    assert "not UTF-8" in capsys.readouterr().err
+    assert server.requests == []
+
+
+def test_stdin_not_utf8_exits_2(server, capsys, monkeypatch):
+    monkeypatch.setattr(sys, "stdin", io.TextIOWrapper(io.BytesIO(b"# Caf\xe9\n")))
+    assert main(["post", "-", "--url", server.url, "--token", "t"]) == 2
+    assert "not UTF-8" in capsys.readouterr().err
+    assert server.requests == []
+
+
+def test_list_item_text(server):
+    assert main(["post", "- buy milk", "--url", server.url, "--token", "t"]) == 0
+    assert server.requests[0]["body"] == b"- buy milk"

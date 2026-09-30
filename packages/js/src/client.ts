@@ -42,7 +42,9 @@ export class Client {
 
   constructor(options: ClientOptions = {}) {
     this.url = setting(options.url, "NOTEFEED_URL").replace(/\/+$/, "");
-    this.token = setting(options.token, "NOTEFEED_TOKEN");
+    this.token = setting(options.token, "NOTEFEED_TOKEN").trim();
+    // Never echo the value: it would end up in terminals and CI logs.
+    if (/[\x00-\x1f\x7f]/.test(this.token)) throw new ConfigError("NOTEFEED_TOKEN contains invalid characters");
     this.timeoutMs = options.timeoutMs ?? 10_000;
   }
 
@@ -67,7 +69,7 @@ export class Client {
         message = JSON.parse(text).error;
         if (typeof message !== "string") throw new Error();
       } catch {
-        message = `HTTP ${res.status}: ${text.slice(0, 200).trim()}`;
+        message = `HTTP ${res.status}: ${text.slice(0, 200).replace(/\s+/g, " ").trim()}`;
       }
       throw new (ERRORS[res.status] ?? NotefeedError)(message, res.status);
     }

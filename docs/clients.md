@@ -67,7 +67,10 @@ backup.sh 2>&1 | notefeed post -           # from stdin
 notefeed post --file report.md             # from a file
 notefeed post "# Hi" --url https://notes.example.com --token "$TOKEN"
 notefeed --version
+notefeed post --help
 ```
+
+Text that starts with `-`, like a list item, works as-is: `notefeed post "- buy milk"`. The usual `notefeed post -- "-x"` works too.
 
 It prints the new note's URL. On failure it prints `notefeed: <reason>` to stderr and exits with:
 
@@ -75,7 +78,7 @@ It prints the new note's URL. On failure it prints `notefeed: <reason>` to stder
 |---|---|
 | `0` | Posted |
 | `1` | The server refused the note, or couldn't be reached |
-| `2` | Usage or configuration problem (no text, unreadable file, no URL or token) |
+| `2` | Usage or configuration problem: no text, an unreadable or non-UTF-8 file or stdin, no URL or token, a token with control characters |
 
 ## Errors
 
@@ -83,7 +86,7 @@ Every error is a `NotefeedError` with a `status` (the HTTP status, or `None`/`nu
 
 | Type | When |
 |---|---|
-| `ConfigError` | No URL or token given |
+| `ConfigError` | No URL or token given, or the token contains control characters (the token itself is never shown) |
 | `InvalidNoteError` | `400` or `415`: empty note, not UTF-8 |
 | `AuthError` | `401`: missing or wrong token |
 | `NoteTooLargeError` | `413`: over 100 KB |
