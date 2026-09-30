@@ -44,12 +44,15 @@ markdown_extensions:
       permalink: true
   - pymdownx.highlight
   - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
   - pymdownx.details
   - pymdownx.keys
 
 nav:
   - Home: index.md
   - Posting notes: posting.md
+  - Client libraries: clients.md
   - Web UI: web-ui.md
   - The feed: feed.md
   - Configuration: configuration.md

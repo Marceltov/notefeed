@@ -17,6 +17,8 @@ Open http://localhost:3000 and log in with the token. Post from a script:
 curl -H "Authorization: Bearer $NOTEFEED_TOKEN" --data-binary @note.md http://localhost:3000/api/notes
 ```
 
+Or with a client: `pip install notefeed` / `npm install notefeed`, then `notefeed post "# Hello"`.
+
 Read the feed at http://localhost:3000/feed.xml.
 
 ## License

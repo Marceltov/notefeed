@@ -57,6 +57,8 @@ Error responses are JSON: `{"error": "<short reason>"}`.
 
 ## From a script
 
+For Python and Node, the [client libraries](clients.md) do this for you, with a `notefeed` command for shell scripts. With plain curl:
+
 A backup job that reports how it went:
 
 ```sh
