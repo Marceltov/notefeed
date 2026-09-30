@@ -123,3 +123,25 @@ test("explicitDoubleDashStillWorks", async () => {
   expect(await main(["post", "--url", server.url, "--token", "t", "--", "- buy milk"], io().io)).toBe(0);
   expect(server.requests[0].body.toString()).toBe("- buy milk");
 });
+
+test("envVars", async () => {
+  process.env.NOTEFEED_URL = server.url;
+  process.env.NOTEFEED_TOKEN = "envtok";
+  expect(await main(["post", "- buy milk"], io().io)).toBe(0);
+  expect(server.requests[0].headers.authorization).toBe("Bearer envtok");
+  expect(server.requests[0].body.toString()).toBe("- buy milk");
+});
+
+test("flagsWinOverEnv", async () => {
+  process.env.NOTEFEED_URL = "http://127.0.0.1:1";
+  process.env.NOTEFEED_TOKEN = "envtok";
+  expect(await main(["post", "hi", "--url", server.url, "--token", "argtok"], io().io)).toBe(0);
+  expect(server.requests[0].headers.authorization).toBe("Bearer argtok");
+});
+
+test("noTokenNamesFlagAndEnv", async () => {
+  const t = io();
+  expect(await main(["post", "hi", "--url", "http://x"], t.io)).toBe(2);
+  expect(t.out.stderr).toContain("--token");
+  expect(t.out.stderr).toContain("NOTEFEED_TOKEN");
+});

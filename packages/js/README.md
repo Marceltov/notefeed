@@ -12,8 +12,10 @@ backup.sh 2>&1 | npx notefeed post -
 ```js
 import { Client } from "notefeed";
 
-const note = await new Client().post("# Deploy done\nversion 1.4.2"); // reads NOTEFEED_URL / NOTEFEED_TOKEN
-console.log(note.url);
+const client = new Client({ url: "https://notes.example.com", token }); // URL and token set once
+console.log((await client.post("# Deploy done\nversion 1.4.2")).url);
 ```
+
+The `notefeed` command reads `--url` / `--token`, or `NOTEFEED_URL` / `NOTEFEED_TOKEN`. The library itself never reads the environment.
 
 Full documentation: https://marceltov.github.io/notefeed/clients/

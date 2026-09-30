@@ -40,7 +40,11 @@ export async function main(argv: string[], io: Io = process): Promise<number> {
     const [command, text, ...rest] = positionals;
     if (command !== "post" || rest.length) throw new UsageError(USAGE);
     const markdown = await read(text, values.file, io);
-    const note = await new Client({ url: values.url, token: values.token }).post(markdown);
+    const url = values.url || process.env.NOTEFEED_URL;
+    const token = values.token || process.env.NOTEFEED_TOKEN;
+    if (!url) throw new UsageError("no URL given; pass --url or set NOTEFEED_URL");
+    if (!token) throw new UsageError("no token given; pass --token or set NOTEFEED_TOKEN");
+    const note = await new Client({ url, token }).post(markdown);
     io.stdout.write(`${note.url}\n`);
     return 0;
   } catch (e) {

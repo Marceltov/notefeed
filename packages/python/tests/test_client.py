@@ -1,6 +1,6 @@
 import pytest
 
-from notefeed import AuthError, Client, ConfigError, InvalidNoteError, Note, NotefeedError, NoteTooLargeError, post
+from notefeed import AuthError, Client, ConfigError, InvalidNoteError, Note, NotefeedError, NoteTooLargeError
 
 
 def test_post_sends_markdown_and_returns_note(server):
@@ -19,29 +19,30 @@ def test_trailing_slash_and_subpath(server):
     assert server.requests[0]["path"] == "/sub/api/notes"
 
 
-def test_env_config(server, monkeypatch):
-    monkeypatch.setenv("NOTEFEED_URL", server.url)
-    monkeypatch.setenv("NOTEFEED_TOKEN", "envtok")
-    Client().post("x")
-    assert server.requests[0]["headers"]["Authorization"] == "Bearer envtok"
-
-
-def test_explicit_args_win(server, monkeypatch):
+def test_ignores_environment(server, monkeypatch):
+    # The library takes url and token from code only; env vars are the CLI's business.
     monkeypatch.setenv("NOTEFEED_URL", "http://127.0.0.1:1")
     monkeypatch.setenv("NOTEFEED_TOKEN", "envtok")
     Client(server.url, "argtok").post("x")
     assert server.requests[0]["headers"]["Authorization"] == "Bearer argtok"
+    with pytest.raises(ConfigError):
+        Client("", "")
 
 
-def test_missing_config_names_variable(monkeypatch):
-    monkeypatch.setenv("NOTEFEED_URL", "http://x")
-    monkeypatch.setenv("NOTEFEED_TOKEN", "")  # empty counts as unset
-    with pytest.raises(ConfigError, match="NOTEFEED_TOKEN") as e:
-        Client()
+def test_missing_url_or_token():
+    with pytest.raises(ConfigError, match="url") as e:
+        Client("", "t")
     assert e.value.status is None
-    monkeypatch.delenv("NOTEFEED_URL")
-    with pytest.raises(ConfigError, match="NOTEFEED_URL"):
-        Client(token="t", url="")  # empty argument and no env var
+    with pytest.raises(ConfigError, match="token"):
+        Client("http://x", "")
+    with pytest.raises(TypeError):
+        Client()  # both are required arguments
+
+
+def test_no_module_level_post():
+    import notefeed
+
+    assert not hasattr(notefeed, "post")
 
 
 @pytest.mark.parametrize(
@@ -70,10 +71,6 @@ def test_connection_refused():
     with pytest.raises(NotefeedError) as e:
         Client("http://127.0.0.1:1", "t").post("x")
     assert e.value.status is None
-
-
-def test_module_level_post(server):
-    assert post("x", url=server.url, token="t") == Note("i", "u")
 
 
 def test_non_json_success_body(server):

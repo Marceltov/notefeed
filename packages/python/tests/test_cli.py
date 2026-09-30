@@ -77,3 +77,25 @@ def test_stdin_not_utf8_exits_2(server, capsys, monkeypatch):
 def test_list_item_text(server):
     assert main(["post", "- buy milk", "--url", server.url, "--token", "t"]) == 0
     assert server.requests[0]["body"] == b"- buy milk"
+
+
+def test_env_vars(server, monkeypatch):
+    monkeypatch.setenv("NOTEFEED_URL", server.url)
+    monkeypatch.setenv("NOTEFEED_TOKEN", "envtok")
+    assert main(["post", "- buy milk"]) == 0
+    req = server.requests[0]
+    assert req["headers"]["Authorization"] == "Bearer envtok"
+    assert req["body"] == b"- buy milk"
+
+
+def test_flags_win_over_env(server, monkeypatch):
+    monkeypatch.setenv("NOTEFEED_URL", "http://127.0.0.1:1")
+    monkeypatch.setenv("NOTEFEED_TOKEN", "envtok")
+    assert main(["post", "hi", "--url", server.url, "--token", "argtok"]) == 0
+    assert server.requests[0]["headers"]["Authorization"] == "Bearer argtok"
+
+
+def test_no_token_names_flag_and_env(capsys):
+    assert main(["post", "hi", "--url", "http://x"]) == 2
+    err = capsys.readouterr().err
+    assert "--token" in err and "NOTEFEED_TOKEN" in err

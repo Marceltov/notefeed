@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 
 from . import __version__
@@ -22,7 +23,13 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         markdown = _read(args)
-        note = Client(args.url, args.token).post(markdown)
+        url = args.url or os.environ.get("NOTEFEED_URL")
+        token = args.token or os.environ.get("NOTEFEED_TOKEN")
+        if not url:
+            raise _UsageError("no URL given; pass --url or set NOTEFEED_URL")
+        if not token:
+            raise _UsageError("no token given; pass --token or set NOTEFEED_TOKEN")
+        note = Client(url, token).post(markdown)
     except (ConfigError, _UsageError) as e:
         print(f"notefeed: {e}", file=sys.stderr)
         return 2

@@ -12,8 +12,10 @@ backup.sh 2>&1 | notefeed post -
 ```python
 from notefeed import Client
 
-note = Client().post("# Deploy done\nversion 1.4.2")  # reads NOTEFEED_URL / NOTEFEED_TOKEN
-print(note.url)
+client = Client("https://notes.example.com", token)  # URL and token set once
+print(client.post("# Deploy done\nversion 1.4.2").url)
 ```
+
+The `notefeed` command reads `--url` / `--token`, or `NOTEFEED_URL` / `NOTEFEED_TOKEN`. The library itself never reads the environment.
 
 Full documentation: https://marceltov.github.io/notefeed/clients/

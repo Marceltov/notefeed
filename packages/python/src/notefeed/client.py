@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import http.client
 import json
-import os
 import re
 import urllib.error
 import urllib.request
@@ -44,20 +43,19 @@ class NoteTooLargeError(NotefeedError):
 _ERRORS = {400: InvalidNoteError, 415: InvalidNoteError, 401: AuthError, 413: NoteTooLargeError}
 
 
-def _setting(value: str | None, env: str) -> str:
-    value = value or os.environ.get(env) or ""
-    if not value:
-        raise ConfigError(f"no {env.split('_')[1].lower()} given; pass it or set {env}")
-    return value
-
-
 class Client:
-    def __init__(self, url: str | None = None, token: str | None = None, timeout: float = 10.0):
-        self.url = _setting(url, "NOTEFEED_URL").rstrip("/")
-        self.token = _setting(token, "NOTEFEED_TOKEN").strip()
+    """A notefeed server. URL and token are set once here; post() takes only the note."""
+
+    def __init__(self, url: str, token: str, timeout: float = 10.0):
+        if not url:
+            raise ConfigError("no url given")
+        if not (token or "").strip():
+            raise ConfigError("no token given")
+        self.url = url.rstrip("/")
+        self.token = token.strip()
         if re.search(r"[\x00-\x1f\x7f]", self.token):
             # Never echo the value: it would end up in terminals and CI logs.
-            raise ConfigError("NOTEFEED_TOKEN contains invalid characters")
+            raise ConfigError("token contains invalid characters")
         self.timeout = timeout
 
     def post(self, markdown: str) -> Note:
@@ -93,7 +91,3 @@ def _http_error(e: urllib.error.HTTPError) -> NotefeedError:
         message = f"HTTP {e.code}: {' '.join(text[:200].split())}"
     return _ERRORS.get(e.code, NotefeedError)(message, status=e.code)
 
-
-def post(markdown: str, **kwargs) -> Note:
-    """Post one note. Keyword arguments go to Client (url, token, timeout)."""
-    return Client(**kwargs).post(markdown)

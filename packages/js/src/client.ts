@@ -1,7 +1,7 @@
 /** A tiny client for notefeed's POST /api/notes. No dependencies; uses the global fetch. */
 
 export type Note = { id: string; url: string };
-export type ClientOptions = { url?: string; token?: string; timeoutMs?: number };
+export type ClientOptions = { url: string; token: string; timeoutMs?: number };
 
 /** Any failure talking to notefeed. `status` is the HTTP status, or null (network, config). */
 export class NotefeedError extends Error {
@@ -29,23 +29,21 @@ const ERRORS: Record<number, typeof NotefeedError> = {
   413: NoteTooLargeError,
 };
 
-function setting(value: string | undefined, env: string): string {
-  const v = value || process.env[env] || "";
-  if (!v) throw new ConfigError(`no ${env.split("_")[1].toLowerCase()} given; pass it or set ${env}`);
-  return v;
-}
-
 export class Client {
   readonly url: string;
   private readonly token: string;
   private readonly timeoutMs: number;
 
-  constructor(options: ClientOptions = {}) {
-    this.url = setting(options.url, "NOTEFEED_URL").replace(/\/+$/, "");
-    this.token = setting(options.token, "NOTEFEED_TOKEN").trim();
+  /** A notefeed server. URL and token are set once here; post() takes only the note. */
+  constructor(options: ClientOptions) {
+    const { url, token, timeoutMs } = options ?? ({} as Partial<ClientOptions>);
+    if (!url) throw new ConfigError("no url given");
+    if (!token?.trim()) throw new ConfigError("no token given");
+    this.url = url.replace(/\/+$/, "");
+    this.token = token.trim();
     // Never echo the value: it would end up in terminals and CI logs.
-    if (/[\x00-\x1f\x7f]/.test(this.token)) throw new ConfigError("NOTEFEED_TOKEN contains invalid characters");
-    this.timeoutMs = options.timeoutMs ?? 10_000;
+    if (/[\x00-\x1f\x7f]/.test(this.token)) throw new ConfigError("token contains invalid characters");
+    this.timeoutMs = timeoutMs ?? 10_000;
   }
 
   async post(markdown: string): Promise<Note> {
@@ -81,7 +79,3 @@ export class Client {
   }
 }
 
-/** Post one note. Options go to Client (url, token, timeoutMs). */
-export function post(markdown: string, options?: ClientOptions): Promise<Note> {
-  return new Client(options).post(markdown);
-}

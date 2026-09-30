@@ -18,23 +18,17 @@ For Python and Node there are small client packages, both called `notefeed`. The
     npx notefeed post "# Hello"
     ```
 
-## Configuration
-
-Both read the server and token from the environment, unless you pass them in:
-
-| Variable | Meaning |
-|---|---|
-| `NOTEFEED_URL` | notefeed's base URL, e.g. `https://notes.example.com` |
-| `NOTEFEED_TOKEN` | the API token (`NOTEFEED_TOKEN` on the server) |
-
 ## From code
+
+Give the server's URL and the token once, when you create the client. After that, `post()` takes only the note.
 
 === "Python"
 
     ```python
+    import os
     from notefeed import Client, NotefeedError
 
-    client = Client()  # or Client("https://notes.example.com", token, timeout=10)
+    client = Client("https://notes.example.com", os.environ["MY_NOTEFEED_TOKEN"])  # timeout=10 by default
     try:
         note = client.post("# Deploy done\nversion 1.4.2 on host-2")
         print(note.id, note.url)
@@ -47,7 +41,7 @@ Both read the server and token from the environment, unless you pass them in:
     ```js
     import { Client, NotefeedError } from "notefeed";
 
-    const client = new Client(); // or new Client({ url, token, timeoutMs: 10000 })
+    const client = new Client({ url: "https://notes.example.com", token: process.env.MY_NOTEFEED_TOKEN }); // timeoutMs: 10000 by default
     try {
       const note = await client.post("# Deploy done\nversion 1.4.2 on host-2");
       console.log(note.id, note.url);
@@ -57,11 +51,21 @@ Both read the server and token from the environment, unless you pass them in:
     }
     ```
 
-For a one-off there's also `post(markdown)` at the top level of both packages.
+The libraries never read environment variables themselves; where the token comes from is up to your program. Keep it out of source code, for example in an environment variable or a secrets store, as above.
 
 ## From the command line
 
+The command takes the server and token from `--url` / `--token`, or else from these environment variables:
+
+| Variable | Meaning |
+|---|---|
+| `NOTEFEED_URL` | notefeed's base URL, e.g. `https://notes.example.com` |
+| `NOTEFEED_TOKEN` | the API token (`NOTEFEED_TOKEN` on the server) |
+
+Prefer the environment variable for the token: a `--token` value is visible to other users of the machine in the process list.
+
 ```sh
+export NOTEFEED_URL=https://notes.example.com NOTEFEED_TOKEN=...
 notefeed post "# Backup finished"          # the text as an argument
 backup.sh 2>&1 | notefeed post -           # from stdin
 notefeed post --file report.md             # from a file
@@ -78,7 +82,7 @@ It prints the new note's URL. On failure it prints `notefeed: <reason>` to stder
 |---|---|
 | `0` | Posted |
 | `1` | The server refused the note, or couldn't be reached |
-| `2` | Usage or configuration problem: no text, an unreadable or non-UTF-8 file or stdin, no URL or token, a token with control characters |
+| `2` | Usage or configuration problem: no text, an unreadable or non-UTF-8 file or stdin, no URL or token (neither flag nor environment variable), a token with control characters |
 
 ## Errors
 
@@ -86,7 +90,7 @@ Every error is a `NotefeedError` with a `status` (the HTTP status, or `None`/`nu
 
 | Type | When |
 |---|---|
-| `ConfigError` | No URL or token given, or the token contains control characters (the token itself is never shown) |
+| `ConfigError` | Empty URL or token passed to `Client`, or the token contains control characters (the token itself is never shown) |
 | `InvalidNoteError` | `400` or `415`: empty note, not UTF-8 |
 | `AuthError` | `401`: missing or wrong token |
 | `NoteTooLargeError` | `413`: over 100 KB |
