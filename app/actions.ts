@@ -33,8 +33,8 @@ export async function postNoteAction(feed: string, _prev: string | null, form: F
   // Same rate limit and caps as POST /<feed>. Messages come from lib/post.ts, lower-case.
   const limited = await checkLimits(feed, await headers());
   if (limited) {
-    const { error } = await limited.json();
-    return error.charAt(0).toUpperCase() + error.slice(1);
+    const { error, retryAfter } = limited;
+    return error.charAt(0).toUpperCase() + error.slice(1) + (retryAfter ? `, try again in ${retryAfter} seconds.` : "");
   }
   let id: string;
   try {
