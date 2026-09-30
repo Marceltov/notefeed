@@ -1,6 +1,17 @@
 # Reverse proxy
 
-notefeed has its own login, so it's fine to put it on the internet behind a reverse proxy. Only `/feed.xml` and `/login` are public; the web UI needs a login and the API needs the token.
+To put notefeed on the internet, run it behind a reverse proxy that handles HTTPS. Decide first whether it's open or locked (see [Configuration](configuration.md#open-or-locked)): open, anyone can post to a feed whose name they know; locked with `NOTEFEED_PASSWORD`, only you can post, and read links stay public either way.
+
+On a public instance, always set these:
+
+```yaml
+environment:
+  PUBLIC_URL: https://notes.example.com   # links don't follow the client's Host header
+  NOTEFEED_TRUST_PROXY: "1"               # rate limits per client, not one shared bucket
+  # NOTEFEED_PASSWORD: ${NOTEFEED_PASSWORD}
+  # NOTEFEED_MAX_FEEDS: 100               # on an open instance
+  # NOTEFEED_MAX_NOTES_PER_FEED: 1000
+```
 
 ## Caddy
 
@@ -10,7 +21,7 @@ notes.example.com {
 }
 ```
 
-Caddy handles HTTPS and forwards the original `Host`, `X-Forwarded-Proto` and `X-Forwarded-Host`, so links and redirects come out right with no extra settings. Because the public address is `https`, the login cookie is marked `Secure`.
+Caddy handles HTTPS and forwards the original `Host`, `X-Forwarded-Proto` and `X-Forwarded-Host`. It also sets `X-Forwarded-For` to the real client address, which is what `NOTEFEED_TRUST_PROXY=1` needs. Because the public address is `https`, the login cookie is marked `Secure`.
 
 Keep port 3000 off the internet so only Caddy can reach it. In `compose.yaml`:
 
@@ -27,8 +38,9 @@ Any proxy works if it:
 
 - forwards the original `Host`, or sets `X-Forwarded-Host`
 - sets `X-Forwarded-Proto`
+- sets `X-Forwarded-For` to the client's address, or appends it to the header the client sent (nginx's `$proxy_add_x_forwarded_for`, for example). notefeed uses the **last** entry, the one the proxy added, so values a client sends itself don't count.
 
-If you can't control those headers (for example with a CDN in front), set `PUBLIC_URL`.
+If you can't control `Host` and `X-Forwarded-Host` (for example with a CDN in front), `PUBLIC_URL` covers the links. If the proxy doesn't set `X-Forwarded-For`, leave `NOTEFEED_TRUST_PROXY` unset and accept the shared rate limit.
 
 !!! warning "Don't put forward auth in front"
-    A login gate such as Authentik forward auth in front of notefeed would block feed readers and scripts. notefeed already requires a login for everything except the feed.
+    A login gate such as Authentik forward auth in front of notefeed would block feed readers and scripts. Use `NOTEFEED_PASSWORD` instead: it locks posting and the web UI and leaves read links open.

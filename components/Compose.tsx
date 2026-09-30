@@ -4,9 +4,9 @@ import { useActionState, useState } from "react";
 import { postNoteAction } from "@/app/actions";
 import { extractTitle, idStamp, slugify } from "@/lib/slug";
 
-export function Compose() {
+export function Compose({ feed }: { feed: string }) {
   const [text, setText] = useState("");
-  const [error, action, pending] = useActionState(postNoteAction, null);
+  const [error, action, pending] = useActionState(postNoteAction.bind(null, feed), null);
   const filename = `${idStamp(new Date())}-${slugify(extractTitle(text))}.md`;
 
   return (

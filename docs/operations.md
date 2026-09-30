@@ -2,9 +2,23 @@
 
 ## Where notes live
 
-Every note is a plain markdown file in `DATA_DIR` (`/data` in the container), named `<id>.md`. With the quick start's `compose.yaml` that's the `data` folder next to it. You can read, grep or copy the files directly.
+Every feed is a folder in `DATA_DIR` (`/data` in the container), named after the feed, and every note is a plain markdown file in it, named `<id>.md`:
+
+```
+data/
+├── .secret                                  # behind the read links; back it up
+├── homelab-7f3k2q9x4m8wz/
+│   ├── 20260929T140512Z-backup-finished.md
+│   └── 20260930T081500Z-deploy-done.md
+└── alerts-q9x2m7hd4k1pv/
+    └── 20260930T090210Z-disk-space-low.md
+```
+
+With the quick start's `compose.yaml` that's the `data` folder next to it. You can read, grep or copy the files directly.
 
 notefeed writes them as the **owner of that folder**: create it yourself (`mkdir data`) and the notes are yours. To choose a different owner, set `PUID` and `PGID`. If Docker created the folder (owned by root), notefeed falls back to uid/gid 1000.
+
+notefeed only reads folders with valid feed names and files named like notes. Anything else in `DATA_DIR`, such as `.git` or loose files, is ignored.
 
 ## Keeping notes in git
 
@@ -16,22 +30,23 @@ git init
 git add -A && git commit -m "notes"
 ```
 
-notefeed only reads files named like notes, so `.git` and any other files in the folder are ignored.
+Leave `.secret` out if the repository goes anywhere public (`echo .secret > .gitignore`): with it, anyone can compute every feed's read link.
 
 ## Backups
 
-Back up the `data` folder. There's no database: restoring the files restores the notes.
+Back up the `data` folder, including `.secret`. There's no database: restoring the files restores the notes, and restoring `.secret` keeps the read links the same (unless `NOTEFEED_SECRET` is set, which then decides them).
 
 ```sh
 tar czf notefeed-notes.tgz -C data .
 ```
 
-## Deleting a note
+## Deleting notes and feeds
 
-Delete its file. It disappears from the web UI and the feed straight away.
+Delete a note's file, or a feed's whole folder. It disappears from the web UI and the feed straight away.
 
 ```sh
-rm data/20260929T140512Z-backup-finished.md
+rm data/homelab-7f3k2q9x4m8wz/20260929T140512Z-backup-finished.md
+rm -r data/homelab-7f3k2q9x4m8wz
 ```
 
 ## Upgrading
@@ -48,9 +63,9 @@ Image tags on `ghcr.io/marceltov/notefeed`:
 |---|---|
 | `:latest` | every release and every change on `main` |
 | `:main` | every change on `main` |
-| `:X.Y.Z`, `:X.Y`, `:X` | releases (`:0.1` follows the newest 0.1.x) |
+| `:X.Y.Z`, `:X.Y`, `:X` | releases (`:0.4` follows the newest 0.4.x) |
 
-To upgrade only on purpose, pin a version, e.g. `image: ghcr.io/marceltov/notefeed:0.1`. Each release is listed on [GitHub Releases](https://github.com/Marceltov/notefeed/releases) with its notes.
+To upgrade only on purpose, pin a version, e.g. `image: ghcr.io/marceltov/notefeed:0.4`. Each release is listed on [GitHub Releases](https://github.com/Marceltov/notefeed/releases) with its notes.
 
 Built from source:
 
@@ -60,12 +75,25 @@ git pull && docker compose up -d --build
 
 Notes are untouched by upgrades.
 
+### Upgrading from 0.3
+
+0.4 replaces the single token-protected feed with named feeds:
+
+- `NOTEFEED_TOKEN` is gone. Remove it; set `NOTEFEED_PASSWORD` if you want the instance locked.
+- `POST /api/notes` is now `POST /<feed>`, and `/feed.xml` is now each feed's read link. Update scripts, and the [client libraries](clients.md#upgrading-from-03) to 0.4.
+- Old notes sit directly in `DATA_DIR` and are ignored now. Move them into a feed:
+
+    ```sh
+    mkdir data/homelab-7f3k2q9x4m8wz
+    mv data/*.md data/homelab-7f3k2q9x4m8wz/
+    ```
+
 ## Running from source
 
 For development:
 
 ```sh
 npm ci
-NOTEFEED_TOKEN=dev DATA_DIR=./data npm run dev
+DATA_DIR=./data npm run dev
 npm test && npm run lint && npm run typecheck
 ```

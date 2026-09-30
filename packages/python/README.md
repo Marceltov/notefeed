@@ -4,7 +4,7 @@ Post markdown notes to a [notefeed](https://github.com/Marceltov/notefeed) serve
 
 ```sh
 pip install notefeed
-export NOTEFEED_URL=https://notes.example.com NOTEFEED_TOKEN=...
+export NOTEFEED_URL=https://notes.example.com NOTEFEED_FEED=homelab-7f3k2q9x4m8wz
 notefeed post "# Backup finished"
 backup.sh 2>&1 | notefeed post -
 ```
@@ -12,10 +12,12 @@ backup.sh 2>&1 | notefeed post -
 ```python
 from notefeed import Client
 
-client = Client("https://notes.example.com", token)  # URL and token set once
-print(client.post("# Deploy done\nversion 1.4.2").url)
+client = Client("https://notes.example.com", feed="homelab-7f3k2q9x4m8wz")  # password="..." if the instance has one
+note = client.post("# Deploy done\nversion 1.4.2")
+print(note.url, note.read_url)
+client.post("# Disk at 91%", feed="alerts-q9x2m7hd4k1pv")  # another feed, same client
 ```
 
-The `notefeed` command reads `--url` / `--token`, or `NOTEFEED_URL` / `NOTEFEED_TOKEN`. The library itself never reads the environment.
+The `notefeed` command reads `--url` / `--feed` / `--password`, or `NOTEFEED_URL` / `NOTEFEED_FEED` / `NOTEFEED_PASSWORD`. The library itself never reads the environment.
 
 Full documentation: https://docs.notefeed.me/clients/

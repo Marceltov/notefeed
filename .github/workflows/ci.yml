@@ -96,18 +96,19 @@ jobs:
               ports:
                 - "3000:3000"
               environment:
-                NOTEFEED_TOKEN: ${NOTEFEED_TOKEN:?Set NOTEFEED_TOKEN in .env}
+                TZ: Europe/Berlin
                 # PUBLIC_URL: https://notes.example.com
-                # TZ: Europe/Berlin
+                # NOTEFEED_PASSWORD: change-me   # optional: lock posting and the web UI
               volumes:
                 - ./data:/data
           ```
 
           ```bash
           mkdir data   # notes are written as the owner of this folder
-          echo "NOTEFEED_TOKEN=$(openssl rand -hex 32)" > .env
           docker compose up -d
           ```
+
+          Then open http://localhost:3000 and pick a hard-to-guess feed name.
 
           Client packages at this version: `pip install notefeed==__VERSION__` · `npm install notefeed@__VERSION__`
 

@@ -8,6 +8,7 @@ edit_uri: edit/main/docs/
 # docs/superpowers/ holds local working notes (gitignored); never publish them.
 exclude_docs: |
   superpowers/
+  adr/
 
 theme:
   name: material
@@ -55,7 +56,7 @@ nav:
   - Posting notes: posting.md
   - Client libraries: clients.md
   - Web UI: web-ui.md
-  - The feed: feed.md
+  - Read links and RSS: feed.md
   - Configuration: configuration.md
   - Reverse proxy: reverse-proxy.md
   - Operations: operations.md

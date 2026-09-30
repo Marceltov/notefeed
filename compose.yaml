@@ -5,9 +5,15 @@ services:
     restart: unless-stopped
     ports:
       - "3000:3000"
+    # Everything is optional; set values in .env (see .env.example). Empty means the default.
     environment:
-      NOTEFEED_TOKEN: ${NOTEFEED_TOKEN:?Set NOTEFEED_TOKEN in .env}
       PUBLIC_URL: ${PUBLIC_URL:-}
+      NOTEFEED_PASSWORD: ${NOTEFEED_PASSWORD:-}
+      NOTEFEED_TRUST_PROXY: ${NOTEFEED_TRUST_PROXY:-}
+      NOTEFEED_RATE_LIMIT: ${NOTEFEED_RATE_LIMIT:-}
+      NOTEFEED_MAX_FEEDS: ${NOTEFEED_MAX_FEEDS:-}
+      NOTEFEED_MAX_NOTES_PER_FEED: ${NOTEFEED_MAX_NOTES_PER_FEED:-}
+      NOTEFEED_SECRET: ${NOTEFEED_SECRET:-}
       NOTEFEED_TITLE: ${NOTEFEED_TITLE:-}
       TZ: ${TZ:-UTC}
     volumes:

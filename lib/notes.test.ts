@@ -8,14 +8,19 @@ import {
   createNote,
   getNote,
   isValidId,
+  countNotes,
+  feedExists,
+  InvalidFeedError,
   listNotes,
 } from "./notes";
 import { bodyAfterTitle, extractTitle, idStamp, slugify } from "./slug";
 
-let dir: string;
+let root: string;
+let dir: string; // the "test" feed's directory
 beforeEach(async () => {
-  dir = await mkdtemp(join(tmpdir(), "notefeed-"));
-  process.env.DATA_DIR = dir;
+  root = await mkdtemp(join(tmpdir(), "notefeed-"));
+  process.env.DATA_DIR = root;
+  dir = join(root, "test");
 });
 
 const at = (iso: string) => new Date(iso);
@@ -75,7 +80,7 @@ describe("isValidId", () => {
 describe("createNote", () => {
   test("writes the body byte-for-byte under a timestamped id", async () => {
     const md = "# Backup finished\nok";
-    const note = await createNote(md, at("2026-09-29T14:05:12Z"));
+    const note = await createNote("test", md, at("2026-09-29T14:05:12Z"));
     expect(note.id).toBe("20260929T140512Z-backup-finished");
     expect(note.title).toBe("Backup finished");
     expect(note.createdAt).toEqual(at("2026-09-29T14:05:12Z"));
@@ -84,9 +89,9 @@ describe("createNote", () => {
 
   test("suffixes collisions and never overwrites", async () => {
     const now = at("2026-09-29T14:05:12Z");
-    const a = await createNote("# Same\nfirst", now);
-    const b = await createNote("# Same\nsecond", now);
-    const c = await createNote("# Same\nthird", now);
+    const a = await createNote("test", "# Same\nfirst", now);
+    const b = await createNote("test", "# Same\nsecond", now);
+    const c = await createNote("test", "# Same\nthird", now);
     expect(b.id).toBe(`${a.id}-2`);
     expect(c.id).toBe(`${a.id}-3`);
     expect(await readFile(join(dir, `${a.id}.md`), "utf8")).toBe("# Same\nfirst");
@@ -94,48 +99,82 @@ describe("createNote", () => {
   });
 
   test("keeps CRLF bytes", async () => {
-    const note = await createNote("# T\r\nx\r\n");
+    const note = await createNote("test", "# T\r\nx\r\n");
     expect(await readFile(join(dir, `${note.id}.md`), "utf8")).toBe("# T\r\nx\r\n");
   });
 
   test("rejects empty notes", async () => {
-    await expect(createNote("  \n")).rejects.toBeInstanceOf(EmptyNoteError);
+    await expect(createNote("test", "  \n")).rejects.toBeInstanceOf(EmptyNoteError);
   });
 
   test("limits by bytes, not characters", async () => {
-    await expect(createNote("é".repeat(51200))).resolves.toBeTruthy();
-    await expect(createNote("é".repeat(51200) + "x")).rejects.toBeInstanceOf(NoteTooLargeError);
+    await expect(createNote("test", "é".repeat(51200))).resolves.toBeTruthy();
+    await expect(createNote("test", "é".repeat(51200) + "x")).rejects.toBeInstanceOf(NoteTooLargeError);
   });
 
   test("creates a missing data dir", async () => {
-    process.env.DATA_DIR = join(dir, "fresh");
-    expect(await listNotes()).toEqual([]);
-    await expect(createNote("hi")).resolves.toBeTruthy();
+    process.env.DATA_DIR = join(root, "fresh");
+    expect(await listNotes("test")).toEqual([]);
+    await expect(createNote("test", "hi")).resolves.toBeTruthy();
   });
 });
 
 describe("listNotes", () => {
   test("returns newest first, limited, ignoring stray files", async () => {
-    await createNote("# One", at("2026-09-29T10:00:00Z"));
-    await createNote("# Three", at("2026-09-29T12:00:00Z"));
-    await createNote("# Two", at("2026-09-29T11:00:00Z"));
+    await createNote("test", "# One", at("2026-09-29T10:00:00Z"));
+    await createNote("test", "# Three", at("2026-09-29T12:00:00Z"));
+    await createNote("test", "# Two", at("2026-09-29T11:00:00Z"));
     await writeFile(join(dir, ".abc.tmp"), "x");
     await writeFile(join(dir, "README.txt"), "x");
-    expect((await listNotes()).map((n) => n.title)).toEqual(["Three", "Two", "One"]);
-    expect(await listNotes(2)).toHaveLength(2);
+    expect((await listNotes("test")).map((n) => n.title)).toEqual(["Three", "Two", "One"]);
+    expect(await listNotes("test", 2)).toHaveLength(2);
+  });
+});
+
+describe("feeds", () => {
+  test("notes are isolated per feed", async () => {
+    const n = await createNote("a", "# Hi");
+    expect(await listNotes("b")).toEqual([]);
+    expect(await getNote("b", n.id)).toBeNull();
+    expect(await listNotes("a")).toHaveLength(1);
+  });
+  test("flat files in DATA_DIR are ignored", async () => {
+    await writeFile(join(root, "20260929T140512Z-flat.md"), "# Flat");
+    expect(await listNotes("test")).toEqual([]);
+    expect(await getNote("test", "20260929T140512Z-flat")).toBeNull();
+  });
+  test.each(["Bad Name", "", "api", "login", "_next"])(
+    "createNote rejects invalid or reserved feed %j and writes nothing",
+    async (feed) => {
+      await expect(createNote(feed, "hi")).rejects.toBeInstanceOf(InvalidFeedError);
+      expect(await readdir(root)).toEqual([]);
+    },
+  );
+  test("countNotes", async () => {
+    expect(await countNotes("test")).toBe(0);
+    await createNote("test", "# One");
+    await createNote("test", "# Two");
+    await writeFile(join(dir, "README.txt"), "x");
+    expect(await countNotes("test")).toBe(2);
+  });
+  test("feedExists", async () => {
+    expect(await feedExists("test")).toBe(false);
+    await createNote("test", "hi");
+    expect(await feedExists("test")).toBe(true);
+    expect(await feedExists("api")).toBe(false);
   });
 });
 
 describe("getNote", () => {
   test("rejects traversal ids", async () => {
-    expect(await getNote("../x")).toBeNull();
+    expect(await getNote("test", "../x")).toBeNull();
   });
   test("returns null for unknown ids", async () => {
-    expect(await getNote("20260101T000000Z-nope")).toBeNull();
+    expect(await getNote("test", "20260101T000000Z-nope")).toBeNull();
   });
   test("reads an existing note", async () => {
-    const created = await createNote("# Hi\nthere");
-    const note = await getNote(created.id);
+    const created = await createNote("test", "# Hi\nthere");
+    const note = await getNote("test", created.id);
     expect(note?.markdown).toBe("# Hi\nthere");
     expect(note?.title).toBe("Hi");
   });

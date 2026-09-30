@@ -1,2 +1,11 @@
-export { AuthError, Client, ConfigError, InvalidNoteError, NotefeedError, NoteTooLargeError } from "./client.js";
-export type { ClientOptions, Note } from "./client.js";
+export {
+  AuthError,
+  Client,
+  ConfigError,
+  InvalidNoteError,
+  LimitReachedError,
+  NotefeedError,
+  NoteTooLargeError,
+  RateLimitedError,
+} from "./client.js";
+export type { ClientOptions, Note, PostOptions } from "./client.js";

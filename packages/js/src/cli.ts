@@ -12,7 +12,7 @@ type Io = {
 
 class UsageError extends Error {}
 
-const USAGE = 'usage: notefeed post <text | - | --file PATH> [--url URL] [--token TOKEN]';
+const USAGE = "usage: notefeed post <text | - | --file PATH> [--url URL] [--feed FEED] [--password PASSWORD]";
 
 /** Returns the exit code: 0 ok, 1 server/network error, 2 usage/config error. */
 export async function main(argv: string[], io: Io = process): Promise<number> {
@@ -22,7 +22,8 @@ export async function main(argv: string[], io: Io = process): Promise<number> {
       allowPositionals: true,
       options: {
         url: { type: "string" },
-        token: { type: "string" },
+        feed: { type: "string" },
+        password: { type: "string" },
         file: { type: "string" },
         version: { type: "boolean" },
         help: { type: "boolean", short: "h" },
@@ -41,10 +42,11 @@ export async function main(argv: string[], io: Io = process): Promise<number> {
     if (command !== "post" || rest.length) throw new UsageError(USAGE);
     const markdown = await read(text, values.file, io);
     const url = values.url || process.env.NOTEFEED_URL;
-    const token = values.token || process.env.NOTEFEED_TOKEN;
+    const feed = values.feed || process.env.NOTEFEED_FEED;
+    const password = values.password || process.env.NOTEFEED_PASSWORD;
     if (!url) throw new UsageError("no URL given; pass --url or set NOTEFEED_URL");
-    if (!token) throw new UsageError("no token given; pass --token or set NOTEFEED_TOKEN");
-    const note = await new Client({ url, token }).post(markdown);
+    if (!feed) throw new UsageError("no feed given; pass --feed or set NOTEFEED_FEED");
+    const note = await new Client({ url, feed, password }).post(markdown);
     io.stdout.write(`${note.url}\n`);
     return 0;
   } catch (e) {

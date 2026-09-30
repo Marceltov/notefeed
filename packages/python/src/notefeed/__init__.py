@@ -4,6 +4,26 @@ from importlib.metadata import version as _version
 
 __version__ = _version("notefeed")
 
-from .client import AuthError, Client, ConfigError, InvalidNoteError, Note, NotefeedError, NoteTooLargeError  # noqa: E402
+from .client import (  # noqa: E402
+    AuthError,
+    Client,
+    ConfigError,
+    InvalidNoteError,
+    LimitReachedError,
+    Note,
+    NotefeedError,
+    NoteTooLargeError,
+    RateLimitedError,
+)
 
-__all__ = ["AuthError", "Client", "ConfigError", "InvalidNoteError", "Note", "NotefeedError", "NoteTooLargeError"]
+__all__ = [
+    "AuthError",
+    "Client",
+    "ConfigError",
+    "InvalidNoteError",
+    "LimitReachedError",
+    "Note",
+    "NotefeedError",
+    "NoteTooLargeError",
+    "RateLimitedError",
+]
