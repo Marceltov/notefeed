@@ -2,7 +2,7 @@
 
 Post short markdown notes — from a script over HTTP, or by hand in a small web UI — and read them back as an RSS feed. Each note is a plain `.md` file on disk. Built as an inbox for dashboards like Glance and Dynacat, which can read RSS but have nowhere to post to.
 
-**Documentation: https://notefeed.marceltov.de/**
+**Documentation: https://notefeed.me/**
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/screenshot-dark.png">
@@ -44,4 +44,4 @@ Read the feed at http://localhost:3000/feed.xml.
 
 ## License
 
-MIT
+notefeed is dual-licensed under the [Apache License 2.0](LICENSE) and the [GPLv2 License](LICENSE.GPLv2), like ntfy. You may use it under either.

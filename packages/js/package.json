@@ -1,8 +1,8 @@
 {
   "name": "notefeed",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "Client and CLI for notefeed, a self-hosted inbox for markdown notes that you read back as RSS.",
-  "license": "MIT",
+  "license": "(Apache-2.0 OR GPL-2.0-only)",
   "author": "Marcel Bruckner",
   "keywords": [
     "notefeed",
@@ -39,7 +39,7 @@
     "url": "git+https://github.com/Marceltov/notefeed.git",
     "directory": "packages/js"
   },
-  "homepage": "https://notefeed.marceltov.de/clients/",
+  "homepage": "https://notefeed.me/clients/",
   "bugs": {
     "url": "https://github.com/Marceltov/notefeed/issues"
   },
