@@ -28,13 +28,16 @@ notefeed stores the body exactly as sent, byte for byte, and answers `201 Create
 
 Any other content type is rejected with `415`. The body must be UTF-8.
 
-JSON is handy from languages where building a raw body is awkward:
+From Python or Node, use the [client libraries](clients.md) instead of building requests yourself. From other languages, JSON is often easier than a raw body:
 
 ```sh
 curl -H "Authorization: Bearer $NOTEFEED_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"markdown": "# Deploy done\nversion 1.4.2 on host-2"}' \
-  https://notes.example.com/api/notes
+  --data-binary @- https://notes.example.com/api/notes <<'EOF'
+{
+  "markdown": "# Deploy done\nversion 1.4.2 on host-2"
+}
+EOF
 ```
 
 ## Titles and filenames
@@ -98,8 +101,9 @@ From a program, with the client libraries:
     client = Client("https://notes.example.com", os.environ["NOTEFEED_TOKEN"])
 
     usage = shutil.disk_usage("/srv")
-    if usage.used / usage.total > 0.9:
-        print(client.post(f"# Disk space low\n/srv is {usage.used / usage.total:.0%} full").url)
+    used = usage.used / usage.total
+    if used > 0.9:
+        print(client.post(f"# Disk space low\n/srv is {used:.0%} full").url)
     ```
 
 === "Node"
