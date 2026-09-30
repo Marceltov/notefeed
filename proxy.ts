@@ -31,11 +31,15 @@ export function proxy(req: NextRequest) {
     return NextResponse.redirect(new URL(pathname.slice(0, -1) + search, publicUrl(h)), 308);
   }
 
+  // /api/feeds/** is exempt from the lock because handlePost checks the bearer password itself;
+  // redirecting it to /login would turn a script's 401 into a success-looking 307.
   if (!locked() || pathname === "/login" || /^\/(r|_next|api\/feeds)\//.test(pathname)) return NextResponse.next();
   if (sessionOk(req.cookies.get(SESSION_COOKIE)?.value)) return NextResponse.next();
   // Must be absolute (Next rejects a relative Location here); built from the public base,
   // not req.url, so it is right behind a reverse proxy.
-  return NextResponse.redirect(new URL("/login", publicUrl(req.headers)));
+  const login = new URL("/login", publicUrl(req.headers));
+  if (pathname !== "/") login.searchParams.set("next", pathname + search); // checked by safeNext after login
+  return NextResponse.redirect(login);
 }
 
 // /r/** (read-only feeds) and Next's assets never need the password; skip the proxy there (also exempted above).

@@ -119,6 +119,6 @@ def _http_error(e: urllib.error.HTTPError) -> NotefeedError:
         message = f"HTTP {e.code}: {' '.join(text[:200].split())}"
     if e.code == 429:
         retry = (e.headers.get("Retry-After") or "").strip()
-        return RateLimitedError(message, status=429, retry_after=int(retry) if retry.isdigit() else None)
+        return RateLimitedError(message, status=429, retry_after=int(retry) if re.fullmatch(r"[0-9]+", retry) else None)
     return _ERRORS.get(e.code, NotefeedError)(message, status=e.code)
 

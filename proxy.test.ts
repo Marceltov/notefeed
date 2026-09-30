@@ -89,7 +89,13 @@ test("locked: pages without a session redirect to the absolute public /login", (
   process.env.NOTEFEED_PASSWORD = "pw";
   const res = proxy(req("/backups"));
   expect(res.status).toBe(307);
-  expect(res.headers.get("location")).toBe("http://localhost:3000/login");
+  expect(res.headers.get("location")).toBe("http://localhost:3000/login?next=%2Fbackups");
+});
+
+test("locked: the redirect keeps the query in next, and / needs none", () => {
+  process.env.NOTEFEED_PASSWORD = "pw";
+  expect(proxy(req("/backups/x?a=1")).headers.get("location")).toBe("http://localhost:3000/login?next=%2Fbackups%2Fx%3Fa%3D1");
+  expect(proxy(req("/")).headers.get("location")).toBe("http://localhost:3000/login");
 });
 
 test("locked: a valid session cookie passes", () => {
@@ -128,7 +134,7 @@ test("redirects to the public /login behind a reverse proxy", () => {
     }),
   );
   expect(res.status).toBe(307);
-  expect(res.headers.get("location")).toBe("https://notes.example/login");
+  expect(res.headers.get("location")).toBe("https://notes.example/login?next=%2Fn%2Fx");
 });
 
 test("PUBLIC_URL wins for the redirect", () => {

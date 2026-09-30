@@ -1,5 +1,5 @@
-import { afterEach, expect, test } from "vitest";
-import { publicUrl } from "./url";
+import { afterEach, describe, expect, test } from "vitest";
+import { publicUrl, safeNext } from "./url";
 
 afterEach(() => {
   delete process.env.PUBLIC_URL;
@@ -22,4 +22,20 @@ test("falls back to Host over http", () => {
 test("empty PUBLIC_URL counts as unset", () => {
   process.env.PUBLIC_URL = "";
   expect(publicUrl(new Headers({ host: "localhost:3000" }))).toBe("http://localhost:3000");
+});
+
+describe("safeNext", () => {
+  test.each(["/my-feed", "/my-feed?x=1", "/r/abc/x", "/"])("keeps %j", (v) => expect(safeNext(v)).toBe(v));
+  test.each([
+    null,
+    "",
+    "my-feed",
+    "//evil.example",
+    "https://evil.example",
+    "/\\evil.example",
+    "/x\\y",
+    "\\evil.example",
+    "/\t/evil.example", // browsers drop tabs and newlines, which would make this //evil.example
+    "/\n/evil.example",
+  ])("rejects %j", (v) => expect(safeNext(v)).toBe("/"));
 });

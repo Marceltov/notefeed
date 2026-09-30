@@ -34,10 +34,10 @@ Raw HTML in notes is shown as text, never run.
 
 ## The read-only view
 
-`/r/<read id>` shows the same notes without the compose box, and never shows the feed's name. Each note opens at `/r/<read id>/<id>`, which is also the note's link in the RSS feed. It needs no login, even on a locked instance.
+`/r/<read id>` shows the same notes without the compose box, and never shows the feed's name. A trailing slash is fine: `/r/<read id>/` answers `200` with the same page, without a redirect. Each note opens at `/r/<read id>/<id>`, which is also the note's link in the RSS feed. It needs no login, even on a locked instance.
 
 ## With a password
 
-If the instance has a password (`NOTEFEED_PASSWORD`), every page except the login page and the read-only views asks for it first. The login lasts a year on that browser. **Log out** at the top ends it in that browser. To log out *every* browser, change `NOTEFEED_PASSWORD` and restart notefeed; scripts use the same password, so update them too.
+If the instance has a password (`NOTEFEED_PASSWORD`), every page except the login page and the read-only views asks for it first. After logging in you land on the page you were trying to open. The login lasts a year on that browser. **Log out** at the top ends it in that browser. To log out *every* browser, change `NOTEFEED_PASSWORD` and restart notefeed; scripts use the same password, so update them too.
 
 Wrong passwords count toward the [rate limit](configuration.md#rate-limits-and-caps): after too many, the login page asks you to wait up to a minute.

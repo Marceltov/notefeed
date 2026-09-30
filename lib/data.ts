@@ -1,2 +1,2 @@
-// DATA_DIR is only known at runtime; turbopackIgnore on the fs calls stops the build from tracing the whole repo.
+// DATA_DIR is only known at runtime.
 export const dataDir = () => process.env.DATA_DIR || "/data";
