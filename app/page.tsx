@@ -39,16 +39,23 @@ export default async function Home({ searchParams }: PageProps<"/">) {
   const { posted } = await searchParams;
   const notes = await listNotes(50);
   const base = publicUrl(await headers());
+  const curlExample = `curl -H "Authorization: Bearer $NOTEFEED_TOKEN" \\\n  --data-binary @note.md ${base}/api/notes`;
 
   return (
     <>
       <Header />
       <Compose key={String(posted)} />
+      {notes.length > 0 && (
+        <details className="-mt-8 mb-10 text-sm text-muted">
+          <summary className="cursor-pointer select-none hover:text-ink">Post from a script</summary>
+          <pre className="mt-2 overflow-x-auto font-mono text-ink">{curlExample}</pre>
+        </details>
+      )}
       {notes.length === 0 ? (
         <section className="text-muted">
           <p>No notes yet. Write one above, or post from a script:</p>
           <pre className="mt-3 overflow-x-auto font-mono text-sm text-ink">
-            {`curl -H "Authorization: Bearer $NOTEFEED_TOKEN" \\\n  --data-binary @note.md ${base}/api/notes`}
+            {curlExample}
           </pre>
         </section>
       ) : (
