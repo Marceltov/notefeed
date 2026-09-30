@@ -26,7 +26,7 @@ test = ["pytest>=9"]
 notefeed = "notefeed.cli:main"
 
 [project.urls]
-Homepage = "https://notefeed.me/"
+Homepage = "https://docs.notefeed.me/"
 Documentation = "https://docs.notefeed.me/clients/"
 Source = "https://github.com/Marceltov/notefeed"
 Issues = "https://github.com/Marceltov/notefeed/issues"
