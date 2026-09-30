@@ -67,13 +67,17 @@ class Client:
         )
         try:
             with urllib.request.urlopen(req, timeout=self.timeout) as res:
-                data = json.load(res)
+                status, text = res.status, res.read().decode("utf-8", errors="replace")
         except urllib.error.HTTPError as e:
             raise _http_error(e) from None
         except (urllib.error.URLError, OSError) as e:
             reason = getattr(e, "reason", e)
             raise NotefeedError(f"could not reach {self.url}: {reason}") from None
-        return Note(id=data["id"], url=data["url"])
+        try:
+            data = json.loads(text)
+            return Note(id=data["id"], url=data["url"])
+        except (ValueError, KeyError, TypeError):
+            raise NotefeedError(f"unexpected response from {self.url} (not a notefeed server?)", status=status) from None
 
 
 def _http_error(e: urllib.error.HTTPError) -> NotefeedError:

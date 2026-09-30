@@ -56,3 +56,5 @@ next-env.d.ts
 /packages/python/dist/
 __pycache__/
 *.egg-info/
+/packages/js/dist/
+/packages/js/node_modules/

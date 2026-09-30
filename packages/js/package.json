@@ -1,0 +1,38 @@
+{
+  "name": "notefeed",
+  "version": "0.1.0",
+  "description": "Post markdown notes to a notefeed server, from Node or the command line.",
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "bin": {
+    "notefeed": "dist/bin.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "prepublishOnly": "npm run build"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Marceltov/notefeed.git",
+    "directory": "packages/js"
+  },
+  "homepage": "https://marceltov.github.io/notefeed/clients/",
+  "devDependencies": {
+    "@types/node": "^20",
+    "typescript": "^5.9",
+    "vitest": "^4.1"
+  }
+}

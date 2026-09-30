@@ -74,3 +74,12 @@ def test_connection_refused():
 
 def test_module_level_post(server):
     assert post("x", url=server.url, token="t") == Note("i", "u")
+
+
+def test_non_json_success_body(server):
+    server.reply(200, "<html>some other site</html>", "text/html")
+    with pytest.raises(NotefeedError) as e:
+        Client(server.url, "t").post("x")
+    assert type(e.value) is NotefeedError
+    assert e.value.status == 200
+    assert "not a notefeed" in str(e.value)
