@@ -111,7 +111,7 @@ jobs:
 
           Client packages at this version: `pip install notefeed==__VERSION__` · `npm install notefeed@__VERSION__`
 
-          Documentation: https://notefeed.me/
+          Documentation: https://docs.notefeed.me/
           EOF
           # The git tag keeps its v (v0.1.1); image and package versions drop it (0.1.1).
           sed -i "s|__VERSION__|${TAG#v}|g" notes.md
