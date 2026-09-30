@@ -9,6 +9,7 @@ notefeed is configured with environment variables. With Compose, put them in `.e
 | `PUBLIC_URL` | derived from the request | Absolute base URL used for links in the feed and API responses, e.g. `https://notes.example.com`. |
 | `NOTEFEED_TITLE` | `notefeed` | The feed's title. |
 | `TZ` | `UTC` | Time zone for the times shown in the web UI, e.g. `Europe/Berlin`. |
+| `PUID`, `PGID` | owner of `DATA_DIR` | User and group notefeed runs as, and so the owner of new note files. By default the owner of the data folder; uid/gid 1000 if that is root. Docker image only. |
 
 An empty value counts as unset.
 

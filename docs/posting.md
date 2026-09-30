@@ -11,7 +11,10 @@ curl -H "Authorization: Bearer $NOTEFEED_TOKEN" \
 notefeed stores the body exactly as sent, byte for byte, and answers `201 Created`:
 
 ```json
-{"id": "20260929T140512Z-backup-finished", "url": "https://notes.example.com/n/20260929T140512Z-backup-finished"}
+{
+  "id": "20260929T140512Z-backup-finished",
+  "url": "https://notes.example.com/n/20260929T140512Z-backup-finished"
+}
 ```
 
 !!! tip "Use `--data-binary`, not `-d`"
@@ -28,13 +31,16 @@ notefeed stores the body exactly as sent, byte for byte, and answers `201 Create
 
 Any other content type is rejected with `415`. The body must be UTF-8.
 
-JSON is handy from languages where building a raw body is awkward:
+From Python or Node, use the [client libraries](clients.md) instead of building requests yourself. From other languages, JSON is often easier than a raw body:
 
 ```sh
 curl -H "Authorization: Bearer $NOTEFEED_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"markdown": "# Deploy done\nversion 1.4.2 on host-2"}' \
-  https://notes.example.com/api/notes
+  --data-binary @- https://notes.example.com/api/notes <<'EOF'
+{
+  "markdown": "# Deploy done\nversion 1.4.2 on host-2"
+}
+EOF
 ```
 
 ## Titles and filenames
@@ -57,31 +63,61 @@ Error responses are JSON: `{"error": "<short reason>"}`.
 
 ## From a script
 
+The [client libraries](clients.md) handle the request, the token and the errors for you, and bring a `notefeed` command for shell scripts. Plain curl works everywhere else.
+
 A backup job that reports how it went:
 
-```sh
-#!/usr/bin/env bash
-set -euo pipefail
+=== "notefeed command"
 
-if output=$(restic backup /srv 2>&1); then status="finished"; else status="FAILED"; fi
+    ```sh
+    #!/usr/bin/env bash
+    set -euo pipefail
+    # NOTEFEED_URL and NOTEFEED_TOKEN come from the environment.
 
-printf '# Backup %s on %s\n\n```\n%s\n```\n' "$status" "$(hostname)" "$(tail -n 5 <<<"$output")" |
-  curl -fsS -H "Authorization: Bearer $NOTEFEED_TOKEN" --data-binary @- \
-    https://notes.example.com/api/notes > /dev/null
-```
+    if output=$(restic backup /srv 2>&1); then status="finished"; else status="FAILED"; fi
 
-The same from Python, with only the standard library:
+    printf '# Backup %s on %s\n\n```\n%s\n```\n' "$status" "$(hostname)" "$(tail -n 5 <<<"$output")" |
+      notefeed post - > /dev/null
+    ```
 
-```python
-import json, os, urllib.request
+=== "curl"
 
-req = urllib.request.Request(
-    "https://notes.example.com/api/notes",
-    data=json.dumps({"markdown": "# Disk space low\n/srv is 92% full"}).encode(),
-    headers={
-        "Authorization": f"Bearer {os.environ['NOTEFEED_TOKEN']}",
-        "Content-Type": "application/json",
-    },
-)
-print(json.load(urllib.request.urlopen(req))["url"])
-```
+    ```sh
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    if output=$(restic backup /srv 2>&1); then status="finished"; else status="FAILED"; fi
+
+    printf '# Backup %s on %s\n\n```\n%s\n```\n' "$status" "$(hostname)" "$(tail -n 5 <<<"$output")" |
+      curl -fsS -H "Authorization: Bearer $NOTEFEED_TOKEN" --data-binary @- \
+        https://notes.example.com/api/notes > /dev/null
+    ```
+
+From a program, with the client libraries:
+
+=== "Python"
+
+    ```python
+    import os, shutil
+    from notefeed import Client
+
+    client = Client("https://notes.example.com", os.environ["NOTEFEED_TOKEN"])
+
+    usage = shutil.disk_usage("/srv")
+    used = usage.used / usage.total
+    if used > 0.9:
+        print(client.post(f"# Disk space low\n/srv is {used:.0%} full").url)
+    ```
+
+=== "Node"
+
+    ```js
+    import { statfs } from "node:fs/promises";
+    import { Client } from "notefeed";
+
+    const client = new Client({ url: "https://notes.example.com", token: process.env.NOTEFEED_TOKEN });
+
+    const fs = await statfs("/srv");
+    const used = 1 - fs.bavail / fs.blocks;
+    if (used > 0.9) console.log((await client.post(`# Disk space low\n/srv is ${Math.round(used * 100)}% full`)).url);
+    ```

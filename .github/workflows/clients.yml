@@ -1,0 +1,113 @@
+name: Clients
+
+on:
+  push:
+    branches: [main]
+    paths: [packages/**, .github/workflows/clients.yml]
+    # Releases follow the repo-wide vX.Y.Z tags, like the MCP repos (path filters are not
+    # evaluated for tag pushes, so every v* tag runs this).
+    tags: ["v*"]
+  pull_request:
+    paths: [packages/**, .github/workflows/clients.yml]
+
+permissions:
+  contents: read
+
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python: ["3.10", "3.13"]
+    defaults:
+      run:
+        working-directory: packages/python
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.python }}
+      - run: pip install -e ".[test]"
+      - run: pytest -q
+
+  js:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node: [20, 24]
+    defaults:
+      run:
+        working-directory: packages/js
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+          cache-dependency-path: packages/js/package-lock.json
+      - run: npm ci
+      - run: npm run build
+      - run: npm test
+
+  # Releases: push a tag vX.Y.Z; both package versions must equal X.Y.Z.
+  check-version:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [python, js]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          tag="${GITHUB_REF_NAME#v}"
+          py=$(sed -n 's/^version = "\(.*\)"$/\1/p' packages/python/pyproject.toml)
+          js=$(node -p 'require("./packages/js/package.json").version')
+          echo "tag=$tag python=$py js=$js"
+          [ "$tag" = "$py" ] && [ "$tag" = "$js" ]
+
+  publish-pypi:
+    needs: check-version
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+      - run: python -m pip install build && python -m build packages/python
+      - uses: pypa/gh-action-pypi-publish@v1.14.2
+        with:
+          packages-dir: packages/python/dist
+          # Re-running a release whose npm half failed must not fail on the files already on PyPI.
+          skip-existing: true
+
+  publish-npm:
+    needs: check-version
+    runs-on: ubuntu-latest
+    # npm trusted publishing (OIDC): no token. The package's Trusted Publisher on npmjs.com
+    # names this repo, clients.yml and this environment.
+    environment: npm
+    permissions:
+      contents: read
+      id-token: write
+    defaults:
+      run:
+        working-directory: packages/js
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+      # Trusted publishing needs npm 11.5.1 or newer.
+      - run: npm install -g npm@^11.5.1
+      - run: npm ci
+      # Re-running a release whose PyPI half failed must not fail on a version already on npm.
+      - run: |
+          version=$(node -p 'require("./package.json").version')
+          if npm view "notefeed@$version" version >/dev/null 2>&1; then
+            echo "notefeed@$version is already on npm, skipping"
+          else
+            npm publish --provenance --access public
+          fi

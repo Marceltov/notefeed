@@ -13,8 +13,10 @@ WORKDIR /app
 ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 DATA_DIR=/data PORT=3000 HOSTNAME=0.0.0.0
 COPY --from=build --chown=node:node /app/.next/standalone ./
 COPY --from=build --chown=node:node /app/.next/static ./.next/static
-RUN mkdir /data && chown node:node /data
-USER node
+RUN apk add --no-cache su-exec && mkdir /data && chown node:node /data
+COPY docker-entrypoint.sh /usr/local/bin/
 VOLUME /data
 EXPOSE 3000
+# Starts as root only to switch to the owner of /data (see docker-entrypoint.sh).
+ENTRYPOINT ["docker-entrypoint.sh"]
 CMD ["node", "server.js"]

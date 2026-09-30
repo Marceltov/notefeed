@@ -2,15 +2,28 @@
 
 ## Where notes live
 
-Every note is a plain markdown file in `DATA_DIR` (`/data` in the container), named `<id>.md`. With the included `compose.yaml` that's the `notefeed-data` Docker volume. You can read, grep or copy the files directly.
+Every note is a plain markdown file in `DATA_DIR` (`/data` in the container), named `<id>.md`. With the quick start's `compose.yaml` that's the `data` folder next to it. You can read, grep or copy the files directly.
+
+notefeed writes them as the **owner of that folder**: create it yourself (`mkdir data`) and the notes are yours. To choose a different owner, set `PUID` and `PGID`. If Docker created the folder (owned by root), notefeed falls back to uid/gid 1000.
+
+## Keeping notes in git
+
+Since the notes are your files, `data` can be a git repository:
+
+```sh
+cd data
+git init
+git add -A && git commit -m "notes"
+```
+
+notefeed only reads files named like notes, so `.git` and any other files in the folder are ignored.
 
 ## Backups
 
-Back up the volume, or just the `.md` files. There's no database: restoring the files restores the notes.
+Back up the `data` folder. There's no database: restoring the files restores the notes.
 
 ```sh
-docker run --rm -v notefeed_notefeed-data:/data -v "$PWD":/backup alpine \
-  tar czf /backup/notefeed-notes.tgz -C /data .
+tar czf notefeed-notes.tgz -C data .
 ```
 
 ## Deleting a note
@@ -18,7 +31,7 @@ docker run --rm -v notefeed_notefeed-data:/data -v "$PWD":/backup alpine \
 Delete its file. It disappears from the web UI and the feed straight away.
 
 ```sh
-docker compose exec notefeed rm /data/20260929T140512Z-backup-finished.md
+rm data/20260929T140512Z-backup-finished.md
 ```
 
 ## Upgrading
@@ -28,6 +41,16 @@ With the published image:
 ```sh
 docker compose pull && docker compose up -d
 ```
+
+Image tags on `ghcr.io/marceltov/notefeed`:
+
+| Tag | Moves on |
+|---|---|
+| `:latest` | every release and every change on `main` |
+| `:main` | every change on `main` |
+| `:X.Y.Z`, `:X.Y`, `:X` | releases (`:0.1` follows the newest 0.1.x) |
+
+To upgrade only on purpose, pin a version, e.g. `image: ghcr.io/marceltov/notefeed:0.1`. Each release is listed on [GitHub Releases](https://github.com/Marceltov/notefeed/releases) with its notes.
 
 Built from source:
 

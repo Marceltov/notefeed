@@ -1,0 +1,120 @@
+import pytest
+
+from notefeed import AuthError, Client, ConfigError, InvalidNoteError, Note, NotefeedError, NoteTooLargeError
+
+
+def test_post_sends_markdown_and_returns_note(server):
+    server.reply(201, {"id": "20260930T100000Z-cafe", "url": "https://n.example/n/20260930T100000Z-cafe"})
+    note = Client(server.url, "t").post("# Café\r\nx")
+    assert note == Note("20260930T100000Z-cafe", "https://n.example/n/20260930T100000Z-cafe")
+    req = server.requests[0]
+    assert req["path"] == "/api/notes"
+    assert req["headers"]["Authorization"] == "Bearer t"
+    assert req["headers"]["Content-Type"] == "text/markdown; charset=utf-8"
+    assert req["body"] == "# Café\r\nx".encode()
+
+
+def test_trailing_slash_and_subpath(server):
+    Client(server.url + "/sub/", "t").post("x")
+    assert server.requests[0]["path"] == "/sub/api/notes"
+
+
+def test_ignores_environment(server, monkeypatch):
+    # The library takes url and token from code only; env vars are the CLI's business.
+    monkeypatch.setenv("NOTEFEED_URL", "http://127.0.0.1:1")
+    monkeypatch.setenv("NOTEFEED_TOKEN", "envtok")
+    Client(server.url, "argtok").post("x")
+    assert server.requests[0]["headers"]["Authorization"] == "Bearer argtok"
+    with pytest.raises(ConfigError):
+        Client("", "")
+
+
+def test_missing_url_or_token():
+    with pytest.raises(ConfigError, match="url") as e:
+        Client("", "t")
+    assert e.value.status is None
+    with pytest.raises(ConfigError, match="token"):
+        Client("http://x", "")
+    with pytest.raises(TypeError):
+        Client()  # both are required arguments
+
+
+def test_no_module_level_post():
+    import notefeed
+
+    assert not hasattr(notefeed, "post")
+
+
+@pytest.mark.parametrize(
+    ("status", "error"),
+    [(400, InvalidNoteError), (415, InvalidNoteError), (401, AuthError), (413, NoteTooLargeError), (500, NotefeedError)],
+)
+def test_error_mapping(server, status, error):
+    server.reply(status, {"error": f"reason {status}"})
+    with pytest.raises(NotefeedError) as e:
+        Client(server.url, "t").post("x")
+    assert type(e.value) is error
+    assert e.value.status == status
+    assert str(e.value) == f"reason {status}"
+
+
+def test_non_json_error_body(server):
+    server.reply(502, "<html>bad gateway</html>", "text/html")
+    with pytest.raises(NotefeedError) as e:
+        Client(server.url, "t").post("x")
+    assert type(e.value) is NotefeedError
+    assert e.value.status == 502
+    assert "502" in str(e.value)
+
+
+def test_connection_refused():
+    with pytest.raises(NotefeedError) as e:
+        Client("http://127.0.0.1:1", "t").post("x")
+    assert e.value.status is None
+
+
+def test_non_json_success_body(server):
+    server.reply(200, "<html>some other site</html>", "text/html")
+    with pytest.raises(NotefeedError) as e:
+        Client(server.url, "t").post("x")
+    assert type(e.value) is NotefeedError
+    assert e.value.status == 200
+    assert "not a notefeed" in str(e.value)
+
+
+def test_token_whitespace_stripped(server):
+    Client(server.url, "tok\r\n").post("x")
+    assert server.requests[0]["headers"]["Authorization"] == "Bearer tok"
+
+
+def test_token_control_chars_rejected_without_echo():
+    with pytest.raises(ConfigError) as e:
+        Client("http://x", "sec\nret")
+    assert "invalid characters" in str(e.value)
+    assert "sec" not in str(e.value) and "ret" not in str(e.value)
+
+
+def test_non_http_reply():
+    import socket
+    import threading
+
+    srv = socket.create_server(("127.0.0.1", 0))
+
+    def banner():
+        conn, _ = srv.accept()
+        conn.recv(65536)
+        conn.sendall(b"SSH-2.0-OpenSSH_9.6\r\n")
+        conn.close()
+
+    threading.Thread(target=banner, daemon=True).start()
+    with pytest.raises(NotefeedError) as e:
+        Client(f"http://127.0.0.1:{srv.getsockname()[1]}", "t").post("x")
+    assert e.value.status is None
+    srv.close()
+
+
+def test_html_error_body_collapsed(server):
+    server.reply(502, "<html>\n  <body>bad gateway</body>\n</html>\n", "text/html")
+    with pytest.raises(NotefeedError) as e:
+        Client(server.url, "t").post("x")
+    assert str(e.value) == "HTTP 502: <html> <body>bad gateway</body> </html>"

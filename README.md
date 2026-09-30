@@ -6,8 +6,24 @@ Post short markdown notes — from a script over HTTP, or by hand in a small web
 
 ## Quick start
 
+Save this as `compose.yaml`, then create the data folder and the token, and start it:
+
+```yaml
+services:
+  notefeed:
+    image: ghcr.io/marceltov/notefeed:latest
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      NOTEFEED_TOKEN: ${NOTEFEED_TOKEN:?Set NOTEFEED_TOKEN in .env}
+    volumes:
+      - ./data:/data
+```
+
 ```sh
-cp .env.example .env        # set NOTEFEED_TOKEN to a long random secret
+mkdir data   # notes are written as the owner of this folder
+echo "NOTEFEED_TOKEN=$(openssl rand -hex 32)" > .env
 docker compose up -d
 ```
 
@@ -16,6 +32,8 @@ Open http://localhost:3000 and log in with the token. Post from a script:
 ```sh
 curl -H "Authorization: Bearer $NOTEFEED_TOKEN" --data-binary @note.md http://localhost:3000/api/notes
 ```
+
+Or with a client: `pip install notefeed` / `npm install notefeed`, then `notefeed post "# Hello"`.
 
 Read the feed at http://localhost:3000/feed.xml.
 

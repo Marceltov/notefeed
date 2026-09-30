@@ -1,0 +1,28 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "notefeed"
+version = "0.1.0"
+description = "Post markdown notes to a notefeed server, from Python or the command line."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.10"
+dependencies = []
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Environment :: Console",
+  "Topic :: Communications",
+]
+
+[project.optional-dependencies]
+test = ["pytest>=9"]
+
+[project.scripts]
+notefeed = "notefeed.cli:main"
+
+[project.urls]
+Documentation = "https://marceltov.github.io/notefeed/clients/"
+Source = "https://github.com/Marceltov/notefeed"

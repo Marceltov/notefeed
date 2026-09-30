@@ -51,3 +51,10 @@ next-env.d.ts
 /.venv-docs/
 /data/
 /.dev/
+
+# Client packages
+/packages/python/dist/
+__pycache__/
+*.egg-info/
+/packages/js/dist/
+/packages/js/node_modules/
