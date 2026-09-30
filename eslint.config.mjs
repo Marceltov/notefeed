@@ -11,6 +11,8 @@ const eslintConfig = defineConfig([
     ".next/**",
     "out/**",
     "build/**",
+    // MkDocs output (docs site), not app code.
+    "site/**",
     "next-env.d.ts",
   ]),
 ]);
