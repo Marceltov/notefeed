@@ -2,6 +2,9 @@
 
 Open notefeed in a browser and log in with the token (`NOTEFEED_TOKEN`). The login lasts a year on that browser.
 
+![The notefeed web UI: a compose box above notes grouped by day](assets/screenshot-light.png#only-light)
+![The notefeed web UI: a compose box above notes grouped by day](assets/screenshot-dark.png#only-dark)
+
 ## Writing a note
 
 Type markdown into the box at the top. While you type, the line under the box shows the file the note will be saved as, for example `20260929T140512Z-backup-finished.md`. See [Titles and filenames](posting.md#titles-and-filenames) for how it's derived.

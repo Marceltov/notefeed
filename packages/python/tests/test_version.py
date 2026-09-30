@@ -6,8 +6,9 @@ import pytest
 import notefeed
 
 
-def test_version():
-    assert notefeed.__version__ == "0.1.0"
+def test_version_matches_pyproject():
+    toml = (Path(__file__).parents[1] / "pyproject.toml").read_text()
+    assert f'\nversion = "{notefeed.__version__}"\n' in toml
 
 
 def test_matches_js_package():

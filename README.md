@@ -4,6 +4,11 @@ Post short markdown notes — from a script over HTTP, or by hand in a small web
 
 **Documentation: https://marceltov.github.io/notefeed/**
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/screenshot-dark.png">
+  <img alt="The notefeed web UI: a compose box above notes grouped by day" src="docs/assets/screenshot-light.png">
+</picture>
+
 ## Quick start
 
 Save this as `compose.yaml`, then create the data folder and the token, and start it:

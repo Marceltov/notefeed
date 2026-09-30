@@ -4,7 +4,7 @@ import { expect, test } from "vitest";
 const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
 
 test("version", () => {
-  expect(pkg.version).toBe("0.1.0");
+  expect(pkg.version).toMatch(/^\d+\.\d+\.\d+$/);
 });
 
 test.skipIf(!existsSync(new URL("../../python/pyproject.toml", import.meta.url)))("matchesPythonPackage", () => {

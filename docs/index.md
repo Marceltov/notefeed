@@ -4,6 +4,9 @@ notefeed is a small self-hosted inbox for short markdown notes. You post notes f
 
 It exists because dashboards like [Glance](https://github.com/glanceapp/glance) and Dynacat can *read* RSS but have nowhere to *post* to. A backup job, a deploy script or a cron check can drop a note into notefeed, and it shows up on the dashboard a few minutes later.
 
+![The notefeed web UI: a compose box above notes grouped by day](assets/screenshot-light.png#only-light)
+![The notefeed web UI: a compose box above notes grouped by day](assets/screenshot-dark.png#only-dark)
+
 ## Quick start
 
 You need Docker with Compose. No checkout, no build: the image is published at `ghcr.io/marceltov/notefeed`.

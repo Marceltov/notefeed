@@ -1,4 +1,4 @@
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Readable } from "node:stream";
@@ -88,7 +88,8 @@ test("connectionRefusedExits1OneLine", async () => {
 test("version", async () => {
   const t = io();
   expect(await main(["--version"], t.io)).toBe(0);
-  expect(t.out.stdout.trim()).toBe("notefeed 0.1.0");
+  const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
+  expect(t.out.stdout.trim()).toBe(`notefeed ${pkg.version}`);
 });
 
 test("fileNotUtf8Exits2", async () => {
