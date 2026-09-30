@@ -45,3 +45,5 @@ Read the feed at http://localhost:3000/feed.xml.
 ## License
 
 notefeed is dual-licensed under the [Apache License 2.0](LICENSE) and the [GPLv2 License](LICENSE.GPLv2), like ntfy. You may use it under either.
+
+Versions up to and including 0.2.x were released under the MIT License.
