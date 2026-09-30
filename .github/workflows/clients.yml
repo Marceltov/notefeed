@@ -4,7 +4,9 @@ on:
   push:
     branches: [main]
     paths: [packages/**, .github/workflows/clients.yml]
-    tags: ["clients-v*"]
+    # Releases follow the repo-wide vX.Y.Z tags, like the MCP repos (path filters are not
+    # evaluated for tag pushes, so every v* tag runs this).
+    tags: ["v*"]
   pull_request:
     paths: [packages/**, .github/workflows/clients.yml]
 
@@ -47,15 +49,15 @@ jobs:
       - run: npm run build
       - run: npm test
 
-  # Releases: push a tag clients-vX.Y.Z; both package versions must equal X.Y.Z.
+  # Releases: push a tag vX.Y.Z; both package versions must equal X.Y.Z.
   check-version:
-    if: startsWith(github.ref, 'refs/tags/clients-v')
+    if: startsWith(github.ref, 'refs/tags/v')
     needs: [python, js]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - run: |
-          tag="${GITHUB_REF_NAME#clients-v}"
+          tag="${GITHUB_REF_NAME#v}"
           py=$(sed -n 's/^version = "\(.*\)"$/\1/p' packages/python/pyproject.toml)
           js=$(node -p 'require("./packages/js/package.json").version')
           echo "tag=$tag python=$py js=$js"
