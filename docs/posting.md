@@ -57,33 +57,60 @@ Error responses are JSON: `{"error": "<short reason>"}`.
 
 ## From a script
 
-For Python and Node, the [client libraries](clients.md) do this for you, with a `notefeed` command for shell scripts. With plain curl:
+The [client libraries](clients.md) handle the request, the token and the errors for you, and bring a `notefeed` command for shell scripts. Plain curl works everywhere else.
 
 A backup job that reports how it went:
 
-```sh
-#!/usr/bin/env bash
-set -euo pipefail
+=== "notefeed command"
 
-if output=$(restic backup /srv 2>&1); then status="finished"; else status="FAILED"; fi
+    ```sh
+    #!/usr/bin/env bash
+    set -euo pipefail
+    # NOTEFEED_URL and NOTEFEED_TOKEN come from the environment.
 
-printf '# Backup %s on %s\n\n```\n%s\n```\n' "$status" "$(hostname)" "$(tail -n 5 <<<"$output")" |
-  curl -fsS -H "Authorization: Bearer $NOTEFEED_TOKEN" --data-binary @- \
-    https://notes.example.com/api/notes > /dev/null
-```
+    if output=$(restic backup /srv 2>&1); then status="finished"; else status="FAILED"; fi
 
-The same from Python, with only the standard library:
+    printf '# Backup %s on %s\n\n```\n%s\n```\n' "$status" "$(hostname)" "$(tail -n 5 <<<"$output")" |
+      notefeed post - > /dev/null
+    ```
 
-```python
-import json, os, urllib.request
+=== "curl"
 
-req = urllib.request.Request(
-    "https://notes.example.com/api/notes",
-    data=json.dumps({"markdown": "# Disk space low\n/srv is 92% full"}).encode(),
-    headers={
-        "Authorization": f"Bearer {os.environ['NOTEFEED_TOKEN']}",
-        "Content-Type": "application/json",
-    },
-)
-print(json.load(urllib.request.urlopen(req))["url"])
-```
+    ```sh
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    if output=$(restic backup /srv 2>&1); then status="finished"; else status="FAILED"; fi
+
+    printf '# Backup %s on %s\n\n```\n%s\n```\n' "$status" "$(hostname)" "$(tail -n 5 <<<"$output")" |
+      curl -fsS -H "Authorization: Bearer $NOTEFEED_TOKEN" --data-binary @- \
+        https://notes.example.com/api/notes > /dev/null
+    ```
+
+From a program, with the client libraries:
+
+=== "Python"
+
+    ```python
+    import os, shutil
+    from notefeed import Client
+
+    client = Client("https://notes.example.com", os.environ["NOTEFEED_TOKEN"])
+
+    usage = shutil.disk_usage("/srv")
+    if usage.used / usage.total > 0.9:
+        print(client.post(f"# Disk space low\n/srv is {usage.used / usage.total:.0%} full").url)
+    ```
+
+=== "Node"
+
+    ```js
+    import { statfs } from "node:fs/promises";
+    import { Client } from "notefeed";
+
+    const client = new Client({ url: "https://notes.example.com", token: process.env.NOTEFEED_TOKEN });
+
+    const fs = await statfs("/srv");
+    const used = 1 - fs.bavail / fs.blocks;
+    if (used > 0.9) console.log((await client.post(`# Disk space low\n/srv is ${Math.round(used * 100)}% full`)).url);
+    ```
