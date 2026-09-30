@@ -18,18 +18,20 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("text", nargs="?", help='the markdown, or "-" to read stdin')
     p.add_argument("--file", help="read the markdown from this file")
     p.add_argument("--url", help="notefeed base URL (default: $NOTEFEED_URL)")
-    p.add_argument("--token", help="API token (default: $NOTEFEED_TOKEN)")
+    p.add_argument("--feed", help="feed name (default: $NOTEFEED_FEED)")
+    p.add_argument("--password", help="instance password, if it has one (default: $NOTEFEED_PASSWORD)")
     args = parser.parse_args(argv)
 
     try:
         markdown = _read(args)
         url = args.url or os.environ.get("NOTEFEED_URL")
-        token = args.token or os.environ.get("NOTEFEED_TOKEN")
+        feed = args.feed or os.environ.get("NOTEFEED_FEED")
+        password = args.password or os.environ.get("NOTEFEED_PASSWORD")
         if not url:
             raise _UsageError("no URL given; pass --url or set NOTEFEED_URL")
-        if not token:
-            raise _UsageError("no token given; pass --token or set NOTEFEED_TOKEN")
-        note = Client(url, token).post(markdown)
+        if not feed:
+            raise _UsageError("no feed given; pass --feed or set NOTEFEED_FEED")
+        note = Client(url, feed, password).post(markdown)
     except (ConfigError, _UsageError) as e:
         print(f"notefeed: {e}", file=sys.stderr)
         return 2
