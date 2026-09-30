@@ -56,7 +56,9 @@ def test_version(capsys):
         main(["--version"])
     except SystemExit as e:
         assert e.code == 0
-    assert capsys.readouterr().out.strip().endswith("0.1.0")
+    import notefeed
+
+    assert capsys.readouterr().out.strip() == f"notefeed {notefeed.__version__}"
 
 
 def test_file_not_utf8_exits_2(server, capsys, tmp_path):
