@@ -16,6 +16,7 @@ export class InvalidFeedError extends Error {}
 
 const ID_RE = /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z-[a-z0-9-]+$/;
 
+// DATA_DIR is only known at runtime; turbopackIgnore on the fs calls stops the build from tracing the whole repo.
 const feedDir = (feed: string) => join(/*turbopackIgnore: true*/ dataDir(), feed);
 
 export function isValidId(id: string): boolean {

@@ -34,7 +34,7 @@ Raw HTML in notes is shown as text, never run.
 
 ## The read-only view
 
-`/r/<read id>` shows the same notes without the compose box, and never shows the feed's name. Each note opens at `/r/<read id>/<id>`, which is also the note's link in the RSS feed. It needs no login, even on a locked instance.
+`/r/<read id>` shows the same notes without the compose box, and never shows the feed's name. A trailing slash is fine: `/r/<read id>/` answers `200` with the same page, without a redirect. Each note opens at `/r/<read id>/<id>`, which is also the note's link in the RSS feed. It needs no login, even on a locked instance.
 
 ## With a password
 

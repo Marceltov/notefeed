@@ -34,6 +34,7 @@ function secret(): Buffer {
   if (cached) return cached;
   // An empty NOTEFEED_SECRET (e.g. compose's ${NOTEFEED_SECRET:-}) counts as unset.
   if (process.env.NOTEFEED_SECRET) return (cached = strong(Buffer.from(process.env.NOTEFEED_SECRET), "NOTEFEED_SECRET"));
+  // turbopackIgnore on the fs calls stops the build from tracing the whole repo (DATA_DIR is only known at runtime).
   const file = join(/*turbopackIgnore: true*/ dataDir(), ".secret");
   try {
     return (cached = strong(readFileSync(/*turbopackIgnore: true*/ file), file));
@@ -58,6 +59,7 @@ export function readId(feed: string): string {
 export async function listFeeds(): Promise<string[]> {
   try {
     const entries = await readdir(/*turbopackIgnore: true*/ dataDir(), { withFileTypes: true });
+    // Dirent.isDirectory() is false for symlinks, so a link can't pull files from outside DATA_DIR into a feed.
     return entries.filter((e) => e.isDirectory() && checkFeed(e.name) === null).map((e) => e.name);
   } catch (e) {
     if ((e as NodeJS.ErrnoException).code === "ENOENT") return [];
