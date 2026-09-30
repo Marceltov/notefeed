@@ -1,6 +1,6 @@
 site_name: notefeed
 site_description: Post markdown notes over HTTP, read them back as RSS.
-site_url: https://notefeed.me/
+site_url: https://docs.notefeed.me/
 repo_url: https://github.com/Marceltov/notefeed
 repo_name: Marceltov/notefeed
 edit_uri: edit/main/docs/
