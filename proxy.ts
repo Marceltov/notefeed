@@ -1,10 +1,20 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { SESSION_COOKIE, locked, sessionOk } from "@/lib/auth";
+import { RESERVED_FEEDS } from "@/lib/feeds";
 import { publicUrl } from "@/lib/url";
 
 // Exactly one segment, after stripping one trailing slash. Kept percent-encoded: the route's
 // [feed] param is decoded by Next and handlePost rejects anything outside FEED_RE ("a%2Fb" → "a/b" → 400).
 const ONE_SEGMENT = /^\/([^/]+)\/?$/;
+
+// Reserved names are the app's own paths (e.g. the plain <form method="post" action="/logout">).
+function isReserved(segment: string): boolean {
+  try {
+    return RESERVED_FEEDS.has(decodeURIComponent(segment));
+  } catch {
+    return false; // malformed escape: not a reserved path; the handler answers 400
+  }
+}
 
 export function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
@@ -15,6 +25,7 @@ export function proxy(req: NextRequest) {
   if (
     m &&
     req.method === "POST" &&
+    !isReserved(m[1]) &&
     !req.headers.has("next-action") &&
     !req.headers.get("content-type")?.toLowerCase().startsWith("multipart/form-data")
   ) {

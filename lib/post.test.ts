@@ -140,3 +140,44 @@ test("unlocked: any authorization header is ignored", async () => {
   for (const authorization of ["Bearer whatever", "garbage"])
     expect((await post("# Hi", { "content-type": "text/plain", authorization })).status).toBe(201);
 });
+
+test("413 for a chunked body over the limit, cancelling the stream early", async () => {
+  const chunk = new Uint8Array(16 * 1024).fill(0x61);
+  const total = 100; // 1.6 MB if fully read
+  let pulled = 0;
+  let cancelled = false;
+  const body = new ReadableStream<Uint8Array>({
+    pull(c) {
+      if (pulled++ < total) c.enqueue(chunk);
+      else c.close();
+    },
+    cancel() {
+      cancelled = true;
+    },
+  });
+  const res = await handlePost(
+    new Request(`${BASE}/test`, { method: "POST", body, duplex: "half", headers: { "content-type": "text/plain" } } as RequestInit),
+    "test",
+  );
+  expect(res.status).toBe(413);
+  expect(await res.json()).toEqual({ error: "note exceeds 100 KB" });
+  expect(cancelled).toBe(true);
+  expect(pulled).toBeLessThan(20);
+  expect(await written()).toEqual([]);
+});
+
+test("a chunked body at the limit is accepted", async () => {
+  const data = new TextEncoder().encode("a".repeat(102400));
+  const body = new ReadableStream<Uint8Array>({
+    start(c) {
+      for (let i = 0; i < data.length; i += 4096) c.enqueue(data.slice(i, i + 4096));
+      c.close();
+    },
+  });
+  const res = await handlePost(
+    new Request(`${BASE}/test`, { method: "POST", body, duplex: "half", headers: { "content-type": "text/plain" } } as RequestInit),
+    "test",
+  );
+  expect(res.status).toBe(201);
+  expect(await file((await res.json()).id)).toBe("a".repeat(102400));
+});

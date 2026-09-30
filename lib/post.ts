@@ -9,6 +9,25 @@ const TEXT_TYPES = ["", "text/markdown", "text/plain", "application/x-www-form-u
 
 const error = (status: number, message: string) => Response.json({ error: message }, { status });
 
+// Reads at most MAX_BYTES; null (and the stream cancelled) as soon as the body is larger.
+// Content-Length can be absent (chunked) or wrong, so it is never trusted for the cap.
+async function readCapped(req: Request): Promise<Uint8Array | null> {
+  const out = new Uint8Array(MAX_BYTES);
+  let size = 0;
+  if (!req.body) return out.subarray(0, 0);
+  const reader = req.body.getReader();
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) return out.subarray(0, size);
+    if (size + value.byteLength > MAX_BYTES) {
+      await reader.cancel();
+      return null;
+    }
+    out.set(value, size);
+    size += value.byteLength;
+  }
+}
+
 export async function handlePost(req: Request, feed: string): Promise<Response> {
   // Before anything touches the disk: a locked instance must not create the feed directory.
   if (!bearerOk(req.headers.get("authorization"))) return error(401, "missing or wrong password");
@@ -20,10 +39,8 @@ export async function handlePost(req: Request, feed: string): Promise<Response> 
   if (!isJson && !TEXT_TYPES.includes(type)) return error(415, "send text/markdown, text/plain or application/json");
 
   if (Number(req.headers.get("content-length")) > MAX_BYTES) return error(413, "note exceeds 100 KB");
-  // ponytail: reads the whole body before the size check when there's no Content-Length; on an open instance
-  // anyone can send 100 KB+ bodies. Stream with a byte cap if that becomes a problem.
-  const bytes = await req.arrayBuffer();
-  if (bytes.byteLength > MAX_BYTES) return error(413, "note exceeds 100 KB");
+  const bytes = await readCapped(req);
+  if (!bytes) return error(413, "note exceeds 100 KB");
   let text: string;
   try {
     text = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(bytes);

@@ -105,3 +105,9 @@ test("PUBLIC_URL wins for the redirect", () => {
   const res = proxy(new NextRequest("http://internal:3000/", { headers: { host: "internal:3000" } }));
   expect(res.headers.get("location")).toBe("https://notefeed.example.com/login");
 });
+
+test.each(["/logout", "/mcp", "/api", "/login"])("POST %s (reserved: the app's own path) is not rewritten", (p) => {
+  const res = proxy(req(p, { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" } }));
+  expect(rewrite(res)).toBeNull();
+  expect(isNext(res)).toBe(true);
+});
