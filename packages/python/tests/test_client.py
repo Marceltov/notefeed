@@ -205,3 +205,11 @@ def test_html_error_body_collapsed(server):
     with pytest.raises(NotefeedError) as e:
         Client(server.url, "inbox").post("x")
     assert str(e.value) == "HTTP 502: <html> <body>bad gateway</body> </html>"
+
+
+def test_retry_after_accepts_ascii_digits_only(server):
+    # "²" is latin-1, so it survives an HTTP header; str.isdigit() accepts it but int() does not.
+    server.reply(429, {"error": "rate limit exceeded"}, headers={"Retry-After": "\u00b2"})
+    with pytest.raises(RateLimitedError) as e:
+        Client(server.url, "inbox").post("x")
+    assert e.value.retry_after is None
