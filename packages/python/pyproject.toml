@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "notefeed"
-version = "0.2.0"
+version = "0.2.1"
 description = "Client and CLI for notefeed, a self-hosted inbox for markdown notes that you read back as RSS."
 readme = "README.md"
 license = "MIT"
