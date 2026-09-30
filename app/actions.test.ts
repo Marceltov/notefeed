@@ -65,7 +65,7 @@ test("locked instance without a session: redirect to /login, nothing written", a
 test("rate limit applies", async () => {
   process.env.NOTEFEED_RATE_LIMIT = "1";
   await expect(postNoteAction("backups", null, form())).rejects.toThrow(/^REDIRECT/);
-  expect(await postNoteAction("backups", null, form())).toBe("Rate limit exceeded");
+  expect(await postNoteAction("backups", null, form())).toMatch(/^Rate limit exceeded, try again in \d+ seconds\.$/);
   expect(await readdir(join(dir, "backups"))).toHaveLength(1);
 });
 

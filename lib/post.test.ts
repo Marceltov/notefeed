@@ -220,6 +220,20 @@ test("61st post in a minute is 429 with numeric Retry-After", async () => {
   expect(Number(res.headers.get("retry-after"))).toBeGreaterThanOrEqual(1);
 });
 
+test("caps below 1 are off", async () => {
+  process.env.NOTEFEED_MAX_FEEDS = "-1";
+  process.env.NOTEFEED_MAX_NOTES_PER_FEED = "-5";
+  expect((await post("a", {}, "one")).status).toBe(201);
+  expect((await post("b", {}, "one")).status).toBe(201);
+});
+
+test("locked: a 401 doesn't use up a posting slot, only the failed-password budget", async () => {
+  process.env.NOTEFEED_PASSWORD = "pw";
+  process.env.NOTEFEED_RATE_LIMIT = "3";
+  for (let i = 0; i < 2; i++) expect((await post("# Hi", { authorization: "Bearer nope" })).status).toBe(401);
+  for (let i = 0; i < 3; i++) expect((await post(`n${i}`, { authorization: "Bearer pw" })).status).toBe(201);
+});
+
 test("NOTEFEED_MAX_FEEDS=1: second new feed 507, first feed still accepts", async () => {
   process.env.NOTEFEED_MAX_FEEDS = "1";
   expect((await post("a", {}, "one")).status).toBe(201);

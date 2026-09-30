@@ -29,17 +29,22 @@ async function readCapped(req: Request): Promise<Uint8Array | null> {
   }
 }
 
+export type Limited = { status: 429 | 507; error: string; retryAfter?: number };
+
+// Unset, invalid or below 1: no cap.
+const cap = (name: string) => Math.max(0, Number(process.env[name]) || 0);
+
 // Rate limit and optional caps, shared with the compose box's server action. null → go ahead.
-export async function checkLimits(feed: string, headers: Headers): Promise<Response | null> {
+export async function checkLimits(feed: string, headers: Headers): Promise<Limited | null> {
   const wait = rateLimit(clientIp(headers));
-  if (wait !== null) return Response.json({ error: "rate limit exceeded" }, { status: 429, headers: { "Retry-After": String(wait) } });
+  if (wait !== null) return { status: 429, error: "rate limit exceeded", retryAfter: wait };
 
   // ponytail: caps are checked, not locked; concurrent posts can overshoot by a few.
-  const maxFeeds = Number(process.env.NOTEFEED_MAX_FEEDS) || 0;
-  const maxNotes = Number(process.env.NOTEFEED_MAX_NOTES_PER_FEED) || 0;
+  const maxFeeds = cap("NOTEFEED_MAX_FEEDS");
+  const maxNotes = cap("NOTEFEED_MAX_NOTES_PER_FEED");
   const exists = maxFeeds || maxNotes ? await feedExists(feed) : true;
-  if (maxFeeds && !exists && (await listFeeds()).length >= maxFeeds) return error(507, "feed limit reached");
-  if (maxNotes && exists && (await countNotes(feed)) >= maxNotes) return error(507, "note limit reached");
+  if (maxFeeds && !exists && (await listFeeds()).length >= maxFeeds) return { status: 507, error: "feed limit reached" };
+  if (maxNotes && exists && (await countNotes(feed)) >= maxNotes) return { status: 507, error: "note limit reached" };
   return null;
 }
 
@@ -52,7 +57,10 @@ export async function handlePost(req: Request, feed: string): Promise<Response> 
   if (bad) return error(400, bad === "reserved" ? "feed name is reserved" : "invalid feed name");
 
   const limited = await checkLimits(feed, req.headers);
-  if (limited) return limited;
+  if (limited) {
+    const { status, error, retryAfter } = limited;
+    return Response.json({ error }, { status, headers: retryAfter ? { "Retry-After": String(retryAfter) } : undefined });
+  }
 
   const type = (req.headers.get("content-type") ?? "").split(";")[0].trim().toLowerCase();
   const isJson = type === "application/json";
