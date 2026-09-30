@@ -6,7 +6,7 @@
 #   scripts/dev.sh status   # show what's running and where
 #
 # App: http://localhost:$APP_PORT, token $NOTEFEED_TOKEN (default "dev"), notes in ./data.
-# Docs: http://localhost:$DOCS_PORT/notefeed/ (the site path from site_url), via the pinned mkdocs-material image (no Python needed).
+# Docs: http://localhost:$DOCS_PORT/, via the pinned mkdocs-material image (no Python needed).
 # Both listen on all interfaces so you can open them from another machine on the LAN.
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -55,7 +55,7 @@ stop() {
 
 status() {
   if app_running; then echo "app:  http://localhost:$APP_PORT (token: ${NOTEFEED_TOKEN:-dev})"; else echo "app:  stopped"; fi
-  if docs_running; then echo "docs: http://localhost:$DOCS_PORT/notefeed/"; else echo "docs: stopped"; fi
+  if docs_running; then echo "docs: http://localhost:$DOCS_PORT/"; else echo "docs: stopped"; fi
 }
 
 case ${1:-} in

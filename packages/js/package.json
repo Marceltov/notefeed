@@ -1,8 +1,18 @@
 {
   "name": "notefeed",
-  "version": "0.2.0",
-  "description": "Post markdown notes to a notefeed server, from Node or the command line.",
-  "license": "MIT",
+  "version": "0.3.0",
+  "description": "Client and CLI for notefeed, a self-hosted inbox for markdown notes that you read back as RSS.",
+  "license": "Apache-2.0",
+  "author": "Marcel Bruckner",
+  "keywords": [
+    "notefeed",
+    "notes",
+    "markdown",
+    "rss",
+    "self-hosted",
+    "homelab",
+    "cli"
+  ],
   "type": "module",
   "exports": {
     ".": {
@@ -29,7 +39,10 @@
     "url": "git+https://github.com/Marceltov/notefeed.git",
     "directory": "packages/js"
   },
-  "homepage": "https://marceltov.github.io/notefeed/clients/",
+  "homepage": "https://notefeed.me/clients/",
+  "bugs": {
+    "url": "https://github.com/Marceltov/notefeed/issues"
+  },
   "devDependencies": {
     "@types/node": "^20",
     "typescript": "^5.9",
