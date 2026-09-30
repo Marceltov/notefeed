@@ -18,4 +18,4 @@ console.log((await client.post("# Deploy done\nversion 1.4.2")).url);
 
 The `notefeed` command reads `--url` / `--token`, or `NOTEFEED_URL` / `NOTEFEED_TOKEN`. The library itself never reads the environment.
 
-Full documentation: https://marceltov.github.io/notefeed/clients/
+Full documentation: https://notefeed.marceltov.de/clients/

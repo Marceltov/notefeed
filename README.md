@@ -2,7 +2,7 @@
 
 Post short markdown notes — from a script over HTTP, or by hand in a small web UI — and read them back as an RSS feed. Each note is a plain `.md` file on disk. Built as an inbox for dashboards like Glance and Dynacat, which can read RSS but have nowhere to post to.
 
-**Documentation: https://marceltov.github.io/notefeed/**
+**Documentation: https://notefeed.marceltov.de/**
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/screenshot-dark.png">
