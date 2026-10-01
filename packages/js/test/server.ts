@@ -9,7 +9,7 @@ type Reply = [number, string, string, Record<string, string>];
 export async function fakeServer() {
   const requests: Recorded[] = [];
   const replies: Reply[] = [];
-  let route: ((r: Recorded) => [number, unknown]) | undefined;
+  let route: ((r: Recorded) => [number, unknown, Record<string, string>?]) | undefined;
   const server = createServer((req, res) => {
     const chunks: Buffer[] = [];
     req.on("data", (c: Buffer) => chunks.push(c));
@@ -17,7 +17,7 @@ export async function fakeServer() {
       const recorded = { method: req.method!, path: req.url!, headers: req.headers, body: Buffer.concat(chunks) };
       requests.push(recorded);
       const routed = route?.(recorded);
-      const [status, body, type, headers] = (routed && ([routed[0], JSON.stringify(routed[1]), "application/json", {}] as Reply)) ?? replies.shift() ?? [
+      const [status, body, type, headers] = (routed && ([routed[0], JSON.stringify(routed[1]), "application/json", routed[2] ?? {}] as Reply)) ?? replies.shift() ?? [
         201,
         JSON.stringify({ id: "i", url: "u", feed_url: "f", read_url: "r" }),
         "application/json",
@@ -34,7 +34,7 @@ export async function fakeServer() {
       replies.push([status, typeof body === "string" ? body : JSON.stringify(body), type, headers]);
     },
     /** Answer every request from its method and path instead of the queue. */
-    route(fn: (r: Recorded) => [number, unknown]) {
+    route(fn: (r: Recorded) => [number, unknown, Record<string, string>?]) {
       route = fn;
     },
     close: () => new Promise((r) => server.close(r)),

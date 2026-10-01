@@ -101,6 +101,45 @@ describe("errors map from the response's code", () => {
   });
 });
 
+describe("an answer that isn't the API's is an error, never a success", () => {
+  test("a POST redirected (http → https) and turned into a GET loses nothing silently", async () => {
+    server.route((r) =>
+      r.method === "POST" ? [301, {}, { Location: "/api/v1/feeds/inbox/notes" }] : [200, { notes: [], next: null }],
+    );
+    const e = (await new Client({ url: server.url, feed: "inbox" }).post("x").catch((e: unknown) => e)) as NotefeedError;
+    expect(e).toBeInstanceOf(NotefeedError);
+    expect(e.message).toMatch(/redirect/);
+  });
+  test.each([
+    ["an HTML page", "<html>hi</html>", "text/html"],
+    ["invalid JSON", "{not json", "application/json"],
+    ["JSON that isn't an object", "[1,2]", "application/json"],
+  ])("a 2xx with %s", async (_, body, type) => {
+    server.reply(201, body, type);
+    const e = (await new Client({ url: server.url, feed: "inbox" }).post("x").catch((e: unknown) => e)) as NotefeedError;
+    expect(e).toBeInstanceOf(NotefeedError);
+    expect(e.message).toMatch(/unexpected response/);
+  });
+  test("notes() on a 200 HTML page is a NotefeedError, not a TypeError", async () => {
+    server.reply(200, "<html>hi</html>", "text/html");
+    await expect(collect(new Client({ url: server.url, feed: "inbox" }).notes())).rejects.toBeInstanceOf(NotefeedError);
+  });
+  test.each([
+    ["an empty body", "", "HTTP 503"],
+    ["a proxy's own JSON", JSON.stringify({ message: "upstream" }), 'HTTP 503: {"message":"upstream"}'],
+  ])("an error with %s says what came back, not [object Object]", async (_, body, message) => {
+    server.reply(503, body, "application/json");
+    const e = (await new Client({ url: server.url, feed: "inbox" }).post("x").catch((e: unknown) => e)) as NotefeedError;
+    expect(e.message).toBe(message);
+  });
+  test("a code that isn't a string is ignored", async () => {
+    server.reply(400, { error: "odd", code: ["x"] });
+    const e = (await new Client({ url: server.url, feed: "inbox" }).post("x").catch((e: unknown) => e)) as NotefeedError;
+    expect(e.constructor).toBe(NotefeedError);
+    expect(e.code).toBeNull();
+  });
+});
+
 describe("config", () => {
   test.each(["Bad Name", "a/b", ""])("an invalid feed name %j is a ConfigError, and nothing is sent", async (feed) => {
     await expect(new Client({ url: server.url }).post("x", { feed: feed || undefined })).rejects.toBeInstanceOf(ConfigError);

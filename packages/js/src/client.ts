@@ -138,20 +138,29 @@ export class Client {
     } while (before);
   }
 
+  // Anything but a JSON object from the API itself is an error, never a success: a POST that was
+  // redirected (http → https) came back as a GET of the list, so the note was never stored.
   private async call<T>(request: Promise<Result<T>>): Promise<T> {
     const { data, error, response } = await request;
-    if (response?.ok) return data as T;
     if (!response) {
       const cause = (error as { cause?: { code?: string; message?: string } } | undefined)?.cause;
       const reason = cause?.code ?? cause?.message ?? (error as Error | undefined)?.message ?? "unknown error";
       throw new NotefeedError(`could not reach ${this.url}: ${reason}`);
     }
-    const body = typeof error === "object" && error !== null ? (error as Partial<ApiError>) : null;
-    const code = body?.code ?? null;
-    const message =
-      typeof body?.error === "string"
-        ? body.error
-        : `HTTP ${response.status}: ${String(error ?? "").slice(0, 200).replace(/\s+/g, " ").trim()}`;
+    if (response.redirected) {
+      throw new NotefeedError(`${this.url} redirected to ${new URL(response.url).origin}: use that address as the URL`, response.status);
+    }
+    if (response.ok) {
+      if (error === undefined && isObject(data)) return data as T;
+      throw new NotefeedError(`unexpected response from ${this.url} (not a notefeed server?)`, response.status);
+    }
+    const body = isObject(error) ? (error as Partial<ApiError>) : null;
+    const code = typeof body?.code === "string" ? body.code : null;
+    let message = typeof body?.error === "string" ? body.error : "";
+    if (!message) {
+      const raw = typeof error === "string" ? error : isObject(error) && Object.keys(error).length ? JSON.stringify(error) : "";
+      message = `HTTP ${response.status}: ${raw.slice(0, 200).replace(/\s+/g, " ").trim()}`.replace(/: $/, "");
+    }
     if (code === "rate_limited" || code === "too_many_attempts" || response.status === 429) {
       const retry = response.headers.get("retry-after")?.trim() ?? "";
       throw new RateLimitedError(message, response.status, code, /^\d+$/.test(retry) ? Number(retry) : null);
@@ -160,6 +169,8 @@ export class Client {
     throw new Cls(message, response.status, code);
   }
 }
+
+const isObject = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
 
 function checkFeed(feed: string): string {
   // Never echo the name: it is the write key.
