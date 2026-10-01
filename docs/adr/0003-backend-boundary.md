@@ -1,5 +1,5 @@
 ---
-status: accepted
+status: accepted; the server-action part is superseded by ADR 0005
 date: 2026-10-01
 decision-makers: Marcel Bruckner
 ---

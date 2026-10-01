@@ -18,7 +18,7 @@ Open notefeed in a browser. The start page asks for a feed name and suggests a r
 
 Type markdown into the box at the top. While you type, the line under the box shows the file the note will be saved as, for example `20260929T140512Z-backup-finished.md`. See [Titles and filenames](posting.md#titles-and-filenames) for how it's derived.
 
-Post with **Post note**, or press ++ctrl+enter++ (++cmd+enter++ on a Mac). The note appears at the top of the list, briefly highlighted. Posting from the page counts toward the same [rate limit and caps](configuration.md#rate-limits-and-caps) as the API.
+Post with **Post note**, or press ++ctrl+enter++ (++cmd+enter++ on a Mac). The note appears at the top of the list, briefly highlighted. The box posts to the same `POST /<feed>` as scripts, so it counts toward the same [rate limit and caps](configuration.md#rate-limits-and-caps) and works without JavaScript too.
 
 Once the feed has notes, **Post from a script** expands to a ready-to-copy `curl` command for this feed.
 
