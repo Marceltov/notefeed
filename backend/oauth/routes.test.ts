@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { resetFeedsForTests } from "../feeds";
 import { resetRateLimitsForTests } from "../limits";
 import { mcpRoute } from "../mcp";
-import { authServerRoute, authorizeRoute, checkAuthorize, protectedResourceRoute, registerRoute, tokenRoute } from "./routes";
+import { authServerRoute, authorizeRoute, checkAuthorize, metadataPreflight, protectedResourceRoute, registerPreflight, registerRoute, tokenRoute } from "./routes";
 import { resetTokensForTests } from "./tokens";
 
 const BASE = "http://localhost:3000";
@@ -209,6 +209,8 @@ describe("register", () => {
     ["a long URI", { redirect_uris: [`https://x/${"a".repeat(503)}`] }],
     ["a long client_name", { client_name: "x".repeat(101), redirect_uris: [CB] }],
     ["a non-string client_name", { client_name: 1, redirect_uris: [CB] }],
+    ["a bidi override in client_name", { client_name: "Claude\u202Eevil", redirect_uris: [CB] }],
+    ["a control character in client_name", { client_name: "a\nb", redirect_uris: [CB] }],
     ["not an object", [CB]],
   ])("%s: 400", async (_, body) => {
     const res = await register(body);
@@ -272,6 +274,35 @@ test("open instance: every handler is 404", async () => {
   expect((await authorizeRoute(form("/api/oauth/authorize", { ...Object.fromEntries(authParams(id, pkce().challenge)), password: "" }))).status).toBe(404);
   expect((await token({ grant_type: "authorization_code" })).status).toBe(404);
   expect(checkAuthorize(authParams(id, pkce().challenge), new Headers(H)).kind).toBe("error");
+  expect(metadataPreflight().status).toBe(404);
+  expect(registerPreflight().status).toBe(404);
+});
+
+describe("CORS for browser-based clients", () => {
+  const get = (path: string) => new Request(BASE + path, { headers: H });
+  test("metadata, register and token answer with Access-Control-Allow-Origin: *", async () => {
+    const c = await code();
+    for (const res of [
+      protectedResourceRoute(get("/.well-known/oauth-protected-resource/mcp")),
+      authServerRoute(get("/.well-known/oauth-authorization-server")),
+      await register({ redirect_uris: [CB] }),
+      await register({ redirect_uris: [] }),
+      await exchange(c),
+      await token({ grant_type: "nope" }),
+    ])
+      expect(res.headers.get("access-control-allow-origin")).toBe("*");
+  });
+  test("preflights", () => {
+    for (const [res, method] of [
+      [metadataPreflight(), "GET"],
+      [registerPreflight(), "POST"],
+    ] as const) {
+      expect(res.status).toBe(204);
+      expect(res.headers.get("access-control-allow-origin")).toBe("*");
+      expect(res.headers.get("access-control-allow-methods")).toBe(method);
+      expect(res.headers.get("access-control-allow-headers")).toBe("content-type, mcp-protocol-version");
+    }
+  });
 });
 
 test("metadata documents", async () => {

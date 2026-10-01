@@ -56,7 +56,7 @@ export const newJti = (): string => randomBytes(16).toString("base64url");
 const state = processState("oauth-used", () => ({ used: new Map<string, number>() }));
 
 // True the first time a jti is seen; `exp` is in seconds, and an expired entry is dropped (its token no longer verifies).
-export function useOnce(jti: string, exp: number, now = Date.now()): boolean {
+export function spendOnce(jti: string, exp: number, now = Date.now()): boolean {
   for (const [j, e] of state.used) if (e * 1000 < now) state.used.delete(j);
   if (state.used.has(jti)) return false;
   state.used.set(jti, exp);

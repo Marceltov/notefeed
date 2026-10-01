@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { beforeEach, describe, expect, test } from "vitest";
 import { resetFeedsForTests } from "../feeds";
-import { TTL, cid, newJti, resetTokensForTests, sign, useOnce, verify } from "./tokens";
+import { TTL, cid, newJti, resetTokensForTests, sign, spendOnce, verify } from "./tokens";
 
 beforeEach(async () => {
   process.env.DATA_DIR = await mkdtemp(join(tmpdir(), "notefeed-tokens-"));
@@ -74,9 +74,10 @@ describe("helpers", () => {
     expect(newJti()).toMatch(/^[\w-]{22}$/);
     expect(newJti()).not.toBe(newJti());
   });
-  test("useOnce", () => {
-    expect(useOnce("j", 100, 0)).toBe(true);
-    expect(useOnce("j", 100, 50_000)).toBe(false);
-    expect(useOnce("j", 300, 200_000)).toBe(true); // the old entry expired and was pruned
+  test("spendOnce", () => {
+    expect(spendOnce("j", 100, 0)).toBe(true);
+    expect(spendOnce("j", 100, 100_000)).toBe(false);
+    expect(spendOnce("j", 100, 50_000)).toBe(false);
+    expect(spendOnce("j", 300, 200_000)).toBe(true); // the old entry expired and was pruned
   });
 });

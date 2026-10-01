@@ -14,7 +14,7 @@ export { dispatch } from "./http/api";
 export { loginRoute, logoutRoute } from "./http/session";
 export { rssRoute } from "./http/rss";
 export { mcpRoute } from "./mcp";
-export { authServerRoute, authorizeRoute, checkAuthorize, protectedResourceRoute, registerRoute, tokenRoute } from "./oauth/routes";
+export { authServerRoute, authorizeRoute, checkAuthorize, metadataPreflight, protectedResourceRoute, registerPreflight, registerRoute, tokenRoute } from "./oauth/routes";
 
 export const instanceTitle = config.title;
 

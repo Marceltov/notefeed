@@ -8,32 +8,46 @@ import { NotefeedError, RateLimitedError } from "../errors";
 import { parseForm, readCapped, seeOther } from "../http/request";
 import { clientIp } from "../limits";
 import { mcpResource, publicUrl } from "../urls";
-// Aliased: eslint's rules-of-hooks reads any use* call as a React hook.
-import { cid, newJti, sign, TTL, useOnce as spend, verify } from "./tokens";
+import { cid, newJti, sign, spendOnce, TTL, verify } from "./tokens";
 
 const notFound = () => new Response("not found", { status: 404 });
-const noStore = { "Cache-Control": "no-store" };
+// Browser-based MCP clients call the metadata, register and token endpoints cross-origin. None of them
+// reads a cookie, so any origin may.
+const cors = { "Access-Control-Allow-Origin": "*" };
+const noStore = { ...cors, "Cache-Control": "no-store" };
 const oauthError = (error: string, status = 400) => Response.json({ error }, { status, headers: noStore });
+
+// OPTIONS for the metadata documents and /oauth/register. /oauth/token takes a plain form POST, which needs no preflight.
+const preflight = (method: string) => (): Response =>
+  locked()
+    ? new Response(null, { status: 204, headers: { ...cors, "Access-Control-Allow-Methods": method, "Access-Control-Allow-Headers": "content-type, mcp-protocol-version" } })
+    : notFound();
+export const metadataPreflight = preflight("GET");
+export const registerPreflight = preflight("POST");
 
 export function protectedResourceRoute(req: Request): Response {
   if (!locked()) return notFound();
-  return Response.json({ resource: mcpResource(req.headers), authorization_servers: [publicUrl(req.headers)], bearer_methods_supported: ["header"] });
+  const body = { resource: mcpResource(req.headers), authorization_servers: [publicUrl(req.headers)], bearer_methods_supported: ["header"] };
+  return Response.json(body, { headers: cors });
 }
 
 export function authServerRoute(req: Request): Response {
   if (!locked()) return notFound();
   const base = publicUrl(req.headers);
-  return Response.json({
-    issuer: base,
-    authorization_endpoint: `${base}/oauth/authorize`,
-    token_endpoint: `${base}/oauth/token`,
-    registration_endpoint: `${base}/oauth/register`,
-    response_types_supported: ["code"],
-    grant_types_supported: ["authorization_code", "refresh_token"],
-    code_challenge_methods_supported: ["S256"],
-    token_endpoint_auth_methods_supported: ["none"],
-    authorization_response_iss_parameter_supported: true,
-  });
+  return Response.json(
+    {
+      issuer: base,
+      authorization_endpoint: `${base}/oauth/authorize`,
+      token_endpoint: `${base}/oauth/token`,
+      registration_endpoint: `${base}/oauth/register`,
+      response_types_supported: ["code"],
+      grant_types_supported: ["authorization_code", "refresh_token"],
+      code_challenge_methods_supported: ["S256"],
+      token_endpoint_auth_methods_supported: ["none"],
+      authorization_response_iss_parameter_supported: true,
+    },
+    { headers: cors },
+  );
 }
 
 // https anywhere, plain http only on loopback (native and CLI clients). No fragment, even an empty one.
@@ -54,7 +68,9 @@ export async function registerRoute(req: Request): Promise<Response> {
   const { client_name, redirect_uris } = body;
   if (!Array.isArray(redirect_uris) || redirect_uris.length < 1 || redirect_uris.length > 5 || !redirect_uris.every(redirectUriOk))
     return oauthError("invalid_redirect_uri");
-  if (client_name !== undefined && (typeof client_name !== "string" || client_name.length > 100)) return oauthError("invalid_client_metadata");
+  // The name is shown on the login page: no control or format characters (a bidi override could disguise it).
+  if (client_name !== undefined && (typeof client_name !== "string" || client_name.length > 100 || /[\p{Cc}\p{Cf}]/u.test(client_name)))
+    return oauthError("invalid_client_metadata");
   // Only these two fields are signed into the client_id; anything else the client sent is dropped.
   const client = client_name === undefined ? { redirect_uris } : { client_name, redirect_uris };
   const client_id = sign("client", client);
@@ -172,7 +188,7 @@ export async function tokenRoute(req: Request): Promise<Response> {
     if (c.cid !== cid(clientId) || c.redirect_uri !== redirectUri) return oauthError("invalid_grant");
     if (createHash("sha256").update(verifier).digest("base64url") !== c.code_challenge) return oauthError("invalid_grant");
     if (resource !== undefined && resource !== c.resource) return oauthError("invalid_grant");
-    if (!spend(c.jti, c.exp!)) return oauthError("invalid_grant");
+    if (!spendOnce(c.jti, c.exp!)) return oauthError("invalid_grant");
     return issue(c.cid, c.resource);
   }
 
@@ -185,7 +201,7 @@ export async function tokenRoute(req: Request): Promise<Response> {
     if (!verify("client", clientId)) return oauthError("invalid_client");
     if (r.cid !== cid(clientId)) return oauthError("invalid_grant");
     if (resource !== undefined && resource !== r.aud) return oauthError("invalid_grant");
-    if (!spend(r.jti, r.exp!)) return oauthError("invalid_grant");
+    if (!spendOnce(r.jti, r.exp!)) return oauthError("invalid_grant");
     return issue(r.cid, r.aud);
   }
 
