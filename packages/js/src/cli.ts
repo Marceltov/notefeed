@@ -1,4 +1,4 @@
-/** `notefeed post ...` — post a note from the command line. */
+/** `notefeed post ...` and `notefeed notes ...`: post and read notes from the command line. */
 import { readFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { parseArgs } from "node:util";
@@ -12,7 +12,10 @@ type Io = {
 
 class UsageError extends Error {}
 
-const USAGE = "usage: notefeed post <text | - | --file PATH> [--url URL] [--feed FEED] [--password PASSWORD]";
+const USAGE = [
+  "usage: notefeed post <text | - | --file PATH> [--url URL] [--feed FEED] [--password PASSWORD]",
+  "       notefeed notes [--limit N] [--json] [--url URL] [--feed FEED] [--password PASSWORD]",
+].join("\n");
 
 /** Returns the exit code: 0 ok, 1 server/network error, 2 usage/config error. */
 export async function main(argv: string[], io: Io = process): Promise<number> {
@@ -25,6 +28,8 @@ export async function main(argv: string[], io: Io = process): Promise<number> {
         feed: { type: "string" },
         password: { type: "string" },
         file: { type: "string" },
+        limit: { type: "string" },
+        json: { type: "boolean" },
         version: { type: "boolean" },
         help: { type: "boolean", short: "h" },
       },
@@ -39,22 +44,38 @@ export async function main(argv: string[], io: Io = process): Promise<number> {
       return 0;
     }
     const [command, text, ...rest] = positionals;
-    if (command !== "post" || rest.length) throw new UsageError(USAGE);
-    const markdown = await read(text, values.file, io);
-    const url = values.url || process.env.NOTEFEED_URL;
-    const feed = values.feed || process.env.NOTEFEED_FEED;
-    const password = values.password || process.env.NOTEFEED_PASSWORD;
-    if (!url) throw new UsageError("no URL given; pass --url or set NOTEFEED_URL");
-    if (!feed) throw new UsageError("no feed given; pass --feed or set NOTEFEED_FEED");
-    const note = await new Client({ url, feed, password }).post(markdown);
-    io.stdout.write(`${note.url}\n`);
-    return 0;
+    if (command === "post" && !rest.length) {
+      const markdown = await read(text, values.file, io);
+      const note = await client(values).post(markdown);
+      io.stdout.write(`${note.url}\n`);
+      return 0;
+    }
+    if (command === "notes" && text === undefined) {
+      const limit = Number(values.limit ?? 20);
+      if (!Number.isInteger(limit) || limit < 1) throw new UsageError("--limit must be a whole number, 1 or more");
+      let left = limit;
+      for await (const n of client(values).notes({ pageSize: Math.min(limit, 100) })) {
+        io.stdout.write(values.json ? `${JSON.stringify(n)}\n` : `${n.created_at}  ${n.title || n.id}  ${n.url}\n`);
+        if (--left === 0) break;
+      }
+      return 0;
+    }
+    throw new UsageError(USAGE);
   } catch (e) {
     io.stderr.write(`notefeed: ${(e as Error).message.split("\n")[0]}\n`);
     if (e instanceof ConfigError || e instanceof UsageError) return 2;
     if (e instanceof NotefeedError) return 1;
     return 2; // parseArgs rejects unknown options with a TypeError
   }
+}
+
+// Flags win over NOTEFEED_URL, NOTEFEED_FEED and NOTEFEED_PASSWORD.
+function client(values: { url?: string; feed?: string; password?: string }): Client {
+  const url = values.url || process.env.NOTEFEED_URL;
+  const feed = values.feed || process.env.NOTEFEED_FEED;
+  if (!url) throw new UsageError("no URL given; pass --url or set NOTEFEED_URL");
+  if (!feed) throw new UsageError("no feed given; pass --feed or set NOTEFEED_FEED");
+  return new Client({ url, feed, password: values.password || process.env.NOTEFEED_PASSWORD });
 }
 
 async function read(text: string | undefined, file: string | undefined, io: Io): Promise<string> {

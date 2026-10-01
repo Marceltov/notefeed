@@ -167,3 +167,67 @@ test("invalidFeedExits2", async () => {
   expect(t.out.stderr).toContain("invalid feed name");
   expect(server.requests).toEqual([]);
 });
+
+// notefeed notes: a feed of `count` notes, served a page at a time like the server.
+function serveNotes(count: number) {
+  const notes = Array.from({ length: count }, (_, i) => ({
+    id: `20260930T${String(10 + i).padStart(2, "0")}0000Z-n${i}`,
+    title: `Note ${i}`,
+    markdown: `# Note ${i}`,
+    created_at: `2026-09-30T${String(10 + i).padStart(2, "0")}:00:00.000Z`,
+    url: `https://n.example/inbox/n${i}`,
+  })).reverse();
+  server.route((r) => {
+    const q = new URL(r.path, "http://x").searchParams;
+    const limit = Number(q.get("limit") ?? 50);
+    const older = notes.filter((n) => !q.get("before") || n.id < q.get("before")!);
+    return [200, { notes: older.slice(0, limit), next: older.length > limit ? older[limit - 1].id : null }];
+  });
+}
+const args = (...a: string[]) => ["notes", "--url", server.url, "--feed", "inbox", ...a];
+
+test("notesPrintsNewestWithLimit", async () => {
+  serveNotes(5);
+  const { out, io: x } = io();
+  expect(await main(args("--limit", "3"), x)).toBe(0);
+  expect(out.stdout).toBe(
+    [
+      "2026-09-30T14:00:00.000Z  Note 4  https://n.example/inbox/n4",
+      "2026-09-30T13:00:00.000Z  Note 3  https://n.example/inbox/n3",
+      "2026-09-30T12:00:00.000Z  Note 2  https://n.example/inbox/n2",
+      "",
+    ].join("\n"),
+  );
+});
+
+test("notesDefaultsToTwentyAcrossPages", async () => {
+  serveNotes(30);
+  const { out, io: x } = io();
+  expect(await main(args(), x)).toBe(0);
+  expect(out.stdout.trim().split("\n")).toHaveLength(20);
+});
+
+test("notesJson", async () => {
+  serveNotes(2);
+  const { out, io: x } = io();
+  expect(await main(args("--json"), x)).toBe(0);
+  expect(out.stdout.trim().split("\n").map((l) => JSON.parse(l).title)).toEqual(["Note 1", "Note 0"]);
+});
+
+test("notesWithoutFeedIsUsageError", async () => {
+  const { out, io: x } = io();
+  expect(await main(["notes", "--url", server.url], x)).toBe(2);
+  expect(out.stderr).toMatch(/no feed given/);
+});
+
+test("notesAuthErrorExitsOne", async () => {
+  server.route(() => [401, { error: "missing or wrong password", code: "auth" }]);
+  const { out, io: x } = io();
+  expect(await main(args(), x)).toBe(1);
+  expect(out.stderr).toBe("notefeed: missing or wrong password\n");
+});
+
+test("notesRejectsBadLimit", async () => {
+  const { io: x } = io();
+  expect(await main(args("--limit", "0"), x)).toBe(2);
+});
