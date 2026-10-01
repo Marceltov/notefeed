@@ -72,4 +72,13 @@ test("the read link shows the notes but not the feed name, and serves RSS", asyn
   const xml = await rss.text();
   expect(xml).toContain("Shared note");
   expect(xml).not.toContain(name);
+  expect(rss.headers()["content-type"]).toBe("application/rss+xml; charset=utf-8");
+
+  // A feed reader follows the item's link: the note's read-only page, not the feed's.
+  const link = /<item>.*?<link>(.*?)<\/link>/s.exec(xml)![1];
+  expect(link).toMatch(/^http:\/\/localhost:3100\/r\/[A-Za-z0-9_-]{22}\/\d{8}T\d{6}Z-shared-note$/);
+  await page.goto(link);
+  await expect(page.getByText("Shared note")).toBeVisible();
+  await expect(page.getByRole("link", { name: "Back to all notes" })).toBeVisible();
+  expect(await page.content()).not.toContain(name);
 });
