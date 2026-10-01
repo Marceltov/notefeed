@@ -168,3 +168,12 @@ describe("updateNote and removeNote", () => {
     expect(await files()).toHaveLength(2);
   });
 });
+
+test("editing a note whose feed was deleted meanwhile is no such note, not a crash", async () => {
+  const { updateNote } = await import("./notes");
+  const { deleteFeed } = await import("./feeds");
+  const n = await createNote("gone", "# a");
+  const p = updateNote("gone", n.id, "# b"); // stat has passed by the time the directory goes
+  await deleteFeed("gone");
+  expect(await p).toBeNull();
+});

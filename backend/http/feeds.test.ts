@@ -191,15 +191,79 @@ describe("DELETE /feeds/{feed}", () => {
   });
 });
 
+describe("settings body", () => {
+  test("a missing feed password is refused before the body is read", async () => {
+    await post("locked", "# x", { "x-feed-password": "correct horse" });
+    let pulled = false;
+    const body = new ReadableStream({ pull: (c) => ((pulled = true), c.close()) }, { highWaterMark: 0 });
+    const req = new Request(`${BASE}${API_PREFIX}/feeds/locked`, { method: "PUT", body, headers: { host: "localhost:3000", "content-type": "application/json" }, duplex: "half" } as RequestInit);
+    expect((await dispatch(req, ["feeds", "locked"])).status).toBe(401);
+    expect(pulled).toBe(false);
+  });
+});
+
+describe("delete racing a creation", () => {
+  const invariants = async (name: string, old: string) => {
+    const { hasFeed, feedForReadId } = await import("../feeds");
+    expect(await feedForReadId(old)).toBeNull();
+    expect(await hasFeed(name)).toBe(await exists(name));
+  };
+
+  test("DELETE and POST through the API in the same tick: never a feed the index and the disk disagree on", async () => {
+    process.env.NOTEFEED_RATE_LIMIT = "0";
+    for (let i = 0; i < 100; i++) {
+      await createNote("race", "x");
+      const old = (await readIdOf("race"))!;
+      const [d, p] = await Promise.all([call("DELETE", "/feeds/race"), post("race", "# again")]);
+      expect(d.status).toBe(204);
+      expect(p.status).toBe(201);
+      await invariants("race", old);
+      expect((await post("race", "# next")).status).toBe(201);
+      await call("DELETE", "/feeds/race");
+    }
+  });
+
+  test("deleteFeed and ensureFeed in the same tick", async () => {
+    const { deleteFeed, ensureFeed } = await import("../feeds");
+    for (let i = 0; i < 200; i++) {
+      await createNote("race", "x");
+      const old = (await readIdOf("race"))!;
+      await Promise.all([deleteFeed("race"), ensureFeed("race")]);
+      await invariants("race", old);
+      await createNote("race", "again"); // never a 500
+      await deleteFeed("race");
+    }
+  });
+
+  test("deleteFeed and createProtectedFeed in the same tick", async () => {
+    const { deleteFeed, createProtectedFeed } = await import("../feeds");
+    for (let i = 0; i < 200; i++) {
+      await createNote("race", "x");
+      const old = (await readIdOf("race"))!;
+      await Promise.all([deleteFeed("race"), createProtectedFeed("race", "hash")]);
+      await invariants("race", old);
+      await deleteFeed("race");
+    }
+  });
+});
+
 describe("leftovers", () => {
+  test("only .deleted-<12 hex> is removed", async () => {
+    await mkdir(join(dir, ".deleted-keepme"));
+    await createNote("real", "x");
+    resetFeedsForTests();
+    await readIdOf("real");
+    expect(await exists(".deleted-keepme")).toBe(true);
+  });
+
   test(".deleted-* is removed when the index loads and never listed", async () => {
     await createNote("real", "x");
-    await mkdir(join(dir, ".deleted-abc"));
-    await writeFile(join(dir, ".deleted-abc", "n.md"), "x");
+    await mkdir(join(dir, ".deleted-0123456789ab"));
+    await writeFile(join(dir, ".deleted-0123456789ab", "n.md"), "x");
     resetFeedsForTests();
     const { listFeeds, feedCount } = await import("../feeds");
     expect(await listFeeds()).toEqual(["real"]);
     expect(await feedCount()).toBe(1);
-    expect(await exists(".deleted-abc")).toBe(false);
+    expect(await exists(".deleted-0123456789ab")).toBe(false);
   });
 });

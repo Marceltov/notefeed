@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, readFile, readdir, stat, symlink, writeFile } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { beforeEach, describe, expect, test, vi } from "vitest";
-import { FEED_RE, READ_ID_RE, RESERVED_FEEDS, checkFeed, derivedReadId, ensureFeed, feedCount, feedForReadId, hasFeed, listFeeds, readIdOf, removeFeed, resetFeedsForTests } from "./feeds";
+import { FEED_RE, deleteFeed, READ_ID_RE, RESERVED_FEEDS, checkFeed, derivedReadId, ensureFeed, feedCount, feedForReadId, hasFeed, listFeeds, readIdOf, resetFeedsForTests } from "./feeds";
 import { createProtected } from "./feedlock";
 import { createNote, listNotes } from "./notes";
 
@@ -143,10 +143,10 @@ describe("per-feed read ids", () => {
 
   test("an unknown feed has no read id", async () => expect(await readIdOf("nope")).toBeNull());
 
-  test("removeFeed drops the feed from the index", async () => {
+  test("deleteFeed drops the feed from the index", async () => {
     await createNote("gone", "x");
     const id = (await readIdOf("gone"))!;
-    await removeFeed("gone");
+    await deleteFeed("gone");
     expect(await hasFeed("gone")).toBe(false);
     expect(await feedForReadId(id)).toBeNull();
     expect(await feedCount()).toBe(0);
@@ -183,7 +183,7 @@ describe("per-feed read ids", () => {
     expect(await readIdOf("a")).toBe("A".repeat(22));
     expect(await readIdOf("b")).toBe(derivedReadId("b"));
     expect(await feedForReadId("A".repeat(22))).toBe("a");
-    await removeFeed("b");
+    await deleteFeed("b");
     expect(await feedForReadId("A".repeat(22))).toBe("a");
     expect(await feedForReadId(derivedReadId("b"))).toBeNull();
   });
@@ -204,6 +204,20 @@ describe("per-feed read ids", () => {
     expect(out).not.toContain("secret");
   });
 
+  test("a hand-made .readid equal to another feed's derived id: the first keeps the link, the other has none", async () => {
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    for (const f of ["a", "d"]) {
+      await mkdir(join(dir, f));
+      await writeFile(join(dir, f, ".readid"), derivedReadId("d")); // d's own derived id, also a's stored one
+    }
+    expect(await feedForReadId(derivedReadId("d"))).toBe("a");
+    expect(await listFeeds()).toEqual(["a", "d"]);
+    expect(log.mock.calls.flat().join(" ")).not.toMatch(/\bd\b/);
+    await deleteFeed("d"); // must not take a's link away
+    expect(await feedForReadId(derivedReadId("d"))).toBe("a");
+    log.mockRestore();
+  });
+
   test(".readid is not a note and not a feed", async () => {
     await createNote("alpha", "x");
     await writeFile(join(dir, ".readid"), "x");
@@ -221,7 +235,6 @@ describe("per-feed read ids", () => {
 describe("deleteFeed", () => {
   const readid = (f: string) => readFile(join(dir, f, ".readid"), "utf8");
   test("drops the feed, its directory and its read id; a re-created feed is a new one", async () => {
-    const { deleteFeed } = await import("./feeds");
     await createNote("gone", "x");
     const old = (await readIdOf("gone"))!;
     expect(await deleteFeed("gone")).toBe(true);
@@ -234,7 +247,6 @@ describe("deleteFeed", () => {
   });
 
   test("a note write in flight while the feed is deleted makes a new, complete feed", async () => {
-    const { deleteFeed } = await import("./feeds");
     await createNote("busy", "x");
     const old = (await readIdOf("busy"))!;
     for (let i = 0; i < 20; i++) {
@@ -249,7 +261,6 @@ describe("deleteFeed", () => {
   });
 
   test("a creation while the directory is still being renamed away does not take the old id back", async () => {
-    const { deleteFeed } = await import("./feeds");
     await createNote("window", "x");
     const old = (await readIdOf("window"))!;
     const deleted = deleteFeed("window");
@@ -263,7 +274,6 @@ describe("deleteFeed", () => {
   });
 
   test("a protected creation in flight while the feed is deleted wins cleanly", async () => {
-    const { deleteFeed } = await import("./feeds");
     await createProtected("prot", "correct horse battery");
     const [, created] = await Promise.all([deleteFeed("prot"), createProtected("prot", "another password").then(() => true, () => false)]);
     expect(created).toBe(true);

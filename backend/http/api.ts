@@ -273,14 +273,15 @@ const OPS: AnyOp[] = [
     },
     before: passwordAndFeed,
   }).handle(async ({ req, params }) => {
-    const bytes = await readCapped(req, 8192);
-    let settings: unknown;
-    try {
-      settings = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes ?? new Uint8Array()));
-    } catch {
-      throw new InvalidBodyError('JSON needs "title" and "description" strings');
-    }
-    await updateFeed(params.feed, clientIp(req.headers), settings, feedAccess(req.headers, params.feed));
+    const read = async () => {
+      const bytes = await readCapped(req, 8192);
+      try {
+        return JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes ?? new Uint8Array()));
+      } catch {
+        throw new InvalidBodyError('JSON needs "title" and "description" strings');
+      }
+    };
+    await updateFeed(params.feed, clientIp(req.headers), read, feedAccess(req.headers, params.feed));
     return { status: 200, body: await feedJson(params.feed, req.headers) };
   }),
 

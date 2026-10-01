@@ -77,7 +77,7 @@ export async function deleteNote(feed: string, id: string, ip: string, access: F
 // changed by anyone who knows its name, as it is posted to (ADR 0001); a protected one needs its password.
 export async function updateFeed(feed: string, ip: string, settings: unknown, access: FeedAccess): Promise<FeedSettings> {
   await admit(feed, ip, access);
-  const checked = checkSettings(settings);
+  const checked = checkSettings(typeof settings === "function" ? await settings() : settings); // a reader runs after admit: a refused request never has its body read
   if (!(await hasFeed(feed))) throw new NotFoundError("no such feed");
   await saveSettings(feed, checked);
   return checked;

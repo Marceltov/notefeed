@@ -4,8 +4,7 @@
 // their name (HMAC with the server secret), so no existing read link changes.
 import { createHmac, randomBytes } from "node:crypto";
 import { config } from "./config";
-import { deleteFeedDir, listFeedDirs, readReadId, removeDeletedLeftovers, writeReadId } from "./data/feeds";
-import { createFeedDirWithHash } from "./data/password";
+import { createFeedDir, deleteFeedDir, listFeedDirs, readReadId, removeDeletedLeftovers } from "./data/feeds";
 import { loadOrCreateSecret, secretPath } from "./data/secret";
 import { InvalidFeedError, ReservedFeedError } from "./errors";
 import { processState } from "./state";
@@ -62,6 +61,12 @@ function register(idx: Index, feed: string, id: string): void {
   if (owner !== undefined && owner !== feed) {
     console.error("a feed's .readid is already another feed's read id (copied directory?); using the derived read id");
     id = derivedReadId(feed);
+    const taken = idx.byReadId.get(id);
+    if (taken !== undefined && taken !== feed) {
+      console.error("a feed's derived read id is already another feed's read id; the feed has no read link");
+      idx.byFeed.set(feed, id); // listed and countable, but not found by read id
+      return;
+    }
   }
   idx.byFeed.set(feed, id);
   idx.byReadId.set(id, feed);
@@ -94,17 +99,24 @@ async function feedIndex(): Promise<Index> {
   return loading;
 }
 
+// Waits for deletes of this feed in progress. The caller reads the index right after, with no await between:
+// a delete that starts in the same tick has then either set its marker (seen here) or not yet run (and
+// then finds the feed this call made).
+async function afterDeletes(feed: string): Promise<void> {
+  for (let d; (d = deleting.get(feed)); ) await d.catch(() => {});
+}
+
 // The one way a feed comes to exist. The index is loaded first (a directory the first load finds without
-// `.readid` is a legacy feed), then the directory and its `.readid` are created, and only then does the
-// caller write anything into it: a crash can't leave notes without their read id. A failed note write may
-// leave an empty directory with `.readid`; that is accepted. Returns the feed's read id.
+// `.readid` is a legacy feed), then the directory is made already holding its `.readid` (see createFeedDir),
+// and only then does the caller write anything into it: a crash can't leave notes without their read id.
+// A failed note write may leave an empty directory with `.readid`; that is accepted. Returns the feed's read id.
 export async function ensureFeed(feed: string): Promise<string> {
   const idx = await feedIndex();
-  await deleteSettled(feed);
+  await afterDeletes(feed);
   const known = idx.byFeed.get(feed);
   if (known !== undefined) return known;
   const fresh = newReadId();
-  const id = (await writeReadId(feed, fresh)) ? fresh : await storedOrDerived(feed); // lost a race: use the winner's
+  const id = (await createFeedDir(feed, fresh)) ? fresh : await storedOrDerived(feed); // lost a race: use the winner's
   register(idx, feed, id);
   return idx.byFeed.get(feed)!;
 }
@@ -112,9 +124,9 @@ export async function ensureFeed(feed: string): Promise<string> {
 // A protected feed: its directory appears already holding the hash and `.readid`. false = the feed exists.
 export async function createProtectedFeed(feed: string, hash: string): Promise<boolean> {
   const idx = await feedIndex();
-  await deleteSettled(feed);
+  await afterDeletes(feed);
   const id = newReadId();
-  if (!(await createFeedDirWithHash(feed, hash, id))) return false;
+  if (!(await createFeedDir(feed, id, hash))) return false;
   register(idx, feed, id);
   return true;
 }
@@ -126,23 +138,23 @@ function unregister(idx: Index, feed: string): void {
   idx.byFeed.delete(feed);
 }
 
-export async function removeFeed(feed: string): Promise<void> {
-  unregister(await feedIndex(), feed);
-}
-
 // Deletes in progress, by feed. The index entry goes first and the directory a moment later; a creation
 // meanwhile would find the old `.readid` still there and take the old id back, so it waits for the delete.
 const deleting = new Map<string, Promise<boolean>>();
-const deleteSettled = (feed: string) => deleting.get(feed)?.catch(() => {});
 
 // Removes a feed with everything in it: false when there is no such feed. A post that already passed
 // ensureFeed and writes after this is ENOENT, and createNote then makes a new feed (new read id, no password).
 export async function deleteFeed(feed: string): Promise<boolean> {
   const idx = await feedIndex();
-  await deleteSettled(feed);
-  if (!idx.byFeed.has(feed)) return false;
-  unregister(idx, feed); // no await between the check and this, so of two deletes only one gets here
-  const done = deleteFeedDir(feed);
+  await afterDeletes(feed);
+  const id = idx.byFeed.get(feed);
+  if (id === undefined) return false;
+  unregister(idx, feed); // no await since the lookup, so of two deletes only one gets here
+  // A rename that fails for another reason than "no such directory" leaves the feed as it was.
+  const done = deleteFeedDir(feed).catch((e) => {
+    register(idx, feed, id);
+    throw e;
+  });
   deleting.set(feed, done);
   try {
     return await done;

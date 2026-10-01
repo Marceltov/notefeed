@@ -34,6 +34,8 @@ export function checkMarkdown(markdown: string): void {
 export async function createNote(feed: string, markdown: string, now = new Date()): Promise<Note> {
   assertFeed(feed);
   checkMarkdown(markdown);
+  // ponytail: checked, not locked. A post that is past ensureFeed when its feed is deleted and the name
+  // re-created lands in the new feed (as do settings written after hasFeed); a per-feed lock would close it.
   const base = `${idStamp(now)}-${slugify(extractTitle(markdown))}`;
   const write = async () => (await ensureFeed(feed), writeNote(feed, base, markdown));
   try {

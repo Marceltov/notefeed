@@ -49,6 +49,9 @@ export async function replaceNote(feed: string, id: string, markdown: string): P
     await writeFile(/*turbopackIgnore: true*/ tmp, markdown);
     await rename(/*turbopackIgnore: true*/ tmp, file(feed, id));
     return true;
+  } catch (e) {
+    if (isErrno(e, "ENOENT")) return false; // the feed was deleted since the stat
+    throw e;
   } finally {
     await unlink(/*turbopackIgnore: true*/ tmp).catch(() => {});
   }
