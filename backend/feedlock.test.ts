@@ -115,6 +115,13 @@ describe("protected feed", () => {
     await expect(ok("a", { password: "pw" })).resolves.toBeUndefined();
   });
 
+  test("a bad cookie alone never touches the limiter", async () => {
+    process.env.NOTEFEED_RATE_LIMIT = "2";
+    await createProtected("a", "pw");
+    for (let i = 0; i < 10; i++) await expect(ok("a", { cookie: "stale" })).rejects.toBeInstanceOf(AuthError);
+    await expect(ok("a", { password: "pw" })).resolves.toBeUndefined();
+  });
+
   test("failed attempts are limited, even for the right password", async () => {
     process.env.NOTEFEED_RATE_LIMIT = "2";
     await createProtected("a", "pw");

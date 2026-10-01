@@ -60,7 +60,9 @@ function checkAccessTo(feed: string, hash: string, access: FeedAccess, ip: strin
   if (access.cookie !== undefined) {
     const want = Buffer.from(cookieOf(feed, hash));
     const got = Buffer.from(access.cookie);
-    if (got.length === want.length && timingSafeEqual(got, want)) return; // a bad cookie is not a failed attempt
+    if (got.length === want.length && timingSafeEqual(got, want)) return;
+    // A bad or stale cookie alone is not a failed attempt: no scrypt, nothing counted.
+    if (!access.password) throw new AuthError();
   }
   checkPassword(access.password ?? "", hash, ip);
 }
