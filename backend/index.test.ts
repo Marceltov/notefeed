@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { beforeEach, expect, test } from "vitest";
 import { cookieValue, createProtected } from "./feedlock";
-import { readId, resetFeedsForTests } from "./feeds";
+import { readIdOf, resetFeedsForTests } from "./feeds";
 import { feedUnlocked, getFeed } from "./index";
 import { createNote } from "./notes";
 
@@ -20,7 +20,7 @@ test("getFeed gives no read id until the feed has a note", async () => {
   await createProtected("soon", "pw");
   expect(await getFeed("soon")).toEqual({ notes: [], readId: null });
   await createNote("soon", "# Hi");
-  expect((await getFeed("soon"))!.readId).toBe(readId("soon"));
+  expect((await getFeed("soon"))!.readId).toBe((await readIdOf("soon"))!);
   expect(await getFeed("login")).toBeNull();
 });
 

@@ -1,9 +1,10 @@
-import { mkdir, mkdtemp, stat, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { beforeEach, describe, expect, test } from "vitest";
-import { FEED_RE, READ_ID_RE, RESERVED_FEEDS, checkFeed, feedForReadId, listFeeds, readId, resetFeedsForTests } from "./feeds";
-import { createNote } from "./notes";
+import { FEED_RE, READ_ID_RE, RESERVED_FEEDS, checkFeed, derivedReadId, feedCount, feedForReadId, hasFeed, listFeeds, readIdOf, removeFeed, resetFeedsForTests } from "./feeds";
+import { createProtected } from "./feedlock";
+import { createNote, listNotes } from "./notes";
 
 let dir: string;
 beforeEach(async () => {
@@ -26,42 +27,42 @@ describe("checkFeed", () => {
   });
 });
 
-describe("readId", () => {
+describe("derivedReadId", () => {
   test("is 22 well-formed chars and stable", () => {
-    const id = readId("a");
+    const id = derivedReadId("a");
     expect(id).toHaveLength(22);
     expect(READ_ID_RE.test(id)).toBe(true);
-    expect(readId("a")).toBe(id);
-    expect(readId("b")).not.toBe(id);
+    expect(derivedReadId("a")).toBe(id);
+    expect(derivedReadId("b")).not.toBe(id);
   });
   test("depends on NOTEFEED_SECRET", () => {
     process.env.NOTEFEED_SECRET = "1".repeat(32);
-    const a = readId("a");
+    const a = derivedReadId("a");
     process.env.NOTEFEED_SECRET = "2".repeat(32);
     resetFeedsForTests();
-    expect(readId("a")).not.toBe(a);
+    expect(derivedReadId("a")).not.toBe(a);
   });
   test("persists a 0600 .secret when no env is set", async () => {
-    const id = readId("a");
+    const id = derivedReadId("a");
     expect((await stat(join(dir, ".secret"))).mode & 0o777).toBe(0o600);
     resetFeedsForTests();
-    expect(readId("a")).toBe(id);
+    expect(derivedReadId("a")).toBe(id);
   });
 });
 
 describe("secret strength", () => {
   test("an empty NOTEFEED_SECRET counts as unset", async () => {
     process.env.NOTEFEED_SECRET = "";
-    readId("a");
+    derivedReadId("a");
     expect((await stat(join(dir, ".secret"))).size).toBe(32);
   });
   test("a NOTEFEED_SECRET shorter than 32 characters is an error", () => {
     process.env.NOTEFEED_SECRET = "x".repeat(31);
-    expect(() => readId("a")).toThrow(/NOTEFEED_SECRET.*32/);
+    expect(() => derivedReadId("a")).toThrow(/NOTEFEED_SECRET.*32/);
   });
   test.each([0, 5, 31])("a %i-byte .secret is an error, and the file is left alone", async (n) => {
     await writeFile(join(dir, ".secret"), "x".repeat(n));
-    expect(() => readId("a")).toThrow(/\.secret.*32/);
+    expect(() => derivedReadId("a")).toThrow(/\.secret.*32/);
     expect((await stat(join(dir, ".secret"))).size).toBe(n);
   });
 });
@@ -69,19 +70,19 @@ describe("secret strength", () => {
 describe("feedForReadId", () => {
   test("finds a feed by its read id", async () => {
     await createNote("alpha", "x");
-    expect(await feedForReadId(readId("alpha"))).toBe("alpha");
+    expect(await feedForReadId((await readIdOf("alpha"))!)).toBe("alpha");
     expect(await feedForReadId("A".repeat(22))).toBeNull();
     expect(await feedForReadId("short")).toBeNull();
   });
 
   test("finds feeds that were on disk before the index was built", async () => {
     await mkdir(join(dir, "beta"));
-    expect(await feedForReadId(readId("beta"))).toBe("beta");
+    expect(await feedForReadId(derivedReadId("beta"))).toBe("beta");
   });
 
   test("picks the matching feed among several", async () => {
     for (const f of ["alpha", "beta", "gamma"]) await createNote(f, "x");
-    for (const f of ["alpha", "beta", "gamma"]) expect(await feedForReadId(readId(f))).toBe(f);
+    for (const f of ["alpha", "beta", "gamma"]) expect(await feedForReadId((await readIdOf(f))!)).toBe(f);
   });
 });
 
@@ -99,5 +100,74 @@ describe("listFeeds", () => {
     const outside = await mkdtemp(join(tmpdir(), "notefeed-outside-"));
     await symlink(outside, join(dir, "linked"));
     expect(await listFeeds()).toEqual([]);
+  });
+});
+
+describe("per-feed read ids", () => {
+  const readid = (f: string) => readFile(join(dir, f, ".readid"), "utf8");
+
+  test("a legacy feed (no .readid) keeps its derived id across a restart, and no file is written", async () => {
+    await mkdir(join(dir, "old"));
+    const id = derivedReadId("old");
+    expect(await readIdOf("old")).toBe(id);
+    resetFeedsForTests();
+    expect(await readIdOf("old")).toBe(id);
+    expect(await feedForReadId(id)).toBe("old");
+    expect(await readdir(join(dir, "old"))).toEqual([]);
+  });
+
+  test("a new feed gets a stored random id that survives a restart", async () => {
+    await createNote("fresh", "x");
+    const id = (await readid("fresh")).trim();
+    expect(await readIdOf("fresh")).toBe(id);
+    expect(READ_ID_RE.test(id)).toBe(true);
+    expect(id).not.toBe(derivedReadId("fresh"));
+    resetFeedsForTests();
+    expect(await readIdOf("fresh")).toBe(id);
+    expect(await feedForReadId(id)).toBe("fresh");
+  });
+
+  test("legacy and new feeds both resolve", async () => {
+    await mkdir(join(dir, "old"));
+    await createNote("fresh", "x");
+    expect(await feedForReadId(derivedReadId("old"))).toBe("old");
+    expect(await feedForReadId((await readIdOf("fresh"))!)).toBe("fresh");
+    expect(await feedForReadId(derivedReadId("fresh"))).toBeNull();
+  });
+
+  test("a junk .readid falls back to the derived id", async () => {
+    await mkdir(join(dir, "bad"));
+    await writeFile(join(dir, "bad", ".readid"), "junk");
+    expect(await readIdOf("bad")).toBe(derivedReadId("bad"));
+  });
+
+  test("an unknown feed has no read id", async () => expect(await readIdOf("nope")).toBeNull());
+
+  test("removeFeed drops the feed from the index", async () => {
+    await createNote("gone", "x");
+    const id = (await readIdOf("gone"))!;
+    await removeFeed("gone");
+    expect(await hasFeed("gone")).toBe(false);
+    expect(await feedForReadId(id)).toBeNull();
+    expect(await feedCount()).toBe(0);
+  });
+
+  test("two concurrent first posts end with one .readid", async () => {
+    await Promise.all([createNote("race", "a"), createNote("race", "b")]);
+    expect((await readdir(join(dir, "race"))).filter((n) => n.startsWith(".") )).toEqual([".readid"]);
+    expect(await readIdOf("race")).toBe((await readid("race")).trim());
+  });
+
+  test(".readid is not a note and not a feed", async () => {
+    await createNote("alpha", "x");
+    await writeFile(join(dir, ".readid"), "x");
+    resetFeedsForTests();
+    expect(await listFeeds()).toEqual(["alpha"]);
+  });
+
+  test("a protected feed gets a stored id too, and .readid is no note", async () => {
+    await createProtected("locked", "correct horse battery");
+    expect(await readIdOf("locked")).toBe((await readid("locked")).trim());
+    expect(await listNotes("locked")).toEqual([]);
   });
 });

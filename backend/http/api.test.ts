@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { beforeEach, describe, expect, test } from "vitest";
 import { login } from "../auth";
-import { resetFeedsForTests, readId } from "../feeds";
+import { resetFeedsForTests, readIdOf } from "../feeds";
 import { resetRateLimitsForTests } from "../limits";
 import { createNote } from "../notes";
 import { API_PREFIX, dispatch } from "./api";
@@ -33,7 +33,7 @@ describe("POST /feeds/{feed}/notes", () => {
     const res = await post("backups", "# Hi");
     expect(res.status).toBe(201);
     const body = await json(res);
-    expect(body.read_url).toBe(`${BASE}/r/${readId("backups")}/feed.xml`);
+    expect(body.read_url).toBe(`${BASE}/r/${(await readIdOf("backups"))!}/feed.xml`);
   });
   test("errors carry a code", async () => {
     expect(await json(await post("backups", "  "))).toEqual({ error: "note is empty", code: "empty_note" });
@@ -131,7 +131,7 @@ describe("GET /read/{readId}/notes", () => {
   test("the feed's notes, linking to the read-only pages, never naming the feed; public when locked", async () => {
     await createNote("secretname", "# Shared");
     process.env.NOTEFEED_PASSWORD = "pw";
-    const rid = readId("secretname");
+    const rid = (await readIdOf("secretname"))!;
     const res = await call("GET", `/read/${rid}/notes`);
     const text = await res.clone().text();
     expect(text).not.toContain("secretname");
@@ -143,7 +143,7 @@ describe("GET /read/{readId}/notes", () => {
   });
   test("one note by read id, or 404", async () => {
     const n = await createNote("secretname", "# Shared");
-    expect((await json(await call("GET", `/read/${readId("secretname")}/notes/${n.id}`))).title).toBe("Shared");
+    expect((await json(await call("GET", `/read/${(await readIdOf("secretname"))!}/notes/${n.id}`))).title).toBe("Shared");
     expect((await call("GET", `/read/${"A".repeat(22)}/notes/${n.id}`)).status).toBe(404);
   });
 });
@@ -247,7 +247,7 @@ describe("feed passwords", () => {
   });
 
   test("read links never need it", async () => {
-    const rid = readId("locked");
+    const rid = (await readIdOf("locked"))!;
     expect((await call("GET", `/read/${rid}/notes`)).status).toBe(200);
     expect((await call("GET", `/read/${rid}/notes/${id}`)).status).toBe(200);
     for (const method of ["GET", "HEAD"])
@@ -316,7 +316,7 @@ describe("editing and deleting notes", () => {
     const viaJson = await put(`/feeds/backups/notes/${id}`, JSON.stringify({ markdown: "# Json" }), { "content-type": "application/json" });
     expect((await json(viaJson)).title).toBe("Json");
     expect(await markdownOf("backups", id)).toBe("# Json");
-    expect((await json(await call("GET", `/read/${readId("backups")}/notes/${id}`))).markdown).toBe("# Json");
+    expect((await json(await call("GET", `/read/${(await readIdOf("backups"))!}/notes/${id}`))).markdown).toBe("# Json");
   });
 
   test("PUT empty is 400 empty_note, over 100 KB is 413, both leave the note", async () => {
@@ -380,6 +380,6 @@ describe("editing and deleting notes", () => {
 
   test("the read paths answer 405 to PUT and DELETE", async () => {
     const id = await make();
-    for (const method of ["PUT", "DELETE"]) expect((await call(method, `/read/${readId("backups")}/notes/${id}`)).status).toBe(405);
+    for (const method of ["PUT", "DELETE"]) expect((await call(method, `/read/${(await readIdOf("backups"))!}/notes/${id}`)).status).toBe(405);
   });
 });

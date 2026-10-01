@@ -2,7 +2,7 @@ import { mkdtemp, readdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import { readId, resetFeedsForTests } from "./feeds";
+import { readIdOf, resetFeedsForTests } from "./feeds";
 import { resetRateLimitsForTests } from "./limits";
 import { createNote } from "./notes";
 import { mcpRoute } from "./mcp";
@@ -81,7 +81,7 @@ describe("tools", () => {
       id,
       url: `http://localhost:3000/a/${id}`,
       feed_url: "http://localhost:3000/a",
-      read_url: `http://localhost:3000/r/${readId("a")}/feed.xml`,
+      read_url: `http://localhost:3000/r/${(await readIdOf("a"))!}/feed.xml`,
     });
     expect(JSON.parse(r.content[0].text)).toEqual(r.structuredContent);
   });

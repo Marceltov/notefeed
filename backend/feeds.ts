@@ -1,8 +1,10 @@
-// Feeds: name rules, read ids (HMAC of the name with the server secret) and the in-memory index of
-// existing feeds, which answers "does it exist", "how many" and "which feed has this read id" in O(1).
-import { createHmac } from "node:crypto";
+// Feeds: name rules, read ids and the in-memory index of existing feeds, which answers "does it exist",
+// "how many", "which feed has this read id" and "what is this feed's read id" in O(1). A feed's read id is
+// a random one stored in its `.readid`; feeds from before that have none and keep the id derived from
+// their name (HMAC with the server secret), so no existing read link changes.
+import { createHmac, randomBytes } from "node:crypto";
 import { config } from "./config";
-import { listFeedDirs } from "./data/feeds";
+import { listFeedDirs, readReadId, writeReadId } from "./data/feeds";
 import { loadOrCreateSecret, secretPath } from "./data/secret";
 import { InvalidFeedError, ReservedFeedError } from "./errors";
 import { processState } from "./state";
@@ -25,7 +27,7 @@ export function assertFeed(name: string): void {
   if (bad === "reserved") throw new ReservedFeedError();
 }
 
-type Index = { dir: string; byReadId: Map<string, string> };
+type Index = { dir: string; byReadId: Map<string, string>; byFeed: Map<string, string> };
 const state = processState("feeds", () => ({}) as { secret?: Buffer; index?: Promise<Index> });
 
 // A short key makes read ids computable offline. Fail loudly instead of regenerating the key,
@@ -41,17 +43,31 @@ export function secret(): Buffer {
   return (state.secret = env ? strong(Buffer.from(env), "NOTEFEED_SECRET") : strong(loadOrCreateSecret(), secretPath()));
 }
 
-export function readId(feed: string): string {
+// Only the index and legacy feeds use this; everything else asks readIdOf().
+export function derivedReadId(feed: string): string {
   return createHmac("sha256", secret()).update(feed).digest("base64url").slice(0, 22);
 }
 
-// The index is read from disk once and then kept current by addFeed(), called by the only code that
-// creates feeds (createNote). Keyed by DATA_DIR, so a changed DATA_DIR (tests) rebuilds it.
+// The index is read from disk once and then kept current by addFeed(), called by the code that creates
+// feeds (createNote, createProtected). Keyed by DATA_DIR, so a changed DATA_DIR (tests) rebuilds it.
 // ponytail: feed directories added or removed by hand show up after a restart; one process per DATA_DIR.
+
+function index(dir: string, entries: [string, string][]): Index {
+  return { dir, byFeed: new Map(entries), byReadId: new Map(entries.map(([f, id]) => [id, f])) };
+}
+
+// A present but invalid file is ignored (logged): the derived id is what the feed had before.
+async function storedOrDerived(feed: string): Promise<string> {
+  const id = await readReadId(feed);
+  if (id === null) return derivedReadId(feed);
+  if (READ_ID_RE.test(id)) return id;
+  console.error(`feed ${feed}: ignoring invalid .readid, using the derived read id`);
+  return derivedReadId(feed);
+}
 
 async function load(dir: string): Promise<Index> {
   const names = (await listFeedDirs()).filter((n) => checkFeed(n) === null);
-  return { dir, byReadId: new Map(names.map((n) => [readId(n), n])) };
+  return index(dir, await Promise.all(names.map(async (n): Promise<[string, string]> => [n, await storedOrDerived(n)])));
 }
 
 async function feedIndex(): Promise<Index> {
@@ -63,20 +79,45 @@ async function feedIndex(): Promise<Index> {
   return loading;
 }
 
+// Callers that create a feed directory await this first: a feed whose directory the first load finds
+// without `.readid` is a legacy feed, so the index must already be loaded when a new directory appears.
+export async function feedsReady(): Promise<void> {
+  await feedIndex();
+}
+
+// The feed's directory must exist. A feed new to the index gets a random read id, unless `.readid` is
+// already there (another request won the race to create it): then that one is used.
 export async function addFeed(feed: string): Promise<void> {
-  (await feedIndex()).byReadId.set(readId(feed), feed);
+  const idx = await feedIndex();
+  if (idx.byFeed.has(feed)) return;
+  const fresh = randomBytes(16).toString("base64url");
+  const id = (await writeReadId(feed, fresh)) ? fresh : await storedOrDerived(feed);
+  idx.byFeed.set(feed, id);
+  idx.byReadId.set(id, feed);
+}
+
+// Index only: the files are the caller's business.
+export async function removeFeed(feed: string): Promise<void> {
+  const idx = await feedIndex();
+  const id = idx.byFeed.get(feed);
+  if (id !== undefined) idx.byReadId.delete(id);
+  idx.byFeed.delete(feed);
+}
+
+export async function readIdOf(feed: string): Promise<string | null> {
+  return (await feedIndex()).byFeed.get(feed) ?? null;
 }
 
 export async function listFeeds(): Promise<string[]> {
-  return [...(await feedIndex()).byReadId.values()];
+  return [...(await feedIndex()).byFeed.keys()];
 }
 
 export async function feedCount(): Promise<number> {
-  return (await feedIndex()).byReadId.size;
+  return (await feedIndex()).byFeed.size;
 }
 
 export async function hasFeed(feed: string): Promise<boolean> {
-  return checkFeed(feed) === null && (await feedIndex()).byReadId.has(readId(feed));
+  return checkFeed(feed) === null && (await feedIndex()).byFeed.has(feed);
 }
 
 // A Map lookup: its timing depends on the hash of the id, not on how much of it matches a real one.

@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { beforeEach, describe, expect, test } from "vitest";
 import { SESSION_COOKIE, login } from "../auth";
-import { hasFeed, readId, resetFeedsForTests } from "../feeds";
+import { hasFeed, readIdOf, resetFeedsForTests } from "../feeds";
 import { resetRateLimitsForTests } from "../limits";
 import { cookieValue, feedCookieName, protectedFeed } from "../feedlock";
 import { dispatch } from "./api";
@@ -45,7 +45,7 @@ test("201 with markdown body; file equals body; response links", async () => {
     id: body.id,
     url: `${BASE}/test/${body.id}`,
     feed_url: `${BASE}/test`,
-    read_url: `${BASE}/r/${readId("test")}/feed.xml`,
+    read_url: `${BASE}/r/${(await readIdOf("test"))!}/feed.xml`,
   });
   expect(await file(body.id)).toBe("# Hi\nthere");
 });
@@ -233,7 +233,7 @@ test("locked: failed bearers are rate-limited per IP; then even the right one ge
     expect(Number(res.headers.get("retry-after"))).toBeGreaterThanOrEqual(1);
   }
   expect((await from("2.2.2.2", "Bearer pw")).status).toBe(201);
-  expect(await readdir(join(dir, "test"))).toHaveLength(1);
+  expect((await readdir(join(dir, "test"))).filter((n) => n.endsWith(".md"))).toHaveLength(1);
 });
 
 test("unlocked: any authorization header is ignored", async () => {

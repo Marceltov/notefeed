@@ -2,7 +2,7 @@
 // backend/ (enforced in eslint.config.mjs). Calls are in-process today. Each query below is shaped like
 // the endpoint it would become if the backend moved out, so the cut would be here and nowhere else.
 import { config } from "./config";
-import { READ_ID_RE, checkFeed, feedForReadId, readId } from "./feeds";
+import { READ_ID_RE, checkFeed, feedForReadId, readIdOf } from "./feeds";
 import { getNote, listNotes, type Note } from "./notes";
 
 export type { Note };
@@ -25,13 +25,14 @@ const PAGE = 50;
 
 /**
  * A feed by its (writable) name: newest notes and its read id; null for an invalid or reserved name.
- * No read id while the feed has no notes: it is derived from the name, so showing it for a name nobody
- * has posted to yet would hand out the read link of whatever feed is created there later.
+ * No read id while the feed has no notes: a name nobody has posted to has no feed (and no id) yet, and a
+ * legacy feed's id is derived from the name, so showing one would hand out the read link of whatever
+ * feed is created there later.
  */
 export async function getFeed(feed: string): Promise<{ notes: Note[]; readId: string | null } | null> {
   if (checkFeed(feed)) return null;
   const notes = await listNotes(feed, PAGE);
-  return { notes, readId: notes.length ? readId(feed) : null };
+  return { notes, readId: notes.length ? await readIdOf(feed) : null };
 }
 
 export async function getFeedNote(feed: string, id: string): Promise<Note | null> {

@@ -4,7 +4,7 @@ import * as z from "zod";
 import { bearerOf, checkBearer, locked } from "./auth";
 import { AuthError, NotefeedError, NotFoundError, TooManyAttemptsError } from "./errors";
 import { checkFeedAccess } from "./feedlock";
-import { assertFeed, FEED_RE, readId } from "./feeds";
+import { assertFeed, FEED_RE, readIdOf } from "./feeds";
 import { clientIp } from "./limits";
 import { getNote, listNotes, type Note } from "./notes";
 import { verify } from "./oauth/tokens";
@@ -56,7 +56,7 @@ function server(h: Headers): McpServer {
     guard(async ({ feed, markdown, password }) => {
       const { note } = await postNote(feed, clientIp(h), async () => ({ markdown }), { password });
       const feedUrl = base + feedPath(feed);
-      return ok({ id: note.id, url: `${feedUrl}/${note.id}`, feed_url: feedUrl, read_url: base + rssPath(readId(feed)) });
+      return ok({ id: note.id, url: `${feedUrl}/${note.id}`, feed_url: feedUrl, read_url: base + rssPath((await readIdOf(feed))!) });
     }),
   );
 

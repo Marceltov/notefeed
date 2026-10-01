@@ -2,7 +2,7 @@ import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { beforeEach, expect, test } from "vitest";
-import { readId, resetFeedsForTests } from "../feeds";
+import { derivedReadId, readIdOf, resetFeedsForTests } from "../feeds";
 import { createNote, updateNote } from "../notes";
 import { rssRoute } from "./rss";
 
@@ -23,7 +23,7 @@ test("serves the feed's notes with read-id links", async () => {
   const a = await createNote("secretname", "# One", new Date("2026-09-29T10:00:00Z"));
   const b = await createNote("secretname", "# Two", new Date("2026-09-29T11:00:00Z"));
   await createNote("other", "# Elsewhere");
-  const rid = readId("secretname");
+  const rid = (await readIdOf("secretname"))!;
   const res = await get(rid);
   expect(res.status).toBe(200);
   expect(res.headers.get("content-type")).toBe("application/rss+xml; charset=utf-8");
@@ -40,7 +40,7 @@ test("serves the feed's notes with read-id links", async () => {
 
 test("channel title comes from NOTEFEED_TITLE", async () => {
   process.env.NOTEFEED_TITLE = "My notes";
-  expect(await (await get(readId("x"))).text()).toContain("<title>My notes</title>");
+  expect(await (await get(derivedReadId("x"))).text()).toContain("<title>My notes</title>");
 });
 
 test("unknown but well-formed read id → empty feed", async () => {
@@ -57,7 +57,7 @@ test("malformed read id → 404", async () => {
 test("public even when the instance is locked", async () => {
   process.env.NOTEFEED_PASSWORD = "pw";
   await createNote("test", "# One");
-  const res = await get(readId("test"));
+  const res = await get((await readIdOf("test"))!);
   expect(res.status).toBe(200);
   expect((await res.text()).match(/<item>/g)).toHaveLength(1);
 });
@@ -65,7 +65,7 @@ test("public even when the instance is locked", async () => {
 test("an edited note keeps its guid and shows the new text", async () => {
   const n = await createNote("test", "# Old\nbefore");
   await updateNote("test", n.id, "# Old\nafter edit");
-  const xml = await (await get(readId("test"))).text();
+  const xml = await (await get((await readIdOf("test"))!)).text();
   expect(xml).toContain(`${n.id}</guid>`);
   expect(xml).toContain("after edit");
   expect(xml).not.toContain("before");

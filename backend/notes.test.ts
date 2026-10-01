@@ -14,6 +14,8 @@ beforeEach(async () => {
   dir = join(root, "test");
 });
 
+// The feed directory's files, without the `.readid` every new feed gets.
+const files = async () => (await readdir(dir)).filter((f) => f !== ".readid");
 const at = (iso: string) => new Date(iso);
 
 describe("isValidId", () => {
@@ -44,7 +46,7 @@ describe("createNote", () => {
     expect(b.id).toBe(`${a.id}-2`);
     expect(c.id).toBe(`${a.id}-3`);
     expect(await readFile(join(dir, `${a.id}.md`), "utf8")).toBe("# Same\nfirst");
-    expect((await readdir(dir)).every((f) => f.endsWith(".md"))).toBe(true);
+    expect((await files()).every((f) => f.endsWith(".md"))).toBe(true);
   });
 
   test("keeps CRLF bytes", async () => {
@@ -143,13 +145,13 @@ describe("updateNote and removeNote", () => {
   test("a missing note is null and creates no file", async () => {
     await createNote("test", "# Old", now);
     expect(await updateNote("test", "20260101T000000Z-x", "# New")).toBeNull();
-    expect(await readdir(dir)).toHaveLength(1);
+    expect(await files()).toHaveLength(1);
   });
   test("a refused edit leaves the file and no temp file", async () => {
     const n = await createNote("test", "# Old", now);
     await expect(updateNote("test", n.id, "  ")).rejects.toThrow(EmptyNoteError);
     expect(await readFile(join(dir, `${n.id}.md`), "utf8")).toBe("# Old");
-    expect(await readdir(dir)).toEqual([`${n.id}.md`]);
+    expect(await files()).toEqual([`${n.id}.md`]);
   });
   test("removeNote is true once, then false", async () => {
     const n = await createNote("test", "# Old", now);
@@ -163,6 +165,6 @@ describe("updateNote and removeNote", () => {
     expect(await updateNote("test", id, "# New")).toBeNull();
     expect(await removeNote("test", id)).toBe(false);
     expect(await readFile(join(dir, ".password"), "utf8")).toBe("hash");
-    expect(await readdir(dir)).toHaveLength(2);
+    expect(await files()).toHaveLength(2);
   });
 });
