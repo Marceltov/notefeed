@@ -18,9 +18,10 @@ describe("checkFeed", () => {
   test.each(["", "x".repeat(65), "Backups", "a b", "..", "a/b", "a.b"])("invalid %j", (n) =>
     expect(checkFeed(n)).toBe("invalid"),
   );
+  test("oauth is reserved", () => expect(checkFeed("oauth")).toBe("reserved"));
   test("reserved names", () => {
     const names = [...RESERVED_FEEDS].filter((n) => FEED_RE.test(n));
-    expect(names).toHaveLength(9);
+    expect(names).toHaveLength(10);
     for (const n of names) expect(checkFeed(n)).toBe("reserved");
   });
 });

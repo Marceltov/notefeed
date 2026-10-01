@@ -18,7 +18,7 @@ function safeEqual(a: string, b: string): boolean {
 }
 
 // Over the failed-attempt limit the password is not even compared; only failures are counted.
-function checkPassword(candidate: string, ip: string): void {
+export function checkPassword(candidate: string, ip: string): void {
   const wait = authWait(ip);
   if (wait !== null) throw new TooManyAttemptsError(wait);
   if (safeEqual(candidate, config.password())) return;
@@ -26,10 +26,13 @@ function checkPassword(candidate: string, ip: string): void {
   throw new AuthError();
 }
 
+// The token of `Authorization: Bearer <token>` (scheme in any case, RFC 9110), or "" when there is none.
+export const bearerOf = (authorization: string | null): string => /^Bearer\s+(.+)$/i.exec(authorization ?? "")?.[1] ?? "";
+
 // `Authorization: Bearer <password>` on a locked instance; anything passes on an open one.
 export function checkBearer(authorization: string | null, ip: string): void {
   if (!locked()) return;
-  checkPassword(/^Bearer (.+)$/.exec(authorization ?? "")?.[1] ?? "", ip);
+  checkPassword(bearerOf(authorization), ip);
 }
 
 const sessionValue = () => createHmac("sha256", config.password()).update("notefeed-session").digest("hex");

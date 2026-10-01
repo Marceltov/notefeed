@@ -4,6 +4,9 @@ const nextConfig: NextConfig = {
   output: "standalone",
   // proxy.ts handles trailing slashes itself: POST /<feed>/ stores the note, everything else gets a 308.
   skipTrailingSlashRedirect: true,
+  // The OAuth login hands a code to whatever host the client registered: no framing it (clickjacking a
+  // password manager's autofill and the "Allow" click).
+  headers: async () => [{ source: "/oauth/authorize", headers: [{ key: "Content-Security-Policy", value: "frame-ancestors 'none'" }] }],
   // notefeed doesn't use next/image, so leave out sharp and its LGPL libvips binaries.
   outputFileTracingExcludes: {
     "*": ["node_modules/sharp/**", "node_modules/@img/**"],

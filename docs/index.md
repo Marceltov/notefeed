@@ -27,6 +27,7 @@ A hosted instance runs at [notefeed.me](https://notefeed.me). To run your own, f
 - [Quick start](quick-start.md): run notefeed with Docker Compose.
 - [Posting notes](posting.md): the API, accepted formats, errors and script examples.
 - [Client libraries](clients.md): Python and Node packages, and the `notefeed` command.
+- [MCP](mcp.md): letting Claude and other AI assistants post and read notes.
 - [Web UI](web-ui.md): the start page, feed pages and writing notes by hand.
 - [Read links and RSS](feed.md): hooking notefeed up to Glance, Dynacat and other readers.
 - [Configuration](configuration.md): every setting, the password, rate limits and caps.

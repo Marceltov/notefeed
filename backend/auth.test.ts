@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test } from "vitest";
-import { checkBearer, locked, login, sessionOk } from "./auth";
+import { bearerOf, checkBearer, locked, login, sessionOk } from "./auth";
 import { AuthError, TooManyAttemptsError } from "./errors";
 import { resetRateLimitsForTests } from "./limits";
 
@@ -31,6 +31,13 @@ test("checkBearer accepts only the exact password when locked", () => {
   expect(thrown(() => checkBearer("Bearer s3cret", "ip"))).toBeNull();
   for (const h of ["Bearer wrong", "Bearer s3cret2", "Bearer S3cret", "s3cret", null, "Bearer "])
     expect(thrown(() => checkBearer(h, "ip"))).toBeInstanceOf(AuthError);
+});
+
+test("bearerOf", () => {
+  expect(bearerOf("Bearer x")).toBe("x");
+  expect(bearerOf("bearer x")).toBe("x");
+  expect(bearerOf("Bearer  x")).toBe("x");
+  for (const h of ["Bearer ", "Bearer", "Basic x", "x", "", null]) expect(bearerOf(h)).toBe("");
 });
 
 test("login: after NOTEFEED_RATE_LIMIT failures the IP must wait, even with the right password", () => {

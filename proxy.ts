@@ -10,7 +10,7 @@ const ONE_SEGMENT = /^\/([^/]+)\/?$/;
 // never headers: the same rule a reverse proxy would apply if the backend moved out.
 function postTarget(pathname: string): string | null {
   const seg = ONE_SEGMENT.exec(pathname)?.[1];
-  if (seg === undefined || seg === "logout") return null; // /logout is a route handler itself
+  if (seg === undefined || seg === "logout" || seg === "mcp") return null; // /logout and /mcp are route handlers themselves
   return seg === "login" ? "/api/login" : `/api/v1/feeds/${seg}/notes`; // reserved names get the handler's 400
 }
 
@@ -29,9 +29,10 @@ export function proxy(req: NextRequest) {
     return NextResponse.redirect(new URL(pathname.slice(0, -1) + search, publicUrl(req.headers)), 308);
   }
 
-  // /api/** is exempt from the lock because each handler checks credentials itself;
-  // redirecting it to /login would turn a script's 401 into a success-looking 307.
-  if (!locked() || pathname === "/login" || /^\/(r|_next|api)\//.test(pathname)) return NextResponse.next();
+  // /login, /mcp, OAuth, and well-known paths are exempt from the lock because each checks credentials itself;
+  // redirecting them to /login would turn a script's 401 into a success-looking 307.
+  const exempt = pathname === "/login" || pathname === "/mcp" || /^\/(r|_next|api|oauth|\.well-known)\//.test(pathname);
+  if (!locked() || exempt) return NextResponse.next();
   if (sessionOk(req.cookies.get(SESSION_COOKIE)?.value)) return NextResponse.next();
   // Must be absolute (Next rejects a relative Location here); built from the public base,
   // not req.url, so it is right behind a reverse proxy.

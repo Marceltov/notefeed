@@ -60,6 +60,7 @@ nav:
   - Posting notes: posting.md
   - Client libraries: clients.md
   - REST API: api.md
+  - MCP: mcp.md
   - Web UI: web-ui.md
   - Read links and RSS: feed.md
   - Configuration: configuration.md
