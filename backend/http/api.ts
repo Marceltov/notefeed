@@ -8,6 +8,7 @@ import { changePassword, checkFeedAccess, removePassword } from "../feedlock";
 import { READ_ID_RE, assertFeed, feedForReadId } from "../feeds";
 import { clientIp } from "../limits";
 import { MAX_BYTES, getNote, listNotes, type Note } from "../notes";
+import { PASSWORD_RULE } from "../../shared/password";
 import { API_PREFIX, feedPath, publicUrl, readPath } from "../urls";
 import { createDispatcher, op, type AnyOp, type ResponseSpec } from "./dispatch";
 import { handlePostNote } from "./notes";
@@ -73,7 +74,8 @@ const OPS: AnyOp[] = [
     operationId: "postNote",
     summary: "Post a note",
     description:
-      "Creates the feed with its first note, optionally protected by its own password (`X-Feed-Password` header or a `password` field in the JSON or form body). " +
+      "Creates the feed with its first note, optionally protected by its own password (`X-Feed-Password` header or a `password` field in the JSON or form body; " +
+      `${PASSWORD_RULE}). ` +
       "Posting to a protected feed needs that password. Also served at `POST /{feed}`, the short form the client packages and curl one-liners use. " +
       `The body is at most ${MAX_BYTES} bytes and must be UTF-8. ` +
       "`application/x-www-form-urlencoded` (what `curl -d` sends) is read as raw markdown, not as form fields.",
@@ -96,7 +98,7 @@ const OPS: AnyOp[] = [
           "Only when the request accepts `text/html` (a browser submitting a form): back to the feed page with `?posted=<id>` or `?error=<code>`, or to the login page",
         headers: { Location: { description: "Where to go", type: "string" } },
       },
-      400: err("Invalid or reserved feed name; empty note; bad JSON, form or UTF-8"),
+      400: err("Invalid or reserved feed name; empty note; bad JSON, form or UTF-8; a new password that is not printable ASCII"),
       401: UNAUTHORIZED,
       409: err("A password was sent for a feed that already exists without one: it can't be claimed"),
       413: err(`Body over ${MAX_BYTES} bytes`),
@@ -164,7 +166,7 @@ const OPS: AnyOp[] = [
     body: { "application/json": PasswordJson },
     responses: {
       204: { description: "Changed; the old password and unlock cookies stop working" },
-      400: err("Invalid or reserved feed name, bad JSON, or a new password not 1 to 256 characters"),
+      400: err(`Invalid or reserved feed name, bad JSON, or a new password that is not ${PASSWORD_RULE}`),
       401: UNAUTHORIZED,
       409: err("The feed has no password"),
       429: { ...err("Too many wrong passwords from this client"), headers: RETRY },

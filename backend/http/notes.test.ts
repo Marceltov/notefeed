@@ -397,6 +397,92 @@ describe("feed passwords", () => {
     const c = `${feedCookieName("test")}=${await cookieValue("test")}`;
     expect((await post(form({ markdown: "# Hi" }), { cookie: c, origin: BASE })).status).toBe(201);
     expect((await post(form({ markdown: "# Hi" }), { cookie: c })).status).toBe(401);
+    // An empty header is no header, so the cookie still applies.
+    expect((await post(form({ markdown: "# Hi" }), { cookie: c, origin: BASE, "x-feed-password": "" })).status).toBe(201);
+  });
+
+  test("an empty X-Feed-Password or body password is no password", async () => {
+    const json = { "content-type": "application/json" };
+    expect((await post("# One", { ...text, "x-feed-password": "" })).status).toBe(201);
+    expect(await protectedFeed("test")).toBe(false);
+    expect((await post("# Two", { ...text, "x-feed-password": "" })).status).toBe(201);
+    expect((await post(JSON.stringify({ markdown: "# Three", password: "" }), json)).status).toBe(201);
+    expect(await notes()).toHaveLength(3);
+  });
+
+  test.each(["pässwort", " lead", "trail ", "tab\tbed", "x".repeat(257)])("a new password that can't travel in a header (%j): 400, no feed", async (password) => {
+    const res = await post(JSON.stringify({ markdown: "# Hi", password }), { "content-type": "application/json" });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({
+      error: "password must be 1 to 256 printable ASCII characters, with no space at the start or end",
+      code: "invalid_body",
+    });
+    expect(await written()).toEqual([]);
+  });
+
+  test("a space inside a password is fine", async () => {
+    expect((await post("# One", { ...text, "x-feed-password": "correct horse" })).status).toBe(201);
+    expect((await post("# Two", { ...text, "x-feed-password": "correct horse" })).status).toBe(201);
+  });
+
+  // The sender decides how long its body takes, so a post admitted before the feed existed can finish after
+  // someone created it protected. `reading` resolves once the handler is waiting for the rest of the body.
+  const slowPost = (headers: Record<string, string>, first = "# injected ", rest = "by a stranger") => {
+    let finish!: () => void;
+    let started!: () => void;
+    const gate = new Promise<void>((r) => (finish = r));
+    const reading = new Promise<void>((r) => (started = r));
+    const enc = new TextEncoder();
+    let pulls = 0;
+    const body = new ReadableStream<Uint8Array>({
+      async pull(c) {
+        if (pulls++ === 0) return c.enqueue(enc.encode(first));
+        started();
+        await gate;
+        c.enqueue(enc.encode(rest));
+        c.close();
+      },
+    });
+    const init = { method: "POST", body, duplex: "half", headers: { host: "localhost:3000", ...headers } } as RequestInit;
+    return { response: postNoteRoute(new Request(`${BASE}/test`, init), "test"), reading, finish };
+  };
+
+  test("a slow body started before the feed was created protected is refused: no note, no cookie", async () => {
+    const stranger = slowPost({ ...text, origin: BASE });
+    await stranger.reading;
+    expect((await post("# Secret", pw)).status).toBe(201);
+    stranger.finish();
+    const res = await stranger.response;
+    expect(res.status).toBe(401);
+    expect((await res.json()).code).toBe("auth");
+    expect(res.headers.getSetCookie()).toEqual([]);
+    expect(await notes()).toHaveLength(1);
+  });
+
+  test("a slow body with its own password loses to the feed created meanwhile", async () => {
+    const stranger = slowPost({ "content-type": "application/json", origin: BASE }, '{"markdown": "# injected", ', '"password": "theirs"}');
+    await stranger.reading;
+    expect((await post("# Secret", pw)).status).toBe(201);
+    stranger.finish();
+    const res = await stranger.response;
+    expect(res.status).toBe(401);
+    expect(res.headers.getSetCookie()).toEqual([]);
+    expect(await notes()).toHaveLength(1);
+    expect((await post("# Still mine", pw)).status).toBe(201);
+  });
+
+  test("only the post that creates a protected feed gets the unlock cookie", async () => {
+    await post("# One", pw);
+    const again = await post("# Two", { ...pw, origin: BASE });
+    expect(again.status).toBe(201);
+    expect(again.headers.getSetCookie()).toEqual([]);
+  });
+
+  test("posts without a password never use up the failed-attempt budget", async () => {
+    process.env.NOTEFEED_RATE_LIMIT = "3";
+    await post("# One", pw);
+    for (let i = 0; i < 5; i++) expect((await post("# Hi", text)).status).toBe(401);
+    expect((await post("# Two", pw)).status).toBe(201);
   });
 });
 

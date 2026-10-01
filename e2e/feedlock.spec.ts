@@ -120,3 +120,27 @@ test("a 401 from the compose box lands on the feed's unlock form, not /login", a
   await expect(page.getByRole("button", { name: "Unlock" })).toBeVisible();
   await expect(page).toHaveURL(`/${name}`);
 });
+
+test("a script posts and reads with X-Feed-Password, and is refused without it", async ({ page, request }) => {
+  const name = feedName();
+  await create(page, name, "pw");
+  const text = { "content-type": "text/markdown" };
+  expect((await request.post(`/${name}`, { data: "# No password", headers: text })).status()).toBe(401);
+  expect((await request.post(`/${name}`, { data: "# Wrong", headers: { ...text, "x-feed-password": "nope" } })).status()).toBe(401);
+  expect((await request.post(`/${name}`, { data: "# From a script", headers: { ...text, "x-feed-password": "pw" } })).status()).toBe(201);
+  expect((await request.get(`/api/v1/feeds/${name}/notes`)).status()).toBe(401);
+  const list = await request.get(`/api/v1/feeds/${name}/notes`, { headers: { "x-feed-password": "pw" } });
+  // Sorted: two notes of the same second are ordered by title, not by arrival.
+  expect((await list.json()).notes.map((n: { title: string }) => n.title).sort()).toEqual(["From a script", "Secret note"]);
+});
+
+test("a password that could not be sent in a header is refused by the form", async ({ page }) => {
+  const name = feedName();
+  await page.goto(`/${name}`);
+  await page.getByLabel("Password (optional, protects this feed)").fill("pässwort");
+  await page.getByLabel("Note in markdown").fill("# Secret note");
+  await page.getByRole("button", { name: "Post note" }).click();
+  await expect(page.getByLabel("Password (optional, protects this feed)")).toHaveJSProperty("validity.patternMismatch", true);
+  await page.reload();
+  await expect(page.getByText("No notes yet")).toBeVisible();
+});

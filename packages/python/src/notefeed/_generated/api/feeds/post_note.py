@@ -111,10 +111,11 @@ def sync_detailed(
     """Post a note
 
      Creates the feed with its first note, optionally protected by its own password (`X-Feed-Password`
-    header or a `password` field in the JSON or form body). Posting to a protected feed needs that
-    password. Also served at `POST /{feed}`, the short form the client packages and curl one-liners use.
-    The body is at most 102400 bytes and must be UTF-8. `application/x-www-form-urlencoded` (what `curl
-    -d` sends) is read as raw markdown, not as form fields.
+    header or a `password` field in the JSON or form body; 1 to 256 printable ASCII characters, with no
+    space at the start or end). Posting to a protected feed needs that password. Also served at `POST
+    /{feed}`, the short form the client packages and curl one-liners use. The body is at most 102400
+    bytes and must be UTF-8. `application/x-www-form-urlencoded` (what `curl -d` sends) is read as raw
+    markdown, not as form fields.
 
     Args:
         feed (str):
@@ -152,10 +153,11 @@ def sync(
     """Post a note
 
      Creates the feed with its first note, optionally protected by its own password (`X-Feed-Password`
-    header or a `password` field in the JSON or form body). Posting to a protected feed needs that
-    password. Also served at `POST /{feed}`, the short form the client packages and curl one-liners use.
-    The body is at most 102400 bytes and must be UTF-8. `application/x-www-form-urlencoded` (what `curl
-    -d` sends) is read as raw markdown, not as form fields.
+    header or a `password` field in the JSON or form body; 1 to 256 printable ASCII characters, with no
+    space at the start or end). Posting to a protected feed needs that password. Also served at `POST
+    /{feed}`, the short form the client packages and curl one-liners use. The body is at most 102400
+    bytes and must be UTF-8. `application/x-www-form-urlencoded` (what `curl -d` sends) is read as raw
+    markdown, not as form fields.
 
     Args:
         feed (str):
@@ -188,10 +190,11 @@ async def asyncio_detailed(
     """Post a note
 
      Creates the feed with its first note, optionally protected by its own password (`X-Feed-Password`
-    header or a `password` field in the JSON or form body). Posting to a protected feed needs that
-    password. Also served at `POST /{feed}`, the short form the client packages and curl one-liners use.
-    The body is at most 102400 bytes and must be UTF-8. `application/x-www-form-urlencoded` (what `curl
-    -d` sends) is read as raw markdown, not as form fields.
+    header or a `password` field in the JSON or form body; 1 to 256 printable ASCII characters, with no
+    space at the start or end). Posting to a protected feed needs that password. Also served at `POST
+    /{feed}`, the short form the client packages and curl one-liners use. The body is at most 102400
+    bytes and must be UTF-8. `application/x-www-form-urlencoded` (what `curl -d` sends) is read as raw
+    markdown, not as form fields.
 
     Args:
         feed (str):
@@ -227,10 +230,11 @@ async def asyncio(
     """Post a note
 
      Creates the feed with its first note, optionally protected by its own password (`X-Feed-Password`
-    header or a `password` field in the JSON or form body). Posting to a protected feed needs that
-    password. Also served at `POST /{feed}`, the short form the client packages and curl one-liners use.
-    The body is at most 102400 bytes and must be UTF-8. `application/x-www-form-urlencoded` (what `curl
-    -d` sends) is read as raw markdown, not as form fields.
+    header or a `password` field in the JSON or form body; 1 to 256 printable ASCII characters, with no
+    space at the start or end). Posting to a protected feed needs that password. Also served at `POST
+    /{feed}`, the short form the client packages and curl one-liners use. The body is at most 102400
+    bytes and must be UTF-8. `application/x-www-form-urlencoded` (what `curl -d` sends) is read as raw
+    markdown, not as form fields.
 
     Args:
         feed (str):

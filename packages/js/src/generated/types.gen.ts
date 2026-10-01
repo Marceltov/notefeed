@@ -68,7 +68,7 @@ export type Error = {
 export type PostJson = {
     markdown: string;
     /**
-     * Protects the feed, 1 to 256 characters. Only honored on the post that creates the feed; an existing open feed answers 409.
+     * Protects the feed: 1 to 256 printable ASCII characters, with no space at the start or end. Only honored on the post that creates the feed; an existing open feed answers 409. Empty is the same as leaving it out.
      */
     password?: string;
 };
@@ -76,14 +76,14 @@ export type PostJson = {
 export type PostForm = {
     markdown: string;
     /**
-     * Protects the feed, 1 to 256 characters. Only honored on the post that creates the feed; an existing open feed answers 409.
+     * Protects the feed: 1 to 256 printable ASCII characters, with no space at the start or end. Only honored on the post that creates the feed; an existing open feed answers 409. Empty is the same as leaving it out.
      */
     password?: string;
 };
 
 export type PasswordJson = {
     /**
-     * The new password, 1 to 256 characters
+     * The new password: 1 to 256 printable ASCII characters, with no space at the start or end
      */
     password: string;
 };
@@ -92,7 +92,7 @@ export type ListNotesData = {
     body?: never;
     headers?: {
         /**
-         * The feed's own password, when it has one: to post, list or get, and (as the current password) to change or remove it. Not needed on a feed without one, except that sending it to an existing open feed with `POST` answers 409.
+         * The feed's own password, when it has one: to post, list or get, and (as the current password) to change or remove it. On the `POST` that creates a feed it sets the feed's password; on a `POST` to an existing feed that has none it answers 409. An empty value is the same as no header, so a `POST` with an empty one creates an open feed.
          */
         'X-Feed-Password'?: string;
     };
@@ -145,7 +145,7 @@ export type PostNoteData = {
     body: PostJson;
     headers?: {
         /**
-         * The feed's own password, when it has one: to post, list or get, and (as the current password) to change or remove it. Not needed on a feed without one, except that sending it to an existing open feed with `POST` answers 409.
+         * The feed's own password, when it has one: to post, list or get, and (as the current password) to change or remove it. On the `POST` that creates a feed it sets the feed's password; on a `POST` to an existing feed that has none it answers 409. An empty value is the same as no header, so a `POST` with an empty one creates an open feed.
          */
         'X-Feed-Password'?: string;
     };
@@ -161,7 +161,7 @@ export type PostNoteData = {
 
 export type PostNoteErrors = {
     /**
-     * Invalid or reserved feed name; empty note; bad JSON, form or UTF-8
+     * Invalid or reserved feed name; empty note; bad JSON, form or UTF-8; a new password that is not printable ASCII
      */
     400: Error;
     /**
@@ -205,7 +205,7 @@ export type GetNoteData = {
     body?: never;
     headers?: {
         /**
-         * The feed's own password, when it has one: to post, list or get, and (as the current password) to change or remove it. Not needed on a feed without one, except that sending it to an existing open feed with `POST` answers 409.
+         * The feed's own password, when it has one: to post, list or get, and (as the current password) to change or remove it. On the `POST` that creates a feed it sets the feed's password; on a `POST` to an existing feed that has none it answers 409. An empty value is the same as no header, so a `POST` with an empty one creates an open feed.
          */
         'X-Feed-Password'?: string;
     };
@@ -321,7 +321,7 @@ export type ChangeFeedPasswordData = {
 
 export type ChangeFeedPasswordErrors = {
     /**
-     * Invalid or reserved feed name, bad JSON, or a new password not 1 to 256 characters
+     * Invalid or reserved feed name, bad JSON, or a new password that is not 1 to 256 printable ASCII characters, with no space at the start or end
      */
     400: Error;
     /**

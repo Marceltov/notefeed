@@ -65,8 +65,9 @@ export function authorize(h: Headers, ip: string): void {
 }
 
 // The feed password header, or (like the instance cookie) the feed's unlock cookie from this instance's own pages.
+// An empty header is no header: that is what curl sends for -H "X-Feed-Password: $UNSET" (nothing at all).
 export function feedAccess(h: Headers, feed: string): FeedAccess {
-  const password = h.get("x-feed-password") ?? undefined;
+  const password = h.get("x-feed-password") || undefined;
   const cookieOk = password === undefined && sameOrigin(h);
   return { password, cookie: cookieOk ? cookie(h, feedCookieName(feed)) : undefined };
 }

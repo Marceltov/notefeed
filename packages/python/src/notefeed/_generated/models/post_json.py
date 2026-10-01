@@ -15,8 +15,9 @@ class PostJson:
     """
     Attributes:
         markdown (str):
-        password (str | Unset): Protects the feed, 1 to 256 characters. Only honored on the post that creates the feed;
-            an existing open feed answers 409.
+        password (str | Unset): Protects the feed: 1 to 256 printable ASCII characters, with no space at the start or
+            end. Only honored on the post that creates the feed; an existing open feed answers 409. Empty is the same as
+            leaving it out.
     """
 
     markdown: str

@@ -54,7 +54,7 @@ function server(h: Headers): McpServer {
       outputSchema: z.object({ id: z.string(), url: z.string(), feed_url: z.string(), read_url: z.string() }),
     },
     guard(async ({ feed, markdown, password }) => {
-      const note = await postNote(feed, clientIp(h), async () => ({ markdown }), { password });
+      const { note } = await postNote(feed, clientIp(h), async () => ({ markdown }), { password });
       const feedUrl = base + feedPath(feed);
       return ok({ id: note.id, url: `${feedUrl}/${note.id}`, feed_url: feedUrl, read_url: base + rssPath(readId(feed)) });
     }),

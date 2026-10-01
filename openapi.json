@@ -33,7 +33,7 @@
       "post": {
         "operationId": "postNote",
         "summary": "Post a note",
-        "description": "Creates the feed with its first note, optionally protected by its own password (`X-Feed-Password` header or a `password` field in the JSON or form body). Posting to a protected feed needs that password. Also served at `POST /{feed}`, the short form the client packages and curl one-liners use. The body is at most 102400 bytes and must be UTF-8. `application/x-www-form-urlencoded` (what `curl -d` sends) is read as raw markdown, not as form fields.",
+        "description": "Creates the feed with its first note, optionally protected by its own password (`X-Feed-Password` header or a `password` field in the JSON or form body; 1 to 256 printable ASCII characters, with no space at the start or end). Posting to a protected feed needs that password. Also served at `POST /{feed}`, the short form the client packages and curl one-liners use. The body is at most 102400 bytes and must be UTF-8. `application/x-www-form-urlencoded` (what `curl -d` sends) is read as raw markdown, not as form fields.",
         "tags": [
           "Feeds"
         ],
@@ -58,7 +58,7 @@
             "name": "X-Feed-Password",
             "in": "header",
             "required": false,
-            "description": "The feed's own password, when it has one: to post, list or get, and (as the current password) to change or remove it. Not needed on a feed without one, except that sending it to an existing open feed with `POST` answers 409.",
+            "description": "The feed's own password, when it has one: to post, list or get, and (as the current password) to change or remove it. On the `POST` that creates a feed it sets the feed's password; on a `POST` to an existing feed that has none it answers 409. An empty value is the same as no header, so a `POST` with an empty one creates an open feed.",
             "schema": {
               "type": "string"
             }
@@ -117,7 +117,7 @@
             }
           },
           "400": {
-            "description": "Invalid or reserved feed name; empty note; bad JSON, form or UTF-8",
+            "description": "Invalid or reserved feed name; empty note; bad JSON, form or UTF-8; a new password that is not printable ASCII",
             "content": {
               "application/json": {
                 "schema": {
@@ -224,7 +224,7 @@
             "name": "X-Feed-Password",
             "in": "header",
             "required": false,
-            "description": "The feed's own password, when it has one: to post, list or get, and (as the current password) to change or remove it. Not needed on a feed without one, except that sending it to an existing open feed with `POST` answers 409.",
+            "description": "The feed's own password, when it has one: to post, list or get, and (as the current password) to change or remove it. On the `POST` that creates a feed it sets the feed's password; on a `POST` to an existing feed that has none it answers 409. An empty value is the same as no header, so a `POST` with an empty one creates an open feed.",
             "schema": {
               "type": "string"
             }
@@ -342,7 +342,7 @@
             "name": "X-Feed-Password",
             "in": "header",
             "required": false,
-            "description": "The feed's own password, when it has one: to post, list or get, and (as the current password) to change or remove it. Not needed on a feed without one, except that sending it to an existing open feed with `POST` answers 409.",
+            "description": "The feed's own password, when it has one: to post, list or get, and (as the current password) to change or remove it. On the `POST` that creates a feed it sets the feed's password; on a `POST` to an existing feed that has none it answers 409. An empty value is the same as no header, so a `POST` with an empty one creates an open feed.",
             "schema": {
               "type": "string"
             }
@@ -460,7 +460,7 @@
             "description": "Changed; the old password and unlock cookies stop working"
           },
           "400": {
-            "description": "Invalid or reserved feed name, bad JSON, or a new password not 1 to 256 characters",
+            "description": "Invalid or reserved feed name, bad JSON, or a new password that is not 1 to 256 printable ASCII characters, with no space at the start or end",
             "content": {
               "application/json": {
                 "schema": {
@@ -893,7 +893,7 @@
           },
           "password": {
             "type": "string",
-            "description": "Protects the feed, 1 to 256 characters. Only honored on the post that creates the feed; an existing open feed answers 409."
+            "description": "Protects the feed: 1 to 256 printable ASCII characters, with no space at the start or end. Only honored on the post that creates the feed; an existing open feed answers 409. Empty is the same as leaving it out."
           }
         },
         "required": [
@@ -909,7 +909,7 @@
           },
           "password": {
             "type": "string",
-            "description": "Protects the feed, 1 to 256 characters. Only honored on the post that creates the feed; an existing open feed answers 409."
+            "description": "Protects the feed: 1 to 256 printable ASCII characters, with no space at the start or end. Only honored on the post that creates the feed; an existing open feed answers 409. Empty is the same as leaving it out."
           }
         },
         "required": [
@@ -922,7 +922,7 @@
         "properties": {
           "password": {
             "type": "string",
-            "description": "The new password, 1 to 256 characters"
+            "description": "The new password: 1 to 256 printable ASCII characters, with no space at the start or end"
           }
         },
         "required": [

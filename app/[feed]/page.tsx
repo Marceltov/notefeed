@@ -36,7 +36,7 @@ export default async function FeedPage({ params, searchParams }: PageProps<"/[fe
   const { notes, readId } = data;
   const settingsError = access === "unlocked" && ["auth", "invalid_body", "too_many_attempts"].includes(String(error));
   const base = publicUrl(await headers());
-  const readUrl = base + rssPath(readId);
+  const readUrl = readId ? base + rssPath(readId) : undefined; // none until the feed has a note
   const auth =
     (locked() ? ` -H "Authorization: Bearer $NOTEFEED_PASSWORD"` : "") +
     (access === "unlocked" ? ` -H "X-Feed-Password: $NOTEFEED_FEED_PASSWORD"` : "");
@@ -48,21 +48,23 @@ export default async function FeedPage({ params, searchParams }: PageProps<"/[fe
       <Compose key={String(posted)} feed={feed} action={feedPath(feed)} error={settingsError ? undefined : errorMessage(error, retry)}
         isNew={access === "open" && notes.length === 0}
       />
-      <section aria-labelledby="read-link" className="-mt-6 mb-10 text-sm">
-        <h2 id="read-link" className="font-bold">
-          Read link
-        </h2>
-        <p className="text-muted">
-          For RSS readers and sharing: it shows the notes but not this feed&apos;s name, and can&apos;t post.{" "}
-          <Link href={readPath(readId)} className="text-carbon hover:underline">
-            Open read-only view
-          </Link>
-        </p>
-        <div className="mt-1 flex items-baseline gap-3">
-          <code className="min-w-0 break-all font-mono text-carbon">{readUrl}</code>
-          <CopyButton text={readUrl} />
-        </div>
-      </section>
+      {readId && readUrl && (
+        <section aria-labelledby="read-link" className="-mt-6 mb-10 text-sm">
+          <h2 id="read-link" className="font-bold">
+            Read link
+          </h2>
+          <p className="text-muted">
+            For RSS readers and sharing: it shows the notes but not this feed&apos;s name, and can&apos;t post.{" "}
+            <Link href={readPath(readId)} className="text-carbon hover:underline">
+              Open read-only view
+            </Link>
+          </p>
+          <div className="mt-1 flex items-baseline gap-3">
+            <code className="min-w-0 break-all font-mono text-carbon">{readUrl}</code>
+            <CopyButton text={readUrl} />
+          </div>
+        </section>
+      )}
       {access === "unlocked" && <FeedSettings feed={feed} error={settingsError ? feedErrorMessage(error, retry) : undefined} />}
       {notes.length === 0 ? (
         <section className="text-muted">

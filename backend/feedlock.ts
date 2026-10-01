@@ -1,35 +1,42 @@
 // Optional per-feed password: DATA_DIR/<feed>/.password holds a scrypt hash, set only when the feed is created.
 // Unprotected feeds (no file) pass every check. The file is read per request, so deleting it unlocks at once.
-import { createHmac, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
+import { createHmac, randomBytes, scrypt, timingSafeEqual, type ScryptOptions } from "node:crypto";
+import { promisify } from "node:util";
+import { PASSWORD_PATTERN, PASSWORD_RULE } from "../shared/password";
 import { createFeedDirWithHash, readHash, removeHash, writeHash } from "./data/password";
 import { AuthError, FeedExistsError, InvalidBodyError, TooManyAttemptsError } from "./errors";
-import { addFeed, secret } from "./feeds";
+import { addFeed, checkFeed, secret } from "./feeds";
 import { authFailed, authWait } from "./limits";
 
+// An empty password means none, wherever it comes from (header, body field, MCP argument).
 export type FeedAccess = { password?: string; cookie?: string };
 
 export const feedCookieName = (feed: string) => `nf_feed_${feed}`;
 
+const PASSWORD_RE = new RegExp(`^(?:${PASSWORD_PATTERN})$`);
+
 export function checkNewPassword(p: string): void {
-  if (p.length < 1 || p.length > 256) throw new InvalidBodyError("password must be 1 to 256 characters");
+  if (!PASSWORD_RE.test(p)) throw new InvalidBodyError(`password must be ${PASSWORD_RULE}`);
 }
 
 const N = 16384, R = 8, P = 1, KEYLEN = 64;
+// The async scrypt runs on the thread pool: a password check (some 40 ms) must not stall every other request.
+const scryptAsync = promisify<string, Buffer, number, ScryptOptions, Buffer>(scrypt);
 const derive = (p: string, salt: Buffer, n: number, r: number, pp: number, len: number) =>
-  scryptSync(p, salt, len, { N: n, r, p: pp, maxmem: 128 * n * r * 2 });
+  scryptAsync(p, salt, len, { N: n, r, p: pp, maxmem: 128 * n * r * 2 });
 
 // scrypt$N$r$p$salt$hash (base64), so the parameters can change later without breaking stored hashes.
-export function hashPassword(p: string): string {
+export async function hashPassword(p: string): Promise<string> {
   const salt = randomBytes(16);
-  return ["scrypt", N, R, P, salt.toString("base64"), derive(p, salt, N, R, P, KEYLEN).toString("base64")].join("$");
+  return ["scrypt", N, R, P, salt.toString("base64"), (await derive(p, salt, N, R, P, KEYLEN)).toString("base64")].join("$");
 }
 
-export function verifyHash(p: string, hash: string): boolean {
+export async function verifyHash(p: string, hash: string): Promise<boolean> {
   const [tag, n, r, pp, salt, key] = hash.split("$");
   if (tag !== "scrypt" || !key) return false;
   try {
     const want = Buffer.from(key, "base64");
-    const got = derive(p, Buffer.from(salt, "base64"), +n, +r, +pp, want.length);
+    const got = await derive(p, Buffer.from(salt, "base64"), +n, +r, +pp, want.length);
     return want.length > 0 && timingSafeEqual(got, want);
   } catch {
     return false; // malformed or absurd parameters
@@ -47,55 +54,68 @@ export async function cookieValue(feed: string): Promise<string | null> {
   return hash === null ? null : cookieOf(feed, hash);
 }
 
-// Over the failed-attempt limit the password is not even compared; only wrong passwords are counted.
-function checkPassword(password: string, hash: string, ip: string): void {
+// The only comparison of an unlock cookie.
+function cookieUnlocks(feed: string, hash: string, cookie: string | undefined): boolean {
+  const want = Buffer.from(cookieOf(feed, hash));
+  const got = Buffer.from(cookie ?? "");
+  return got.length === want.length && timingSafeEqual(got, want);
+}
+
+// No password at all is refused first: no scrypt, and nothing counted, or anyone could lock the owner out
+// just by asking. Only a wrong password is a failed attempt; over the limit it is not even compared.
+async function checkPassword(password: string | undefined, hash: string, ip: string): Promise<void> {
+  if (!password) throw new AuthError();
   const wait = authWait(ip);
   if (wait !== null) throw new TooManyAttemptsError(wait);
-  if (verifyHash(password, hash)) return;
+  if (await verifyHash(password, hash)) return;
   authFailed(ip);
   throw new AuthError();
 }
 
-function checkAccessTo(feed: string, hash: string, access: FeedAccess, ip: string): void {
-  if (access.cookie !== undefined) {
-    const want = Buffer.from(cookieOf(feed, hash));
-    const got = Buffer.from(access.cookie);
-    if (got.length === want.length && timingSafeEqual(got, want)) return;
-    // A bad or stale cookie alone is not a failed attempt: no scrypt, nothing counted.
-    if (!access.password) throw new AuthError();
-  }
-  checkPassword(access.password ?? "", hash, ip);
+// Passes for a feed without a password. True when the feed has one and this access proved it; a bad or
+// stale cookie with no password beside it is, like no password, not a failed attempt.
+export async function checkFeedAccess(feed: string, access: FeedAccess, ip: string): Promise<boolean> {
+  const hash = await readHash(feed);
+  if (hash === null) return false;
+  if (!cookieUnlocks(feed, hash, access.cookie)) await checkPassword(access.password, hash, ip);
+  return true;
 }
 
-export async function checkFeedAccess(feed: string, access: FeedAccess, ip: string): Promise<void> {
+/** For the pages. open: the feed has no password; unlocked: the cookie is the valid one; locked: anything else. Counts no attempts. */
+export async function feedUnlocked(feed: string, cookie: string | undefined): Promise<"open" | "unlocked" | "locked"> {
+  if (checkFeed(feed)) return "open"; // the page 404s on its own
   const hash = await readHash(feed);
-  if (hash !== null) checkAccessTo(feed, hash, access, ip);
+  if (hash === null) return "open";
+  return cookieUnlocks(feed, hash, cookie) ? "unlocked" : "locked";
 }
 
 export async function unlock(feed: string, password: string, ip: string): Promise<string> {
   const hash = await readHash(feed);
   if (hash === null) throw new AuthError();
-  checkPassword(password, hash, ip);
+  await checkPassword(password, hash, ip);
   return cookieOf(feed, hash);
 }
 
 export async function createProtected(feed: string, password: string): Promise<void> {
   checkNewPassword(password);
-  if (await createFeedDirWithHash(feed, hashPassword(password))) return void (await addFeed(feed));
+  if (await createFeedDirWithHash(feed, await hashPassword(password))) return void (await addFeed(feed));
   throw (await protectedFeed(feed)) ? new AuthError() : new FeedExistsError();
 }
 
 async function currentHash(feed: string, current: string, ip: string): Promise<string> {
   const hash = await readHash(feed);
   if (hash === null) throw new FeedExistsError();
-  checkPassword(current, hash, ip);
+  await checkPassword(current, hash, ip);
   return hash;
 }
 
-export async function changePassword(feed: string, current: string, next: string, ip: string): Promise<void> {
+// Returns the unlock cookie for the new password; every earlier cookie stops working.
+export async function changePassword(feed: string, current: string, next: string, ip: string): Promise<string> {
   checkNewPassword(next);
   await currentHash(feed, current, ip);
-  await writeHash(feed, hashPassword(next));
+  const hash = await hashPassword(next);
+  await writeHash(feed, hash);
+  return cookieOf(feed, hash);
 }
 
 export async function removePassword(feed: string, current: string, ip: string): Promise<void> {

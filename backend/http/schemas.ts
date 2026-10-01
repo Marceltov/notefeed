@@ -2,6 +2,7 @@
 // document; handlers build their bodies as z.infer of these, and the dispatcher checks them.
 import * as z from "zod";
 import { ERROR_CODES } from "../../shared/errors";
+import { PASSWORD_RULE } from "../../shared/password";
 import { FEED_RE, READ_ID_RE } from "../feeds";
 
 export const NOTE_ID = /^\d{8}T\d{6}Z-[a-z0-9-]+$/;
@@ -42,14 +43,20 @@ export const ErrorJson = z
   })
   .meta({ id: "Error" });
 
-const NewPassword = z.string().describe("Protects the feed, 1 to 256 characters. Only honored on the post that creates the feed; an existing open feed answers 409.");
+const NewPassword = z
+  .string()
+  .describe(`Protects the feed: ${PASSWORD_RULE}. Only honored on the post that creates the feed; an existing open feed answers 409. Empty is the same as leaving it out.`);
 export const PostJson = z.object({ markdown: z.string(), password: NewPassword.optional() }).meta({ id: "PostJson" });
 export const PostForm = z.object({ markdown: z.string(), password: NewPassword.optional() }).meta({ id: "PostForm" });
-export const PasswordJson = z.object({ password: z.string().describe("The new password, 1 to 256 characters") }).meta({ id: "PasswordJson" });
+export const PasswordJson = z.object({ password: z.string().describe(`The new password: ${PASSWORD_RULE}`) }).meta({ id: "PasswordJson" });
 
 export const FeedPasswordHeader = z
   .string()
-  .describe("The feed's own password, when it has one: to post, list or get, and (as the current password) to change or remove it. Not needed on a feed without one, except that sending it to an existing open feed with `POST` answers 409.");
+  .describe(
+    "The feed's own password, when it has one: to post, list or get, and (as the current password) to change or remove it. " +
+      "On the `POST` that creates a feed it sets the feed's password; on a `POST` to an existing feed that has none it answers 409. " +
+      "An empty value is the same as no header, so a `POST` with an empty one creates an open feed.",
+  );
 export const CurrentPasswordHeader = z.string().describe("The feed's current password");
 
 export const COMPONENTS = [NoteJson, NoteList, Created, ErrorJson, PostJson, PostForm, PasswordJson];

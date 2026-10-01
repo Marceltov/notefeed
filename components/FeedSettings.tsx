@@ -1,3 +1,6 @@
+import { PASSWORD_HINT } from "@/app/_lib/messages";
+import { PASSWORD_PATTERN } from "@/shared/password";
+
 const input = "min-w-0 flex-1 rounded-sm border border-rule bg-transparent px-3 py-1.5 focus:border-carbon focus:outline-none";
 
 // Shown on a protected feed once unlocked: plain forms to POST /<feed>/access.
@@ -15,11 +18,25 @@ export function FeedSettings({ feed, error }: { feed: string; error?: string }) 
           New password
         </label>
         <div className="flex gap-2">
-          <input id="new-password" name="next" type="password" autoComplete="new-password" required maxLength={256} aria-describedby="settings-error" className={input} />
+          <input
+            id="new-password"
+            name="next"
+            type="password"
+            autoComplete="new-password"
+            required
+            maxLength={256}
+            pattern={PASSWORD_PATTERN}
+            title={PASSWORD_HINT}
+            aria-describedby="new-password-hint settings-error"
+            className={input}
+          />
           <button type="submit" name="action" value="change" className="rounded-sm bg-carbon px-4 py-1.5 font-bold text-on-carbon">
             Change
           </button>
         </div>
+        <p id="new-password-hint" className="mt-1 text-muted">
+          {PASSWORD_HINT}
+        </p>
         <p id="settings-error" role="alert" className="mt-2 text-error">
           {error}
         </p>

@@ -1,7 +1,7 @@
 // POST /<feed>/access: the web UI's plain forms for a feed password (unlock, lock, change, remove).
 // Always answers with a redirect back to the feed page; the cookie is the feed's unlock cookie.
 import { AuthError, InvalidRequestError, NotefeedError, RateLimitedError } from "../errors";
-import { changePassword, cookieValue, feedCookieName, protectedFeed, removePassword, unlock } from "../feedlock";
+import { changePassword, feedCookieName, protectedFeed, removePassword, unlock } from "../feedlock";
 import { assertFeed } from "../feeds";
 import { clientIp } from "../limits";
 import { API_PREFIX, feedPath, publicUrl } from "../urls";
@@ -33,19 +33,19 @@ export async function feedAccessRoute(req: Request, feed: string): Promise<Respo
     const field = (name: string) => String(form?.get(name) ?? "");
     const action = field("action");
     if (!["unlock", "lock", "change", "remove"].includes(action)) throw new InvalidRequestError("unknown action");
+    // Only this instance's own pages may send these: they set, use or drop the cookie's session, and another
+    // site's form must not spend a visitor's password attempts either.
+    if (!sameOrigin(h)) throw new AuthError();
     if (action === "unlock") {
       if (!(await protectedFeed(feed))) return seeOther(page);
       return seeOther(page, set(await unlock(feed, field("password"), clientIp(h))));
     }
-    // These use the cookie's session, so only this instance's own pages may send them.
-    if (!sameOrigin(h)) throw new AuthError();
     if (action === "lock") return seeOther(page, clear());
     if (action === "remove") {
       await removePassword(feed, field("current"), clientIp(h));
       return seeOther(page, clear());
     }
-    await changePassword(feed, field("current"), field("next"), clientIp(h));
-    return seeOther(page, set((await cookieValue(feed)) ?? ""));
+    return seeOther(page, set(await changePassword(feed, field("current"), field("next"), clientIp(h))));
   } catch (e) {
     if (!(e instanceof NotefeedError)) throw e;
     if (["invalid_feed", "reserved_feed", "invalid_request"].includes(e.code)) return errorResponse(e);

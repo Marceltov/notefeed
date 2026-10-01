@@ -10,7 +10,9 @@ import {
   cookieValue,
   createProtected,
   hashPassword,
+  protectedFeed,
   removePassword,
+  unlock,
   verifyHash,
 } from "./feedlock";
 import { listFeeds, resetFeedsForTests } from "./feeds";
@@ -29,25 +31,28 @@ beforeEach(async () => {
 
 const ok = (feed: string, a: { password?: string; cookie?: string }) => checkFeedAccess(feed, a, IP);
 
-test("hashPassword verifies for the right password only; hashes are salted", () => {
-  const h = hashPassword("pw");
-  expect(verifyHash("pw", h)).toBe(true);
-  expect(verifyHash("no", h)).toBe(false);
-  expect(hashPassword("pw")).not.toBe(h);
+test("hashPassword verifies for the right password only; hashes are salted", async () => {
+  const h = await hashPassword("pw");
+  expect(await verifyHash("pw", h)).toBe(true);
+  expect(await verifyHash("no", h)).toBe(false);
+  expect(await hashPassword("pw")).not.toBe(h);
+  expect(await verifyHash("pw", "scrypt$1$1$1$$")).toBe(false);
+  expect(await verifyHash("pw", "scrypt$3$8$1$c2FsdA==$aGFzaA==")).toBe(false); // N is not a power of two
 });
 
-test("an unprotected feed passes for empty access", async () => {
-  await expect(ok("open", {})).resolves.toBeUndefined();
+test("an unprotected feed passes for any access, proving nothing", async () => {
+  await expect(ok("open", {})).resolves.toBe(false);
+  await expect(ok("open", { password: "x", cookie: "y" })).resolves.toBe(false);
 });
 
 describe("protected feed", () => {
   test("password and cookie access; a cookie from another feed fails", async () => {
     await createProtected("a", "pw");
     await createProtected("b", "pw");
-    await expect(ok("a", { password: "pw" })).resolves.toBeUndefined();
+    await expect(ok("a", { password: "pw" })).resolves.toBe(true);
     await expect(ok("a", {})).rejects.toBeInstanceOf(AuthError);
     await expect(ok("a", { password: "no" })).rejects.toBeInstanceOf(AuthError);
-    await expect(ok("a", { cookie: (await cookieValue("a"))! })).resolves.toBeUndefined();
+    await expect(ok("a", { cookie: (await cookieValue("a"))! })).resolves.toBe(true);
     await expect(ok("a", { cookie: (await cookieValue("b"))! })).rejects.toBeInstanceOf(AuthError);
   });
 
@@ -60,8 +65,14 @@ describe("protected feed", () => {
     await expect(createProtected("notes", "pw")).rejects.toBeInstanceOf(FeedExistsError);
   });
 
-  test("createProtected rejects a bad password", async () => {
-    await expect(createProtected("a", "")).rejects.toBeInstanceOf(InvalidBodyError);
+  test.each(["", "x".repeat(257), "pässwort", "emoji 🔑", " lead", "trail ", "new\nline", "\x7f"])("createProtected rejects the password %j", async (bad) => {
+    await expect(createProtected("a", bad)).rejects.toBeInstanceOf(InvalidBodyError);
+    expect(await protectedFeed("a")).toBe(false);
+  });
+
+  test.each(["x", "x".repeat(256), "two words", "~!@#$%^&*()"])("createProtected accepts the password %j", async (good) => {
+    await createProtected("a", good);
+    await expect(ok("a", { password: good })).resolves.toBe(true);
   });
 
   test("two concurrent creations: exactly one wins, only its password works", async () => {
@@ -69,7 +80,7 @@ describe("protected feed", () => {
     expect(res.filter((r) => r.status === "fulfilled")).toHaveLength(1);
     const winner = res[0].status === "fulfilled" ? "x" : "y";
     const loser = winner === "x" ? "y" : "x";
-    await expect(ok("race", { password: winner })).resolves.toBeUndefined();
+    await expect(ok("race", { password: winner })).resolves.toBe(true);
     await expect(ok("race", { password: loser })).rejects.toBeInstanceOf(AuthError);
     const lost = res.find((r) => r.status === "rejected") as PromiseRejectedResult;
     expect(lost.reason).toBeInstanceOf(AuthError);
@@ -86,7 +97,7 @@ describe("protected feed", () => {
     await createProtected("a", "pw");
     await expect(ok("a", {})).rejects.toBeInstanceOf(AuthError);
     await rm(join(dir, "a", ".password"));
-    await expect(ok("a", {})).resolves.toBeUndefined();
+    await expect(ok("a", {})).resolves.toBe(false);
   });
 
   test("changePassword and removePassword", async () => {
@@ -95,11 +106,11 @@ describe("protected feed", () => {
     await changePassword("a", "pw", "new", IP);
     await expect(ok("a", { password: "pw" })).rejects.toBeInstanceOf(AuthError);
     await expect(ok("a", { cookie: oldCookie })).rejects.toBeInstanceOf(AuthError);
-    await expect(ok("a", { password: "new" })).resolves.toBeUndefined();
+    await expect(ok("a", { password: "new" })).resolves.toBe(true);
     await expect(removePassword("a", "pw", IP)).rejects.toBeInstanceOf(AuthError);
     await expect(changePassword("a", "pw", "x", IP)).rejects.toBeInstanceOf(AuthError);
     await removePassword("a", "new", IP);
-    await expect(ok("a", {})).resolves.toBeUndefined();
+    await expect(ok("a", {})).resolves.toBe(false);
   });
 
   test("change and remove on an open feed throw FeedExistsError", async () => {
@@ -111,15 +122,36 @@ describe("protected feed", () => {
   test("changePassword with an invalid new password keeps the old one", async () => {
     await createProtected("a", "pw");
     await expect(changePassword("a", "pw", "", IP)).rejects.toBeInstanceOf(InvalidBodyError);
-    await expect(changePassword("a", "pw", "x".repeat(257), IP)).rejects.toBeInstanceOf(InvalidBodyError);
-    await expect(ok("a", { password: "pw" })).resolves.toBeUndefined();
+    for (const bad of ["x".repeat(257), "pässwort", " lead", "trail "])
+      await expect(changePassword("a", "pw", bad, IP)).rejects.toBeInstanceOf(InvalidBodyError);
+    await expect(ok("a", { password: "pw" })).resolves.toBe(true);
   });
 
   test("a bad cookie alone never touches the limiter", async () => {
     process.env.NOTEFEED_RATE_LIMIT = "2";
     await createProtected("a", "pw");
     for (let i = 0; i < 10; i++) await expect(ok("a", { cookie: "stale" })).rejects.toBeInstanceOf(AuthError);
-    await expect(ok("a", { password: "pw" })).resolves.toBeUndefined();
+    await expect(ok("a", { password: "pw" })).resolves.toBe(true);
+  });
+
+  test("no password is refused but never touches the limiter", async () => {
+    process.env.NOTEFEED_RATE_LIMIT = "2";
+    await createProtected("a", "pw");
+    for (const access of [{}, { password: "" }, { password: "", cookie: "stale" }])
+      for (let i = 0; i < 5; i++) await expect(ok("a", access)).rejects.toBeInstanceOf(AuthError);
+    for (let i = 0; i < 5; i++) {
+      await expect(unlock("a", "", IP)).rejects.toBeInstanceOf(AuthError);
+      await expect(removePassword("a", "", IP)).rejects.toBeInstanceOf(AuthError);
+      await expect(changePassword("a", "", "new", IP)).rejects.toBeInstanceOf(AuthError);
+    }
+    await expect(ok("a", { password: "pw" })).resolves.toBe(true);
+  });
+
+  test("changePassword returns the cookie for the new password", async () => {
+    await createProtected("a", "pw");
+    const cookie = await changePassword("a", "pw", "new", IP);
+    expect(cookie).toBe(await cookieValue("a"));
+    await expect(ok("a", { cookie })).resolves.toBe(true);
   });
 
   test("failed attempts are limited, even for the right password", async () => {

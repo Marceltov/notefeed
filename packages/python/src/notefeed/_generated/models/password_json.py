@@ -12,7 +12,7 @@ T = TypeVar("T", bound="PasswordJson")
 class PasswordJson:
     """
     Attributes:
-        password (str): The new password, 1 to 256 characters
+        password (str): The new password: 1 to 256 printable ASCII characters, with no space at the start or end
     """
 
     password: str

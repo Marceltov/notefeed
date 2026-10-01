@@ -41,7 +41,7 @@ async function readMarkdown(req: Request): Promise<{ markdown: string; password?
     const form = await parseForm(bytes, req.headers).then(Object.fromEntries, () => null);
     const parsed = PostForm.safeParse(form);
     if (!parsed.success) throw new InvalidBodyError('form needs a "markdown" field');
-    return { ...parsed.data, password: parsed.data.password || undefined }; // an empty optional input means none
+    return parsed.data;
   }
 
   let text: string;
@@ -77,9 +77,10 @@ export async function handlePostNote(req: Request, feed: string): Promise<PostRe
       if (e instanceof AuthError && wantsHtml(h)) return redirect(`/login?next=${encodeURIComponent(feedPath(feed))}`);
       throw e;
     }
-    const note = await postNote(feed, ip, () => readMarkdown(req), feedAccess(h, feed));
-    // The post proved access (or created the feed), so this browser stays unlocked without asking again.
-    const value = sameOrigin(h) ? await cookieValue(feed) : null;
+    const { note, created } = await postNote(feed, ip, () => readMarkdown(req), feedAccess(h, feed));
+    // Only the post that created a protected feed gets the cookie: that browser chose the password, so it
+    // stays unlocked without asking again. Any other post either came with the cookie or is a script.
+    const value = created && sameOrigin(h) ? await cookieValue(feed) : null;
     const unlocked = value === null ? undefined : feedCookies(h, feed, value);
     if (wantsHtml(h)) return redirect(`${feedPath(feed)}?posted=${note.id}`, unlocked);
     const base = publicUrl(h);

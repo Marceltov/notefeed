@@ -3,8 +3,9 @@
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { postNote } from "@/app/_lib/api";
-import { errorMessage } from "@/app/_lib/messages";
+import { PASSWORD_HINT, errorMessage } from "@/app/_lib/messages";
 import { extractTitle, idStamp, slugify } from "@/shared/notes";
+import { PASSWORD_PATTERN } from "@/shared/password";
 
 // A plain multipart form to POST /<feed>, the same endpoint scripts use: without JavaScript the browser
 // follows the 303 back to the feed page. With JavaScript the box posts through the API client generated
@@ -81,10 +82,16 @@ export function Compose({ feed, action, error: initialError, isNew }: { feed: st
             type="password"
             autoComplete="new-password"
             maxLength={256}
+            pattern={PASSWORD_PATTERN}
+            title={PASSWORD_HINT}
+            aria-describedby="new-feed-password-hint"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             className="w-full max-w-sm rounded-sm border border-rule bg-transparent px-3 py-1.5 focus:border-carbon focus:outline-none"
           />
+          <p id="new-feed-password-hint" className="mt-1 text-muted">
+            {PASSWORD_HINT}
+          </p>
         </div>
       )}
       <p id="compose-error" role="alert" className="mt-2 text-sm text-error">

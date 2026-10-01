@@ -234,6 +234,18 @@ describe("feed passwords", () => {
     }
   });
 
+  test("requests without a password are refused but not counted; wrong passwords are", async () => {
+    process.env.NOTEFEED_RATE_LIMIT = "3";
+    for (let i = 0; i < 5; i++) expect((await call("GET", "/feeds/locked/notes")).status).toBe(401);
+    for (let i = 0; i < 5; i++) expect((await call("GET", "/feeds/locked/notes", { headers: { "x-feed-password": "" } })).status).toBe(401);
+    expect((await call("DELETE", "/feeds/locked/password")).status).toBe(401);
+    expect((await call("GET", "/feeds/locked/notes", { headers: fp })).status).toBe(200);
+    for (let i = 0; i < 3; i++) expect((await call("GET", "/feeds/locked/notes", { headers: { "x-feed-password": "nope" } })).status).toBe(401);
+    const res = await call("GET", "/feeds/locked/notes", { headers: fp });
+    expect(res.status).toBe(429);
+    expect((await json(res)).code).toBe("too_many_attempts");
+  });
+
   test("read links never need it", async () => {
     const rid = readId("locked");
     expect((await call("GET", `/read/${rid}/notes`)).status).toBe(200);
@@ -263,7 +275,7 @@ describe("feed passwords", () => {
 
   test("PUT changes it with the current password", async () => {
     expect((await put("locked", "new", { "x-feed-password": "nope" })).status).toBe(401);
-    for (const bad of ["", "x".repeat(257)]) {
+    for (const bad of ["", "x".repeat(257), "pässwort", " lead", "trail "]) {
       const res = await put("locked", bad);
       expect(res.status).toBe(400);
       expect((await json(res)).code).toBe("invalid_body");
