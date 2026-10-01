@@ -1,8 +1,8 @@
 import { redirect } from "next/navigation";
 import { Header } from "@/components/Header";
 import { OpenFeed } from "@/components/OpenFeed";
-import { checkFeed } from "@/lib/feeds";
-import { normalizeFeedInput, suggestFeedName } from "@/lib/names";
+import { checkFeed, feedPath } from "@/backend";
+import { normalizeFeedInput, suggestFeedName } from "@/app/_lib/names";
 
 export const dynamic = "force-dynamic";
 
@@ -17,7 +17,7 @@ export default async function Home({ searchParams }: PageProps<"/">) {
   if (typeof feed === "string") {
     const name = normalizeFeedInput(feed);
     const bad = checkFeed(name);
-    if (!bad) redirect(`/${name}`);
+    if (!bad) redirect(feedPath(name));
     error = MESSAGES[bad];
   }
 

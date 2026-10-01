@@ -2,8 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { Header } from "@/components/Header";
 import { NoteList } from "@/components/NoteList";
-import { READ_ID_RE, feedForReadId } from "@/lib/feeds";
-import { listNotes } from "@/lib/notes";
+import { getReadFeed, instanceTitle, readPath, rssPath } from "@/backend";
 
 export const dynamic = "force-dynamic";
 
@@ -11,25 +10,25 @@ export const dynamic = "force-dynamic";
 export async function generateMetadata({ params }: PageProps<"/r/[readId]">): Promise<Metadata> {
   const { readId } = await params;
   return {
-    title: { absolute: process.env.NOTEFEED_TITLE || "notefeed" },
-    alternates: READ_ID_RE.test(readId) ? { types: { "application/rss+xml": `/r/${readId}/feed.xml` } } : undefined,
+    title: { absolute: instanceTitle() },
+    alternates: { types: { "application/rss+xml": rssPath(readId) } },
   };
 }
 
 // Like the RSS route: a malformed id is a 404, an unknown one an empty feed.
 export default async function ReadPage({ params }: PageProps<"/r/[readId]">) {
   const { readId } = await params;
-  if (!READ_ID_RE.test(readId)) notFound();
-  const feed = await feedForReadId(readId);
-  const notes = feed ? await listNotes(feed, 50) : [];
+  const data = await getReadFeed(readId);
+  if (!data) notFound();
+  const { notes } = data;
 
   return (
     <>
-      <Header rss={`/r/${readId}/feed.xml`} />
+      <Header rss={rssPath(readId)} />
       {notes.length === 0 ? (
         <p className="text-muted">No notes yet.</p>
       ) : (
-        <NoteList notes={notes} base={`/r/${readId}`} />
+        <NoteList notes={notes} base={readPath(readId)} />
       )}
     </>
   );

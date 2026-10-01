@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { afterEach, beforeEach, expect, test } from "vitest";
-import { SESSION_COOKIE, sessionValue } from "./lib/auth";
+import { SESSION_COOKIE, login } from "@/backend";
 import { config, proxy } from "./proxy";
 
 beforeEach(() => {
@@ -81,7 +81,7 @@ test("encoded traversal: %2e%2e normalizes to / (not rewritten); a%2Fb stays enc
   expect(rewrite(proxy(req("/%2e%2e", { method: "POST" })))).toBeNull();
   const target = rewrite(proxy(req("/a%2Fb", { method: "POST" })))!;
   expect(target).toBe("http://localhost:3000/api/feeds/a%2Fb/notes");
-  // Next decodes the [feed] param; handlePost rejects "a/b" (see lib/post.test.ts).
+  // Next decodes the [feed] param; the handler rejects "a/b" (see backend/http/notes.test.ts).
   expect(decodeURIComponent(new URL(target).pathname.split("/")[3])).toBe("a/b");
 });
 
@@ -100,7 +100,7 @@ test("locked: the redirect keeps the query in next, and / needs none", () => {
 
 test("locked: a valid session cookie passes", () => {
   process.env.NOTEFEED_PASSWORD = "pw";
-  expect(isNext(proxy(req("/backups", { headers: { cookie: `${SESSION_COOKIE}=${sessionValue()}` } })))).toBe(true);
+  expect(isNext(proxy(req("/backups", { headers: { cookie: `${SESSION_COOKIE}=${login("pw", "test")}` } })))).toBe(true);
 });
 
 test("locked: a server action POST without a session is redirected", () => {

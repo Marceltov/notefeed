@@ -1,4 +1,5 @@
-// Pure helpers shared by the server (lib/notes.ts) and the compose box preview.
+// Pure helpers shared by the backend (note titles and ids) and the compose box preview. No Node APIs:
+// this runs in the browser too.
 
 const lines = (markdown: string) => markdown.replace(/^﻿/, "").split(/\r?\n/);
 

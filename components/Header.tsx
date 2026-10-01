@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { cookies } from "next/headers";
-import { SESSION_COOKIE, locked, sessionOk } from "@/lib/auth";
+import { SESSION_COOKIE, feedPath, locked, sessionOk } from "@/backend";
 
 // `feed` only on the writable pages; the read-only pages must never show it.
 export async function Header({ feed, rss }: { feed?: string; rss?: string }) {
@@ -13,7 +13,7 @@ export async function Header({ feed, rss }: { feed?: string; rss?: string }) {
         {feed && (
           <>
             <span className="text-muted"> / </span>
-            <Link href={`/${feed}`} className="text-carbon">
+            <Link href={feedPath(feed)} className="text-carbon">
               {feed}
             </Link>
           </>

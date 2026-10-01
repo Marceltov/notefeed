@@ -1,0 +1,42 @@
+// The backend's boundary: the only module the frontend (app/, components/, proxy.ts) may import from
+// backend/ (enforced in eslint.config.mjs). Calls are in-process today. Each query below is shaped like
+// the endpoint it would become if the backend moved out, so the cut would be here and nowhere else.
+import { config } from "./config";
+import { READ_ID_RE, checkFeed, feedForReadId, readId } from "./feeds";
+import { getNote, listNotes, type Note } from "./notes";
+
+export type { Note };
+export * from "./errors";
+export { SESSION_COOKIE, locked, login, sessionOk } from "./auth";
+export { checkFeed } from "./feeds";
+export { clientIp } from "./limits";
+export { postNote } from "./posting";
+export { feedPath, publicUrl, readPath, rssPath } from "./urls";
+export { postNoteRoute } from "./http/notes";
+export { rssRoute } from "./http/rss";
+
+export const instanceTitle = config.title;
+
+const PAGE = 50;
+
+/** A feed by its (writable) name: newest notes and its read id; null for an invalid or reserved name. */
+export async function getFeed(feed: string): Promise<{ notes: Note[]; readId: string } | null> {
+  if (checkFeed(feed)) return null;
+  return { notes: await listNotes(feed, PAGE), readId: readId(feed) };
+}
+
+export async function getFeedNote(feed: string, id: string): Promise<Note | null> {
+  return getNote(feed, id); // null for an invalid or reserved feed name too
+}
+
+/** A feed by its read id: null for a malformed id; an unknown one is an empty feed, so ids can't be probed. */
+export async function getReadFeed(id: string): Promise<{ notes: Note[] } | null> {
+  if (!READ_ID_RE.test(id)) return null;
+  const feed = await feedForReadId(id);
+  return { notes: feed ? await listNotes(feed, PAGE) : [] };
+}
+
+export async function getReadNote(readId: string, id: string): Promise<Note | null> {
+  const feed = await feedForReadId(readId);
+  return feed ? getNote(feed, id) : null;
+}

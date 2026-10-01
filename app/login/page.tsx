@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { LoginForm } from "@/components/LoginForm";
-import { locked } from "@/lib/auth";
-import { safeNext } from "@/lib/url";
+import { safeNext } from "@/app/_lib/urls";
+import { locked } from "@/backend";
 
 export const dynamic = "force-dynamic";
 

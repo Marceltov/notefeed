@@ -1,5 +1,5 @@
 import { cookies } from "next/headers";
-import { SESSION_COOKIE, locked } from "@/lib/auth";
+import { SESSION_COOKIE, locked } from "@/backend";
 
 export async function POST() {
   (await cookies()).delete(SESSION_COOKIE);

@@ -2,7 +2,7 @@
 
 import { useActionState, useState } from "react";
 import { postNoteAction } from "@/app/actions";
-import { extractTitle, idStamp, slugify } from "@/lib/slug";
+import { extractTitle, idStamp, slugify } from "@/shared/notes";
 
 export function Compose({ feed }: { feed: string }) {
   const [text, setText] = useState("");
