@@ -1,0 +1,690 @@
+{
+  "openapi": "3.1.1",
+  "info": {
+    "title": "notefeed API",
+    "version": "1",
+    "description": "Post markdown notes to a feed, read them back. See https://docs.notefeed.me/",
+    "license": {
+      "name": "AGPL-3.0-only",
+      "identifier": "AGPL-3.0-only"
+    }
+  },
+  "servers": [
+    {
+      "url": "https://notefeed.me"
+    }
+  ],
+  "tags": [
+    {
+      "name": "Feeds",
+      "description": "By the feed's name, the write key. Need the instance password when one is set."
+    },
+    {
+      "name": "Read",
+      "description": "By the feed's read id. Public and read-only."
+    },
+    {
+      "name": "Meta",
+      "description": "About the API itself."
+    }
+  ],
+  "paths": {
+    "/api/v1/feeds/{feed}/notes": {
+      "post": {
+        "operationId": "postNote",
+        "summary": "Post a note",
+        "description": "Creates the feed with its first note. Also served at `POST /{feed}`, the short form the client packages and curl one-liners use. The body is at most 102400 bytes and must be UTF-8. `application/x-www-form-urlencoded` (what `curl -d` sends) is read as raw markdown, not as form fields.",
+        "tags": [
+          "Feeds"
+        ],
+        "security": [
+          {},
+          {
+            "password": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "feed",
+            "in": "path",
+            "required": true,
+            "description": "The feed's name. It is the write key: anyone who knows it can post.",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9_-]{1,64}$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "text/markdown": {
+              "schema": {
+                "type": "string"
+              }
+            },
+            "text/plain": {
+              "schema": {
+                "type": "string"
+              }
+            },
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PostJson"
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/PostForm"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Stored",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Created"
+                }
+              }
+            }
+          },
+          "303": {
+            "description": "Only when the request accepts `text/html` (a browser submitting a form): back to the feed page with `?posted=<id>` or `?error=<code>`, or to the login page",
+            "headers": {
+              "Location": {
+                "description": "Where to go",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid or reserved feed name; empty note; bad JSON, form or UTF-8",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The instance has a password and it is missing or wrong",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Body over 102400 bytes",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported content type",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many posts, or wrong passwords, from this client",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before trying again",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "507": {
+            "description": "NOTEFEED_MAX_FEEDS or NOTEFEED_MAX_NOTES_PER_FEED reached",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "operationId": "listNotes",
+        "summary": "List a feed's notes",
+        "description": "Newest first. A feed with no notes (or that doesn't exist yet) is an empty list.",
+        "tags": [
+          "Feeds"
+        ],
+        "security": [
+          {},
+          {
+            "password": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "feed",
+            "in": "path",
+            "required": true,
+            "description": "The feed's name. It is the write key: anyone who knows it can post.",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9_-]{1,64}$"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Notes per page, 1–100",
+            "schema": {
+              "default": 50,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            }
+          },
+          {
+            "name": "before",
+            "in": "query",
+            "required": false,
+            "description": "Only notes older than this id: the previous page's `next`",
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{8}T\\d{6}Z-[a-z0-9-]+$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of notes",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NoteList"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid or reserved feed name, or a bad `limit` / `before`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The instance has a password and it is missing or wrong",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many wrong passwords from this client",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before trying again",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/feeds/{feed}/notes/{id}": {
+      "get": {
+        "operationId": "getNote",
+        "summary": "Get one note",
+        "tags": [
+          "Feeds"
+        ],
+        "security": [
+          {},
+          {
+            "password": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "feed",
+            "in": "path",
+            "required": true,
+            "description": "The feed's name. It is the write key: anyone who knows it can post.",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9_-]{1,64}$"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "The note's id",
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{8}T\\d{6}Z-[a-z0-9-]+$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The note",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Note"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid or reserved feed name",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The instance has a password and it is missing or wrong",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such note",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many wrong passwords from this client",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before trying again",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/read/{readId}/notes": {
+      "get": {
+        "operationId": "listReadNotes",
+        "summary": "List a feed's notes by its read id",
+        "description": "Public, even on an instance with a password, and never reveals the feed's name. An unknown read id is an empty list, so read ids can't be probed. The same notes as the read link's RSS.",
+        "tags": [
+          "Read"
+        ],
+        "security": [],
+        "parameters": [
+          {
+            "name": "readId",
+            "in": "path",
+            "required": true,
+            "description": "The feed's read id, from its read link. Read-only; never reveals the name.",
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{22}$"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Notes per page, 1–100",
+            "schema": {
+              "default": 50,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            }
+          },
+          {
+            "name": "before",
+            "in": "query",
+            "required": false,
+            "description": "Only notes older than this id: the previous page's `next`",
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{8}T\\d{6}Z-[a-z0-9-]+$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of notes",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NoteList"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "A bad `limit` / `before`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Malformed read id",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/read/{readId}/notes/{id}": {
+      "get": {
+        "operationId": "getReadNote",
+        "summary": "Get one note by its feed's read id",
+        "description": "Public, like the read link.",
+        "tags": [
+          "Read"
+        ],
+        "security": [],
+        "parameters": [
+          {
+            "name": "readId",
+            "in": "path",
+            "required": true,
+            "description": "The feed's read id, from its read link. Read-only; never reveals the name.",
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{22}$"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "The note's id",
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{8}T\\d{6}Z-[a-z0-9-]+$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The note",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Note"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such note, or a malformed or unknown read id",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/openapi.json": {
+      "get": {
+        "operationId": "getOpenApi",
+        "summary": "This API's OpenAPI document",
+        "description": "Generated from the server's route table, with `servers` set to this instance's URL.",
+        "tags": [
+          "Meta"
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "OpenAPI 3.1",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "additionalProperties": {}
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Note": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^\\d{8}T\\d{6}Z-[a-z0-9-]+$",
+            "description": "UTC time to the second plus a slug of the title"
+          },
+          "title": {
+            "type": "string",
+            "description": "The first heading, or the first non-empty line; may be empty"
+          },
+          "markdown": {
+            "type": "string",
+            "description": "The note, byte-for-byte as posted"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+            "description": "When the note was posted (UTC)"
+          },
+          "url": {
+            "type": "string",
+            "format": "uri",
+            "description": "The note's page in the web UI"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "markdown",
+          "created_at",
+          "url"
+        ],
+        "additionalProperties": false
+      },
+      "NoteList": {
+        "type": "object",
+        "properties": {
+          "notes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Note"
+            },
+            "description": "Newest first"
+          },
+          "next": {
+            "description": "Pass as `before` for the next (older) page; null on the last page",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "notes",
+          "next"
+        ],
+        "additionalProperties": false
+      },
+      "Created": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^\\d{8}T\\d{6}Z-[a-z0-9-]+$"
+          },
+          "url": {
+            "type": "string",
+            "format": "uri",
+            "description": "The note's page in the web UI"
+          },
+          "feed_url": {
+            "type": "string",
+            "format": "uri",
+            "description": "The feed's page in the web UI"
+          },
+          "read_url": {
+            "type": "string",
+            "format": "uri",
+            "description": "The feed's read-only RSS link, safe to share"
+          }
+        },
+        "required": [
+          "id",
+          "url",
+          "feed_url",
+          "read_url"
+        ],
+        "additionalProperties": false
+      },
+      "Error": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string",
+            "description": "A short reason, for people"
+          },
+          "code": {
+            "description": "Stable machine-readable code; absent only on a 500",
+            "type": "string",
+            "enum": [
+              "invalid_feed",
+              "reserved_feed",
+              "auth",
+              "rate_limited",
+              "too_many_attempts",
+              "feed_limit",
+              "note_limit",
+              "empty_note",
+              "too_large",
+              "unsupported_type",
+              "invalid_body",
+              "invalid_request",
+              "not_found"
+            ]
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "additionalProperties": false
+      },
+      "PostJson": {
+        "type": "object",
+        "properties": {
+          "markdown": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "markdown"
+        ],
+        "additionalProperties": false
+      },
+      "PostForm": {
+        "type": "object",
+        "properties": {
+          "markdown": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "markdown"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "securitySchemes": {
+      "password": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "The instance password (NOTEFEED_PASSWORD), when one is set"
+      }
+    }
+  }
+}

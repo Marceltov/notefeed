@@ -175,7 +175,7 @@ const OPS: AnyOp[] = [
   op({
     method: "GET",
     path: "/api/v1/openapi.json",
-    operationId: "openapi",
+    operationId: "getOpenApi",
     summary: "This API's OpenAPI document",
     description: "Generated from the server's route table, with `servers` set to this instance's URL.",
     tags: ["Meta"],

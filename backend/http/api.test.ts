@@ -1,11 +1,11 @@
-import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { beforeEach, describe, expect, test } from "vitest";
 import { resetFeedsForTests, readId } from "../feeds";
 import { resetRateLimitsForTests } from "../limits";
 import { createNote } from "../notes";
-import { API_PREFIX, dispatch, openApiDocument } from "./api";
+import { API_PREFIX, dispatch } from "./api";
 
 const BASE = "http://localhost:3000";
 beforeEach(async () => {
@@ -154,20 +154,5 @@ describe("the OpenAPI document", () => {
     const doc = await json(await call("GET", "/openapi.json"));
     expect(doc.openapi).toBe("3.1.1");
     expect(doc.servers).toEqual([{ url: "https://notes.example" }]);
-  });
-
-  test("every $ref points at a component", () => {
-    const doc = openApiDocument("https://notefeed.me");
-    const refs = [...JSON.stringify(doc).matchAll(/"\$ref":"#\/components\/schemas\/([^"]+)"/g)].map((m) => m[1]);
-    expect(refs.length).toBeGreaterThan(0);
-    for (const r of refs) expect((doc.components as { schemas: object }).schemas).toHaveProperty(r);
-  });
-
-  // The docs site renders docs/api/openapi.json; regenerate with UPDATE_OPENAPI=1 npx vitest run backend/http/api.test.ts
-  test("docs/api/openapi.json is up to date", async () => {
-    const file = join(import.meta.dirname, "../../docs/api/openapi.json");
-    const generated = JSON.stringify(openApiDocument("https://notefeed.me"), null, 2) + "\n";
-    if (process.env.UPDATE_OPENAPI === "1") await writeFile(file, generated);
-    expect(await readFile(file, "utf8").catch(() => "missing")).toBe(generated);
   });
 });

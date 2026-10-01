@@ -18,6 +18,20 @@ jobs:
       - run: npm run typecheck
       - run: npm test
 
+  # The committed openapi.json (and, later, the generated clients) must match the route table.
+  generate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm run generate
+      - run: git diff --exit-code || (echo "::error::Generated files are stale: run npm run generate and commit" && exit 1)
+      - run: npx -y @redocly/cli@2.57.0 lint openapi.json
+
   e2e:
     runs-on: ubuntu-latest
     steps:
