@@ -1,4 +1,4 @@
-"""Post markdown notes to a notefeed server."""
+"""Post and read markdown notes on a notefeed server."""
 
 from importlib.metadata import version as _version
 
@@ -8,10 +8,12 @@ from .client import (  # noqa: E402
     AuthError,
     Client,
     ConfigError,
-    InvalidNoteError,
+    Created,
+    InvalidRequestError,
     LimitReachedError,
     Note,
     NotefeedError,
+    NotFoundError,
     NoteTooLargeError,
     RateLimitedError,
 )
@@ -20,10 +22,12 @@ __all__ = [
     "AuthError",
     "Client",
     "ConfigError",
-    "InvalidNoteError",
+    "Created",
+    "InvalidRequestError",
     "LimitReachedError",
     "Note",
     "NotefeedError",
+    "NotFoundError",
     "NoteTooLargeError",
     "RateLimitedError",
 ]

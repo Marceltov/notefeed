@@ -2,12 +2,14 @@
 
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
+import { postNote } from "@/app/_lib/api";
 import { errorMessage } from "@/app/_lib/messages";
 import { extractTitle, idStamp, slugify } from "@/shared/notes";
 
-// A plain multipart form to POST /<feed>, the same endpoint scripts use. Without JavaScript the browser
-// follows the 303 back to the feed page; with it, fetch() asks for JSON and errors show inline.
-export function Compose({ action, error: initialError }: { action: string; error?: string }) {
+// A plain multipart form to POST /<feed>, the same endpoint scripts use: without JavaScript the browser
+// follows the 303 back to the feed page. With JavaScript the box posts through the API client generated
+// from openapi.json (JSON, the session cookie rides along same-origin) and shows refusals inline.
+export function Compose({ feed, action, error: initialError }: { feed: string; action: string; error?: string }) {
   const router = useRouter();
   const [text, setText] = useState("");
   const [error, setError] = useState(initialError);
@@ -18,11 +20,13 @@ export function Compose({ action, error: initialError }: { action: string; error
     e.preventDefault();
     setPending(true);
     try {
-      const res = await fetch(action, { method: "POST", body: new FormData(e.currentTarget), headers: { Accept: "application/json" } });
-      const body = await res.json().catch(() => ({}));
-      if (res.ok) return router.push(`${action}?posted=${body.id}`); // the page remounts this box empty
-      if (res.status === 401) return router.push(`/login?next=${encodeURIComponent(action)}`);
-      setError(errorMessage(body.code ?? "unknown", res.headers.get("retry-after")));
+      // baseUrl: this page's origin, not the spec's default server.
+      const { data, error, response } = await postNote({ baseUrl: window.location.origin, path: { feed }, body: { markdown: text } });
+      // The generated client returns a network failure instead of throwing it: no response at all.
+      if (!response) throw new Error("no response");
+      if (data) return router.push(`${action}?posted=${data.id}`); // the page remounts this box empty
+      if (response?.status === 401) return router.push(`/login?next=${encodeURIComponent(action)}`);
+      setError(errorMessage(error?.code ?? "unknown", response?.headers.get("retry-after")));
     } catch {
       setError("Could not reach notefeed. Check your connection and try again.");
     }

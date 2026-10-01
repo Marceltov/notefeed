@@ -4,15 +4,15 @@ build-backend = "hatchling.build"
 
 [project]
 name = "notefeed"
-version = "0.4.0"
+version = "0.5.0"
 description = "Client and CLI for notefeed, a self-hosted inbox for markdown notes that you read back as RSS."
 readme = "README.md"
 license = "Apache-2.0"
 license-files = ["LICENSE"]
 authors = [{ name = "Marcel Bruckner" }]
 keywords = ["notefeed", "notes", "markdown", "rss", "self-hosted", "homelab", "cli"]
-requires-python = ">=3.10"
-dependencies = []
+requires-python = ">=3.11"
+dependencies = ["httpx>=0.28", "attrs>=24"]
 classifiers = [
   "Programming Language :: Python :: 3",
   "Environment :: Console",

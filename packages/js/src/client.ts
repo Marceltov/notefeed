@@ -1,118 +1,179 @@
-/** A tiny client for notefeed's POST /<feed>. No dependencies; uses the global fetch. */
+/**
+ * The notefeed client: a small convenience layer over the API client generated from the server's
+ * OpenAPI description (./generated, `npm run generate` in the repo). No runtime dependencies.
+ */
+import { createClient, createConfig } from "./generated/client/index.js";
+import { getNote, getReadNote, listNotes, listReadNotes, postNote } from "./generated/sdk.gen.js";
+import type { Created, Error as ApiError, Note, NoteList } from "./generated/types.gen.js";
 
-export type Note = { id: string; url: string; readUrl: string };
+/** The stable error codes the API answers with. */
+export type ErrorCode = NonNullable<ApiError["code"]>;
+
+export type { Created, Note };
 export type ClientOptions = { url: string; feed?: string; password?: string; timeoutMs?: number };
-export type PostOptions = { feed?: string };
 
-/** Any failure talking to notefeed. `status` is the HTTP status, or null (network, config). */
+/** Any failure talking to notefeed. `status` and `code` are null when there was no API answer. */
 export class NotefeedError extends Error {
   constructor(
     message: string,
     readonly status: number | null = null,
+    readonly code: ErrorCode | null = null,
   ) {
     super(message);
     this.name = new.target.name;
   }
 }
-/** URL or feed missing, or an invalid feed name or password. */
+/** Raised before sending: no URL, no feed, an invalid feed name or password. */
 export class ConfigError extends NotefeedError {}
-/** The server rejected the note (400, 415): empty, not UTF-8, wrong type. */
-export class InvalidNoteError extends NotefeedError {}
-/** Missing or wrong password on a locked instance (401). */
+/** Missing or wrong password on a locked instance. */
 export class AuthError extends NotefeedError {}
-/** The note is over the server's size limit (413). */
-export class NoteTooLargeError extends NotefeedError {}
-
-/** Too many requests (429). `retryAfter` is the wait in seconds, or null if the server gave none. */
+/** Too many posts or wrong passwords. `retryAfter` is the wait in seconds, or null if none was given. */
 export class RateLimitedError extends NotefeedError {
   constructor(
     message: string,
-    status: number | null = null,
-    readonly retryAfter: number | null = null,
+    status: number | null,
+    code: ErrorCode | null,
+    readonly retryAfter: number | null,
   ) {
-    super(message, status);
+    super(message, status, code);
   }
 }
-/** The server's feed or note limit is reached (507). */
+/** No such note, or a malformed read id. */
+export class NotFoundError extends NotefeedError {}
+/** The instance's feed or note limit is reached. */
 export class LimitReachedError extends NotefeedError {}
+/** The note is over the server's size limit. */
+export class NoteTooLargeError extends NotefeedError {}
+/** The server refused the request itself: invalid or reserved feed, empty note, bad body or parameter. */
+export class InvalidRequestError extends NotefeedError {}
 
-const ERRORS: Record<number, typeof NotefeedError> = {
-  400: InvalidNoteError,
-  415: InvalidNoteError,
-  401: AuthError,
-  413: NoteTooLargeError,
-  507: LimitReachedError,
+const BY_CODE: Partial<Record<ErrorCode, typeof NotefeedError>> = {
+  auth: AuthError,
+  not_found: NotFoundError,
+  feed_limit: LimitReachedError,
+  note_limit: LimitReachedError,
+  too_large: NoteTooLargeError,
+  invalid_feed: InvalidRequestError,
+  reserved_feed: InvalidRequestError,
+  empty_note: InvalidRequestError,
+  invalid_body: InvalidRequestError,
+  invalid_request: InvalidRequestError,
+  unsupported_type: InvalidRequestError,
 };
 
-// Same rule as the server; reserved names still come back as a 400.
-function checkFeed(feed: string): string {
-  if (!/^[a-z0-9_-]{1,64}$/.test(feed)) {
-    throw new ConfigError("invalid feed name: use 1-64 of a-z, 0-9, _ and -"); // never echo the name: it is the write key
-  }
-  return feed;
-}
+const FEED_RE = /^[a-z0-9_-]{1,64}$/; // same rule as the server; reserved names still come back as a 400
+
+type Result<T> = { data?: T; error?: unknown; response?: Response };
 
 export class Client {
   readonly url: string;
   readonly feed: string | null;
-  private readonly password: string | null;
+  private readonly api;
   private readonly timeoutMs: number;
 
-  /** A notefeed server. The feed set here is the default; post(md, { feed }) overrides it. */
+  /** A notefeed server. The feed set here is the default for every call; each call can override it. */
   constructor(options: ClientOptions) {
     const { url, feed, password, timeoutMs } = options ?? ({} as Partial<ClientOptions>);
     if (!url) throw new ConfigError("no url given");
     this.url = url.replace(/\/+$/, "");
     this.feed = feed ? checkFeed(feed) : null;
-    this.password = password?.trim() || null;
+    const pw = password?.trim() || null;
     // Never echo the value: it would end up in terminals and CI logs.
-    if (this.password && /[\x00-\x1f\x7f]/.test(this.password)) {
-      throw new ConfigError("password contains invalid characters");
-    }
+    if (pw && /[\x00-\x1f\x7f]/.test(pw)) throw new ConfigError("password contains invalid characters");
     this.timeoutMs = timeoutMs ?? 10_000;
+    this.api = createClient(createConfig({ baseUrl: this.url, headers: pw ? { Authorization: `Bearer ${pw}` } : {} }));
   }
 
-  async post(markdown: string, options: PostOptions = {}): Promise<Note> {
-    const feed = options.feed || this.feed;
-    if (!feed) throw new ConfigError("no feed given");
-    checkFeed(feed);
-    const headers: Record<string, string> = { "Content-Type": "text/markdown; charset=utf-8" };
-    if (this.password) headers.Authorization = `Bearer ${this.password}`;
-    let res: Response;
-    try {
-      res = await fetch(`${this.url}/${feed}`, {
-        method: "POST",
-        headers,
-        body: new TextEncoder().encode(markdown),
-        signal: AbortSignal.timeout(this.timeoutMs),
-      });
-    } catch (e) {
-      const cause = (e as { cause?: { code?: string; message?: string } }).cause;
-      const reason = cause?.code ?? cause?.message ?? (e as Error).message;
+  /** NOTEFEED_URL, NOTEFEED_FEED and NOTEFEED_PASSWORD. */
+  static fromEnv(env: Record<string, string | undefined> = process.env): Client {
+    return new Client({ url: env.NOTEFEED_URL ?? "", feed: env.NOTEFEED_FEED || undefined, password: env.NOTEFEED_PASSWORD });
+  }
+
+  async post(markdown: string, options: { feed?: string } = {}): Promise<Created> {
+    const feed = this.feedFor(options.feed);
+    return this.call(postNote({ client: this.api, path: { feed }, body: { markdown }, ...this.opts() }));
+  }
+
+  /** Every note in the feed, newest first, fetched a page at a time; stop iterating whenever you like. */
+  notes(options: { feed?: string; pageSize?: number } = {}): AsyncGenerator<Note> {
+    const feed = this.feedFor(options.feed);
+    return this.pages((before) =>
+      listNotes({ client: this.api, path: { feed }, query: { limit: options.pageSize, before }, ...this.opts() }),
+    );
+  }
+
+  async note(id: string, options: { feed?: string } = {}): Promise<Note> {
+    const feed = this.feedFor(options.feed);
+    return this.call(getNote({ client: this.api, path: { feed, id }, ...this.opts() }));
+  }
+
+  /** Like notes(), by the feed's read id: public, read-only, needs no password. */
+  readNotes(readId: string, options: { pageSize?: number } = {}): AsyncGenerator<Note> {
+    return this.pages((before) =>
+      listReadNotes({ client: this.api, path: { readId }, query: { limit: options.pageSize, before }, ...this.opts() }),
+    );
+  }
+
+  async readNote(readId: string, id: string): Promise<Note> {
+    return this.call(getReadNote({ client: this.api, path: { readId, id }, ...this.opts() }));
+  }
+
+  private feedFor(feed: string | undefined): string {
+    const f = feed || this.feed;
+    if (!f) throw new ConfigError("no feed given");
+    return checkFeed(f);
+  }
+
+  private opts() {
+    return { signal: AbortSignal.timeout(this.timeoutMs) };
+  }
+
+  // `before` is the previous page's `next`: older notes only, so notes posted meanwhile never repeat.
+  private async *pages(fetchPage: (before?: string) => Promise<Result<NoteList>>): AsyncGenerator<Note> {
+    let before: string | undefined;
+    do {
+      const page = await this.call(fetchPage(before));
+      yield* page.notes;
+      before = page.next ?? undefined;
+    } while (before);
+  }
+
+  // Anything but a JSON object from the API itself is an error, never a success: a POST that was
+  // redirected (http → https) came back as a GET of the list, so the note was never stored.
+  private async call<T>(request: Promise<Result<T>>): Promise<T> {
+    const { data, error, response } = await request;
+    if (!response) {
+      const cause = (error as { cause?: { code?: string; message?: string } } | undefined)?.cause;
+      const reason = cause?.code ?? cause?.message ?? (error as Error | undefined)?.message ?? "unknown error";
       throw new NotefeedError(`could not reach ${this.url}: ${reason}`);
     }
-    const text = await res.text();
-    if (!res.ok) {
-      let message: string;
-      try {
-        message = JSON.parse(text).error;
-        if (typeof message !== "string") throw new Error();
-      } catch {
-        message = `HTTP ${res.status}: ${text.slice(0, 200).replace(/\s+/g, " ").trim()}`;
-      }
-      if (res.status === 429) {
-        const retry = res.headers.get("retry-after")?.trim() ?? "";
-        throw new RateLimitedError(message, 429, /^\d+$/.test(retry) ? Number(retry) : null);
-      }
-      throw new (ERRORS[res.status] ?? NotefeedError)(message, res.status);
+    if (response.redirected) {
+      throw new NotefeedError(`${this.url} redirected to ${new URL(response.url).origin}: use that address as the URL`, response.status);
     }
-    try {
-      const { id, url, read_url } = JSON.parse(text) as { id: unknown; url: unknown; read_url: unknown };
-      if (typeof id === "string" && typeof url === "string" && typeof read_url === "string") {
-        return { id, url, readUrl: read_url };
-      }
-    } catch {}
-    throw new NotefeedError(`unexpected response from ${this.url} (not a notefeed server?)`, res.status);
+    if (response.ok) {
+      if (error === undefined && isObject(data)) return data as T;
+      throw new NotefeedError(`unexpected response from ${this.url} (not a notefeed server?)`, response.status);
+    }
+    const body = isObject(error) ? (error as Partial<ApiError>) : null;
+    const code = typeof body?.code === "string" ? body.code : null;
+    let message = typeof body?.error === "string" ? body.error : "";
+    if (!message) {
+      const raw = typeof error === "string" ? error : isObject(error) && Object.keys(error).length ? JSON.stringify(error) : "";
+      message = `HTTP ${response.status}: ${raw.slice(0, 200).replace(/\s+/g, " ").trim()}`.replace(/: $/, "");
+    }
+    if (code === "rate_limited" || code === "too_many_attempts" || response.status === 429) {
+      const retry = response.headers.get("retry-after")?.trim() ?? "";
+      throw new RateLimitedError(message, response.status, code, /^\d+$/.test(retry) ? Number(retry) : null);
+    }
+    const Cls = (code && BY_CODE[code]) || NotefeedError;
+    throw new Cls(message, response.status, code);
   }
 }
 
+const isObject = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
+
+function checkFeed(feed: string): string {
+  // Never echo the name: it is the write key.
+  if (!FEED_RE.test(feed)) throw new ConfigError("invalid feed name: use 1-64 of a-z, 0-9, _ and -");
+  return feed;
+}

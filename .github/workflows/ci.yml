@@ -18,7 +18,7 @@ jobs:
       - run: npm run typecheck
       - run: npm test
 
-  # The committed openapi.json (and, later, the generated clients) must match the route table.
+  # The committed openapi.json and the clients generated from it must match the route table.
   generate:
     runs-on: ubuntu-latest
     steps:
@@ -27,10 +27,12 @@ jobs:
         with:
           node-version-file: .nvmrc
           cache: npm
+      - uses: astral-sh/setup-uv@v6
       - run: npm ci
       - run: npm run generate
+      # --porcelain also catches files the generators added that aren't committed yet.
       - name: Generated files are current
-        run: git diff --exit-code || { echo "::error::Generated files are stale. Run npm run generate and commit."; exit 1; }
+        run: test -z "$(git status --porcelain)" || { git status --short; echo "::error::Generated files are stale. Run npm run generate and commit."; exit 1; }
       - run: npx -y @redocly/cli@2.57.0 lint openapi.json
 
   e2e:

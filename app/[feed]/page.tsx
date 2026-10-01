@@ -30,7 +30,7 @@ export default async function FeedPage({ params, searchParams }: PageProps<"/[fe
   return (
     <>
       <Header feed={feed} rss={readUrl} />
-      <Compose key={String(posted)} action={feedPath(feed)} error={errorMessage(error, retry)} />
+      <Compose key={String(posted)} feed={feed} action={feedPath(feed)} error={errorMessage(error, retry)} />
       <section aria-labelledby="read-link" className="-mt-6 mb-10 text-sm">
         <h2 id="read-link" className="font-bold">
           Read link
