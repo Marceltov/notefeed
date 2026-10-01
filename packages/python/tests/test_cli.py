@@ -202,3 +202,16 @@ def test_notes_json_prints_exactly_the_documented_fields(server, capsys):
     )
     assert main(notes_args(server, "--json")) == 0
     assert list(json.loads(capsys.readouterr().out)) == ["id", "title", "markdown", "created_at", "url"]
+
+
+def test_notes_stops_quietly_when_the_reader_goes_away(server, capsys, monkeypatch):
+    """`notefeed notes --limit 1000 | head -1`: the pipe closes after the first line."""
+    serve_notes(server, 5)
+
+    class ClosedPipe(io.StringIO):
+        def write(self, s):
+            raise BrokenPipeError
+
+    monkeypatch.setattr(sys, "stdout", ClosedPipe())
+    assert main(notes_args(server, "--limit", "1000")) == 0
+    assert capsys.readouterr().err == ""

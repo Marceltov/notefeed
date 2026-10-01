@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import io
 import itertools
 import json
 import os
@@ -38,6 +39,14 @@ def main(argv: list[str] | None = None) -> int:
                 raise _UsageError("--limit must be a whole number, 1 or more")
             for note in itertools.islice(_client(args).notes(page_size=min(args.limit, 100)), args.limit):
                 print(_line(note, args.json))
+    except BrokenPipeError:
+        # The reader went away (`notefeed notes | head -1`): stop quietly, and point stdout at devnull so
+        # Python's own flush at exit doesn't complain about the closed pipe.
+        try:
+            os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
+        except (OSError, ValueError, io.UnsupportedOperation):
+            pass
+        return 0
     except (ConfigError, _UsageError) as e:
         print(f"notefeed: {e}", file=sys.stderr)
         return 2
