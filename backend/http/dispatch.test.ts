@@ -44,7 +44,7 @@ op({
   // @ts-expect-error 201 is not declared
 }).handle(async () => ({ status: 201, body: { id: "a", limit: 1 } }));
 
-const dispatch = createDispatcher([getThing, postThing]);
+const dispatch = createDispatcher([getThing, postThing], "/api/v1");
 const call = (path: string, method = "GET") => dispatch(new Request(`http://x/api/v1/${path}`, { method }), path.split("?")[0].split("/"));
 
 afterEach(() => {
@@ -55,6 +55,10 @@ afterEach(() => {
 });
 
 describe("routing", () => {
+  test("paths are matched under the dispatcher's prefix", async () => {
+    const v2 = createDispatcher([{ ...getThing, path: "/v2/things/{id}" }], "/v2");
+    expect((await v2(new Request("http://x/v2/things/b"), ["things", "b"])).status).toBe(200);
+  });
   test("an unknown path is a JSON 404", async () => {
     const res = await call("nothing/here");
     expect(res.status).toBe(404);
@@ -96,7 +100,7 @@ describe("replies", () => {
   test("an undeclared status never leaves: logged, 500", async () => {
     const log = vi.spyOn(console, "error").mockImplementation(() => {});
     const sneaky = { ...getThing, handle: async () => ({ status: 418 as 200, body: { id: "a", limit: 1 } }) };
-    const res = await createDispatcher([sneaky])(new Request("http://x/api/v1/things/a"), ["things", "a"]);
+    const res = await createDispatcher([sneaky], "/api/v1")(new Request("http://x/api/v1/things/a"), ["things", "a"]);
     expect(res.status).toBe(500);
     expect(log).toHaveBeenCalled();
   });
@@ -105,7 +109,7 @@ describe("replies", () => {
       throw new RateLimitedError(7);
     };
     const sneaky = { ...getThing, responses: { ...getThing.responses, 429: NotFound } };
-    const res = await createDispatcher([sneaky])(new Request("http://x/api/v1/things/a"), ["things", "a"]);
+    const res = await createDispatcher([sneaky], "/api/v1")(new Request("http://x/api/v1/things/a"), ["things", "a"]);
     expect(res.status).toBe(429);
     expect(res.headers.get("retry-after")).toBe("7");
     expect(await res.json()).toEqual({ error: "rate limit exceeded", code: "rate_limited" });
@@ -130,7 +134,7 @@ describe("replies", () => {
   });
   test("a body that doesn't match its schema throws outside production, is sent in production", async () => {
     const bad = { ...getThing, handle: async () => ({ status: 200 as const, body: { id: 1 } as never }) };
-    const d = createDispatcher([bad]);
+    const d = createDispatcher([bad], "/api/v1");
     const req = () => new Request("http://x/api/v1/things/a");
     await expect(d(req(), ["things", "a"])).rejects.toThrow("getThing answered 200 with a body that doesn't match its schema");
     vi.stubEnv("NODE_ENV", "production");

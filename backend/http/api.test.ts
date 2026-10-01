@@ -153,7 +153,7 @@ test("unknown endpoints are a JSON 404, wrong methods a 405 with Allow", async (
   expect((await json(unknown)).code).toBe("not_found");
   const wrong = await call("POST", `/read/${"A".repeat(22)}/notes`);
   expect(wrong.status).toBe(405);
-  expect(wrong.headers.get("allow")).toBe("GET");
+  expect(wrong.headers.get("allow")).toBe("GET, HEAD");
 });
 
 describe("the OpenAPI document", () => {

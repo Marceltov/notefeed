@@ -60,7 +60,7 @@ async function page(notes: (limit: number, before?: string) => Promise<Note[]>, 
 const OPS: AnyOp[] = [
   op({
     method: "POST",
-    path: "/api/v1/feeds/{feed}/notes",
+    path: `${API_PREFIX}/feeds/{feed}/notes`,
     operationId: "postNote",
     summary: "Post a note",
     description:
@@ -96,7 +96,7 @@ const OPS: AnyOp[] = [
 
   op({
     method: "GET",
-    path: "/api/v1/feeds/{feed}/notes",
+    path: `${API_PREFIX}/feeds/{feed}/notes`,
     operationId: "listNotes",
     summary: "List a feed's notes",
     description: "Newest first. A feed with no notes (or that doesn't exist yet) is an empty list.",
@@ -117,7 +117,7 @@ const OPS: AnyOp[] = [
 
   op({
     method: "GET",
-    path: "/api/v1/feeds/{feed}/notes/{id}",
+    path: `${API_PREFIX}/feeds/{feed}/notes/{id}`,
     operationId: "getNote",
     summary: "Get one note",
     tags: ["Feeds"],
@@ -139,7 +139,7 @@ const OPS: AnyOp[] = [
 
   op({
     method: "GET",
-    path: "/api/v1/read/{readId}/notes",
+    path: `${API_PREFIX}/read/{readId}/notes`,
     operationId: "listReadNotes",
     summary: "List a feed's notes by its read id",
     description:
@@ -162,7 +162,7 @@ const OPS: AnyOp[] = [
 
   op({
     method: "GET",
-    path: "/api/v1/read/{readId}/notes/{id}",
+    path: `${API_PREFIX}/read/{readId}/notes/{id}`,
     operationId: "getReadNote",
     summary: "Get one note by its feed's read id",
     description: "Public, like the read link.",
@@ -181,7 +181,7 @@ const OPS: AnyOp[] = [
 
   op({
     method: "GET",
-    path: "/api/v1/openapi.json",
+    path: `${API_PREFIX}/openapi.json`,
     operationId: "getOpenApi",
     summary: "This API's OpenAPI document",
     description: "Generated from the server's route table, with `servers` set to this instance's URL.",
@@ -191,7 +191,7 @@ const OPS: AnyOp[] = [
   }).handle(async ({ req }) => ({ status: 200, body: openApiDocument(publicUrl(req.headers)) })),
 ];
 
-export const dispatch = createDispatcher(OPS);
+export const dispatch = createDispatcher(OPS, API_PREFIX);
 
 // --- The OpenAPI document. ---
 

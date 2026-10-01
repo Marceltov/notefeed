@@ -55,12 +55,13 @@ export function op<const R extends Record<number, ResponseSpec>, Q extends z.Zod
 }
 
 // The entries for a path, whatever the method, with its path parameters. `segments` are the decoded
-// path after /api/v1 (Next's catch-all param), so "a%2Fb" is one segment "a/b".
-export function matchOps(ops: AnyOp[], segments: string[]): { ops: AnyOp[]; params: Record<string, string> } | null {
+// path after `prefix` (Next's catch-all param), so "a%2Fb" is one segment "a/b".
+export function matchOps(ops: AnyOp[], prefix: string, segments: string[]): { ops: AnyOp[]; params: Record<string, string> } | null {
   const found: AnyOp[] = [];
   let params: Record<string, string> = {};
   for (const o of ops) {
-    const tpl = o.path.split("/").slice(3); // drop "", "api", "v1"
+    if (!o.path.startsWith(prefix + "/")) continue;
+    const tpl = o.path.slice(prefix.length + 1).split("/");
     if (tpl.length !== segments.length) continue;
     const p: Record<string, string> = {};
     if (tpl.every((t, i) => (t.startsWith("{") ? ((p[t.slice(1, -1)] = segments[i]), true) : t === segments[i]))) {
@@ -96,9 +97,10 @@ function send(entry: AnyOp, reply: AnyReply): Response {
   return Response.json(reply.body, { status: reply.status, headers: reply.headers });
 }
 
-export function createDispatcher(ops: AnyOp[]): (req: Request, segments: string[]) => Promise<Response> {
+// `prefix` is where the catch-all route is mounted (e.g. "/api/v1"); entry paths include it.
+export function createDispatcher(ops: AnyOp[], prefix: string): (req: Request, segments: string[]) => Promise<Response> {
   return async (req, segments) => {
-    const m = matchOps(ops, segments);
+    const m = matchOps(ops, prefix, segments);
     if (!m) return Response.json(errorReply(new NotFoundError("no such endpoint")).body, { status: 404 });
     // Next answers HEAD by calling the GET export with the request as is; it drops the body itself.
     const method = req.method === "HEAD" ? "GET" : req.method;
