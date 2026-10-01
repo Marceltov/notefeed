@@ -4,6 +4,7 @@ from enum import StrEnum
 class ErrorCode(StrEnum):
     AUTH = "auth"
     EMPTY_NOTE = "empty_note"
+    FEED_EXISTS = "feed_exists"
     FEED_LIMIT = "feed_limit"
     INVALID_BODY = "invalid_body"
     INVALID_FEED = "invalid_feed"

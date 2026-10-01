@@ -6,16 +6,13 @@ import httpx
 
 from ... import errors
 from ...client import AuthenticatedClient, Client
-from ...models.created import Created
 from ...models.error import Error
-from ...models.post_json import PostJson
 from ...types import UNSET, Response, Unset
 
 
 def _get_kwargs(
     feed: str,
     *,
-    body: PostJson,
     x_feed_password: str | Unset = UNSET,
 ) -> dict[str, Any]:
     headers: dict[str, Any] = {}
@@ -23,15 +20,11 @@ def _get_kwargs(
         headers["X-Feed-Password"] = x_feed_password
 
     _kwargs: dict[str, Any] = {
-        "method": "post",
-        "url": "/api/v1/feeds/{feed}/notes".format(
+        "method": "delete",
+        "url": "/api/v1/feeds/{feed}/password".format(
             feed=quote(str(feed), safe=""),
         ),
     }
-
-    _kwargs["json"] = body.to_dict()
-
-    headers["Content-Type"] = "application/json"
 
     _kwargs["headers"] = headers
     return _kwargs
@@ -39,15 +32,10 @@ def _get_kwargs(
 
 def _parse_response(
     *, client: AuthenticatedClient | Client, response: httpx.Response
-) -> Any | Created | Error | None:
-    if response.status_code == 201:
-        response_201 = Created.from_dict(response.json())
-
-        return response_201
-
-    if response.status_code == 303:
-        response_303 = cast(Any, None)
-        return response_303
+) -> Any | Error | None:
+    if response.status_code == 204:
+        response_204 = cast(Any, None)
+        return response_204
 
     if response.status_code == 400:
         response_400 = Error.from_dict(response.json())
@@ -64,25 +52,10 @@ def _parse_response(
 
         return response_409
 
-    if response.status_code == 413:
-        response_413 = Error.from_dict(response.json())
-
-        return response_413
-
-    if response.status_code == 415:
-        response_415 = Error.from_dict(response.json())
-
-        return response_415
-
     if response.status_code == 429:
         response_429 = Error.from_dict(response.json())
 
         return response_429
-
-    if response.status_code == 507:
-        response_507 = Error.from_dict(response.json())
-
-        return response_507
 
     if client.raise_on_unexpected_status:
         raise errors.UnexpectedStatus(response.status_code, response.content)
@@ -92,7 +65,7 @@ def _parse_response(
 
 def _build_response(
     *, client: AuthenticatedClient | Client, response: httpx.Response
-) -> Response[Any | Created | Error]:
+) -> Response[Any | Error]:
     return Response(
         status_code=HTTPStatus(response.status_code),
         content=response.content,
@@ -105,33 +78,27 @@ def sync_detailed(
     feed: str,
     *,
     client: AuthenticatedClient,
-    body: PostJson,
     x_feed_password: str | Unset = UNSET,
-) -> Response[Any | Created | Error]:
-    """Post a note
+) -> Response[Any | Error]:
+    """Remove a feed's password
 
-     Creates the feed with its first note, optionally protected by its own password (`X-Feed-Password`
-    header or a `password` field in the JSON or form body). Posting to a protected feed needs that
-    password. Also served at `POST /{feed}`, the short form the client packages and curl one-liners use.
-    The body is at most 102400 bytes and must be UTF-8. `application/x-www-form-urlencoded` (what `curl
-    -d` sends) is read as raw markdown, not as form fields.
+     Needs the current password in `X-Feed-Password`. The feed stays, open to anyone who knows its name.
+    An open feed answers 409.
 
     Args:
         feed (str):
         x_feed_password (str | Unset):
-        body (PostJson):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Response[Any | Created | Error]
+        Response[Any | Error]
     """
 
     kwargs = _get_kwargs(
         feed=feed,
-        body=body,
         x_feed_password=x_feed_password,
     )
 
@@ -146,34 +113,28 @@ def sync(
     feed: str,
     *,
     client: AuthenticatedClient,
-    body: PostJson,
     x_feed_password: str | Unset = UNSET,
-) -> Any | Created | Error | None:
-    """Post a note
+) -> Any | Error | None:
+    """Remove a feed's password
 
-     Creates the feed with its first note, optionally protected by its own password (`X-Feed-Password`
-    header or a `password` field in the JSON or form body). Posting to a protected feed needs that
-    password. Also served at `POST /{feed}`, the short form the client packages and curl one-liners use.
-    The body is at most 102400 bytes and must be UTF-8. `application/x-www-form-urlencoded` (what `curl
-    -d` sends) is read as raw markdown, not as form fields.
+     Needs the current password in `X-Feed-Password`. The feed stays, open to anyone who knows its name.
+    An open feed answers 409.
 
     Args:
         feed (str):
         x_feed_password (str | Unset):
-        body (PostJson):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Any | Created | Error
+        Any | Error
     """
 
     return sync_detailed(
         feed=feed,
         client=client,
-        body=body,
         x_feed_password=x_feed_password,
     ).parsed
 
@@ -182,33 +143,27 @@ async def asyncio_detailed(
     feed: str,
     *,
     client: AuthenticatedClient,
-    body: PostJson,
     x_feed_password: str | Unset = UNSET,
-) -> Response[Any | Created | Error]:
-    """Post a note
+) -> Response[Any | Error]:
+    """Remove a feed's password
 
-     Creates the feed with its first note, optionally protected by its own password (`X-Feed-Password`
-    header or a `password` field in the JSON or form body). Posting to a protected feed needs that
-    password. Also served at `POST /{feed}`, the short form the client packages and curl one-liners use.
-    The body is at most 102400 bytes and must be UTF-8. `application/x-www-form-urlencoded` (what `curl
-    -d` sends) is read as raw markdown, not as form fields.
+     Needs the current password in `X-Feed-Password`. The feed stays, open to anyone who knows its name.
+    An open feed answers 409.
 
     Args:
         feed (str):
         x_feed_password (str | Unset):
-        body (PostJson):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Response[Any | Created | Error]
+        Response[Any | Error]
     """
 
     kwargs = _get_kwargs(
         feed=feed,
-        body=body,
         x_feed_password=x_feed_password,
     )
 
@@ -221,35 +176,29 @@ async def asyncio(
     feed: str,
     *,
     client: AuthenticatedClient,
-    body: PostJson,
     x_feed_password: str | Unset = UNSET,
-) -> Any | Created | Error | None:
-    """Post a note
+) -> Any | Error | None:
+    """Remove a feed's password
 
-     Creates the feed with its first note, optionally protected by its own password (`X-Feed-Password`
-    header or a `password` field in the JSON or form body). Posting to a protected feed needs that
-    password. Also served at `POST /{feed}`, the short form the client packages and curl one-liners use.
-    The body is at most 102400 bytes and must be UTF-8. `application/x-www-form-urlencoded` (what `curl
-    -d` sends) is read as raw markdown, not as form fields.
+     Needs the current password in `X-Feed-Password`. The feed stays, open to anyone who knows its name.
+    An open feed answers 409.
 
     Args:
         feed (str):
         x_feed_password (str | Unset):
-        body (PostJson):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Any | Created | Error
+        Any | Error
     """
 
     return (
         await asyncio_detailed(
             feed=feed,
             client=client,
-            body=body,
             x_feed_password=x_feed_password,
         )
     ).parsed

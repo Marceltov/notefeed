@@ -5,6 +5,8 @@ from typing import Any, Self, TypeVar
 
 from attrs import define as _attrs_define
 
+from ..types import UNSET, Unset
+
 T = TypeVar("T", bound="PostJson")
 
 
@@ -13,12 +15,17 @@ class PostJson:
     """
     Attributes:
         markdown (str):
+        password (str | Unset): Protects the feed, 1 to 256 characters. Only honored on the post that creates the feed;
+            an existing open feed answers 409.
     """
 
     markdown: str
+    password: str | Unset = UNSET
 
     def to_dict(self) -> dict[str, Any]:
         markdown = self.markdown
+
+        password = self.password
 
         field_dict: dict[str, Any] = {}
 
@@ -27,6 +34,8 @@ class PostJson:
                 "markdown": markdown,
             }
         )
+        if password is not UNSET:
+            field_dict["password"] = password
 
         return field_dict
 
@@ -35,8 +44,11 @@ class PostJson:
         d = dict(src_dict)
         markdown = d.pop("markdown")
 
+        password = d.pop("password", UNSET)
+
         post_json = cls(
             markdown=markdown,
+            password=password,
         )
 
         return post_json
