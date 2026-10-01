@@ -84,7 +84,14 @@ function send(entry: AnyOp, reply: AnyReply): Response {
     return Response.json({ error: "internal error" }, { status: 500 });
   }
   // Types can't see formats and patterns (or a thrown error's body); check them wherever it's cheap to fail.
-  if (process.env.NODE_ENV !== "production") declared.schema?.parse(reply.body);
+  if (process.env.NODE_ENV !== "production" && declared.schema) {
+    const checked = declared.schema.safeParse(reply.body);
+    if (!checked.success) {
+      throw new Error(`${entry.operationId} answered ${reply.status} with a body that doesn't match its schema: ${z.prettifyError(checked.error)}`, {
+        cause: checked.error,
+      });
+    }
+  }
   if (reply.body === undefined) return new Response(null, { status: reply.status, headers: reply.headers });
   return Response.json(reply.body, { status: reply.status, headers: reply.headers });
 }

@@ -131,7 +131,7 @@ describe("replies", () => {
     const bad = { ...getThing, handle: async () => ({ status: 200 as const, body: { id: 1 } as never }) };
     const d = createDispatcher([bad]);
     const req = () => new Request("http://x/api/v1/things/a");
-    await expect(d(req(), ["things", "a"])).rejects.toThrow();
+    await expect(d(req(), ["things", "a"])).rejects.toThrow("getThing answered 200 with a body that doesn't match its schema");
     vi.stubEnv("NODE_ENV", "production");
     expect(await (await d(req(), ["things", "a"])).json()).toEqual({ id: 1 });
   });
