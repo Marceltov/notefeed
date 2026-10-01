@@ -1,5 +1,6 @@
-// POST /<feed> (proxy.ts rewrites it to /api/feeds/<feed>/notes): the API for scripts and the clients.
-import { checkBearer } from "../auth";
+// POST /<feed> (proxy.ts rewrites it to /api/feeds/<feed>/notes): the only way to post a note, for
+// scripts, the client packages and the web UI's compose box alike.
+import { SESSION_COOKIE, checkBearer, locked, sessionOk } from "../auth";
 import {
   AuthError,
   EmptyNoteError,
@@ -7,6 +8,7 @@ import {
   InvalidFeedError,
   LimitReachedError,
   NoteTooLargeError,
+  NotefeedError,
   RateLimitedError,
   ReservedFeedError,
   UnsupportedTypeError,
@@ -16,6 +18,7 @@ import { clientIp } from "../limits";
 import { MAX_BYTES } from "../notes";
 import { postNote } from "../posting";
 import { feedPath, publicUrl, rssPath } from "../urls";
+import { cookie, mediaType, parseForm, readCapped, sameOrigin, seeOther, wantsHtml } from "./request";
 
 // curl --data-binary sends x-www-form-urlencoded by default; treat it (and no type) as raw markdown.
 const TEXT_TYPES = ["", "text/markdown", "text/plain", "application/x-www-form-urlencoded"];
@@ -34,42 +37,51 @@ const STATUS: [new (...args: never[]) => Error, number][] = [
 
 function errorResponse(e: unknown): Response {
   const status = STATUS.find(([cls]) => e instanceof cls)?.[1];
-  if (!status) {
+  if (!status || !(e instanceof NotefeedError)) {
     console.error("posting a note failed", e);
     return Response.json({ error: "write failed" }, { status: 500 });
   }
   const headers = e instanceof RateLimitedError ? { "Retry-After": String(e.retryAfter) } : undefined;
-  return Response.json({ error: (e as Error).message }, { status, headers });
+  return Response.json({ error: e.message, code: e.code }, { status, headers });
 }
 
-// Reads at most MAX_BYTES; null (and the stream cancelled) as soon as the body is larger.
-// Content-Length can be absent (chunked) or wrong, so it is never trusted for the cap.
-async function readCapped(req: Request): Promise<Uint8Array | null> {
-  const out = new Uint8Array(MAX_BYTES);
-  let size = 0;
-  if (!req.body) return out.subarray(0, 0);
-  const reader = req.body.getReader();
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) return out.subarray(0, size);
-    if (size + value.byteLength > MAX_BYTES) {
-      await reader.cancel();
-      return null;
-    }
-    out.set(value, size);
-    size += value.byteLength;
-  }
+// A plain form post from the web UI without JavaScript: back to the feed page, which shows the outcome.
+function formRedirect(feed: string, e: unknown): Response {
+  if (e instanceof AuthError) return seeOther(`/login?next=${encodeURIComponent(feedPath(feed))}`);
+  if (!(e instanceof NotefeedError)) return errorResponse(e);
+  const retry = e instanceof RateLimitedError ? `&retry=${e.retryAfter}` : "";
+  return seeOther(`${feedPath(feed)}?error=${e.code}${retry}`);
 }
 
-// The note's markdown from a raw text or JSON {markdown} body.
+// Scripts send the bearer password. The compose box sends the session cookie instead, accepted only
+// from this instance's own pages: a cross-site form would carry no cookie (SameSite=Lax), and the
+// Origin check covers browsers that would.
+function authorize(h: Headers, ip: string): void {
+  if (!locked()) return;
+  if (!h.has("authorization") && sameOrigin(h) && sessionOk(cookie(h, SESSION_COOKIE))) return;
+  checkBearer(h.get("authorization"), ip);
+}
+
+// The note's markdown from a raw text body, JSON {markdown}, or a form's `markdown` field.
+// The 100 KB cap counts the whole body, so a form's own framing takes a few bytes of it.
 async function readMarkdown(req: Request): Promise<string> {
-  const type = (req.headers.get("content-type") ?? "").split(";")[0].trim().toLowerCase();
+  const type = mediaType(req.headers);
   const isJson = type === "application/json";
-  if (!isJson && !TEXT_TYPES.includes(type)) throw new UnsupportedTypeError();
+  const isForm = type === "multipart/form-data";
+  if (!isJson && !isForm && !TEXT_TYPES.includes(type)) throw new UnsupportedTypeError();
 
-  if (Number(req.headers.get("content-length")) > MAX_BYTES) throw new NoteTooLargeError();
-  const bytes = await readCapped(req);
+  const bytes = await readCapped(req, MAX_BYTES);
   if (!bytes) throw new NoteTooLargeError();
+
+  if (isForm) {
+    const field = await parseForm(bytes, req.headers).then(
+      (f) => f.get("markdown"),
+      () => null,
+    );
+    if (typeof field !== "string") throw new InvalidBodyError('form needs a "markdown" field');
+    return field;
+  }
+
   let text: string;
   try {
     text = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(bytes);
@@ -89,12 +101,14 @@ async function readMarkdown(req: Request): Promise<string> {
 }
 
 export async function postNoteRoute(req: Request, feed: string): Promise<Response> {
+  const h = req.headers;
   try {
-    const ip = clientIp(req.headers);
+    const ip = clientIp(h);
     // Before anything touches the disk: a locked instance must not create the feed directory.
-    checkBearer(req.headers.get("authorization"), ip);
+    authorize(h, ip);
     const note = await postNote(feed, ip, () => readMarkdown(req));
-    const base = publicUrl(req.headers);
+    if (wantsHtml(h)) return seeOther(`${feedPath(feed)}?posted=${note.id}`);
+    const base = publicUrl(h);
     return Response.json(
       {
         id: note.id,
@@ -105,6 +119,6 @@ export async function postNoteRoute(req: Request, feed: string): Promise<Respons
       { status: 201 },
     );
   } catch (e) {
-    return errorResponse(e);
+    return wantsHtml(h) ? formRedirect(feed, e) : errorResponse(e);
   }
 }

@@ -5,34 +5,33 @@ import { SESSION_COOKIE, locked, publicUrl, sessionOk } from "@/backend";
 // [feed] param is decoded by Next and the handler rejects anything outside FEED_RE ("a%2Fb" → "a/b" → 400).
 const ONE_SEGMENT = /^\/([^/]+)\/?$/;
 
+// Pages are GET-only; every POST is a backend route handler. /<feed> and /login are also pages, and
+// Next can't put a route handler next to a page, so their POSTs are rewritten. Method and path decide,
+// never headers: the same rule a reverse proxy would apply if the backend moved out.
+function postTarget(pathname: string): string | null {
+  const seg = ONE_SEGMENT.exec(pathname)?.[1];
+  if (seg === undefined || seg === "logout") return null; // /logout is a route handler itself
+  return seg === "login" ? "/api/login" : `/api/feeds/${seg}/notes`; // reserved names get the handler's 400
+}
+
 export function proxy(req: NextRequest) {
   const { pathname, search } = req.nextUrl;
-  const h = req.headers;
 
-  // A POST from a script, which must never get a success-looking answer unless its note was stored.
-  // Server actions also POST to page URLs: with JS they carry next-action; without JS the browser
-  // submits multipart/form-data and asks for text/html. `curl -F` sends multipart with Accept */*,
-  // so it goes to the handler and gets 415.
-  const scriptPost =
-    req.method === "POST" &&
-    !h.has("next-action") &&
-    !(h.get("content-type")?.toLowerCase().startsWith("multipart/form-data") && h.get("accept")?.includes("text/html"));
-
-  if (scriptPost && pathname === "/") return Response.json({ error: "no feed in URL" }, { status: 404 });
-  // POST /<feed> → the notes route, reserved names too (the handler answers 400), except /logout,
-  // a real POST route (the plain <form method="post" action="/logout">). The handler checks the bearer password itself.
-  const m = ONE_SEGMENT.exec(pathname);
-  if (scriptPost && m && m[1] !== "logout") return NextResponse.rewrite(new URL(`/api/feeds/${m[1]}/notes`, req.url));
+  if (req.method === "POST") {
+    if (pathname === "/") return Response.json({ error: "no feed in URL" }, { status: 404 });
+    const target = postTarget(pathname);
+    if (target) return NextResponse.rewrite(new URL(target, req.url));
+  }
 
   // next.config.ts sets skipTrailingSlashRedirect so POST /<feed>/ reaches the rewrite above;
   // everything else keeps Next's usual 308 to the path without the slash.
   if (pathname !== "/" && pathname.endsWith("/")) {
-    return NextResponse.redirect(new URL(pathname.slice(0, -1) + search, publicUrl(h)), 308);
+    return NextResponse.redirect(new URL(pathname.slice(0, -1) + search, publicUrl(req.headers)), 308);
   }
 
-  // /api/feeds/** is exempt from the lock because the handler checks the bearer password itself;
+  // /api/** is exempt from the lock because each handler checks credentials itself;
   // redirecting it to /login would turn a script's 401 into a success-looking 307.
-  if (!locked() || pathname === "/login" || /^\/(r|_next|api\/feeds)\//.test(pathname)) return NextResponse.next();
+  if (!locked() || pathname === "/login" || /^\/(r|_next|api)\//.test(pathname)) return NextResponse.next();
   if (sessionOk(req.cookies.get(SESSION_COOKIE)?.value)) return NextResponse.next();
   // Must be absolute (Next rejects a relative Location here); built from the public base,
   // not req.url, so it is right behind a reverse proxy.

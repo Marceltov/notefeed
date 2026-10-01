@@ -82,3 +82,21 @@ test("the read link shows the notes but not the feed name, and serves RSS", asyn
   await expect(page.getByRole("link", { name: "Back to all notes" })).toBeVisible();
   expect(await page.content()).not.toContain(name);
 });
+
+test.describe("without JavaScript", () => {
+  test.use({ javaScriptEnabled: false });
+
+  test("the compose box is a plain form: posting and errors work", async ({ page }) => {
+    const name = feedName();
+    await page.goto(`/${name}`);
+    await page.getByLabel("Note in markdown").fill("# Posted without JS");
+    await page.getByRole("button", { name: "Post note" }).click();
+    await expect(page).toHaveURL(new RegExp(`/${name}\\?posted=\\d{8}T\\d{6}Z-posted-without-js$`));
+    await expect(page.getByRole("listitem").first()).toContainText("Posted without JS");
+
+    await page.getByLabel("Note in markdown").fill("   ");
+    await page.getByRole("button", { name: "Post note" }).click();
+    await expect(page).toHaveURL(`/${name}?error=empty_note`);
+    await expect(page.locator("#compose-error")).toHaveText("The note is empty.");
+  });
+});

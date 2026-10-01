@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { afterEach, beforeEach, expect, test } from "vitest";
-import { SESSION_COOKIE, login } from "@/backend";
+import { SESSION_COOKIE } from "@/backend";
+import { login } from "@/backend/auth";
 import { config, proxy } from "./proxy";
 
 beforeEach(() => {
@@ -36,25 +37,22 @@ test("other trailing slashes still get Next's usual 308 to the path without it",
   expect(proxy(req("/backups/x/", { method: "POST" })).status).toBe(308);
 });
 
-test("server actions (next-action header) are never rewritten", () => {
-  const res = proxy(req("/backups", { method: "POST", headers: { "next-action": "abc" } }));
-  expect(rewrite(res)).toBeNull();
-  expect(isNext(res)).toBe(true);
+// Method and path decide, never headers: a browser form, fetch(), curl -F and a client package all
+// reach the same handler.
+test.each<Record<string, string>>([
+  {},
+  { "next-action": "abc" },
+  { "content-type": "multipart/form-data; boundary=x", accept: "text/html,application/xhtml+xml,*/*;q=0.8" },
+  { "content-type": "multipart/form-data; boundary=x", accept: "*/*" },
+  { "content-type": "application/json", accept: "application/json" },
+])("POST /<feed> with headers %j is rewritten to the notes route", (headers) => {
+  expect(rewrite(proxy(req("/backups", { method: "POST", headers })))).toBe("http://localhost:3000/api/feeds/backups/notes");
 });
 
-test("no-JS server action forms (multipart, Accept: text/html) are never rewritten", () => {
-  const res = proxy(
-    req("/backups", {
-      method: "POST",
-      headers: { "content-type": "multipart/form-data; boundary=x", accept: "text/html,application/xhtml+xml,*/*;q=0.8" },
-    }),
-  );
-  expect(rewrite(res)).toBeNull();
-});
-
-test("multipart from a script (curl -F, Accept: */*) goes to the handler, which answers 415", () => {
-  const res = proxy(req("/backups", { method: "POST", headers: { "content-type": "multipart/form-data; boundary=x", accept: "*/*" } }));
-  expect(rewrite(res)).toBe("http://localhost:3000/api/feeds/backups/notes");
+test("POST /login goes to the login route, whatever the headers", () => {
+  for (const headers of [{}, { "next-action": "abc" }, { accept: "text/html" }] as Record<string, string>[])
+    expect(rewrite(proxy(req("/login", { method: "POST", headers })))).toBe("http://localhost:3000/api/login");
+  expect(rewrite(proxy(req("/login/", { method: "POST" })))).toBe("http://localhost:3000/api/login");
 });
 
 test("POST / (e.g. an empty feed variable) is a JSON 404, not the start page", async () => {
@@ -103,12 +101,12 @@ test("locked: a valid session cookie passes", () => {
   expect(isNext(proxy(req("/backups", { headers: { cookie: `${SESSION_COOKIE}=${login("pw", "test")}` } })))).toBe(true);
 });
 
-test("locked: a server action POST without a session is redirected", () => {
+test("locked: POST /login is rewritten without a session (that's how you get one)", () => {
   process.env.NOTEFEED_PASSWORD = "pw";
-  expect(proxy(req("/backups", { method: "POST", headers: { "next-action": "abc" } })).status).toBe(307);
+  expect(rewrite(proxy(req("/login", { method: "POST" })))).toBe("http://localhost:3000/api/login");
 });
 
-test.each(["/r/x/feed.xml", "/login", "/_next/static/x.js", "/api/feeds/backups/notes"])("locked: %s passes", (p) => {
+test.each(["/r/x/feed.xml", "/login", "/_next/static/x.js", "/api/feeds/backups/notes", "/api/login"])("locked: %s passes", (p) => {
   process.env.NOTEFEED_PASSWORD = "pw";
   expect(isNext(proxy(req(p)))).toBe(true);
 });
@@ -150,10 +148,6 @@ test("POST /logout (a real POST route) is not rewritten", () => {
   expect(isNext(res)).toBe(true);
 });
 
-test.each(["mcp", "api", "health", "r", "login"])("POST /%s (reserved) goes to the handler, which answers 400", (name) => {
+test.each(["mcp", "api", "health", "r"])("POST /%s (reserved) goes to the handler, which answers 400", (name) => {
   expect(rewrite(proxy(req(`/${name}`, { method: "POST" })))).toBe(`http://localhost:3000/api/feeds/${name}/notes`);
-});
-
-test("the login server action (next-action) on /login is not rewritten", () => {
-  expect(rewrite(proxy(req("/login", { method: "POST", headers: { "next-action": "abc" } })))).toBeNull();
 });
