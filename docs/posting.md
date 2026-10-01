@@ -6,6 +6,8 @@ Send the note's markdown to `POST /<feed>`:
 curl --data-binary @note.md https://notes.example.com/homelab-7f3k2q9x4m8wz
 ```
 
+`POST /<feed>` is the short form of `POST /api/v1/feeds/<feed>/notes`; both behave the same. To read notes back as JSON, see the [REST API](api.md).
+
 The feed is created by its first note; there's nothing to set up first. notefeed stores the body exactly as sent, byte for byte, and answers `201 Created`:
 
 ```json
