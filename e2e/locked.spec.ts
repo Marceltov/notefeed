@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { mcp } from "./mcp";
 
 const feed = () => `e2e-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
@@ -47,35 +48,23 @@ test("the read-only view and its RSS need no login", async ({ page, browser, req
   await anonymous.close();
 });
 
-const V = "2026-07-28";
-const mcp = (headers: Record<string, string> = {}) => ({
-  headers: {
-    "content-type": "application/json",
-    accept: "application/json, text/event-stream",
-    "mcp-protocol-version": V,
-    "mcp-method": "tools/list",
-    ...headers,
-  },
-  data: {
-    jsonrpc: "2.0",
-    id: 1,
-    method: "tools/list",
-    params: {
-      _meta: {
-        "io.modelcontextprotocol/protocolVersion": V,
-        "io.modelcontextprotocol/clientInfo": { name: "e2e", version: "0" },
-        "io.modelcontextprotocol/clientCapabilities": {},
-      },
-    },
-  },
-});
-
 test("MCP: /mcp wants the password as a bearer and points at the OAuth metadata", async ({ request }) => {
-  const anon = await request.post("/mcp", mcp());
+  const anon = await request.post("/mcp", mcp("tools/list"));
   expect(anon.status()).toBe(401);
   expect(anon.headers()["www-authenticate"]).toBe('Bearer resource_metadata="http://localhost:3101/.well-known/oauth-protected-resource/mcp"');
-  expect((await request.post("/mcp", mcp({ authorization: "Bearer wrong" }))).status()).toBe(401);
-  expect((await request.post("/mcp", mcp({ authorization: "Bearer e2e" }))).status()).toBe(200);
+  expect((await request.post("/mcp", mcp("tools/list", {}, { authorization: "Bearer wrong" }))).status()).toBe(401);
+  expect((await request.post("/mcp", mcp("tools/list", {}, { authorization: "Bearer e2e" }))).status()).toBe(200);
+
+  const resource = await request.get("/.well-known/oauth-protected-resource/mcp");
+  expect(resource.status()).toBe(200);
+  expect((await resource.json()).resource).toBe("http://localhost:3101/mcp");
+  const server = await request.get("/.well-known/oauth-authorization-server");
+  expect(server.status()).toBe(200);
+  expect((await server.json()).issuer).toBe("http://localhost:3101");
+  expect(server.headers()["access-control-allow-origin"]).toBe("*");
+  const preflight = await request.fetch("/oauth/register", { method: "OPTIONS" });
+  expect(preflight.status()).toBe(204);
+  expect(preflight.headers()["access-control-allow-methods"]).toBe("POST");
 });
 
 test("MCP: the OAuth login page, then the redirect with a code", async ({ page, request }) => {

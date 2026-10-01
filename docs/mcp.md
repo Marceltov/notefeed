@@ -31,6 +31,10 @@ claude mcp add notefeed --transport http https://notes.example.com/mcp --header 
 
 Add a custom connector and give it the URL `https://notes.example.com/mcp`. On an open instance that's all. On an instance with a password, the connector opens notefeed's login page: check that it names the client and the host it returns to, enter the instance password and press **Allow**. See [OAuth](configuration.md#oauth) for how that works and how long it lasts.
 
+OAuth needs the instance's public `https://` address: set `PUBLIC_URL=https://notes.example.com`, or `NOTEFEED_TRUST_PROXY=1` behind a reverse proxy that sets `X-Forwarded-Proto` and `X-Forwarded-Host`.
+
+A client may register only `https://` redirect URIs, or plain `http://` on `localhost` or `127.0.0.1`, and must return to exactly the one it registered, port included. Clients whose callback has its own scheme, such as `cursor://`, can't log in through OAuth: send the password as a `Bearer` header instead, as for [Claude Code](#claude-code).
+
 ## Telling the assistant which feed
 
 The assistant needs a feed name. Put it in a project or custom instruction, for example "Post notes to the notefeed feed `homelab-7f3k2q9x4m8wz`."
