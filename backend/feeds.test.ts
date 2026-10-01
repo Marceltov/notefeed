@@ -217,3 +217,56 @@ describe("per-feed read ids", () => {
     expect(await listNotes("locked")).toEqual([]);
   });
 });
+
+describe("deleteFeed", () => {
+  const readid = (f: string) => readFile(join(dir, f, ".readid"), "utf8");
+  test("drops the feed, its directory and its read id; a re-created feed is a new one", async () => {
+    const { deleteFeed } = await import("./feeds");
+    await createNote("gone", "x");
+    const old = (await readIdOf("gone"))!;
+    expect(await deleteFeed("gone")).toBe(true);
+    expect(await hasFeed("gone")).toBe(false);
+    expect(await feedForReadId(old)).toBeNull();
+    expect(await deleteFeed("gone")).toBe(false);
+    await createNote("gone", "y");
+    expect(await readIdOf("gone")).not.toBe(old);
+    expect((await readid("gone")).trim()).toBe(await readIdOf("gone"));
+  });
+
+  test("a note write in flight while the feed is deleted makes a new, complete feed", async () => {
+    const { deleteFeed } = await import("./feeds");
+    await createNote("busy", "x");
+    const old = (await readIdOf("busy"))!;
+    for (let i = 0; i < 20; i++) {
+      const [, note] = await Promise.all([deleteFeed("busy"), createNote("busy", `# n${i}`)]);
+      expect(note.id).toBeTruthy();
+      const files = await readdir(join(dir, "busy"));
+      expect(files).toContain(".readid"); // never a half-feed
+      expect((await readid("busy")).trim()).toBe(await readIdOf("busy"));
+      expect(await feedForReadId(old)).toBeNull();
+      expect((await readdir(dir)).filter((n) => n.startsWith(".deleted-"))).toEqual([]);
+    }
+  });
+
+  test("a creation while the directory is still being renamed away does not take the old id back", async () => {
+    const { deleteFeed } = await import("./feeds");
+    await createNote("window", "x");
+    const old = (await readIdOf("window"))!;
+    const deleted = deleteFeed("window");
+    for (let i = 0; i < 20; i++) await null; // the index entry is gone, the rename is still in the thread pool
+    const fresh = await ensureFeed("window");
+    await deleted;
+    expect(fresh).not.toBe(old);
+    expect(await feedForReadId(old)).toBeNull();
+    await createNote("window", "y");
+    expect((await readid("window")).trim()).toBe(fresh);
+  });
+
+  test("a protected creation in flight while the feed is deleted wins cleanly", async () => {
+    const { deleteFeed } = await import("./feeds");
+    await createProtected("prot", "correct horse battery");
+    const [, created] = await Promise.all([deleteFeed("prot"), createProtected("prot", "another password").then(() => true, () => false)]);
+    expect(created).toBe(true);
+    expect(await hasFeed("prot")).toBe(true);
+  });
+});

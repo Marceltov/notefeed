@@ -11,7 +11,7 @@ const notes: Note[] = [
   },
   { id: "20260928T090000Z-plain", title: "Plain", markdown: "Plain", createdAt: new Date("2026-09-28T09:00:00Z") },
 ];
-const xml = renderFeed(notes, { title: "my feed", baseUrl: "https://x.test", readId: "AbCdEfGhIjKlMnOpQrSt_-" });
+const xml = renderFeed(notes, { title: "my feed", description: "about it", baseUrl: "https://x.test", readId: "AbCdEfGhIjKlMnOpQrSt_-" });
 
 test("is an RSS 2.0 document", () => {
   expect(xml.startsWith('<?xml version="1.0" encoding="UTF-8"?>')).toBe(true);
@@ -43,7 +43,7 @@ test("pubDate is RFC 822", () => {
 test("strips XML-forbidden control characters", () => {
   const out = renderFeed(
     [{ id: "20260929T140512Z-red", title: "\x1b[31mred", markdown: "\x1b[31mred\x1b[0m\ttab\r\nok", createdAt: new Date() }],
-    { title: "t", baseUrl: "https://x.test", readId: "AbCdEfGhIjKlMnOpQrSt_-" },
+    { title: "t", description: "t", baseUrl: "https://x.test", readId: "AbCdEfGhIjKlMnOpQrSt_-" },
   );
   expect(out).not.toMatch(/[\x00-\x08\x0B\x0C\x0E-\x1F￾￿]/);
   expect(out).toContain("[31mred[0m\ttab\r\nok");

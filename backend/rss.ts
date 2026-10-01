@@ -13,7 +13,7 @@ const escapeXml = (s: string) =>
 const cdata = (s: string) => `<![CDATA[${xmlSafe(s).replaceAll("]]>", "]]]]><![CDATA[>")}]]>`;
 
 // Links go through the read id only, so the feed never reveals the (writable) feed name.
-export function renderFeed(notes: Note[], opts: { title: string; baseUrl: string; readId: string }): string {
+export function renderFeed(notes: Note[], opts: { title: string; description: string; baseUrl: string; readId: string }): string {
   const base = opts.baseUrl + readPath(opts.readId);
   const items = notes.map((n) => {
     const url = `${base}/${n.id}`;
@@ -30,7 +30,7 @@ export function renderFeed(notes: Note[], opts: { title: string; baseUrl: string
 <channel>
 <title>${escapeXml(opts.title)}</title>
 <link>${base}</link>
-<description>${escapeXml(opts.title)}</description>
+<description>${escapeXml(opts.description)}</description>
 ${items.join("\n")}
 </channel>
 </rss>

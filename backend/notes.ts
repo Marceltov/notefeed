@@ -1,5 +1,6 @@
 // Notes: validation, ids and reading them back. Storage itself is in data/notes.ts.
 import { extractTitle, idStamp, slugify } from "../shared/notes";
+import { isErrno } from "./data/fs";
 import { deleteNoteFile, replaceNote, writeNote, listNoteFiles, readNote } from "./data/notes";
 import { EmptyNoteError, NoteTooLargeError } from "./errors";
 import { assertFeed, checkFeed, ensureFeed } from "./feeds";
@@ -33,9 +34,14 @@ export function checkMarkdown(markdown: string): void {
 export async function createNote(feed: string, markdown: string, now = new Date()): Promise<Note> {
   assertFeed(feed);
   checkMarkdown(markdown);
-  await ensureFeed(feed);
-  const id = await writeNote(feed, `${idStamp(now)}-${slugify(extractTitle(markdown))}`, markdown);
-  return toNote(id, markdown);
+  const base = `${idStamp(now)}-${slugify(extractTitle(markdown))}`;
+  const write = async () => (await ensureFeed(feed), writeNote(feed, base, markdown));
+  try {
+    return toNote(await write(), markdown);
+  } catch (e) {
+    if (!isErrno(e, "ENOENT")) throw e;
+    return toNote(await write(), markdown); // the feed was deleted since ensureFeed: this is a new feed
+  }
 }
 
 async function noteIds(feed: string): Promise<string[]> {

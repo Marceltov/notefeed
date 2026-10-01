@@ -4,14 +4,15 @@
 import * as z from "zod";
 import { config } from "../config";
 import { InvalidBodyError, NotFoundError } from "../errors";
-import { changePassword, checkFeedAccess, removePassword } from "../feedlock";
-import { READ_ID_RE, assertFeed, feedForReadId } from "../feeds";
+import { changePassword, checkFeedAccess, protectedFeed, removePassword } from "../feedlock";
+import { READ_ID_RE, assertFeed, feedForReadId, hasFeed, readIdOf } from "../feeds";
+import { getSettings } from "../feedsettings";
 import { clientIp } from "../limits";
-import { MAX_BYTES, getNote, listNotes, type Note } from "../notes";
+import { MAX_BYTES, countNotes, getNote, listNotes, type Note } from "../notes";
 import { PASSWORD_RULE } from "../../shared/password";
-import { API_PREFIX, feedPath, publicUrl, readPath } from "../urls";
+import { API_PREFIX, feedPath, publicUrl, readPath, rssPath } from "../urls";
 import { createDispatcher, op, type AnyOp, type ResponseSpec } from "./dispatch";
-import { deleteNote, editNote } from "../posting";
+import { deleteFeed, deleteNote, editNote, updateFeed } from "../posting";
 import { handlePostNote, readMarkdown } from "./notes";
 import { authorize, feedAccess, readCapped } from "./request";
 import {
@@ -19,8 +20,10 @@ import {
   Created,
   CurrentPasswordHeader,
   ErrorJson,
+  FeedJson,
   FeedParam,
   FeedPasswordHeader,
+  FeedSettingsJson,
   NoteIdParam,
   NoteJson,
   NoteList,
@@ -28,6 +31,7 @@ import {
   PasswordJson,
   PostForm,
   PostJson,
+  ReadFeedJson,
   ReadIdParam,
 } from "./schemas";
 
@@ -65,6 +69,17 @@ async function page(notes: (limit: number, before?: string) => Promise<Note[]>, 
   return {
     status: 200 as const,
     body: { notes: shown.map((n) => noteJson(n, base)), next: found.length > query.limit ? shown[shown.length - 1].id : null },
+  };
+}
+
+// The feed as the Feeds API shows it; the feed must exist. No read link while it has no notes (ADR 0008).
+async function feedJson(feed: string, headers: Headers): Promise<z.infer<typeof FeedJson>> {
+  const readId = (await countNotes(feed)) ? await readIdOf(feed) : null;
+  return {
+    name: feed,
+    ...(await getSettings(feed)),
+    protected: await protectedFeed(feed),
+    read_url: readId && publicUrl(headers) + rssPath(readId),
   };
 }
 
@@ -214,6 +229,88 @@ const OPS: AnyOp[] = [
   }),
 
   op({
+    method: "GET",
+    path: `${API_PREFIX}/feeds/{feed}`,
+    operationId: "getFeed",
+    summary: "Get a feed's settings",
+    description: "The title and description, whether the feed is protected, and its read link (null while it has no notes). A feed exists once its first note is posted.",
+    tags: ["Feeds"],
+    password: true,
+    params: { feed: FeedParam },
+    headers: { "X-Feed-Password": FeedPasswordHeader },
+    responses: {
+      200: { description: "The feed", schema: FeedJson },
+      400: err("Invalid or reserved feed name"),
+      401: UNAUTHORIZED,
+      404: err("No such feed"),
+      429: { ...err("Too many wrong passwords from this client"), headers: RETRY },
+    },
+    before: passwordFeedAndFeedPassword,
+  }).handle(async ({ req, params }) => {
+    if (!(await hasFeed(params.feed))) throw new NotFoundError("no such feed");
+    return { status: 200, body: await feedJson(params.feed, req.headers) };
+  }),
+
+  op({
+    method: "PUT",
+    path: `${API_PREFIX}/feeds/{feed}`,
+    operationId: "updateFeed",
+    summary: "Change a feed's settings",
+    description:
+      "Replaces both the title (at most 100 characters) and the description (at most 500); surrounding whitespace is trimmed and control characters are refused. " +
+      "Needs the feed's password if it has one, and counts against the post rate limit. Only on a feed that exists: it is created by its first note. Read links can't change settings.",
+    tags: ["Feeds"],
+    password: true,
+    params: { feed: FeedParam },
+    headers: { "X-Feed-Password": FeedPasswordHeader },
+    body: { "application/json": FeedSettingsJson },
+    responses: {
+      200: { description: "The feed as it is now", schema: FeedJson },
+      400: err("Invalid or reserved feed name, bad JSON, or a title or description that is too long or has control characters"),
+      401: UNAUTHORIZED,
+      404: err("No such feed"),
+      429: { ...err("Too many posts, edits and deletes, or wrong passwords, from this client"), headers: RETRY },
+    },
+    before: passwordAndFeed,
+  }).handle(async ({ req, params }) => {
+    const bytes = await readCapped(req, 8192);
+    let settings: unknown;
+    try {
+      settings = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes ?? new Uint8Array()));
+    } catch {
+      throw new InvalidBodyError('JSON needs "title" and "description" strings');
+    }
+    await updateFeed(params.feed, clientIp(req.headers), settings, feedAccess(req.headers, params.feed));
+    return { status: 200, body: await feedJson(params.feed, req.headers) };
+  }),
+
+  op({
+    method: "DELETE",
+    path: `${API_PREFIX}/feeds/{feed}`,
+    operationId: "deleteFeed",
+    summary: "Delete a feed",
+    description:
+      "Deletes the feed with all its notes, its settings, its password and its read link, for good: there is no undo. The name is free again; " +
+      "a feed created there later gets a new read link, and the old one answers like an unknown one. " +
+      "Needs the feed's password if it has one, and counts against the post rate limit.",
+    tags: ["Feeds"],
+    password: true,
+    params: { feed: FeedParam },
+    headers: { "X-Feed-Password": FeedPasswordHeader },
+    responses: {
+      204: { description: "Deleted" },
+      400: err("Invalid or reserved feed name"),
+      401: UNAUTHORIZED,
+      404: err("No such feed"),
+      429: { ...err("Too many posts, edits and deletes, or wrong passwords, from this client"), headers: RETRY },
+    },
+    before: passwordAndFeed,
+  }).handle(async ({ req, params }) => {
+    await deleteFeed(params.feed, clientIp(req.headers), feedAccess(req.headers, params.feed));
+    return { status: 204, body: undefined };
+  }),
+
+  op({
     method: "PUT",
     path: `${API_PREFIX}/feeds/{feed}/password`,
     operationId: "changeFeedPassword",
@@ -264,6 +361,26 @@ const OPS: AnyOp[] = [
   }).handle(async ({ req, params }) => {
     await removePassword(params.feed, req.headers.get("x-feed-password") ?? "", clientIp(req.headers));
     return { status: 204, body: undefined };
+  }),
+
+  op({
+    method: "GET",
+    path: `${API_PREFIX}/read/{readId}`,
+    operationId: "getReadFeed",
+    summary: "Get a feed's title and description by its read id",
+    description:
+      "Public, even on an instance with a password, and never reveals the feed's name. " +
+      "An unknown read id has an empty title and description, so read ids can't be probed.",
+    tags: ["Read"],
+    params: { readId: ReadIdParam },
+    responses: {
+      200: { description: "The feed's public settings", schema: ReadFeedJson },
+      404: err("Malformed read id"),
+    },
+  }).handle(async ({ params }) => {
+    if (!READ_ID_RE.test(params.readId)) throw new NotFoundError("malformed read id");
+    const feed = await feedForReadId(params.readId);
+    return { status: 200, body: feed ? await getSettings(feed) : { title: "", description: "" } };
   }),
 
   op({

@@ -88,6 +88,51 @@ export type PasswordJson = {
     password: string;
 };
 
+export type FeedSettings = {
+    /**
+     * Display title, at most 100 characters, one line; empty means none (the feed's name is shown)
+     */
+    title: string;
+    /**
+     * Description, at most 500 characters, one line; may be empty
+     */
+    description: string;
+};
+
+export type Feed = {
+    /**
+     * The feed's name
+     */
+    name: string;
+    /**
+     * Display title, at most 100 characters, one line; empty means none (the feed's name is shown)
+     */
+    title: string;
+    /**
+     * Description, at most 500 characters, one line; may be empty
+     */
+    description: string;
+    /**
+     * Whether the feed has its own password
+     */
+    protected: boolean;
+    /**
+     * The feed's read-only RSS link; null while the feed has no notes
+     */
+    read_url: string | null;
+};
+
+export type ReadFeed = {
+    /**
+     * Display title, at most 100 characters, one line; empty means none (the feed's name is shown)
+     */
+    title: string;
+    /**
+     * Description, at most 500 characters, one line; may be empty
+     */
+    description: string;
+};
+
 export type ListNotesData = {
     body?: never;
     headers?: {
@@ -365,6 +410,150 @@ export type EditNoteResponses = {
 
 export type EditNoteResponse = EditNoteResponses[keyof EditNoteResponses];
 
+export type DeleteFeedData = {
+    body?: never;
+    headers?: {
+        /**
+         * The feed's own password, when it has one: to post, list or get, and (as the current password) to change or remove it. On the `POST` that creates a feed it sets the feed's password; on a `POST` to an existing feed that has none it answers 409. An empty value is the same as no header, so a `POST` with an empty one creates an open feed.
+         */
+        'X-Feed-Password'?: string;
+    };
+    path: {
+        /**
+         * The feed's name. It is the write key: anyone who knows it can post.
+         */
+        feed: string;
+    };
+    query?: never;
+    url: '/api/v1/feeds/{feed}';
+};
+
+export type DeleteFeedErrors = {
+    /**
+     * Invalid or reserved feed name
+     */
+    400: Error;
+    /**
+     * The instance has a password, or the feed has its own, and it is missing or wrong
+     */
+    401: Error;
+    /**
+     * No such feed
+     */
+    404: Error;
+    /**
+     * Too many posts, edits and deletes, or wrong passwords, from this client
+     */
+    429: Error;
+};
+
+export type DeleteFeedError = DeleteFeedErrors[keyof DeleteFeedErrors];
+
+export type DeleteFeedResponses = {
+    /**
+     * Deleted
+     */
+    204: void;
+};
+
+export type DeleteFeedResponse = DeleteFeedResponses[keyof DeleteFeedResponses];
+
+export type GetFeedData = {
+    body?: never;
+    headers?: {
+        /**
+         * The feed's own password, when it has one: to post, list or get, and (as the current password) to change or remove it. On the `POST` that creates a feed it sets the feed's password; on a `POST` to an existing feed that has none it answers 409. An empty value is the same as no header, so a `POST` with an empty one creates an open feed.
+         */
+        'X-Feed-Password'?: string;
+    };
+    path: {
+        /**
+         * The feed's name. It is the write key: anyone who knows it can post.
+         */
+        feed: string;
+    };
+    query?: never;
+    url: '/api/v1/feeds/{feed}';
+};
+
+export type GetFeedErrors = {
+    /**
+     * Invalid or reserved feed name
+     */
+    400: Error;
+    /**
+     * The instance has a password, or the feed has its own, and it is missing or wrong
+     */
+    401: Error;
+    /**
+     * No such feed
+     */
+    404: Error;
+    /**
+     * Too many wrong passwords from this client
+     */
+    429: Error;
+};
+
+export type GetFeedError = GetFeedErrors[keyof GetFeedErrors];
+
+export type GetFeedResponses = {
+    /**
+     * The feed
+     */
+    200: Feed;
+};
+
+export type GetFeedResponse = GetFeedResponses[keyof GetFeedResponses];
+
+export type UpdateFeedData = {
+    body: FeedSettings;
+    headers?: {
+        /**
+         * The feed's own password, when it has one: to post, list or get, and (as the current password) to change or remove it. On the `POST` that creates a feed it sets the feed's password; on a `POST` to an existing feed that has none it answers 409. An empty value is the same as no header, so a `POST` with an empty one creates an open feed.
+         */
+        'X-Feed-Password'?: string;
+    };
+    path: {
+        /**
+         * The feed's name. It is the write key: anyone who knows it can post.
+         */
+        feed: string;
+    };
+    query?: never;
+    url: '/api/v1/feeds/{feed}';
+};
+
+export type UpdateFeedErrors = {
+    /**
+     * Invalid or reserved feed name, bad JSON, or a title or description that is too long or has control characters
+     */
+    400: Error;
+    /**
+     * The instance has a password, or the feed has its own, and it is missing or wrong
+     */
+    401: Error;
+    /**
+     * No such feed
+     */
+    404: Error;
+    /**
+     * Too many posts, edits and deletes, or wrong passwords, from this client
+     */
+    429: Error;
+};
+
+export type UpdateFeedError = UpdateFeedErrors[keyof UpdateFeedErrors];
+
+export type UpdateFeedResponses = {
+    /**
+     * The feed as it is now
+     */
+    200: Feed;
+};
+
+export type UpdateFeedResponse = UpdateFeedResponses[keyof UpdateFeedResponses];
+
 export type RemoveFeedPasswordData = {
     body?: never;
     headers?: {
@@ -460,6 +649,36 @@ export type ChangeFeedPasswordResponses = {
 };
 
 export type ChangeFeedPasswordResponse = ChangeFeedPasswordResponses[keyof ChangeFeedPasswordResponses];
+
+export type GetReadFeedData = {
+    body?: never;
+    path: {
+        /**
+         * The feed's read id, from its read link. Read-only; never reveals the name.
+         */
+        readId: string;
+    };
+    query?: never;
+    url: '/api/v1/read/{readId}';
+};
+
+export type GetReadFeedErrors = {
+    /**
+     * Malformed read id
+     */
+    404: Error;
+};
+
+export type GetReadFeedError = GetReadFeedErrors[keyof GetReadFeedErrors];
+
+export type GetReadFeedResponses = {
+    /**
+     * The feed's public settings
+     */
+    200: ReadFeed;
+};
+
+export type GetReadFeedResponse = GetReadFeedResponses[keyof GetReadFeedResponses];
 
 export type ListReadNotesData = {
     body?: never;

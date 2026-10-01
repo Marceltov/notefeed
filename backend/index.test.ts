@@ -16,9 +16,9 @@ beforeEach(async () => {
 // The read id is derived from the name: shown for a name nobody has posted to yet, a stranger could
 // collect it and read the feed once someone creates it, protected or not.
 test("getFeed gives no read id until the feed has a note", async () => {
-  expect(await getFeed("soon")).toEqual({ notes: [], readId: null });
+  expect(await getFeed("soon")).toEqual({ notes: [], readId: null, title: "", description: "" });
   await createProtected("soon", "pw");
-  expect(await getFeed("soon")).toEqual({ notes: [], readId: null });
+  expect(await getFeed("soon")).toEqual({ notes: [], readId: null, title: "", description: "" });
   await createNote("soon", "# Hi");
   expect((await getFeed("soon"))!.readId).toBe((await readIdOf("soon"))!);
   expect(await getFeed("login")).toBeNull();

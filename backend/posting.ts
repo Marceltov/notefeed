@@ -3,7 +3,8 @@
 import { config } from "./config";
 import { FeedExistsError, FeedLimitError, NotFoundError, NoteLimitError, RateLimitedError } from "./errors";
 import { type FeedAccess, checkFeedAccess, createProtected } from "./feedlock";
-import { assertFeed, feedCount, hasFeed } from "./feeds";
+import { type FeedSettings, checkSettings, saveSettings } from "./feedsettings";
+import { assertFeed, deleteFeed as removeWholeFeed, feedCount, hasFeed } from "./feeds";
 import { rateLimit } from "./limits";
 import { checkMarkdown, countNotes, createNote, removeNote, updateNote, type Note } from "./notes";
 
@@ -70,4 +71,19 @@ export async function editNote(feed: string, id: string, ip: string, read: () =>
 export async function deleteNote(feed: string, id: string, ip: string, access: FeedAccess): Promise<void> {
   await admit(feed, ip, access);
   if (!(await removeNote(feed, id))) throw new NotFoundError("no such note");
+}
+
+// Settings and deletion of a whole feed: the same gate as posting, then the feed must exist. An open feed is
+// changed by anyone who knows its name, as it is posted to (ADR 0001); a protected one needs its password.
+export async function updateFeed(feed: string, ip: string, settings: unknown, access: FeedAccess): Promise<FeedSettings> {
+  await admit(feed, ip, access);
+  const checked = checkSettings(settings);
+  if (!(await hasFeed(feed))) throw new NotFoundError("no such feed");
+  await saveSettings(feed, checked);
+  return checked;
+}
+
+export async function deleteFeed(feed: string, ip: string, access: FeedAccess): Promise<void> {
+  await admit(feed, ip, access);
+  if (!(await removeWholeFeed(feed))) throw new NotFoundError("no such feed");
 }

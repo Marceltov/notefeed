@@ -2,7 +2,7 @@
 
 import type { Client, ClientMeta, Options as Options2, RequestResult, TDataShape } from './client';
 import { client } from './client.gen';
-import type { ChangeFeedPasswordData, ChangeFeedPasswordErrors, ChangeFeedPasswordResponses, DeleteNoteData, DeleteNoteErrors, DeleteNoteResponses, EditNoteData, EditNoteErrors, EditNoteResponses, GetNoteData, GetNoteErrors, GetNoteResponses, GetOpenApiData, GetOpenApiResponses, GetReadNoteData, GetReadNoteErrors, GetReadNoteResponses, ListNotesData, ListNotesErrors, ListNotesResponses, ListReadNotesData, ListReadNotesErrors, ListReadNotesResponses, PostNoteData, PostNoteErrors, PostNoteResponses, RemoveFeedPasswordData, RemoveFeedPasswordErrors, RemoveFeedPasswordResponses } from './types.gen';
+import type { ChangeFeedPasswordData, ChangeFeedPasswordErrors, ChangeFeedPasswordResponses, DeleteFeedData, DeleteFeedErrors, DeleteFeedResponses, DeleteNoteData, DeleteNoteErrors, DeleteNoteResponses, EditNoteData, EditNoteErrors, EditNoteResponses, GetFeedData, GetFeedErrors, GetFeedResponses, GetNoteData, GetNoteErrors, GetNoteResponses, GetOpenApiData, GetOpenApiResponses, GetReadFeedData, GetReadFeedErrors, GetReadFeedResponses, GetReadNoteData, GetReadNoteErrors, GetReadNoteResponses, ListNotesData, ListNotesErrors, ListNotesResponses, ListReadNotesData, ListReadNotesErrors, ListReadNotesResponses, PostNoteData, PostNoteErrors, PostNoteResponses, RemoveFeedPasswordData, RemoveFeedPasswordErrors, RemoveFeedPasswordResponses, UpdateFeedData, UpdateFeedErrors, UpdateFeedResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -80,6 +80,43 @@ export const editNote = <ThrowOnError extends boolean = false>(options: Options<
 });
 
 /**
+ * Delete a feed
+ *
+ * Deletes the feed with all its notes, its settings, its password and its read link, for good: there is no undo. The name is free again; a feed created there later gets a new read link, and the old one answers like an unknown one. Needs the feed's password if it has one, and counts against the post rate limit.
+ */
+export const deleteFeed = <ThrowOnError extends boolean = false>(options: Options<DeleteFeedData, ThrowOnError>): RequestResult<DeleteFeedResponses, DeleteFeedErrors, ThrowOnError> => (options.client ?? client).delete<DeleteFeedResponses, DeleteFeedErrors, ThrowOnError>({
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/api/v1/feeds/{feed}',
+    ...options
+});
+
+/**
+ * Get a feed's settings
+ *
+ * The title and description, whether the feed is protected, and its read link (null while it has no notes). A feed exists once its first note is posted.
+ */
+export const getFeed = <ThrowOnError extends boolean = false>(options: Options<GetFeedData, ThrowOnError>): RequestResult<GetFeedResponses, GetFeedErrors, ThrowOnError> => (options.client ?? client).get<GetFeedResponses, GetFeedErrors, ThrowOnError>({
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/api/v1/feeds/{feed}',
+    ...options
+});
+
+/**
+ * Change a feed's settings
+ *
+ * Replaces both the title (at most 100 characters) and the description (at most 500); surrounding whitespace is trimmed and control characters are refused. Needs the feed's password if it has one, and counts against the post rate limit. Only on a feed that exists: it is created by its first note. Read links can't change settings.
+ */
+export const updateFeed = <ThrowOnError extends boolean = false>(options: Options<UpdateFeedData, ThrowOnError>): RequestResult<UpdateFeedResponses, UpdateFeedErrors, ThrowOnError> => (options.client ?? client).put<UpdateFeedResponses, UpdateFeedErrors, ThrowOnError>({
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/api/v1/feeds/{feed}',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
  * Remove a feed's password
  *
  * Needs the current password in `X-Feed-Password`. The feed stays, open to anyone who knows its name. An open feed answers 409.
@@ -104,6 +141,13 @@ export const changeFeedPassword = <ThrowOnError extends boolean = false>(options
         ...options.headers
     }
 });
+
+/**
+ * Get a feed's title and description by its read id
+ *
+ * Public, even on an instance with a password, and never reveals the feed's name. An unknown read id has an empty title and description, so read ids can't be probed.
+ */
+export const getReadFeed = <ThrowOnError extends boolean = false>(options: Options<GetReadFeedData, ThrowOnError>): RequestResult<GetReadFeedResponses, GetReadFeedErrors, ThrowOnError> => (options.client ?? client).get<GetReadFeedResponses, GetReadFeedErrors, ThrowOnError>({ url: '/api/v1/read/{readId}', ...options });
 
 /**
  * List a feed's notes by its read id

@@ -1,6 +1,6 @@
 // A feed on disk is a directory `<DATA_DIR>/<feed>/`.
 import { randomBytes } from "node:crypto";
-import { link, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { link, mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { feedDir, isErrno, orMissing, root } from "./fs";
 
@@ -32,5 +32,30 @@ export async function writeReadId(feed: string, id: string): Promise<boolean> {
     throw e;
   } finally {
     await rm(/*turbopackIgnore: true*/ tmp, { force: true });
+  }
+}
+
+// Delete in two steps: the rename takes the feed away in one syscall (it is never half-deleted from a
+// reader's point of view), then the files go. A leading dot is no valid feed name, so a leftover is never
+// listed as a feed. false = there was no such directory.
+const DELETED = ".deleted-";
+export async function deleteFeedDir(feed: string): Promise<boolean> {
+  const gone = join(root(), `${DELETED}${randomBytes(6).toString("hex")}`);
+  try {
+    await rename(/*turbopackIgnore: true*/ feedDir(feed), gone);
+  } catch (e) {
+    if (isErrno(e, "ENOENT")) return false;
+    throw e;
+  }
+  // The feed is gone either way; a failure here leaves a leftover the next start removes.
+  await rm(/*turbopackIgnore: true*/ gone, { recursive: true, force: true }).catch((e) => console.error("could not remove a deleted feed's files; they go at the next start", e));
+  return true;
+}
+
+// A crash between the rename and the removal. Called once, when the index loads.
+export async function removeDeletedLeftovers(): Promise<void> {
+  const entries = await orMissing(readdir(/*turbopackIgnore: true*/ root(), { withFileTypes: true }), []);
+  for (const e of entries) {
+    if (e.isDirectory() && e.name.startsWith(DELETED)) await rm(/*turbopackIgnore: true*/ join(root(), e.name), { recursive: true, force: true });
   }
 }

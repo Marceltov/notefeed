@@ -4,7 +4,7 @@
 // their name (HMAC with the server secret), so no existing read link changes.
 import { createHmac, randomBytes } from "node:crypto";
 import { config } from "./config";
-import { listFeedDirs, readReadId, writeReadId } from "./data/feeds";
+import { deleteFeedDir, listFeedDirs, readReadId, removeDeletedLeftovers, writeReadId } from "./data/feeds";
 import { createFeedDirWithHash } from "./data/password";
 import { loadOrCreateSecret, secretPath } from "./data/secret";
 import { InvalidFeedError, ReservedFeedError } from "./errors";
@@ -80,6 +80,7 @@ async function storedOrDerived(feed: string): Promise<string> {
 // sorted, so which of two feeds sharing an id keeps it is the same on every start.
 async function load(dir: string): Promise<Index> {
   const idx: Index = { dir, byFeed: new Map(), byReadId: new Map() };
+  await removeDeletedLeftovers();
   for (const n of (await listFeedDirs()).filter((n) => checkFeed(n) === null).sort()) register(idx, n, await storedOrDerived(n));
   return idx;
 }
@@ -99,6 +100,7 @@ async function feedIndex(): Promise<Index> {
 // leave an empty directory with `.readid`; that is accepted. Returns the feed's read id.
 export async function ensureFeed(feed: string): Promise<string> {
   const idx = await feedIndex();
+  await deleteSettled(feed);
   const known = idx.byFeed.get(feed);
   if (known !== undefined) return known;
   const fresh = newReadId();
@@ -110,6 +112,7 @@ export async function ensureFeed(feed: string): Promise<string> {
 // A protected feed: its directory appears already holding the hash and `.readid`. false = the feed exists.
 export async function createProtectedFeed(feed: string, hash: string): Promise<boolean> {
   const idx = await feedIndex();
+  await deleteSettled(feed);
   const id = newReadId();
   if (!(await createFeedDirWithHash(feed, hash, id))) return false;
   register(idx, feed, id);
@@ -117,11 +120,35 @@ export async function createProtectedFeed(feed: string, hash: string): Promise<b
 }
 
 // Index only: the files are the caller's business. Another feed that was given this feed's id keeps it.
-export async function removeFeed(feed: string): Promise<void> {
-  const idx = await feedIndex();
+function unregister(idx: Index, feed: string): void {
   const id = idx.byFeed.get(feed);
   if (id !== undefined && idx.byReadId.get(id) === feed) idx.byReadId.delete(id);
   idx.byFeed.delete(feed);
+}
+
+export async function removeFeed(feed: string): Promise<void> {
+  unregister(await feedIndex(), feed);
+}
+
+// Deletes in progress, by feed. The index entry goes first and the directory a moment later; a creation
+// meanwhile would find the old `.readid` still there and take the old id back, so it waits for the delete.
+const deleting = new Map<string, Promise<boolean>>();
+const deleteSettled = (feed: string) => deleting.get(feed)?.catch(() => {});
+
+// Removes a feed with everything in it: false when there is no such feed. A post that already passed
+// ensureFeed and writes after this is ENOENT, and createNote then makes a new feed (new read id, no password).
+export async function deleteFeed(feed: string): Promise<boolean> {
+  const idx = await feedIndex();
+  await deleteSettled(feed);
+  if (!idx.byFeed.has(feed)) return false;
+  unregister(idx, feed); // no await between the check and this, so of two deletes only one gets here
+  const done = deleteFeedDir(feed);
+  deleting.set(feed, done);
+  try {
+    return await done;
+  } finally {
+    if (deleting.get(feed) === done) deleting.delete(feed);
+  }
 }
 
 export async function readIdOf(feed: string): Promise<string | null> {
@@ -149,4 +176,5 @@ export async function feedForReadId(id: string): Promise<string | null> {
 export const resetFeedsForTests = () => {
   state.secret = undefined;
   state.index = undefined;
+  deleting.clear();
 };

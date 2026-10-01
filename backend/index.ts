@@ -2,6 +2,7 @@
 // backend/ (enforced in eslint.config.mjs). Calls are in-process today. Each query below is shaped like
 // the endpoint it would become if the backend moved out, so the cut would be here and nowhere else.
 import { config } from "./config";
+import { getSettings } from "./feedsettings";
 import { READ_ID_RE, checkFeed, feedForReadId, readIdOf } from "./feeds";
 import { getNote, listNotes, type Note } from "./notes";
 
@@ -29,10 +30,10 @@ const PAGE = 50;
  * legacy feed's id is derived from the name, so showing one would hand out the read link of whatever
  * feed is created there later.
  */
-export async function getFeed(feed: string): Promise<{ notes: Note[]; readId: string | null } | null> {
+export async function getFeed(feed: string): Promise<{ notes: Note[]; readId: string | null; title: string; description: string } | null> {
   if (checkFeed(feed)) return null;
   const notes = await listNotes(feed, PAGE);
-  return { notes, readId: notes.length ? await readIdOf(feed) : null };
+  return { notes, readId: notes.length ? await readIdOf(feed) : null, ...(await getSettings(feed)) };
 }
 
 export async function getFeedNote(feed: string, id: string): Promise<Note | null> {
@@ -40,10 +41,10 @@ export async function getFeedNote(feed: string, id: string): Promise<Note | null
 }
 
 /** A feed by its read id: null for a malformed id; an unknown one is an empty feed, so ids can't be probed. */
-export async function getReadFeed(id: string): Promise<{ notes: Note[] } | null> {
+export async function getReadFeed(id: string): Promise<{ notes: Note[]; title: string; description: string } | null> {
   if (!READ_ID_RE.test(id)) return null;
   const feed = await feedForReadId(id);
-  return { notes: feed ? await listNotes(feed, PAGE) : [] };
+  return { notes: feed ? await listNotes(feed, PAGE) : [], ...(feed ? await getSettings(feed) : { title: "", description: "" }) };
 }
 
 export async function getReadNote(readId: string, id: string): Promise<Note | null> {
