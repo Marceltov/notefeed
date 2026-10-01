@@ -13,6 +13,7 @@ export { feedPath, publicUrl, readPath, rssPath, safeNext } from "./urls";
 // Every write is one of these HTTP handlers; the frontend only mounts them and renders.
 export { dispatch } from "./http/api";
 export { feedCookieName, feedUnlocked } from "./feedlock";
+export { feedDeleteRoute, feedSettingsRoute } from "./http/feedforms";
 export { feedAccessRoute } from "./http/feedsession";
 export { noteFormRoute } from "./http/noteforms";
 export { loginRoute, logoutRoute } from "./http/session";

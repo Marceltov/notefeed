@@ -66,7 +66,7 @@ test.each([["another site", "https://evil.example"], ["no Origin", null]])("from
 test("refusals go back to the note with the code", async () => {
   expect(loc(await send("openfeed", id, "edit", { markdown: "  " }))).toBe(`/openfeed/${id}?error=empty_note`);
   expect(loc(await send("openfeed", "nope", "edit", { markdown: "# x" }))).toBe("/openfeed/nope?error=not_found");
-  });
+});
 
 test("rate limited: the wait is passed on", async () => {
   process.env.NOTEFEED_RATE_LIMIT = "1";

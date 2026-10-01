@@ -4,6 +4,7 @@ import { cookies, headers } from "next/headers";
 import { notFound } from "next/navigation";
 import { Compose } from "@/components/Compose";
 import { CopyButton } from "@/components/CopyButton";
+import { FeedDetails } from "@/components/FeedDetails";
 import { FeedSettings } from "@/components/FeedSettings";
 import { Header } from "@/components/Header";
 import { NoteList } from "@/components/NoteList";
@@ -15,12 +16,15 @@ export const dynamic = "force-dynamic";
 
 export async function generateMetadata({ params }: PageProps<"/[feed]">): Promise<Metadata> {
   const { feed } = await params;
-  return checkFeed(feed) ? {} : { title: feed };
+  if (checkFeed(feed)) return {};
+  // A locked feed shows nothing of itself, not even its title.
+  const access = await feedUnlocked(feed, (await cookies()).get(feedCookieName(feed))?.value);
+  return { title: access === "locked" ? feed : ((await getFeed(feed))?.title || feed) };
 }
 
 export default async function FeedPage({ params, searchParams }: PageProps<"/[feed]">) {
   const { feed } = await params;
-  const { posted, deleted, error, retry } = await searchParams;
+  const { posted, deleted, saved, error, retry } = await searchParams;
   const access = await feedUnlocked(feed, (await cookies()).get(feedCookieName(feed))?.value);
   // A locked feed shows nothing of itself: no notes, no read link.
   if (access === "locked") {
@@ -33,7 +37,7 @@ export default async function FeedPage({ params, searchParams }: PageProps<"/[fe
   }
   const data = await getFeed(feed);
   if (!data) notFound();
-  const { notes, readId, exists } = data;
+  const { notes, readId, exists, title, description } = data;
   const settingsError = access === "unlocked" && ["auth", "invalid_body", "too_many_attempts"].includes(String(error));
   const base = publicUrl(await headers());
   const readUrl = readId ? base + rssPath(readId) : undefined; // none until the feed has a note
@@ -45,6 +49,17 @@ export default async function FeedPage({ params, searchParams }: PageProps<"/[fe
   return (
     <>
       <Header feed={feed} rss={readUrl} />
+      {(title || description) && (
+        <div className="mb-8">
+          {title && <h1 className="text-2xl font-bold tracking-tight">{title}</h1>}
+          {description && <p className="mt-1 text-muted">{description}</p>}
+        </div>
+      )}
+      {saved && (
+        <p role="status" className="mb-4 text-sm text-carbon">
+          Saved.
+        </p>
+      )}
       {deleted && (
         <p role="status" className="mb-4 text-sm text-carbon">
           Note deleted.
@@ -70,6 +85,7 @@ export default async function FeedPage({ params, searchParams }: PageProps<"/[fe
           </div>
         </section>
       )}
+      {exists && <FeedDetails key={`${title}\n${description}`} feed={feed} title={title} description={description} />}
       {access === "unlocked" && <FeedSettings feed={feed} error={settingsError ? feedErrorMessage(error, retry) : undefined} />}
       {notes.length === 0 ? (
         <section className="text-muted">

@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
 export async function generateMetadata({ params }: PageProps<"/r/[readId]">): Promise<Metadata> {
   const { readId } = await params;
   return {
-    title: { absolute: instanceTitle() },
+    title: { absolute: (await getReadFeed(readId))?.title || instanceTitle() },
     alternates: { types: { "application/rss+xml": rssPath(readId) } },
   };
 }
@@ -20,11 +20,17 @@ export default async function ReadPage({ params }: PageProps<"/r/[readId]">) {
   const { readId } = await params;
   const data = await getReadFeed(readId);
   if (!data) notFound();
-  const { notes } = data;
+  const { notes, title, description } = data;
 
   return (
     <>
       <Header rss={rssPath(readId)} />
+      {(title || description) && (
+        <div className="mb-8">
+          {title && <h1 className="text-2xl font-bold tracking-tight">{title}</h1>}
+          {description && <p className="mt-1 text-muted">{description}</p>}
+        </div>
+      )}
       {notes.length === 0 ? (
         <p className="text-muted">No notes yet.</p>
       ) : (

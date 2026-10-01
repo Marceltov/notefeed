@@ -31,6 +31,12 @@ export const mediaType = (h: Headers) => (h.get("content-type") ?? "").split(";"
 export const parseForm = (bytes: Uint8Array, h: Headers) =>
   new Response(bytes as BodyInit, { headers: { "content-type": h.get("content-type") ?? "" } }).formData();
 
+// A small form post's fields; null when the body is too large or not a form.
+export async function readFields(req: Request, max: number): Promise<FormData | null> {
+  const bytes = await readCapped(req, max);
+  return bytes ? parseForm(bytes, req.headers).catch(() => null) : null;
+}
+
 export function cookie(h: Headers, name: string): string | undefined {
   for (const part of (h.get("cookie") ?? "").split(";")) {
     const i = part.indexOf("=");

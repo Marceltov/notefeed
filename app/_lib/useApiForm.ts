@@ -1,0 +1,34 @@
+"use client";
+
+import { useRouter } from "next/navigation";
+import { useState, type FormEvent } from "react";
+import { errorMessage } from "@/app/_lib/messages";
+
+type Result = { data?: unknown; error?: { code?: string }; response?: Response };
+
+// The enhanced-form logic shared by the compose box and the edit and delete forms: `run` submits through a
+// generated client call, `done` runs on success (or on status `doneOn`); a 401 goes to the feed page, which shows
+// its unlock form (or proxy.ts sends a missing instance login on to /login); other refusals become `error`.
+export function useApiForm(page: string, initialError?: string) {
+  const router = useRouter();
+  const [error, setError] = useState(initialError);
+  const [pending, setPending] = useState(false);
+
+  async function run<T extends Result>(e: FormEvent, call: () => Promise<T>, done: (result: T) => void, doneOn?: number) {
+    e.preventDefault();
+    setPending(true);
+    try {
+      const result = await call();
+      const { error, response } = result;
+      if (!response) throw new Error("no response"); // the client returns a network failure instead of throwing it
+      if (response.ok || response.status === doneOn) return done(result);
+      if (response.status === 401) return router.push(page);
+      setError(errorMessage(error?.code ?? "unknown", response.headers.get("retry-after")));
+    } catch {
+      setError("Could not reach notefeed. Check your connection and try again.");
+    }
+    setPending(false);
+  }
+
+  return { run, error, setError, pending, setPending, router };
+}

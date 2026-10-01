@@ -1,9 +1,8 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { deleteNote, editNote } from "@/app/_lib/api";
-import { errorMessage } from "@/app/_lib/messages";
+import { useApiForm } from "@/app/_lib/useApiForm";
 
 const summary = "cursor-pointer select-none text-muted hover:text-ink";
 
@@ -11,30 +10,11 @@ const summary = "cursor-pointer select-none text-muted hover:text-ink";
 // through the generated API client and show refusals inline; without, the browser follows the 303 and the
 // note page shows the outcome (`error` is its message).
 export function NoteActions({ feed, id, markdown, error: initialError }: { feed: string; id: string; markdown: string; error?: string }) {
-  const router = useRouter();
+  const page = `/${feed}`;
+  const { run, error, setError, pending, setPending, router } = useApiForm(page, initialError);
   const [text, setText] = useState(markdown);
   const [editing, setEditing] = useState(!!initialError);
-  const [error, setError] = useState(initialError);
-  const [pending, setPending] = useState(false);
-  const page = `/${feed}`;
   const base = `${page}/${id}`;
-
-  // Runs `call`, which returns the response, and `done` on success; a 401 goes to the feed page, which
-  // shows its unlock form (or proxy.ts sends a missing instance login on to /login).
-  async function run(e: FormEvent, call: () => Promise<{ error?: { code?: string }; response?: Response }>, done: () => void, doneOn?: number) {
-    e.preventDefault();
-    setPending(true);
-    try {
-      const { error, response } = await call();
-      if (!response) throw new Error("no response"); // the client returns a network failure instead of throwing it
-      if (response.ok || response.status === doneOn) return done();
-      if (response.status === 401) return router.push(page);
-      setError(errorMessage(error?.code ?? "unknown", response.headers.get("retry-after")));
-    } catch {
-      setError("Could not reach notefeed. Check your connection and try again.");
-    }
-    setPending(false);
-  }
 
   const opts = () => ({ baseUrl: window.location.origin, path: { feed, id } }); // in handlers only: no window while rendering on the server
   const save = (e: FormEvent) =>

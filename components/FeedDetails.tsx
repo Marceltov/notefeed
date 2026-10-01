@@ -1,0 +1,78 @@
+"use client";
+
+import { useState, useSyncExternalStore, type FormEvent } from "react";
+import { deleteFeed, updateFeed } from "@/app/_lib/api";
+import { useApiForm } from "@/app/_lib/useApiForm";
+
+const input = "w-full rounded-sm border border-rule bg-transparent px-3 py-1.5 focus:border-carbon focus:outline-none";
+const summary = "cursor-pointer select-none text-muted hover:text-ink";
+
+// A feed's title and description, and deleting it: plain forms to POST /<feed>/settings and /delete. With
+// JavaScript they go through the generated API client and show refusals inline; without, the browser follows
+// the 303 (the feed page says "Saved.", or the home page "Feed deleted.").
+export function FeedDetails({ feed, title: savedTitle, description: savedDescription }: { feed: string; title: string; description: string }) {
+  const page = `/${feed}`;
+  const { run, error, setError, pending, setPending, router } = useApiForm(page);
+  const [title, setTitle] = useState(savedTitle);
+  const [description, setDescription] = useState(savedDescription);
+  const [confirm, setConfirm] = useState("");
+  // False while rendering on the server, true once hydrated: without JavaScript the delete button stays enabled
+  // and the server checks the name.
+  const hydrated = useSyncExternalStore(() => () => {}, () => true, () => false);
+  const opts = () => ({ baseUrl: window.location.origin, path: { feed } }); // in handlers only: no window while rendering on the server
+
+  const save = (e: FormEvent) =>
+    run(e, () => updateFeed({ ...opts(), body: { title, description } }), () => {
+      setError(undefined);
+      setPending(false);
+      router.replace(`${page}?saved=1`);
+      router.refresh();
+    });
+  const remove = (e: FormEvent) => run(e, () => deleteFeed(opts()), () => router.replace("/?deleted=" + feed), 404); // already gone: the goal is met
+
+  return (
+    <section aria-label="Feed details" className="mb-10 space-y-3 text-sm">
+      <details>
+        <summary className={summary}>Feed settings</summary>
+        <form method="post" action={`${page}/settings`} onSubmit={save} className="mt-3 max-w-md">
+          <label htmlFor="feed-title" className="mb-1 block text-muted">
+            Title
+          </label>
+          <input id="feed-title" name="title" maxLength={100} value={title} onChange={(e) => setTitle(e.target.value)} className={`${input} mb-2`} />
+          <label htmlFor="feed-description" className="mb-1 block text-muted">
+            Description
+          </label>
+          <input id="feed-description" name="description" maxLength={500} value={description} onChange={(e) => setDescription(e.target.value)} className={`${input} mb-2`} />
+          <button type="submit" disabled={pending} className="rounded-sm bg-carbon px-4 py-1.5 font-bold text-on-carbon disabled:opacity-60">
+            Save
+          </button>
+        </form>
+      </details>
+      <details>
+        <summary className={summary}>Delete feed</summary>
+        <form method="post" action={`${page}/delete`} onSubmit={remove} className="mt-3 max-w-md">
+          <p className="text-muted">This deletes the feed and all its notes. It can&apos;t be undone. Type the feed&apos;s name to confirm.</p>
+          <label htmlFor="feed-confirm" className="mb-1 mt-2 block text-muted">
+            Feed name
+          </label>
+          <input
+            id="feed-confirm"
+            name="confirm"
+            autoComplete="off"
+            required
+            pattern={feed}
+            value={confirm}
+            onChange={(e) => setConfirm(e.target.value)}
+            className={`${input} mb-2`}
+          />
+          <button type="submit" disabled={pending || (hydrated && confirm !== feed)} className="rounded-sm border border-error px-4 py-1.5 font-bold text-error disabled:opacity-60">
+            Delete feed
+          </button>
+        </form>
+      </details>
+      <p role="alert" className="text-error">
+        {error}
+      </p>
+    </section>
+  );
+}

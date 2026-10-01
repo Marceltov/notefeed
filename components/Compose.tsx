@@ -1,9 +1,9 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { postNote } from "@/app/_lib/api";
-import { PASSWORD_HINT, errorMessage } from "@/app/_lib/messages";
+import { useApiForm } from "@/app/_lib/useApiForm";
+import { PASSWORD_HINT } from "@/app/_lib/messages";
 import { extractTitle, idStamp, slugify } from "@/shared/notes";
 import { PASSWORD_PATTERN } from "@/shared/password";
 
@@ -12,30 +12,13 @@ import { PASSWORD_PATTERN } from "@/shared/password";
 // from openapi.json (JSON, the session cookie rides along same-origin) and shows refusals inline.
 // `isNew`: a feed that doesn't exist yet, so the box offers to protect it with a password.
 export function Compose({ feed, action, error: initialError, isNew }: { feed: string; action: string; error?: string; isNew?: boolean }) {
-  const router = useRouter();
+  const { run, error, pending, router } = useApiForm(action, initialError);
   const [text, setText] = useState("");
-  const [error, setError] = useState(initialError);
   const [password, setPassword] = useState("");
-  const [pending, setPending] = useState(false);
   const filename = `${idStamp(new Date())}-${slugify(extractTitle(text))}.md`;
 
-  async function submit(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    setPending(true);
-    try {
-      // baseUrl: this page's origin, not the spec's default server.
-      const { data, error, response } = await postNote({ baseUrl: window.location.origin, path: { feed }, body: { markdown: text, ...(password && { password }) } });
-      // The generated client returns a network failure instead of throwing it: no response at all.
-      if (!response) throw new Error("no response");
-      if (data) return router.push(`${action}?posted=${data.id}`); // the page remounts this box empty
-      // The feed page shows its unlock form, or proxy.ts sends a missing instance login on to /login.
-      if (response?.status === 401) return router.push(action);
-      setError(errorMessage(error?.code ?? "unknown", response?.headers.get("retry-after")));
-    } catch {
-      setError("Could not reach notefeed. Check your connection and try again.");
-    }
-    setPending(false);
-  }
+  const submit = (e: FormEvent) =>
+    run(e, () => postNote({ baseUrl: window.location.origin, path: { feed }, body: { markdown: text, ...(password && { password }) } }), ({ data }) => router.push(`${action}?posted=${data?.id}`)); // the page remounts this box empty
 
   return (
     <form method="post" action={action} encType="multipart/form-data" onSubmit={submit} className="mb-12">
