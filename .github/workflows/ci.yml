@@ -29,7 +29,8 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run generate
-      - run: git diff --exit-code || (echo "::error::Generated files are stale: run npm run generate and commit" && exit 1)
+      - name: Generated files are current
+        run: git diff --exit-code || { echo "::error::Generated files are stale. Run npm run generate and commit."; exit 1; }
       - run: npx -y @redocly/cli@2.57.0 lint openapi.json
 
   e2e:
