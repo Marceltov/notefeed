@@ -41,6 +41,8 @@ const eslintConfig = defineConfig([
     // Client packages have their own tooling.
     "packages/**",
     "next-env.d.ts",
+    // Generated from openapi.json by `npm run generate`; never edited by hand.
+    "app/_lib/api/**",
   ]),
 ]);
 
