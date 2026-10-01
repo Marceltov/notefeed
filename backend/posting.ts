@@ -5,7 +5,7 @@ import { FeedExistsError, FeedLimitError, NoteLimitError, RateLimitedError } fro
 import { type FeedAccess, checkFeedAccess, createProtected, protectedFeed } from "./feedlock";
 import { assertFeed, feedCount, hasFeed } from "./feeds";
 import { rateLimit } from "./limits";
-import { countNotes, createNote, type Note } from "./notes";
+import { checkMarkdown, countNotes, createNote, type Note } from "./notes";
 
 // `readMarkdown` runs only once the post is admitted, so a refused request never has its body read.
 // A password (header, or body `password`) is set only by the post that creates the feed.
@@ -28,6 +28,7 @@ export async function postNote(
   if (maxNotes && exists && (await countNotes(feed)) >= maxNotes) throw new NoteLimitError();
 
   const { markdown, password: bodyPassword } = await read();
+  checkMarkdown(markdown); // before createProtected: a refused note must not leave a protected, empty feed
   const password = access.password ?? bodyPassword;
   // A protected feed was already unlocked above; an open existing one can't be claimed.
   if (password !== undefined && !(exists && (await protectedFeed(feed)))) {

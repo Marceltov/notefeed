@@ -369,6 +369,16 @@ describe("feed passwords", () => {
     expect(await written()).toEqual(["one"]);
   });
 
+  test("a blank or oversize first note with a password creates no feed", async () => {
+    const json = { "content-type": "application/json" };
+    const blank = await post(JSON.stringify({ markdown: "  ", password: "pw" }), json);
+    expect(blank.status).toBe(400);
+    expect((await blank.json()).code).toBe("empty_note");
+    const big = await post(JSON.stringify({ markdown: "x".repeat(102401), password: "pw" }), json);
+    expect(big.status).toBe(413);
+    expect(await written()).toEqual([]);
+  });
+
   test("a browser form post without the password: back to the feed's unlock screen", async () => {
     await post("# One", pw);
     const res = await post(form({ markdown: "# Hi" }), { accept: "text/html" });

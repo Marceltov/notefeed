@@ -25,10 +25,14 @@ function toNote(id: string, markdown: string): Note {
 }
 
 // Storage only: no auth, rate limit or caps (that is posting.ts).
-export async function createNote(feed: string, markdown: string, now = new Date()): Promise<Note> {
-  assertFeed(feed);
+export function checkMarkdown(markdown: string): void {
   if (markdown.trim() === "") throw new EmptyNoteError();
   if (Buffer.byteLength(markdown, "utf8") > MAX_BYTES) throw new NoteTooLargeError();
+}
+
+export async function createNote(feed: string, markdown: string, now = new Date()): Promise<Note> {
+  assertFeed(feed);
+  checkMarkdown(markdown);
   const id = await writeNote(feed, `${idStamp(now)}-${slugify(extractTitle(markdown))}`, markdown);
   await addFeed(feed);
   return toNote(id, markdown);
