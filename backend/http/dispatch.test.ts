@@ -67,7 +67,8 @@ describe("routing", () => {
   test("a known path with the wrong method is a 405 with Allow", async () => {
     const res = await call("things/a", "PUT");
     expect(res.status).toBe(405);
-    expect(res.headers.get("allow")).toBe("GET, POST");
+    expect(res.headers.get("allow")).toBe("GET, HEAD, POST");
+    expect(await res.json()).toEqual({ error: "method not allowed" });
   });
 });
 

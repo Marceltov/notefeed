@@ -104,7 +104,8 @@ export function createDispatcher(ops: AnyOp[]): (req: Request, segments: string[
     const method = req.method === "HEAD" ? "GET" : req.method;
     const entry = m.ops.find((o) => o.method === method);
     if (!entry) {
-      const allow = m.ops.map((o) => o.method).join(", ");
+      const methods = m.ops.map((o) => o.method);
+      const allow = (methods.includes("GET") ? [...methods, "HEAD"] : methods).sort().join(", ");
       return Response.json({ error: "method not allowed" }, { status: 405, headers: { Allow: allow } });
     }
     let reply: AnyReply;

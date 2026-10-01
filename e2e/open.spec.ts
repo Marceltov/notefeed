@@ -118,3 +118,14 @@ test("the REST API: post with the short form, read back as JSON, by name and by 
   const spec = await (await request.get("/api/v1/openapi.json")).json();
   expect(spec.paths).toHaveProperty("/api/v1/feeds/{feed}/notes");
 });
+
+test("the REST API answers unknown paths and methods in JSON, not with Next's pages", async ({ request }) => {
+  const unknown = await request.get("/api/v1/nope");
+  expect(unknown.status()).toBe(404);
+  expect(await unknown.json()).toEqual({ error: "no such endpoint", code: "not_found" });
+  const put = await request.put("/api/v1/openapi.json");
+  expect(put.status()).toBe(405);
+  expect(put.headers()["allow"]).toBe("GET, HEAD");
+  expect(await put.json()).toEqual({ error: "method not allowed" });
+  expect((await request.head("/api/v1/openapi.json")).status()).toBe(200);
+});

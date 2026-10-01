@@ -266,7 +266,10 @@ export function openApiDocument(serverUrl: string): Json {
     info: {
       title: `${config.title()} API`,
       version: "1",
-      description: "Post markdown notes to a feed, read them back. See https://docs.notefeed.me/",
+      description:
+        "Post markdown notes to a feed, read them back. See https://docs.notefeed.me/\n\n" +
+        "Every error is JSON, `{\"error\": \"...\", \"code\": \"...\"}`. Besides the responses listed per operation, " +
+        "an unknown path under /api/v1 answers 404 (`not_found`) and a method an operation doesn't have answers 405 with `Allow`.",
       license: { name: "AGPL-3.0-only", identifier: "AGPL-3.0-only" },
     },
     servers: [{ url: serverUrl }],
