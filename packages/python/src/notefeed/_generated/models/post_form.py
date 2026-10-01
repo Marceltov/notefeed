@@ -5,7 +5,6 @@ from typing import Any, Self, TypeVar
 
 from attrs import define as _attrs_define
 
-from .. import types
 from ..types import UNSET, Unset
 
 T = TypeVar("T", bound="PostForm")
@@ -40,18 +39,6 @@ class PostForm:
             field_dict["password"] = password
 
         return field_dict
-
-    def to_multipart(self) -> types.RequestFiles:
-        files: types.RequestFiles = []
-
-        files.append(("markdown", (None, str(self.markdown).encode(), "text/plain")))
-
-        if not isinstance(self.password, Unset):
-            files.append(
-                ("password", (None, str(self.password).encode(), "text/plain"))
-            )
-
-        return files
 
     @classmethod
     def from_dict(cls, src_dict: Mapping[str, Any]) -> Self:

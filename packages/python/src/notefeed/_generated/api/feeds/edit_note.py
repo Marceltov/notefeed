@@ -8,7 +8,6 @@ from ... import errors
 from ...client import AuthenticatedClient, Client
 from ...models.error import Error
 from ...models.note import Note
-from ...models.post_form import PostForm
 from ...models.post_json import PostJson
 from ...types import UNSET, Response, Unset
 
@@ -17,7 +16,7 @@ def _get_kwargs(
     feed: str,
     id: str,
     *,
-    body: str | PostJson | PostForm | Unset = UNSET,
+    body: PostJson,
     x_feed_password: str | Unset = UNSET,
 ) -> dict[str, Any]:
     headers: dict[str, Any] = {}
@@ -32,17 +31,9 @@ def _get_kwargs(
         ),
     }
 
-    if isinstance(body, str):
-        _kwargs["data"] = body.to_dict()
-        headers["Content-Type"] = "application/x-www-form-urlencoded"
-    if isinstance(body, PostJson):
-        _kwargs["json"] = body.to_dict()
+    _kwargs["json"] = body.to_dict()
 
-        headers["Content-Type"] = "application/json"
-    if isinstance(body, PostForm):
-        _kwargs["files"] = body.to_multipart()
-
-        headers["Content-Type"] = "multipart/form-data; boundary=+++"
+    headers["Content-Type"] = "application/json"
 
     _kwargs["headers"] = headers
     return _kwargs
@@ -108,7 +99,7 @@ def sync_detailed(
     id: str,
     *,
     client: AuthenticatedClient,
-    body: str | PostJson | PostForm | Unset = UNSET,
+    body: PostJson,
     x_feed_password: str | Unset = UNSET,
 ) -> Response[Error | Note]:
     """Edit a note
@@ -121,9 +112,7 @@ def sync_detailed(
         feed (str):
         id (str):
         x_feed_password (str | Unset):
-        body (str):
         body (PostJson):
-        body (PostForm):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -152,7 +141,7 @@ def sync(
     id: str,
     *,
     client: AuthenticatedClient,
-    body: str | PostJson | PostForm | Unset = UNSET,
+    body: PostJson,
     x_feed_password: str | Unset = UNSET,
 ) -> Error | Note | None:
     """Edit a note
@@ -165,9 +154,7 @@ def sync(
         feed (str):
         id (str):
         x_feed_password (str | Unset):
-        body (str):
         body (PostJson):
-        body (PostForm):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -191,7 +178,7 @@ async def asyncio_detailed(
     id: str,
     *,
     client: AuthenticatedClient,
-    body: str | PostJson | PostForm | Unset = UNSET,
+    body: PostJson,
     x_feed_password: str | Unset = UNSET,
 ) -> Response[Error | Note]:
     """Edit a note
@@ -204,9 +191,7 @@ async def asyncio_detailed(
         feed (str):
         id (str):
         x_feed_password (str | Unset):
-        body (str):
         body (PostJson):
-        body (PostForm):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -233,7 +218,7 @@ async def asyncio(
     id: str,
     *,
     client: AuthenticatedClient,
-    body: str | PostJson | PostForm | Unset = UNSET,
+    body: PostJson,
     x_feed_password: str | Unset = UNSET,
 ) -> Error | Note | None:
     """Edit a note
@@ -246,9 +231,7 @@ async def asyncio(
         feed (str):
         id (str):
         x_feed_password (str | Unset):
-        body (str):
         body (PostJson):
-        body (PostForm):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
