@@ -82,11 +82,8 @@ function server(h: Headers): McpServer {
   return s;
 }
 
-// The SDK warns on every JSON-mode handler that mid-call notifications are dropped; none of our tools send any.
-const warn = console.warn;
-console.warn = () => {};
-const handler = createMcpHandler(({ requestInfo }) => server(requestInfo!.headers), { legacy: "reject", responseMode: "json" });
-console.warn = warn;
+// "auto" answers with one JSON body unless a tool emits mid-call notifications, which ours never do.
+const handler = createMcpHandler(({ requestInfo }) => server(requestInfo!.headers), { legacy: "reject" });
 
 const rpcError = (status: number, message: string) =>
   Response.json({ jsonrpc: "2.0", error: { code: -32600, message } }, { status });

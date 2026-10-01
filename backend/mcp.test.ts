@@ -64,6 +64,11 @@ describe("protocol", () => {
 });
 
 describe("tools", () => {
+  test("a tool call answers with a single JSON body", async () => {
+    const res = await rpc("tools/call", { name: "list_notes", arguments: { feed: "a" } });
+    expect(res.headers.get("content-type")).toContain("application/json");
+  });
+
   test("post_note", async () => {
     const r = await call("post_note", { feed: "a", markdown: "# Hi" });
     const { id } = r.structuredContent;
