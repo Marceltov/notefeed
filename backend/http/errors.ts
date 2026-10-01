@@ -3,6 +3,7 @@ import type { ErrorCode } from "../../shared/errors";
 import {
   AuthError,
   EmptyNoteError,
+  FeedExistsError,
   InvalidBodyError,
   InvalidFeedError,
   InvalidRequestError,
@@ -23,6 +24,7 @@ const STATUS: [new (...args: never[]) => NotefeedError, number][] = [
   [InvalidRequestError, 400],
   [AuthError, 401],
   [NotFoundError, 404],
+  [FeedExistsError, 409],
   [NoteTooLargeError, 413],
   [UnsupportedTypeError, 415],
   [RateLimitedError, 429], // and TooManyAttemptsError

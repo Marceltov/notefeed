@@ -16,6 +16,7 @@ const MESSAGES: Record<ErrorCode, string> = {
   invalid_body: "The note could not be read.",
   invalid_request: "Something went wrong.",
   not_found: "Not found.",
+  feed_exists: "This feed already exists, so it can't be given a password.",
 };
 
 // undefined for no code; an unknown code still says something.

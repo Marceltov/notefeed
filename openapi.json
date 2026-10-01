@@ -650,7 +650,8 @@
               "unsupported_type",
               "invalid_body",
               "invalid_request",
-              "not_found"
+              "not_found",
+              "feed_exists"
             ]
           }
         },
