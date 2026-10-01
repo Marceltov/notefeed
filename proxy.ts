@@ -11,7 +11,7 @@ const ONE_SEGMENT = /^\/([^/]+)\/?$/;
 function postTarget(pathname: string): string | null {
   const seg = ONE_SEGMENT.exec(pathname)?.[1];
   if (seg === undefined || seg === "logout") return null; // /logout is a route handler itself
-  return seg === "login" ? "/api/login" : `/api/feeds/${seg}/notes`; // reserved names get the handler's 400
+  return seg === "login" ? "/api/login" : `/api/v1/feeds/${seg}/notes`; // reserved names get the handler's 400
 }
 
 export function proxy(req: NextRequest) {

@@ -100,3 +100,40 @@ test.describe("without JavaScript", () => {
     await expect(page.locator("#compose-error")).toHaveText("The note is empty.");
   });
 });
+
+test("the REST API: post with the short form, read back as JSON, by name and by read id", async ({ request }) => {
+  const name = feedName();
+  const created = await request.post(`/${name}`, { data: "# Via the API", headers: { "content-type": "text/markdown" } });
+  expect(created.status()).toBe(201);
+  const { id, read_url } = await created.json();
+
+  const byName = await (await request.get(`/api/v1/feeds/${name}/notes?limit=1`)).json();
+  expect(byName).toEqual({ notes: [expect.objectContaining({ id, title: "Via the API" })], next: null });
+
+  const rid = new URL(read_url).pathname.split("/")[2];
+  const byReadId = await request.get(`/api/v1/read/${rid}/notes/${id}`);
+  expect((await byReadId.json()).markdown).toBe("# Via the API");
+  expect(await byReadId.text()).not.toContain(name);
+
+  const spec = await (await request.get("/api/v1/openapi.json")).json();
+  expect(spec.paths).toHaveProperty("/api/v1/feeds/{feed}/notes");
+});
+
+test("the REST API answers unknown paths and methods in JSON, not with Next's pages", async ({ request }) => {
+  const unknown = await request.get("/api/v1/nope");
+  expect(unknown.status()).toBe(404);
+  expect(await unknown.json()).toEqual({ error: "no such endpoint", code: "not_found" });
+  const put = await request.put("/api/v1/openapi.json");
+  expect(put.status()).toBe(405);
+  expect(put.headers()["allow"]).toBe("GET, HEAD");
+  expect(await put.json()).toEqual({ error: "method not allowed" });
+  expect((await request.head("/api/v1/openapi.json")).status()).toBe(200);
+});
+
+test("an encoded slash or non-ASCII feed name is refused, through the real proxy rewrite", async ({ request }) => {
+  for (const feed of ["a%2Fb", "%E2%9C%93"]) {
+    const res = await request.post(`/${feed}`, { data: "# Hi", headers: { "content-type": "text/markdown" } });
+    expect(res.status()).toBe(400);
+    expect((await res.json()).code).toBe("invalid_feed");
+  }
+});

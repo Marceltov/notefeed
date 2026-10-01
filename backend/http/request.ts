@@ -1,4 +1,5 @@
 // Reading requests, for the handlers in backend/http.
+import { SESSION_COOKIE, checkBearer, locked, sessionOk } from "../auth";
 import { publicUrl } from "../urls";
 
 // Reads at most `max` bytes; null (and the stream cancelled) as soon as the body is larger.
@@ -48,3 +49,12 @@ export const wantsHtml = (h: Headers) => (h.get("accept") ?? "").includes("text/
 
 export const seeOther = (location: string, headers: HeadersInit = {}) =>
   new Response(null, { status: 303, headers: { ...Object.fromEntries(new Headers(headers)), Location: location } });
+
+// Scripts send the bearer password. The web UI sends the session cookie instead, accepted only from
+// this instance's own pages: a cross-site form would carry no cookie (SameSite=Lax), and the Origin
+// check covers browsers that would. Throws AuthError or TooManyAttemptsError.
+export function authorize(h: Headers, ip: string): void {
+  if (!locked()) return;
+  if (!h.has("authorization") && sameOrigin(h) && sessionOk(cookie(h, SESSION_COOKIE))) return;
+  checkBearer(h.get("authorization"), ip);
+}

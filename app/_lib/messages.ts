@@ -14,6 +14,8 @@ const MESSAGES: Record<ErrorCode, string> = {
   too_large: "The note is over 100 KB.",
   unsupported_type: "The note could not be read.",
   invalid_body: "The note could not be read.",
+  invalid_request: "Something went wrong.",
+  not_found: "Not found.",
 };
 
 // undefined for no code; an unknown code still says something.

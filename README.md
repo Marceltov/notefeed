@@ -41,6 +41,17 @@ The answer includes the feed's `read_url`: a read-only RSS link to give to feed 
 
 To require a password for posting and the web UI, set `NOTEFEED_PASSWORD`. Read links stay open. See [Configuration](https://docs.notefeed.me/configuration/).
 
+## Development
+
+```sh
+npm ci
+npm run dev        # http://localhost:3000
+npm test           # unit tests; npm run test:e2e for the browser tests
+npm run generate   # after changing the API in backend/http/api.ts: regenerates openapi.json
+```
+
+The REST API is defined in code (`backend/http/api.ts`); `openapi.json` is generated from it and committed. CI fails when it is stale. Use Node 22 (`.nvmrc`).
+
 ## License
 
 - **The notefeed server** (the web app and the Docker image) is licensed under the [GNU Affero General Public License v3.0](LICENSE). You can self-host it for free, for yourself or your company. If you run a modified version as a service for others, you must publish your changes under the same license.

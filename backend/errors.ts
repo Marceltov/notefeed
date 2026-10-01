@@ -81,3 +81,15 @@ export class InvalidBodyError extends NotefeedError {
     super("invalid_body", message);
   }
 }
+
+/** A path or query parameter the API can't use, e.g. `limit=0`. */
+export class InvalidRequestError extends NotefeedError {
+  constructor(message: string) {
+    super("invalid_request", message);
+  }
+}
+export class NotFoundError extends NotefeedError {
+  constructor(message = "not found") {
+    super("not_found", message);
+  }
+}
