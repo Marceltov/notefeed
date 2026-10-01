@@ -1,7 +1,7 @@
 import { mkdtemp, readdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { beforeEach, describe, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { readId, resetFeedsForTests } from "./feeds";
 import { resetRateLimitsForTests } from "./limits";
 import { createNote } from "./notes";
@@ -18,6 +18,7 @@ beforeEach(async () => {
   resetRateLimitsForTests();
   for (const k of ["NOTEFEED_PASSWORD", "NOTEFEED_RATE_LIMIT", "PUBLIC_URL"]) delete process.env[k];
 });
+afterEach(() => vi.restoreAllMocks());
 
 async function rpc(method: string, params: Record<string, unknown> = {}, headers: Record<string, string> = {}, version = V, withMeta = true) {
   const name: Record<string, string> = typeof params.name === "string" ? { "mcp-name": params.name } : {};
@@ -129,7 +130,6 @@ describe("tools", () => {
     expect(r.isError).toBe(true);
     expect(r.content[0].text).toBe("internal error");
     expect(log).toHaveBeenCalledOnce();
-    log.mockRestore();
   });
 
   test("empty note and rate limit", async () => {
@@ -146,7 +146,8 @@ describe("tools", () => {
 });
 
 describe("gate on a locked instance", () => {
-  const WWW = 'Bearer resource_metadata="http://localhost:3000/.well-known/oauth-protected-resource/mcp"';
+  const META_URL = 'resource_metadata="http://localhost:3000/.well-known/oauth-protected-resource/mcp"';
+  const WWW = `Bearer ${META_URL}`;
   const bearer = (t: string) => ({ authorization: `Bearer ${t}` });
   beforeEach(() => {
     process.env.NOTEFEED_PASSWORD = "pw";
@@ -165,7 +166,21 @@ describe("gate on a locked instance", () => {
   });
   test("an access token for another resource, or a refresh token, is 401", async () => {
     expect((await rpc("tools/list", {}, bearer(sign("access", { aud: "http://other/mcp" })))).status).toBe(401);
-    expect((await rpc("tools/list", {}, bearer(sign("refresh", { aud: "http://localhost:3000/mcp" } as never)))).status).toBe(401);
+    expect((await rpc("tools/list", {}, bearer(sign("refresh", { cid: "c", aud: "http://localhost:3000/mcp", jti: "j" })))).status).toBe(401);
+  });
+  test.each([
+    ["expired", () => sign("access", { aud: "http://localhost:3000/mcp" }, Date.now() - 3601_000)],
+    ["for another resource", () => sign("access", { aud: "http://other/mcp" })],
+  ])("an access token %s is invalid_token and no failed password attempt", async (_, token) => {
+    process.env.NOTEFEED_RATE_LIMIT = "1";
+    const res = await rpc("tools/list", {}, bearer(token()));
+    expect(res.status).toBe(401);
+    expect(res.headers.get("www-authenticate")).toBe(`Bearer error="invalid_token", ${META_URL}`);
+    expect((await rpc("tools/list", {}, bearer("pw"))).status).toBe(200);
+  });
+  test("the scheme is case-insensitive and extra spaces are fine", async () => {
+    expect((await rpc("tools/list", {}, { authorization: "bearer pw" })).status).toBe(200);
+    expect((await rpc("tools/list", {}, { authorization: "Bearer  pw" })).status).toBe(200);
   });
   test("over the failed-attempt limit is 429, even with the right password", async () => {
     process.env.NOTEFEED_RATE_LIMIT = "2";

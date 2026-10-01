@@ -1,7 +1,7 @@
 // The MCP endpoint: POST /mcp, protocol 2026-07-28 only, three tools over the same backend the HTTP API uses.
 import { McpServer, createMcpHandler, type AuthInfo } from "@modelcontextprotocol/server";
 import * as z from "zod";
-import { checkBearer, locked } from "./auth";
+import { bearerOf, checkBearer, locked } from "./auth";
 import { AuthError, NotefeedError, NotFoundError, TooManyAttemptsError } from "./errors";
 import { FEED_RE, readId } from "./feeds";
 import { clientIp } from "./limits";
@@ -91,8 +91,9 @@ const rpcError = (status: number, message: string, headers?: Record<string, stri
   Response.json({ jsonrpc: "2.0", error: { code: -32600, message } }, { status, headers });
 
 // What may reach the handler. The SDK doesn't check Origin, so a browser page of another site can't drive
-// this endpoint: no Origin (server-side clients) passes, a present one must be our own host. A locked
-// instance then wants an OAuth access token minted for this resource, or the password as the bearer.
+// this endpoint: no Origin (server-side clients) passes, a present one must be our own host. That stops
+// DNS rebinding only when PUBLIC_URL is set; without it our host comes from the request's own Host header.
+// A locked instance then wants an OAuth access token minted for this resource, or the password as the bearer.
 function gate(req: Request): Response | AuthInfo | undefined {
   const origin = req.headers.get("origin");
   if (origin !== null) {
@@ -103,15 +104,21 @@ function gate(req: Request): Response | AuthInfo | undefined {
     if (host !== new URL(publicUrl(req.headers)).host) return rpcError(403, "forbidden origin");
   }
   if (!locked()) return undefined;
+  const unauthorized = (message: string, error = "") =>
+    rpcError(401, message, { "www-authenticate": `Bearer ${error}resource_metadata="${publicUrl(req.headers)}/.well-known/oauth-protected-resource/mcp"` });
   const authorization = req.headers.get("authorization");
-  const token = /^Bearer (.+)$/.exec(authorization ?? "")?.[1] ?? "";
-  if (verify("access", token)?.aud === mcpResource(req.headers)) return { token, clientId: "oauth", scopes: [] };
+  const token = bearerOf(authorization);
+  // An access token we signed (now = 0 ignores expiry) is never a password guess: when it has expired or
+  // names another resource, invalid_token tells the client to refresh, and no failed attempt is counted.
+  if (verify("access", token, 0)) {
+    if (verify("access", token)?.aud === mcpResource(req.headers)) return { token, clientId: "oauth", scopes: [] };
+    return unauthorized("invalid token", 'error="invalid_token", ');
+  }
   try {
     checkBearer(authorization, clientIp(req.headers));
   } catch (e) {
     if (e instanceof TooManyAttemptsError) return rpcError(429, e.message, { "retry-after": String(e.retryAfter) });
-    if (e instanceof AuthError)
-      return rpcError(401, e.message, { "www-authenticate": `Bearer resource_metadata="${publicUrl(req.headers)}/.well-known/oauth-protected-resource/mcp"` });
+    if (e instanceof AuthError) return unauthorized(e.message);
     throw e;
   }
   return { token: "", clientId: "password", scopes: [] };
