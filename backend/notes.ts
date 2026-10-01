@@ -2,7 +2,7 @@
 import { extractTitle, idStamp, slugify } from "../shared/notes";
 import { deleteNoteFile, replaceNote, writeNote, listNoteFiles, readNote } from "./data/notes";
 import { EmptyNoteError, NoteTooLargeError } from "./errors";
-import { addFeed, assertFeed, checkFeed, feedsReady } from "./feeds";
+import { assertFeed, checkFeed, ensureFeed } from "./feeds";
 
 export type Note = { id: string; title: string; markdown: string; createdAt: Date };
 
@@ -33,9 +33,8 @@ export function checkMarkdown(markdown: string): void {
 export async function createNote(feed: string, markdown: string, now = new Date()): Promise<Note> {
   assertFeed(feed);
   checkMarkdown(markdown);
-  await feedsReady();
+  await ensureFeed(feed);
   const id = await writeNote(feed, `${idStamp(now)}-${slugify(extractTitle(markdown))}`, markdown);
-  await addFeed(feed);
   return toNote(id, markdown);
 }
 

@@ -3,9 +3,9 @@
 import { createHmac, randomBytes, scrypt, timingSafeEqual, type ScryptOptions } from "node:crypto";
 import { promisify } from "node:util";
 import { PASSWORD_PATTERN, PASSWORD_RULE } from "../shared/password";
-import { createFeedDirWithHash, readHash, removeHash, writeHash } from "./data/password";
+import { readHash, removeHash, writeHash } from "./data/password";
 import { AuthError, FeedExistsError, InvalidBodyError, TooManyAttemptsError } from "./errors";
-import { addFeed, checkFeed, feedsReady, secret } from "./feeds";
+import { checkFeed, createProtectedFeed, secret } from "./feeds";
 import { authAttempt } from "./limits";
 
 // An empty password means none, wherever it comes from (header, body field, MCP argument).
@@ -99,8 +99,7 @@ export async function unlock(feed: string, password: string, ip: string): Promis
 
 export async function createProtected(feed: string, password: string): Promise<void> {
   checkNewPassword(password);
-  await feedsReady();
-  if (await createFeedDirWithHash(feed, await hashPassword(password))) return void (await addFeed(feed));
+  if (await createProtectedFeed(feed, await hashPassword(password))) return;
   throw (await protectedFeed(feed)) ? new AuthError() : new FeedExistsError();
 }
 

@@ -26,15 +26,16 @@ export async function writeHash(feed: string, hash: string): Promise<void> {
 
 export const removeHash = (feed: string): Promise<void> => rm(/*turbopackIgnore: true*/ file(feed), { force: true });
 
-// The directory appears already holding its hash, so the feed is never open, even briefly.
+// The directory appears already holding its hash and read id (see data/feeds.ts), so the feed is never open, even briefly.
 // rename() onto a pre-existing EMPTY directory succeeds and claims it (intentional: an empty dir is no feed).
 // rename() onto a non-empty directory fails, so exactly one of two racers wins; false = lost.
-export async function createFeedDirWithHash(feed: string, hash: string): Promise<boolean> {
+export async function createFeedDirWithHash(feed: string, hash: string, readId: string): Promise<boolean> {
   await mkdir(/*turbopackIgnore: true*/ root(), { recursive: true });
   const tmp = join(root(), tmpName()); // a leading dot is not a valid feed name, so never listed as a feed
   try {
     await mkdir(/*turbopackIgnore: true*/ tmp);
     await writeFile(/*turbopackIgnore: true*/ join(tmp, ".password"), hash);
+    await writeFile(/*turbopackIgnore: true*/ join(tmp, ".readid"), readId);
     await rename(/*turbopackIgnore: true*/ tmp, feedDir(feed));
     return true;
   } catch (e) {

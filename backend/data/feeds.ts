@@ -1,6 +1,6 @@
 // A feed on disk is a directory `<DATA_DIR>/<feed>/`.
 import { randomBytes } from "node:crypto";
-import { link, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { link, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { feedDir, isErrno, orMissing, root } from "./fs";
 
@@ -21,6 +21,7 @@ export const readReadId = async (feed: string): Promise<string | null> =>
 // Exclusive create: a temp file is hard-linked into place, so the file appears complete or not at all and
 // exactly one of two racers wins. false = `.readid` already exists.
 export async function writeReadId(feed: string, id: string): Promise<boolean> {
+  await mkdir(/*turbopackIgnore: true*/ feedDir(feed), { recursive: true });
   const tmp = join(feedDir(feed), `.${randomBytes(6).toString("hex")}.tmp`);
   try {
     await writeFile(/*turbopackIgnore: true*/ tmp, id);

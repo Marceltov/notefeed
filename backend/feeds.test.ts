@@ -1,8 +1,8 @@
 import { mkdir, mkdtemp, readFile, readdir, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { beforeEach, describe, expect, test } from "vitest";
-import { FEED_RE, READ_ID_RE, RESERVED_FEEDS, checkFeed, derivedReadId, feedCount, feedForReadId, hasFeed, listFeeds, readIdOf, removeFeed, resetFeedsForTests } from "./feeds";
+import { beforeEach, describe, expect, test, vi } from "vitest";
+import { FEED_RE, READ_ID_RE, RESERVED_FEEDS, checkFeed, derivedReadId, ensureFeed, feedCount, feedForReadId, hasFeed, listFeeds, readIdOf, removeFeed, resetFeedsForTests } from "./feeds";
 import { createProtected } from "./feedlock";
 import { createNote, listNotes } from "./notes";
 
@@ -152,10 +152,56 @@ describe("per-feed read ids", () => {
     expect(await feedCount()).toBe(0);
   });
 
-  test("two concurrent first posts end with one .readid", async () => {
+  test("two concurrent first creations end with one .readid and the same id", async () => {
+    const [x, y] = await Promise.all([ensureFeed("race"), ensureFeed("race")]);
     await Promise.all([createNote("race", "a"), createNote("race", "b")]);
-    expect((await readdir(join(dir, "race"))).filter((n) => n.startsWith(".") )).toEqual([".readid"]);
-    expect(await readIdOf("race")).toBe((await readid("race")).trim());
+    expect(x).toBe(y);
+    expect((await readdir(join(dir, "race"))).filter((n) => n.startsWith("."))).toEqual([".readid"]);
+    expect((await readid("race")).trim()).toBe(x);
+    expect(await readIdOf("race")).toBe(x);
+  });
+
+  test("the id is on disk before the feed has content, so a failed creation can't lose it", async () => {
+    const id = await ensureFeed("early"); // as if the note write after it failed
+    expect(await readdir(join(dir, "early"))).toEqual([".readid"]);
+    resetFeedsForTests();
+    expect(await readIdOf("early")).toBe(id);
+    expect(id).not.toBe(derivedReadId("early"));
+  });
+
+  test("a protected feed has .readid in it from the moment it exists", async () => {
+    await createProtected("locked2", "correct horse battery");
+    resetFeedsForTests();
+    expect(await readIdOf("locked2")).not.toBe(derivedReadId("locked2"));
+  });
+
+  test("a copied .readid: the later feed gets its derived id, the first keeps its link", async () => {
+    for (const f of ["a", "b"]) {
+      await mkdir(join(dir, f));
+      await writeFile(join(dir, f, ".readid"), "A".repeat(22));
+    }
+    expect(await readIdOf("a")).toBe("A".repeat(22));
+    expect(await readIdOf("b")).toBe(derivedReadId("b"));
+    expect(await feedForReadId("A".repeat(22))).toBe("a");
+    await removeFeed("b");
+    expect(await feedForReadId("A".repeat(22))).toBe("a");
+    expect(await feedForReadId(derivedReadId("b"))).toBeNull();
+  });
+
+  test("logs a junk or duplicate .readid without the feed name", async () => {
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    await mkdir(join(dir, "secretjunk"));
+    await writeFile(join(dir, "secretjunk", ".readid"), "junk");
+    await mkdir(join(dir, "secretdup"));
+    await writeFile(join(dir, "secretdup", ".readid"), "A".repeat(22));
+    await mkdir(join(dir, "secretdup2"));
+    await writeFile(join(dir, "secretdup2", ".readid"), "A".repeat(22));
+    await readIdOf("secretjunk");
+    const out = log.mock.calls.flat().join(" ");
+    const n = log.mock.calls.length;
+    log.mockRestore();
+    expect(n).toBe(2);
+    expect(out).not.toContain("secret");
   });
 
   test(".readid is not a note and not a feed", async () => {
