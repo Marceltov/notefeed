@@ -6,6 +6,7 @@ import { readId, resetFeedsForTests } from "./feeds";
 import { resetRateLimitsForTests } from "./limits";
 import { createNote } from "./notes";
 import { mcpRoute } from "./mcp";
+import { sign } from "./oauth/tokens";
 
 const V = "2026-07-28";
 const META = { "io.modelcontextprotocol/clientInfo": { name: "t", version: "0" }, "io.modelcontextprotocol/clientCapabilities": {} };
@@ -141,5 +142,41 @@ describe("tools", () => {
     const r = await call("post_note", { feed: "a", markdown: "y" });
     expect(r.isError).toBe(true);
     expect(r.content[0].text).toBe("rate limit exceeded");
+  });
+});
+
+describe("gate on a locked instance", () => {
+  const WWW = 'Bearer resource_metadata="http://localhost:3000/.well-known/oauth-protected-resource/mcp"';
+  const bearer = (t: string) => ({ authorization: `Bearer ${t}` });
+  beforeEach(() => {
+    process.env.NOTEFEED_PASSWORD = "pw";
+  });
+
+  test("no authorization is 401 pointing at the metadata", async () => {
+    const res = await rpc("tools/list");
+    expect(res.status).toBe(401);
+    expect(res.headers.get("www-authenticate")).toBe(WWW);
+  });
+  test("the password works as a bearer", async () => {
+    expect((await rpc("tools/list", {}, bearer("pw"))).status).toBe(200);
+  });
+  test("an access token for this resource works", async () => {
+    expect((await rpc("tools/list", {}, bearer(sign("access", { aud: "http://localhost:3000/mcp" })))).status).toBe(200);
+  });
+  test("an access token for another resource, or a refresh token, is 401", async () => {
+    expect((await rpc("tools/list", {}, bearer(sign("access", { aud: "http://other/mcp" })))).status).toBe(401);
+    expect((await rpc("tools/list", {}, bearer(sign("refresh", { aud: "http://localhost:3000/mcp" } as never)))).status).toBe(401);
+  });
+  test("over the failed-attempt limit is 429, even with the right password", async () => {
+    process.env.NOTEFEED_RATE_LIMIT = "2";
+    expect((await rpc("tools/list", {}, bearer("a"))).status).toBe(401);
+    expect((await rpc("tools/list", {}, bearer("b"))).status).toBe(401);
+    const res = await rpc("tools/list", {}, bearer("pw"));
+    expect(res.status).toBe(429);
+    expect(Number(res.headers.get("retry-after"))).toBeGreaterThanOrEqual(1);
+  });
+  test("an open instance ignores the bearer", async () => {
+    delete process.env.NOTEFEED_PASSWORD;
+    expect((await rpc("tools/list", {}, bearer("garbage"))).status).toBe(200);
   });
 });

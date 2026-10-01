@@ -1,12 +1,14 @@
 // The MCP endpoint: POST /mcp, protocol 2026-07-28 only, three tools over the same backend the HTTP API uses.
 import { McpServer, createMcpHandler, type AuthInfo } from "@modelcontextprotocol/server";
 import * as z from "zod";
-import { NotefeedError, NotFoundError } from "./errors";
+import { checkBearer, locked } from "./auth";
+import { AuthError, NotefeedError, NotFoundError, TooManyAttemptsError } from "./errors";
 import { FEED_RE, readId } from "./feeds";
 import { clientIp } from "./limits";
 import { getNote, listNotes, type Note } from "./notes";
+import { verify } from "./oauth/tokens";
 import { postNote } from "./posting";
-import { feedPath, publicUrl, rssPath } from "./urls";
+import { feedPath, mcpResource, publicUrl, rssPath } from "./urls";
 
 const SECRET_NOTE = "The feed name works like a password: anyone who knows it can read and post. Don't repeat it in replies.";
 
@@ -85,20 +87,34 @@ function server(h: Headers): McpServer {
 // "auto" answers with one JSON body unless a tool emits mid-call notifications, which ours never do.
 const handler = createMcpHandler(({ requestInfo }) => server(requestInfo!.headers), { legacy: "reject" });
 
-const rpcError = (status: number, message: string) =>
-  Response.json({ jsonrpc: "2.0", error: { code: -32600, message } }, { status });
+const rpcError = (status: number, message: string, headers?: Record<string, string>) =>
+  Response.json({ jsonrpc: "2.0", error: { code: -32600, message } }, { status, headers });
 
 // What may reach the handler. The SDK doesn't check Origin, so a browser page of another site can't drive
-// this endpoint: no Origin (server-side clients) passes, a present one must be our own host.
+// this endpoint: no Origin (server-side clients) passes, a present one must be our own host. A locked
+// instance then wants an OAuth access token minted for this resource, or the password as the bearer.
 function gate(req: Request): Response | AuthInfo | undefined {
   const origin = req.headers.get("origin");
-  if (origin === null) return undefined;
-  let host: string | null = null;
+  if (origin !== null) {
+    let host: string | null = null;
+    try {
+      host = new URL(origin).host;
+    } catch {}
+    if (host !== new URL(publicUrl(req.headers)).host) return rpcError(403, "forbidden origin");
+  }
+  if (!locked()) return undefined;
+  const authorization = req.headers.get("authorization");
+  const token = /^Bearer (.+)$/.exec(authorization ?? "")?.[1] ?? "";
+  if (verify("access", token)?.aud === mcpResource(req.headers)) return { token, clientId: "oauth", scopes: [] };
   try {
-    host = new URL(origin).host;
-  } catch {}
-  if (host !== new URL(publicUrl(req.headers)).host) return rpcError(403, "forbidden origin");
-  return undefined;
+    checkBearer(authorization, clientIp(req.headers));
+  } catch (e) {
+    if (e instanceof TooManyAttemptsError) return rpcError(429, e.message, { "retry-after": String(e.retryAfter) });
+    if (e instanceof AuthError)
+      return rpcError(401, e.message, { "www-authenticate": `Bearer resource_metadata="${publicUrl(req.headers)}/.well-known/oauth-protected-resource/mcp"` });
+    throw e;
+  }
+  return { token: "", clientId: "password", scopes: [] };
 }
 
 export async function mcpRoute(req: Request): Promise<Response> {
