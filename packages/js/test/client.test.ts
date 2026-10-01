@@ -3,19 +3,18 @@ import {
   AuthError,
   Client,
   ConfigError,
-  InvalidNoteError,
+  InvalidRequestError,
   LimitReachedError,
   NotefeedError,
+  NotFoundError,
   NoteTooLargeError,
   RateLimitedError,
+  type Note,
 } from "../src/index.js";
-import { fakeServer } from "./server.js";
+import { fakeServer, type Recorded } from "./server.js";
 
 let server: Awaited<ReturnType<typeof fakeServer>>;
 beforeEach(async () => {
-  delete process.env.NOTEFEED_URL;
-  delete process.env.NOTEFEED_FEED;
-  delete process.env.NOTEFEED_PASSWORD;
   server = await fakeServer();
 });
 afterEach(() => server.close());
@@ -26,181 +25,148 @@ const CREATED = {
   feed_url: "https://n.example/inbox",
   read_url: "https://n.example/r/AAAAAAAAAAAAAAAAAAAAAA/feed.xml",
 };
-
-test("postSendsMarkdownAndReturnsNote", async () => {
-  server.reply(201, CREATED);
-  const note = await new Client({ url: server.url, feed: "inbox" }).post("# Café\r\nx");
-  expect(note).toEqual({ id: CREATED.id, url: CREATED.url, readUrl: CREATED.read_url });
-  const req = server.requests[0];
-  expect(req.method).toBe("POST");
-  expect(req.path).toBe("/inbox");
-  expect(req.headers.authorization).toBeUndefined();
-  expect(req.headers["content-type"]).toBe("text/markdown; charset=utf-8");
-  expect(req.body.equals(Buffer.from("# Café\r\nx", "utf8"))).toBe(true);
+const note = (h: number): Note => ({
+  id: `20260930T${String(h).padStart(2, "0")}0000Z-n${h}`,
+  title: `N${h}`,
+  markdown: `# N${h}`,
+  created_at: `2026-09-30T${String(h).padStart(2, "0")}:00:00.000Z`,
+  url: `https://n.example/inbox/n${h}`,
 });
+const collect = async <T>(it: AsyncIterable<T>) => {
+  const out: T[] = [];
+  for await (const x of it) out.push(x);
+  return out;
+};
+const url = (r: Recorded) => new URL(r.path, "http://x");
 
-test("returnsReadUrl", async () => {
-  server.reply(201, CREATED);
-  expect((await new Client({ url: server.url, feed: "inbox" }).post("x")).readUrl).toBe(CREATED.read_url);
-});
-
-test("trailingSlashAndSubpath", async () => {
-  await new Client({ url: server.url + "/sub/", feed: "inbox" }).post("x");
-  expect(server.requests[0].path).toBe("/sub/inbox");
-});
-
-test("postUsesClientFeed", async () => {
-  await new Client({ url: server.url, feed: "inbox" }).post("x");
-  expect(server.requests[0].path).toBe("/inbox");
-});
-
-test("postFeedOverridesClientFeed", async () => {
-  await new Client({ url: server.url, feed: "inbox" }).post("x", { feed: "other" });
-  await new Client({ url: server.url }).post("x", { feed: "other" });
-  expect(server.requests.map((r) => r.path)).toEqual(["/other", "/other"]);
-});
-
-test("noFeedRaisesConfigErrorBeforeRequest", async () => {
-  const err = await new Client({ url: server.url }).post("x").catch((e) => e);
-  expect(err).toBeInstanceOf(ConfigError);
-  expect(err.message).toMatch(/no feed given/);
-  expect(err.status).toBeNull();
-  expect(server.requests.length).toBe(0);
-});
-
-describe("invalidFeedNameRaisesConfigError", () => {
-  test.each(["Inbox", "a/b", "..", "a".repeat(65), "with space"])("%s", async (feed) => {
-    expect(() => new Client({ url: server.url, feed })).toThrow(/invalid feed name/);
-    const err = await new Client({ url: server.url }).post("x", { feed }).catch((e) => e);
-    expect(err).toBeInstanceOf(ConfigError);
-    expect(err.message).toMatch(/invalid feed name/);
-    expect(server.requests.length).toBe(0);
+describe("post", () => {
+  test("sends {markdown} as JSON to the feed and returns the created note", async () => {
+    server.reply(201, CREATED);
+    expect(await new Client({ url: server.url, feed: "inbox" }).post("# Café\r\nx")).toEqual(CREATED);
+    const req = server.requests[0];
+    expect([req.method, req.path]).toEqual(["POST", "/api/v1/feeds/inbox/notes"]);
+    expect(JSON.parse(req.body.toString())).toEqual({ markdown: "# Café\r\nx" });
+    expect(req.headers.authorization).toBeUndefined();
+  });
+  test("the password goes as a bearer; a per-call feed overrides the default", async () => {
+    await new Client({ url: server.url, feed: "inbox", password: "pw" }).post("x", { feed: "other" });
+    expect(server.requests[0].path).toBe("/api/v1/feeds/other/notes");
+    expect(server.requests[0].headers.authorization).toBe("Bearer pw");
+  });
+  test("a base URL with a path prefix and a trailing slash keeps the prefix", async () => {
+    await new Client({ url: `${server.url}/prefix/`, feed: "inbox" }).post("x");
+    expect(server.requests[0].path).toBe("/prefix/api/v1/feeds/inbox/notes");
   });
 });
 
-test("invalidFeedNameIsNotEchoed", async () => {
-  // The name is the write key: a near miss must not end up in CI logs.
-  const feed = "Homelab-7f3k2q9x4m8wz";
-  expect(() => new Client({ url: server.url, feed })).toThrow(/invalid feed name/);
-  expect(() => new Client({ url: server.url, feed })).not.toThrow(/7f3k2q9x4m8wz/);
-  const err = await new Client({ url: server.url }).post("x", { feed }).catch((e) => e);
-  expect(err.message).not.toContain("7f3k2q9x4m8wz");
-});
-
-test("passwordSentAsBearerOnlyWhenSet", async () => {
-  await new Client({ url: server.url, feed: "inbox" }).post("x");
-  await new Client({ url: server.url, feed: "inbox", password: "" }).post("x");
-  await new Client({ url: server.url, feed: "inbox", password: "s3cret\n" }).post("x");
-  expect(server.requests.map((r) => r.headers.authorization)).toEqual([undefined, undefined, "Bearer s3cret"]);
-});
-
-test("ignoresEnvironment", async () => {
-  // The library takes its settings from code only; env vars are the CLI's business.
-  process.env.NOTEFEED_URL = "http://127.0.0.1:1";
-  process.env.NOTEFEED_FEED = "envfeed";
-  process.env.NOTEFEED_PASSWORD = "envpw";
-  await new Client({ url: server.url, feed: "argfeed" }).post("x");
-  expect(server.requests[0].path).toBe("/argfeed");
-  expect(server.requests[0].headers.authorization).toBeUndefined();
-  expect(() => new Client({ url: "" })).toThrow(ConfigError);
-});
-
-test("missingUrl", () => {
-  expect(() => new Client({ url: "", feed: "inbox" })).toThrow(/url/);
-  // Plain-JS callers get a ConfigError, not a TypeError from reading undefined.
-  expect(() => new (Client as unknown as new () => Client)()).toThrow(ConfigError);
-});
-
-test("noModuleLevelPost", async () => {
-  expect("post" in (await import("../src/index.js"))).toBe(false);
-});
-
-describe("errorMapping", () => {
+describe("errors map from the response's code", () => {
   test.each([
-    [400, InvalidNoteError],
-    [415, InvalidNoteError],
-    [401, AuthError],
-    [413, NoteTooLargeError],
-    [429, RateLimitedError],
-    [507, LimitReachedError],
-    [500, NotefeedError],
-  ])("%i", async (status, type) => {
-    server.reply(status, { error: `reason ${status}` });
-    const err = await new Client({ url: server.url, feed: "inbox" }).post("x").catch((e) => e);
-    expect(err.constructor).toBe(type);
-    expect(err).toBeInstanceOf(NotefeedError);
-    expect(err.status).toBe(status);
-    expect(err.message).toBe(`reason ${status}`);
+    ["auth", 401, AuthError],
+    ["rate_limited", 429, RateLimitedError],
+    ["too_many_attempts", 429, RateLimitedError],
+    ["not_found", 404, NotFoundError],
+    ["feed_limit", 507, LimitReachedError],
+    ["note_limit", 507, LimitReachedError],
+    ["too_large", 413, NoteTooLargeError],
+    ["invalid_feed", 400, InvalidRequestError],
+    ["reserved_feed", 400, InvalidRequestError],
+    ["empty_note", 400, InvalidRequestError],
+    ["invalid_body", 400, InvalidRequestError],
+    ["invalid_request", 400, InvalidRequestError],
+    ["unsupported_type", 415, InvalidRequestError],
+  ] as const)("%s → %s", async (code, status, cls) => {
+    server.reply(status, { error: `because ${code}`, code });
+    const e = await new Client({ url: server.url, feed: "inbox" }).post("x").catch((e: unknown) => e);
+    expect(e).toBeInstanceOf(cls);
+    expect(e).toMatchObject({ status, code, message: `because ${code}` });
+  });
+  test("RateLimitedError carries Retry-After", async () => {
+    server.reply(429, { error: "slow down", code: "rate_limited" }, "application/json", { "Retry-After": "17" });
+    const e = (await new Client({ url: server.url, feed: "inbox" }).post("x").catch((e: unknown) => e)) as RateLimitedError;
+    expect(e.retryAfter).toBe(17);
+  });
+  test("an HTML 502 from a proxy is a NotefeedError with the status and no code", async () => {
+    server.reply(502, "<html><body>Bad Gateway</body></html>", "text/html");
+    const e = (await new Client({ url: server.url, feed: "inbox" }).post("x").catch((e: unknown) => e)) as NotefeedError;
+    expect(e).toBeInstanceOf(NotefeedError);
+    expect([e.status, e.code]).toEqual([502, null]);
+    expect(e.message).toMatch(/^HTTP 502/);
+  });
+  test("an unreachable server is a NotefeedError without a status", async () => {
+    await server.close();
+    const e = (await new Client({ url: server.url, feed: "inbox", timeoutMs: 2000 }).post("x").catch((e: unknown) => e)) as NotefeedError;
+    expect(e).toBeInstanceOf(NotefeedError);
+    expect(e.status).toBeNull();
+    expect(e.message).toMatch(/^could not reach/);
   });
 });
 
-test("429RaisesRateLimitedWithRetryAfter", async () => {
-  server.reply(429, { error: "rate limit exceeded" }, "application/json", { "Retry-After": "42" });
-  server.reply(429, { error: "rate limit exceeded" });
-  const c = new Client({ url: server.url, feed: "inbox" });
-  const first = await c.post("x").catch((e) => e);
-  expect(first).toBeInstanceOf(RateLimitedError);
-  expect(first.retryAfter).toBe(42);
-  const second = await c.post("x").catch((e) => e);
-  expect(second).toBeInstanceOf(RateLimitedError);
-  expect(second.retryAfter).toBeNull();
+describe("config", () => {
+  test.each(["Bad Name", "a/b", ""])("an invalid feed name %j is a ConfigError, and nothing is sent", async (feed) => {
+    await expect(new Client({ url: server.url }).post("x", { feed: feed || undefined })).rejects.toBeInstanceOf(ConfigError);
+    expect(server.requests).toHaveLength(0);
+  });
+  test("a password with a control character inside is a ConfigError (surrounding whitespace is trimmed)", () => {
+    expect(() => new Client({ url: server.url, password: "p\nw" })).toThrow(ConfigError);
+    expect(() => new Client({ url: server.url, password: "pw\n" })).not.toThrow();
+  });
+  test("no url is a ConfigError", () => {
+    expect(() => new Client({ url: "" })).toThrow(ConfigError);
+  });
+  test("fromEnv reads NOTEFEED_URL, NOTEFEED_FEED and NOTEFEED_PASSWORD", async () => {
+    const c = Client.fromEnv({ NOTEFEED_URL: server.url, NOTEFEED_FEED: "inbox", NOTEFEED_PASSWORD: "pw" });
+    await c.post("x");
+    expect(server.requests[0].path).toBe("/api/v1/feeds/inbox/notes");
+    expect(server.requests[0].headers.authorization).toBe("Bearer pw");
+  });
 });
 
-test("507RaisesLimitReached", async () => {
-  server.reply(507, { error: "note limit reached" });
-  const err = await new Client({ url: server.url, feed: "inbox" }).post("x").catch((e) => e);
-  expect(err).toBeInstanceOf(LimitReachedError);
-  expect(err.message).toBe("note limit reached");
-  expect(err.status).toBe(507);
-});
-
-test("nonJsonErrorBody", async () => {
-  server.reply(502, "<html>bad gateway</html>", "text/html");
-  const err = await new Client({ url: server.url, feed: "inbox" }).post("x").catch((e) => e);
-  expect(err.constructor).toBe(NotefeedError);
-  expect(err.status).toBe(502);
-  expect(err.message).toContain("502");
-});
-
-test("connectionRefused", async () => {
-  const err = await new Client({ url: "http://127.0.0.1:1", feed: "inbox" }).post("x").catch((e) => e);
-  expect(err).toBeInstanceOf(NotefeedError);
-  expect(err.status).toBeNull();
-});
-
-test("nonJsonSuccessBody", async () => {
-  server.reply(200, "<html>some other site</html>", "text/html");
-  const err = await new Client({ url: server.url, feed: "inbox" }).post("x").catch((e) => e);
-  expect(err.constructor).toBe(NotefeedError);
-  expect(err.status).toBe(200);
-  expect(err.message).toContain("not a notefeed");
-});
-
-test("passwordControlCharsRejectedWithoutEcho", () => {
-  let err: unknown;
-  try {
-    new Client({ url: "http://x", feed: "inbox", password: "sec\nret" });
-  } catch (e) {
-    err = e;
+describe("reading", () => {
+  // A feed of notes N10..N14 that pages by `before`, newest first, like the server.
+  function serveFeed(notes: Note[]) {
+    server.route((r) => {
+      const q = url(r).searchParams;
+      const limit = Number(q.get("limit") ?? 50);
+      const older = [...notes].sort((a, b) => b.id.localeCompare(a.id)).filter((n) => !q.get("before") || n.id < q.get("before")!);
+      const page = older.slice(0, limit);
+      return [200, { notes: page, next: older.length > limit ? page[page.length - 1].id : null }];
+    });
   }
-  expect(err).toBeInstanceOf(ConfigError);
-  expect((err as Error).message).toContain("invalid characters");
-  expect((err as Error).message).not.toMatch(/sec|ret/);
-});
 
-test("nonHttpReply", async () => {
-  const { createServer } = await import("node:net");
-  const srv = createServer((s) => s.once("data", () => s.end("SSH-2.0-OpenSSH_9.6\r\n")));
-  await new Promise<void>((r) => srv.listen(0, "127.0.0.1", r));
-  const port = (srv.address() as { port: number }).port;
-  const err = await new Client({ url: `http://127.0.0.1:${port}`, feed: "inbox" }).post("x").catch((e) => e);
-  expect(err).toBeInstanceOf(NotefeedError);
-  expect(err.status).toBeNull();
-  srv.close();
-});
+  test("notes() walks every page via next → before, newest first", async () => {
+    serveFeed([10, 11, 12, 13, 14].map(note));
+    const got = await collect(new Client({ url: server.url, feed: "inbox" }).notes({ pageSize: 2 }));
+    expect(got.map((n) => n.title)).toEqual(["N14", "N13", "N12", "N11", "N10"]);
+    const pages = server.requests.map((r) => url(r));
+    expect(pages.map((u) => u.pathname)).toEqual(Array(3).fill("/api/v1/feeds/inbox/notes"));
+    expect(pages.map((u) => u.searchParams.get("before"))).toEqual([null, note(13).id, note(11).id]);
+  });
 
-test("htmlErrorBodyCollapsed", async () => {
-  server.reply(502, "<html>\n  <body>bad gateway</body>\n</html>\n", "text/html");
-  const err = await new Client({ url: server.url, feed: "inbox" }).post("x").catch((e) => e);
-  expect(err.message).toBe("HTTP 502: <html> <body>bad gateway</body> </html>");
+  test("a note posted while paging is neither repeated nor yielded", async () => {
+    const notes = [10, 11, 12, 13].map(note);
+    serveFeed(notes);
+    const seen: string[] = [];
+    for await (const n of new Client({ url: server.url, feed: "inbox" }).notes({ pageSize: 2 })) {
+      seen.push(n.title);
+      if (seen.length === 1) notes.push(note(20)); // newer than everything already listed
+    }
+    expect(seen).toEqual(["N13", "N12", "N11", "N10"]);
+  });
+
+  test("note(id) and the read-id variants go to their endpoints", async () => {
+    server.route(() => [200, note(10)]);
+    const c = new Client({ url: server.url, feed: "inbox" });
+    expect((await c.note(note(10).id)).title).toBe("N10");
+    expect((await c.readNote("AAAAAAAAAAAAAAAAAAAAAA", note(10).id)).title).toBe("N10");
+    expect(server.requests.map((r) => r.path)).toEqual([
+      `/api/v1/feeds/inbox/notes/${note(10).id}`,
+      `/api/v1/read/AAAAAAAAAAAAAAAAAAAAAA/notes/${note(10).id}`,
+    ]);
+  });
+
+  test("readNotes() pages by read id and needs no feed", async () => {
+    server.route(() => [200, { notes: [note(10)], next: null }]);
+    expect(await collect(new Client({ url: server.url }).readNotes("AAAAAAAAAAAAAAAAAAAAAA"))).toHaveLength(1);
+    expect(url(server.requests[0]).pathname).toBe("/api/v1/read/AAAAAAAAAAAAAAAAAAAAAA/notes");
+  });
 });

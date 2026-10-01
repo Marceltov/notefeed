@@ -15,6 +15,9 @@ beforeEach(async () => {
 });
 afterEach(() => server.close());
 
+// The markdown the CLI posted (the client sends JSON {markdown}).
+const sent = (i: number) => JSON.parse(server.requests[i].body.toString()).markdown;
+
 function io(stdin = "") {
   const out = { stdout: "", stderr: "" };
   return {
@@ -32,20 +35,20 @@ test("postTextPrintsUrl", async () => {
   const t = io();
   expect(await main(["post", "hi", "--url", server.url, "--feed", "inbox"], t.io)).toBe(0);
   expect(t.out.stdout.trim()).toBe("https://n.example/inbox/i");
-  expect(server.requests[0].body.toString()).toBe("hi");
+  expect(sent(0)).toBe("hi");
 });
 
 test("postStdin", async () => {
   const t = io("# from stdin\r\nCafé\n");
   expect(await main(["post", "-", "--url", server.url, "--feed", "inbox"], t.io)).toBe(0);
-  expect(server.requests[0].body.equals(Buffer.from("# from stdin\r\nCafé\n", "utf8"))).toBe(true);
+  expect(sent(0)).toBe("# from stdin\r\nCafé\n");
 });
 
 test("postFile", async () => {
   const f = join(mkdtempSync(join(tmpdir(), "nf-")), "note.md");
   writeFileSync(f, "# File\r\nbody\n");
   expect(await main(["post", "--file", f, "--url", server.url, "--feed", "inbox"], io().io)).toBe(0);
-  expect(server.requests[0].body.toString()).toBe("# File\r\nbody\n");
+  expect(sent(0)).toBe("# File\r\nbody\n");
 });
 
 test("missingFileExits2", async () => {
@@ -112,7 +115,7 @@ test("stdinNotUtf8Exits2", async () => {
 
 test("listItemText", async () => {
   expect(await main(["post", "- buy milk", "--url", server.url, "--feed", "inbox"], io().io)).toBe(0);
-  expect(server.requests[0].body.toString()).toBe("- buy milk");
+  expect(sent(0)).toBe("- buy milk");
 });
 
 test("help", async () => {
@@ -123,7 +126,7 @@ test("help", async () => {
 
 test("explicitDoubleDashStillWorks", async () => {
   expect(await main(["post", "--url", server.url, "--feed", "inbox", "--", "- buy milk"], io().io)).toBe(0);
-  expect(server.requests[0].body.toString()).toBe("- buy milk");
+  expect(sent(0)).toBe("- buy milk");
 });
 
 test("envVars", async () => {
@@ -131,9 +134,9 @@ test("envVars", async () => {
   process.env.NOTEFEED_FEED = "envfeed";
   process.env.NOTEFEED_PASSWORD = "envpw";
   expect(await main(["post", "- buy milk"], io().io)).toBe(0);
-  expect(server.requests[0].path).toBe("/envfeed");
+  expect(server.requests[0].path).toBe("/api/v1/feeds/envfeed/notes");
   expect(server.requests[0].headers.authorization).toBe("Bearer envpw");
-  expect(server.requests[0].body.toString()).toBe("- buy milk");
+  expect(sent(0)).toBe("- buy milk");
 });
 
 test("flagsWinOverEnv", async () => {
@@ -141,7 +144,7 @@ test("flagsWinOverEnv", async () => {
   process.env.NOTEFEED_FEED = "envfeed";
   process.env.NOTEFEED_PASSWORD = "envpw";
   expect(await main(["post", "hi", "--url", server.url, "--feed", "argfeed", "--password", "argpw"], io().io)).toBe(0);
-  expect(server.requests[0].path).toBe("/argfeed");
+  expect(server.requests[0].path).toBe("/api/v1/feeds/argfeed/notes");
   expect(server.requests[0].headers.authorization).toBe("Bearer argpw");
 });
 

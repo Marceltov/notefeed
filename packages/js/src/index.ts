@@ -2,10 +2,11 @@ export {
   AuthError,
   Client,
   ConfigError,
-  InvalidNoteError,
+  InvalidRequestError,
   LimitReachedError,
   NotefeedError,
+  NotFoundError,
   NoteTooLargeError,
   RateLimitedError,
 } from "./client.js";
-export type { ClientOptions, Note, PostOptions } from "./client.js";
+export type { ClientOptions, Created, ErrorCode, Note } from "./client.js";
