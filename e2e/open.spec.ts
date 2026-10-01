@@ -43,6 +43,17 @@ test("posting with the button and with Ctrl+Enter puts the note on top", async (
   await expect(page.getByLabel("Note in markdown")).toHaveValue("");
 });
 
+test("with JavaScript, the box posts through the API client and shows a refusal inline", async ({ page }) => {
+  const name = feedName();
+  await page.goto(`/${name}`);
+  await page.getByLabel("Note in markdown").fill("   ");
+  const sent = page.waitForRequest((r) => r.method() === "POST" && new URL(r.url()).pathname === `/api/v1/feeds/${name}/notes`);
+  await page.getByRole("button", { name: "Post note" }).click();
+  await sent;
+  await expect(page.locator("#compose-error")).toHaveText("The note is empty.");
+  await expect(page).toHaveURL(`/${name}`);
+});
+
 test("a note opens on its own page, with raw HTML shown as text", async ({ page }) => {
   const name = feedName();
   await page.goto(`/${name}`);
