@@ -1,4 +1,5 @@
 // Reading requests, for the handlers in backend/http.
+import { NotefeedError, RateLimitedError } from "../errors";
 import { SESSION_COOKIE, checkBearer, locked, sessionOk } from "../auth";
 import { type FeedAccess, feedCookieName } from "../feedlock";
 import { publicUrl } from "../urls";
@@ -53,6 +54,13 @@ export function seeOther(location: string, headers: HeadersInit = {}): Response 
   const h = new Headers(headers);
   h.set("Location", location);
   return new Response(null, { status: 303, headers: h });
+}
+
+// A refused form post goes back to `page` with ?error=<code>[&retry=n]; anything but a domain error is a bug.
+export function errorRedirect(page: string, e: unknown): Response {
+  if (!(e instanceof NotefeedError)) throw e;
+  const retry = e instanceof RateLimitedError ? `&retry=${e.retryAfter}` : "";
+  return seeOther(`${page}?error=${e.code}${retry}`);
 }
 
 // Scripts send the bearer password. The web UI sends the session cookie instead, accepted only from

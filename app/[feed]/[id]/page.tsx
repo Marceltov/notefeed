@@ -4,7 +4,7 @@ import { Header } from "@/components/Header";
 import { NoteArticle } from "@/components/NoteList";
 import { NoteActions } from "@/components/NoteActions";
 import { UnlockForm } from "@/components/UnlockForm";
-import { errorMessage } from "@/app/_lib/messages";
+import { noteErrorMessage } from "@/app/_lib/messages";
 import { feedCookieName, feedPath, feedUnlocked, getFeedNote } from "@/backend";
 
 export const dynamic = "force-dynamic";
@@ -32,7 +32,7 @@ export default async function NotePage({ params, searchParams }: PageProps<"/[fe
         </p>
       )}
       <NoteArticle note={note} back={feedPath(feed)} />
-      <NoteActions key={note.markdown} feed={feed} id={id} markdown={note.markdown} error={errorMessage(error, retry)} />
+      <NoteActions key={note.markdown} feed={feed} id={id} markdown={note.markdown} error={noteErrorMessage(error, retry)} />
     </>
   );
 }

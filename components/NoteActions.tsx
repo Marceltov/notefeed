@@ -21,13 +21,13 @@ export function NoteActions({ feed, id, markdown, error: initialError }: { feed:
 
   // Runs `call`, which returns the response, and `done` on success; a 401 goes to the feed page, which
   // shows its unlock form (or proxy.ts sends a missing instance login on to /login).
-  async function run(e: FormEvent, call: () => Promise<{ error?: { code?: string }; response?: Response }>, done: () => void) {
+  async function run(e: FormEvent, call: () => Promise<{ error?: { code?: string }; response?: Response }>, done: () => void, doneOn?: number) {
     e.preventDefault();
     setPending(true);
     try {
       const { error, response } = await call();
       if (!response) throw new Error("no response"); // the client returns a network failure instead of throwing it
-      if (response.ok) return done();
+      if (response.ok || response.status === doneOn) return done();
       if (response.status === 401) return router.push(page);
       setError(errorMessage(error?.code ?? "unknown", response.headers.get("retry-after")));
     } catch {
@@ -45,13 +45,13 @@ export function NoteActions({ feed, id, markdown, error: initialError }: { feed:
       router.replace(`${base}?edited=1`);
       router.refresh();
     });
-  const remove = (e: FormEvent) => run(e, () => deleteNote(opts()), () => router.push(`${page}?deleted=${id}`));
+  const remove = (e: FormEvent) => run(e, () => deleteNote(opts()), () => router.replace(`${page}?deleted=${id}`), 404); // already gone: the goal is met
 
   return (
     <section aria-label="Edit or delete this note" className="mt-8 space-y-3 text-sm">
       <details open={editing} onToggle={(e) => setEditing(e.currentTarget.open)}>
         <summary className={summary}>Edit</summary>
-        <form method="post" action={`${base}/edit`} onSubmit={save} className="mt-3">
+        <form method="post" action={`${base}/edit`} encType="multipart/form-data" onSubmit={save} className="mt-3">
           <label htmlFor="edit-markdown" className="sr-only">
             Note in markdown
           </label>
@@ -60,6 +60,9 @@ export function NoteActions({ feed, id, markdown, error: initialError }: { feed:
             name="markdown"
             value={text}
             onChange={(e) => setText(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) e.currentTarget.form?.requestSubmit();
+            }}
             rows={10}
             aria-describedby="note-actions-error"
             className="block w-full resize-y rounded-sm border border-rule bg-transparent p-3 font-mono text-ink focus:border-carbon focus:outline-none"

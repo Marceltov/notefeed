@@ -33,7 +33,7 @@ export default async function FeedPage({ params, searchParams }: PageProps<"/[fe
   }
   const data = await getFeed(feed);
   if (!data) notFound();
-  const { notes, readId } = data;
+  const { notes, readId, exists } = data;
   const settingsError = access === "unlocked" && ["auth", "invalid_body", "too_many_attempts"].includes(String(error));
   const base = publicUrl(await headers());
   const readUrl = readId ? base + rssPath(readId) : undefined; // none until the feed has a note
@@ -51,7 +51,7 @@ export default async function FeedPage({ params, searchParams }: PageProps<"/[fe
         </p>
       )}
       <Compose key={String(posted)} feed={feed} action={feedPath(feed)} error={settingsError ? undefined : errorMessage(error, retry)}
-        isNew={access === "open" && notes.length === 0}
+        isNew={access === "open" && !exists}
       />
       {readId && readUrl && (
         <section aria-labelledby="read-link" className="-mt-6 mb-10 text-sm">

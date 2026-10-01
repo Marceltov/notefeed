@@ -98,6 +98,7 @@ function server(h: Headers): McpServer {
       description: `Replace a note's markdown; its id stays. ${PROTECTED} ${SECRET_NOTE}`,
       inputSchema: z.object({ feed, id: z.string(), markdown: z.string(), password }),
       outputSchema: NoteFull,
+      annotations: { destructiveHint: true, idempotentHint: true },
     },
     guard(async ({ feed, id, markdown, password }) => {
       const note = await editNote(feed, id, clientIp(h), async () => ({ markdown }), { password });

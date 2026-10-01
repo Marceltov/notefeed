@@ -144,3 +144,27 @@ test("a password that could not be sent in a header is refused by the form", asy
   await page.reload();
   await expect(page.getByText("No notes yet")).toBeVisible();
 });
+
+test("an unlocked browser edits and deletes a note through the API, with the feed cookie", async ({ page, browser, baseURL }) => {
+  const name = feedName();
+  await create(page, name, "pw-edit");
+  const other = await fresh(browser, baseURL);
+  await unlock(other, name, "pw-edit");
+  await other.getByRole("link", { name: "Secret note" }).click();
+  await other.getByText("Edit", { exact: true }).click();
+  await other.getByLabel("Note in markdown").fill("# Edited secret");
+  const sent = other.waitForResponse((r) => r.request().method() === "PUT" && new URL(r.url()).pathname.startsWith(`/api/v1/feeds/${name}/notes/`));
+  await other.getByRole("button", { name: "Save" }).click();
+  expect((await sent).status()).toBe(200);
+  await expect(other.getByRole("heading", { name: "Edited secret" })).toBeVisible();
+
+  await other.getByText("Delete", { exact: true }).click();
+  const deleted = other.waitForResponse((r) => r.request().method() === "DELETE");
+  await other.getByRole("button", { name: "Delete note" }).click();
+  expect((await deleted).status()).toBe(204);
+  await expect(other.getByRole("status")).toHaveText("Note deleted.");
+  // Still protected after the last note is gone.
+  const stranger = await fresh(browser, baseURL);
+  await stranger.goto(`/${name}`);
+  await expect(stranger.getByRole("button", { name: "Unlock" })).toBeVisible();
+});

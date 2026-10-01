@@ -1,12 +1,12 @@
 // POST /<feed>/access: the web UI's plain forms for a feed password (unlock, lock, change, remove).
 // Always answers with a redirect back to the feed page; the cookie is the feed's unlock cookie.
-import { AuthError, InvalidRequestError, NotefeedError, RateLimitedError } from "../errors";
+import { AuthError, InvalidRequestError, NotefeedError } from "../errors";
 import { changePassword, feedCookieName, protectedFeed, removePassword, unlock } from "../feedlock";
 import { assertFeed } from "../feeds";
 import { clientIp } from "../limits";
 import { API_PREFIX, feedPath, publicUrl } from "../urls";
 import { errorResponse } from "./errors";
-import { parseForm, readCapped, sameOrigin, seeOther } from "./request";
+import { errorRedirect, parseForm, readCapped, sameOrigin, seeOther } from "./request";
 
 const YEAR = 60 * 60 * 24 * 365;
 
@@ -49,7 +49,6 @@ export async function feedAccessRoute(req: Request, feed: string): Promise<Respo
   } catch (e) {
     if (!(e instanceof NotefeedError)) throw e;
     if (["invalid_feed", "reserved_feed", "invalid_request"].includes(e.code)) return errorResponse(e);
-    const retry = e instanceof RateLimitedError ? `&retry=${e.retryAfter}` : "";
-    return seeOther(`${page}?error=${e.code}${retry}`);
+    return errorRedirect(page, e);
   }
 }

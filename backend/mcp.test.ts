@@ -39,7 +39,8 @@ describe("protocol", () => {
     expect(tools.map((t: { name: string }) => t.name).sort()).toEqual(["delete_note", "edit_note", "get_note", "list_notes", "post_note"]);
     for (const t of tools) {
       expect(t.annotations?.readOnlyHint === true).toBe(["get_note", "list_notes"].includes(t.name));
-      expect(t.annotations?.destructiveHint === true).toBe(t.name === "delete_note");
+      expect(t.annotations?.destructiveHint === true).toBe(["edit_note", "delete_note"].includes(t.name));
+      expect(t.annotations?.idempotentHint === true).toBe(t.name === "edit_note");
     }
   });
   test("server/discover lists the version", async () => {

@@ -149,7 +149,7 @@ EOF
 | `404` | No feed in the URL: `POST /`, for example from an empty variable in `$NOTEFEED_URL/$FEED`. For [editing and deleting](#editing-and-deleting-notes): no such note |
 | `413` | The body is larger than 100 KB (102400 bytes) |
 | `415` | The content type is not one of those above |
-| `429` | Too many posts, or too many wrong passwords, from this client in the last minute. `Retry-After` says how many seconds to wait. See [Rate limits and caps](configuration.md#rate-limits-and-caps). |
+| `429` | Too many posts, edits or deletes, or too many wrong passwords, from this client in the last minute. `Retry-After` says how many seconds to wait. See [Rate limits and caps](configuration.md#rate-limits-and-caps). |
 | `303` | The request asked for HTML (`Accept: text/html`, as a browser submitting a form does): back to the feed page with `?posted=<id>` or `?error=<code>`. Also for `POST /login` and `POST /logout`: those are the web UI's log-in and log-out routes, not feeds, so a script gets a redirect, and nothing is stored |
 | `500` | The note could not be written. No partial file is left behind. |
 | `507` | A cap is reached: a new feed when there are already `NOTEFEED_MAX_FEEDS` feeds, or a note to a feed that already has `NOTEFEED_MAX_NOTES_PER_FEED` notes |
