@@ -1,65 +1,78 @@
-"""A tiny client for notefeed's POST /<feed>. Standard library only."""
+"""The notefeed client: a small convenience layer over the API client generated from the server's
+OpenAPI description (notefeed._generated, `npm run generate` in the repo)."""
 
 from __future__ import annotations
 
-import http.client
-import json
+import os
 import re
-import urllib.error
-import urllib.request
-from dataclasses import dataclass
+from collections.abc import Callable, Iterator, Mapping
+from typing import Any
 
+import httpx
 
-@dataclass(frozen=True)
-class Note:
-    id: str
-    url: str
-    read_url: str
+from ._generated import AuthenticatedClient
+from ._generated import Client as _GeneratedClient
+from ._generated.api.feeds import get_note, list_notes, post_note
+from ._generated.api.read import get_read_note, list_read_notes
+from ._generated.models import Created, Note, NoteList, PostJson
+from ._generated.types import UNSET
 
 
 class NotefeedError(Exception):
-    """Any failure talking to notefeed. `status` is the HTTP status, or None (network, config)."""
+    """Any failure talking to notefeed. `status` and `code` are None when there was no API answer."""
 
-    def __init__(self, message: str, status: int | None = None):
+    def __init__(self, message: str, status: int | None = None, code: str | None = None):
         super().__init__(message)
         self.status = status
+        self.code = code
 
 
 class ConfigError(NotefeedError):
-    """URL or feed missing, or an invalid feed name or password."""
-
-
-class InvalidNoteError(NotefeedError):
-    """The server rejected the note (400, 415): empty, not UTF-8, wrong type."""
+    """Raised before sending: no URL, no feed, an invalid feed name or password."""
 
 
 class AuthError(NotefeedError):
-    """Missing or wrong password on a locked instance (401)."""
-
-
-class NoteTooLargeError(NotefeedError):
-    """The note is over the server's size limit (413)."""
+    """Missing or wrong password on a locked instance."""
 
 
 class RateLimitedError(NotefeedError):
-    """Too many requests (429). `retry_after` is the wait in seconds, or None if the server gave none."""
+    """Too many posts or wrong passwords. `retry_after` is the wait in seconds, or None if none was given."""
 
-    def __init__(self, message: str, status: int | None = None, retry_after: int | None = None):
-        super().__init__(message, status)
+    def __init__(self, message: str, status: int | None = None, code: str | None = None, retry_after: int | None = None):
+        super().__init__(message, status, code)
         self.retry_after = retry_after
 
 
+class NotFoundError(NotefeedError):
+    """No such note, or a malformed read id."""
+
+
 class LimitReachedError(NotefeedError):
-    """The server's feed or note limit is reached (507)."""
+    """The instance's feed or note limit is reached."""
 
 
-_ERRORS = {
-    400: InvalidNoteError,
-    415: InvalidNoteError,
-    401: AuthError,
-    413: NoteTooLargeError,
-    429: RateLimitedError,
-    507: LimitReachedError,
+class NoteTooLargeError(NotefeedError):
+    """The note is over the server's size limit."""
+
+
+class InvalidRequestError(NotefeedError):
+    """The server refused the request itself: invalid or reserved feed, empty note, bad body or parameter."""
+
+
+_BY_CODE: dict[str, type[NotefeedError]] = {
+    "auth": AuthError,
+    "rate_limited": RateLimitedError,
+    "too_many_attempts": RateLimitedError,
+    "not_found": NotFoundError,
+    "feed_limit": LimitReachedError,
+    "note_limit": LimitReachedError,
+    "too_large": NoteTooLargeError,
+    "invalid_feed": InvalidRequestError,
+    "reserved_feed": InvalidRequestError,
+    "empty_note": InvalidRequestError,
+    "invalid_body": InvalidRequestError,
+    "invalid_request": InvalidRequestError,
+    "unsupported_type": InvalidRequestError,
 }
 
 # Same rule as the server; reserved names still come back as a 400.
@@ -73,52 +86,88 @@ def _check_feed(feed: str) -> str:
 
 
 class Client:
-    """A notefeed server. The feed set here is the default; post(feed=...) overrides it."""
+    """A notefeed server. The feed set here is the default for every call; each call can override it."""
 
     def __init__(self, url: str, feed: str | None = None, password: str | None = None, timeout: float = 10.0):
         if not url:
             raise ConfigError("no url given")
         self.url = url.rstrip("/")
         self.feed = _check_feed(feed) if feed else None
-        self.password = (password or "").strip() or None
-        if self.password and re.search(r"[\x00-\x1f\x7f]", self.password):
+        password = (password or "").strip() or None
+        if password and re.search(r"[\x00-\x1f\x7f]", password):
             # Never echo the value: it would end up in terminals and CI logs.
             raise ConfigError("password contains invalid characters")
-        self.timeout = timeout
+        # The generated clients: the authenticated one sends `Authorization: Bearer <password>` on every call.
+        t = httpx.Timeout(timeout)
+        self._api = (
+            AuthenticatedClient(base_url=self.url, token=password, timeout=t)
+            if password
+            else _GeneratedClient(base_url=self.url, timeout=t)
+        )
 
-    def post(self, markdown: str, feed: str | None = None) -> Note:
+    @classmethod
+    def from_env(cls, environ: Mapping[str, str] = os.environ) -> Client:
+        """NOTEFEED_URL, NOTEFEED_FEED and NOTEFEED_PASSWORD."""
+        return cls(environ.get("NOTEFEED_URL", ""), environ.get("NOTEFEED_FEED") or None, environ.get("NOTEFEED_PASSWORD"))
+
+    def post(self, markdown: str, feed: str | None = None) -> Created:
+        kwargs = post_note._get_kwargs(feed=self._feed_for(feed), body=PostJson(markdown=markdown))
+        return Created.from_dict(self._call(kwargs))
+
+    def notes(self, feed: str | None = None, page_size: int = 50) -> Iterator[Note]:
+        """Every note in the feed, newest first, fetched a page at a time; stop iterating whenever you like."""
+        feed = self._feed_for(feed)
+        return self._pages(lambda before: list_notes._get_kwargs(feed=feed, limit=page_size, before=before))
+
+    def note(self, id: str, feed: str | None = None) -> Note:
+        return Note.from_dict(self._call(get_note._get_kwargs(feed=self._feed_for(feed), id=id)))
+
+    def read_notes(self, read_id: str, page_size: int = 50) -> Iterator[Note]:
+        """Like notes(), by the feed's read id: public, read-only, needs no password."""
+        return self._pages(lambda before: list_read_notes._get_kwargs(read_id=read_id, limit=page_size, before=before))
+
+    def read_note(self, read_id: str, id: str) -> Note:
+        return Note.from_dict(self._call(get_read_note._get_kwargs(read_id=read_id, id=id)))
+
+    def _feed_for(self, feed: str | None) -> str:
         feed = feed or self.feed
         if not feed:
             raise ConfigError("no feed given")
-        headers = {"Content-Type": "text/markdown; charset=utf-8"}
-        if self.password:
-            headers["Authorization"] = f"Bearer {self.password}"
-        req = urllib.request.Request(
-            f"{self.url}/{_check_feed(feed)}", data=markdown.encode("utf-8"), method="POST", headers=headers
-        )
-        try:
-            with urllib.request.urlopen(req, timeout=self.timeout) as res:
-                status, text = res.status, res.read().decode("utf-8", errors="replace")
-        except urllib.error.HTTPError as e:
-            raise _http_error(e) from None
-        except (urllib.error.URLError, http.client.HTTPException, OSError) as e:
-            reason = getattr(e, "reason", e)
-            raise NotefeedError(f"could not reach {self.url}: {reason}") from None
-        try:
-            data = json.loads(text)
-            return Note(id=data["id"], url=data["url"], read_url=data["read_url"])
-        except (ValueError, KeyError, TypeError):
-            raise NotefeedError(f"unexpected response from {self.url} (not a notefeed server?)", status=status) from None
+        return _check_feed(feed)
 
+    # `before` is the previous page's `next`: older notes only, so notes posted meanwhile never repeat.
+    def _pages(self, kwargs_for: Callable[[Any], dict[str, Any]]) -> Iterator[Note]:
+        before: Any = UNSET
+        while True:
+            page = NoteList.from_dict(self._call(kwargs_for(before)))
+            yield from page.notes
+            if not page.next_:
+                return
+            before = page.next_
 
-def _http_error(e: urllib.error.HTTPError) -> NotefeedError:
-    text = e.read().decode("utf-8", errors="replace")
-    try:
-        message = json.loads(text)["error"]
-    except (ValueError, KeyError, TypeError):
-        message = f"HTTP {e.code}: {' '.join(text[:200].split())}"
-    if e.code == 429:
-        retry = (e.headers.get("Retry-After") or "").strip()
-        return RateLimitedError(message, status=429, retry_after=int(retry) if re.fullmatch(r"[0-9]+", retry) else None)
-    return _ERRORS.get(e.code, NotefeedError)(message, status=e.code)
+    # The generated request builders (_get_kwargs) and httpx client, but the response is read here: the
+    # generated parsers assume every declared error status has a JSON body, and a proxy's HTML page doesn't.
+    def _call(self, kwargs: dict[str, Any]) -> dict[str, Any]:
+        try:
+            response = self._api.get_httpx_client().request(**kwargs)
+        except httpx.HTTPError as e:
+            raise NotefeedError(f"could not reach {self.url}: {e}") from None
+        try:
+            body = response.json()
+        except ValueError:
+            body = None
+        if response.is_success and isinstance(body, dict):
+            return body
+        if response.is_success:
+            raise NotefeedError(f"unexpected response from {self.url} (not a notefeed server?)", response.status_code)
+        code = body.get("code") if isinstance(body, dict) else None
+        if isinstance(body, dict) and isinstance(body.get("error"), str):
+            message = body["error"]
+        else:
+            message = f"HTTP {response.status_code}: {' '.join(response.text[:200].split())}"
+        cls = _BY_CODE.get(code or "", RateLimitedError if response.status_code == 429 else NotefeedError)
+        if cls is RateLimitedError:
+            retry = (response.headers.get("Retry-After") or "").strip()
+            raise RateLimitedError(message, response.status_code, code, int(retry) if re.fullmatch(r"[0-9]+", retry) else None)
+        raise cls(message, response.status_code, code)
 

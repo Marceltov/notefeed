@@ -1,27 +1,33 @@
 import io
+import json
 import sys
 
 from notefeed.cli import main
 
 
+def sent(server, i=0):
+    """The markdown the CLI posted (the client sends JSON {markdown})."""
+    return json.loads(server.requests[i]["body"])["markdown"]
+
+
 def test_post_text_prints_url(server, capsys):
-    server.reply(201, {"id": "i", "url": "https://n.example/inbox/i", "read_url": "https://n.example/r/x/feed.xml"})
+    server.reply(201, {"id": "20260930T100000Z-i", "url": "https://n.example/inbox/i", "feed_url": "https://n.example/inbox", "read_url": "https://n.example/r/x/feed.xml"})
     assert main(["post", "hi", "--url", server.url, "--feed", "inbox"]) == 0
     assert capsys.readouterr().out.strip() == "https://n.example/inbox/i"
-    assert server.requests[0]["body"] == b"hi"
+    assert sent(server) == "hi"
 
 
 def test_post_stdin(server, monkeypatch):
     monkeypatch.setattr(sys, "stdin", io.TextIOWrapper(io.BytesIO("# from stdin\r\nCafé\n".encode())))
     assert main(["post", "-", "--url", server.url, "--feed", "inbox"]) == 0
-    assert server.requests[0]["body"] == "# from stdin\r\nCafé\n".encode()
+    assert sent(server) == "# from stdin\r\nCafé\n"
 
 
 def test_post_file(server, tmp_path):
     f = tmp_path / "note.md"
     f.write_bytes("# File\r\nbody\n".encode())
     assert main(["post", "--file", str(f), "--url", server.url, "--feed", "inbox"]) == 0
-    assert server.requests[0]["body"] == b"# File\r\nbody\n"
+    assert sent(server) == "# File\r\nbody\n"
 
 
 def test_missing_file_exits_2(capsys, tmp_path):
@@ -78,7 +84,7 @@ def test_stdin_not_utf8_exits_2(server, capsys, monkeypatch):
 
 def test_list_item_text(server):
     assert main(["post", "- buy milk", "--url", server.url, "--feed", "inbox"]) == 0
-    assert server.requests[0]["body"] == b"- buy milk"
+    assert sent(server) == "- buy milk"
 
 
 def test_env_vars(server, monkeypatch):
@@ -87,9 +93,9 @@ def test_env_vars(server, monkeypatch):
     monkeypatch.setenv("NOTEFEED_PASSWORD", "envpw")
     assert main(["post", "- buy milk"]) == 0
     req = server.requests[0]
-    assert req["path"] == "/envfeed"
+    assert req["path"] == "/api/v1/feeds/envfeed/notes"
     assert req["headers"]["Authorization"] == "Bearer envpw"
-    assert req["body"] == b"- buy milk"
+    assert sent(server) == "- buy milk"
 
 
 def test_flags_win_over_env(server, monkeypatch):
@@ -98,7 +104,7 @@ def test_flags_win_over_env(server, monkeypatch):
     monkeypatch.setenv("NOTEFEED_PASSWORD", "envpw")
     assert main(["post", "hi", "--url", server.url, "--feed", "argfeed", "--password", "argpw"]) == 0
     req = server.requests[0]
-    assert req["path"] == "/argfeed"
+    assert req["path"] == "/api/v1/feeds/argfeed/notes"
     assert req["headers"]["Authorization"] == "Bearer argpw"
 
 
