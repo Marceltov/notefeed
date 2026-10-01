@@ -13,6 +13,7 @@ export { feedPath, publicUrl, readPath, rssPath, safeNext } from "./urls";
 export { dispatch } from "./http/api";
 export { loginRoute, logoutRoute } from "./http/session";
 export { rssRoute } from "./http/rss";
+export { mcpRoute } from "./mcp";
 
 export const instanceTitle = config.title;
 
