@@ -403,7 +403,11 @@ describe("feed passwords", () => {
 test("a same-origin post that creates a protected feed leaves this browser unlocked", async () => {
   const res = await post(JSON.stringify({ markdown: "# Mine", password: "pw" }), { "content-type": "application/json", origin: BASE }, "mine");
   expect(res.status).toBe(201);
-  expect(res.headers.get("set-cookie")).toContain(`${feedCookieName("mine")}=${await cookieValue("mine")}; Path=/mine`);
+  const v = await cookieValue("mine");
+  expect(res.headers.getSetCookie().map((c) => c.split("; ").slice(0, 2).join("; "))).toEqual([
+    `${feedCookieName("mine")}=${v}; Path=/mine`,
+    `${feedCookieName("mine")}=${v}; Path=/api/v1/feeds/mine`,
+  ]);
   const script = await post(JSON.stringify({ markdown: "# Mine", password: "pw2" }), { "content-type": "application/json" }, "mine2");
   expect(script.headers.get("set-cookie")).toBeNull();
 });

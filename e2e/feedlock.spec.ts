@@ -95,3 +95,28 @@ test("Lock forgets the unlock in this browser", async ({ page }) => {
   await page.getByRole("button", { name: "Lock" }).click();
   await expect(page.getByRole("button", { name: "Unlock" })).toBeVisible();
 });
+
+test("a second note posts from the compose box, with a fresh unlock too", async ({ page, browser, baseURL }) => {
+  const name = feedName();
+  await create(page, name, "pw");
+  await page.getByLabel("Note in markdown").fill("# Second note");
+  await page.getByRole("button", { name: "Post note" }).click();
+  await expect(page.getByRole("link", { name: "Second note" })).toBeVisible();
+
+  const other = await fresh(browser, baseURL);
+  await unlock(other, name, "pw");
+  await other.getByLabel("Note in markdown").fill("# Third note");
+  await other.getByRole("button", { name: "Post note" }).click();
+  await expect(other.getByRole("link", { name: "Third note" })).toBeVisible();
+  await expect(other.getByRole("link", { name: "Secret note" })).toBeVisible();
+});
+
+test("a 401 from the compose box lands on the feed's unlock form, not /login", async ({ page }) => {
+  const name = feedName();
+  await create(page, name, "pw");
+  await page.context().clearCookies();
+  await page.getByLabel("Note in markdown").fill("# Too late");
+  await page.getByRole("button", { name: "Post note" }).click();
+  await expect(page.getByRole("button", { name: "Unlock" })).toBeVisible();
+  await expect(page).toHaveURL(`/${name}`);
+});

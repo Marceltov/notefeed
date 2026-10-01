@@ -8,7 +8,7 @@ import { changePassword, checkFeedAccess, removePassword } from "../feedlock";
 import { READ_ID_RE, assertFeed, feedForReadId } from "../feeds";
 import { clientIp } from "../limits";
 import { MAX_BYTES, getNote, listNotes, type Note } from "../notes";
-import { feedPath, publicUrl, readPath } from "../urls";
+import { API_PREFIX, feedPath, publicUrl, readPath } from "../urls";
 import { createDispatcher, op, type AnyOp, type ResponseSpec } from "./dispatch";
 import { handlePostNote } from "./notes";
 import { authorize, feedAccess, readCapped } from "./request";
@@ -29,7 +29,7 @@ import {
   ReadIdParam,
 } from "./schemas";
 
-export const API_PREFIX = "/api/v1";
+export { API_PREFIX };
 
 const err = (description: string) => ({ description, schema: ErrorJson }) satisfies ResponseSpec;
 const RETRY = { "Retry-After": { description: "Seconds to wait before trying again", type: "integer" } } as const;

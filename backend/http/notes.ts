@@ -7,7 +7,7 @@ import { clientIp } from "../limits";
 import { MAX_BYTES } from "../notes";
 import { postNote } from "../posting";
 import { feedPath, publicUrl, rssPath } from "../urls";
-import { feedCookie } from "./feedsession";
+import { feedCookies } from "./feedsession";
 import { authorize, feedAccess, sameOrigin, mediaType, parseForm, readCapped, wantsHtml } from "./request";
 import { type Created, PostForm, PostJson } from "./schemas";
 
@@ -15,8 +15,8 @@ import { type Created, PostForm, PostJson } from "./schemas";
 const TEXT_TYPES = ["", "text/markdown", "text/plain", "application/x-www-form-urlencoded"];
 
 // What the POST answers: the created note, or (to a browser form) a redirect.
-type PostReply = { status: 201; body: Created; headers?: Record<string, string> } | { status: 303; body: undefined; headers: { Location: string } };
-const redirect = (location: string, more: Record<string, string> = {}): PostReply => ({ status: 303, body: undefined, headers: { Location: location, ...more } });
+type PostReply = { status: 201; body: Created; headers?: HeadersInit } | { status: 303; body: undefined; headers: HeadersInit };
+const redirect = (location: string, more: [string, string][] = []): PostReply => ({ status: 303, body: undefined, headers: [["Location", location], ...more] });
 
 // A plain form post from the web UI without JavaScript: back to the feed page, which shows the outcome
 // (a wrong feed password shows its unlock screen). The instance login is handled by the caller.
@@ -80,7 +80,7 @@ export async function handlePostNote(req: Request, feed: string): Promise<PostRe
     const note = await postNote(feed, ip, () => readMarkdown(req), feedAccess(h, feed));
     // The post proved access (or created the feed), so this browser stays unlocked without asking again.
     const value = sameOrigin(h) ? await cookieValue(feed) : null;
-    const unlocked = value === null ? undefined : feedCookie(h, feed, value);
+    const unlocked = value === null ? undefined : feedCookies(h, feed, value);
     if (wantsHtml(h)) return redirect(`${feedPath(feed)}?posted=${note.id}`, unlocked);
     const base = publicUrl(h);
     return {

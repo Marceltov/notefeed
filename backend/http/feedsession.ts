@@ -4,23 +4,28 @@ import { AuthError, InvalidRequestError, NotefeedError, RateLimitedError } from 
 import { changePassword, cookieValue, feedCookieName, protectedFeed, removePassword, unlock } from "../feedlock";
 import { assertFeed } from "../feeds";
 import { clientIp } from "../limits";
-import { feedPath, publicUrl } from "../urls";
+import { API_PREFIX, feedPath, publicUrl } from "../urls";
 import { errorResponse } from "./errors";
 import { parseForm, readCapped, sameOrigin, seeOther } from "./request";
 
 const YEAR = 60 * 60 * 24 * 365;
 
-// The unlock cookie's header; an empty value with age 0 clears it. Secure behind https.
-export function feedCookie(h: Headers, feed: string, value: string, age = YEAR): Record<string, string> {
+// The unlock cookie as Set-Cookie headers; an empty value with age 0 clears it. Set twice, for the page's
+// path and for the feed's API path, because the web UI's fetch() calls /api/v1/feeds/<feed>/...; both
+// match on a "/" boundary, so feed foo's cookie never reaches foobar. Secure behind https.
+export function feedCookies(h: Headers, feed: string, value: string, age = YEAR): [string, string][] {
   const secure = publicUrl(h).startsWith("https:") ? "; Secure" : "";
-  return { "Set-Cookie": `${feedCookieName(feed)}=${value}; Path=/${feed}; Max-Age=${age}; HttpOnly; SameSite=Lax${secure}` };
+  return [`/${feed}`, `${API_PREFIX}/feeds/${feed}`].map((path) => [
+    "Set-Cookie",
+    `${feedCookieName(feed)}=${value}; Path=${path}; Max-Age=${age}; HttpOnly; SameSite=Lax${secure}`,
+  ]);
 }
 
 export async function feedAccessRoute(req: Request, feed: string): Promise<Response> {
   const h = req.headers;
   const page = feedPath(feed);
-  const set = (value: string) => feedCookie(h, feed, value);
-  const clear = () => feedCookie(h, feed, "", 0);
+  const set = (value: string) => feedCookies(h, feed, value);
+  const clear = () => feedCookies(h, feed, "", 0);
   try {
     assertFeed(feed); // before anything touches the disk
     const bytes = await readCapped(req, 4096);

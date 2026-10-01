@@ -48,8 +48,12 @@ export function sameOrigin(h: Headers): boolean {
 // A browser navigating (a plain form post) rather than a script or fetch() asking for JSON.
 export const wantsHtml = (h: Headers) => (h.get("accept") ?? "").includes("text/html");
 
-export const seeOther = (location: string, headers: HeadersInit = {}) =>
-  new Response(null, { status: 303, headers: { ...Object.fromEntries(new Headers(headers)), Location: location } });
+// `headers` may repeat a name (two Set-Cookie).
+export function seeOther(location: string, headers: HeadersInit = {}): Response {
+  const h = new Headers(headers);
+  h.set("Location", location);
+  return new Response(null, { status: 303, headers: h });
+}
 
 // Scripts send the bearer password. The web UI sends the session cookie instead, accepted only from
 // this instance's own pages: a cross-site form would carry no cookie (SameSite=Lax), and the Origin

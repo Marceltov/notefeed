@@ -14,7 +14,7 @@ export type ResponseSpec = {
 
 type BodyOf<R> = R extends { schema: infer S extends z.ZodType } ? z.infer<S> : undefined;
 export type Reply<R> = {
-  [S in keyof R & number]: { status: S; body: BodyOf<R[S]>; headers?: Record<string, string> };
+  [S in keyof R & number]: { status: S; body: BodyOf<R[S]>; headers?: HeadersInit };
 }[keyof R & number];
 
 type QueryOf<Q> = Q extends z.ZodObject ? z.infer<Q> : Record<string, never>;
@@ -42,7 +42,7 @@ export type Op<
   Q extends z.ZodObject | undefined = z.ZodObject | undefined,
 > = Meta<R, Q> & { handle: Handler<R, Q> };
 
-type AnyReply = { status: number; body?: unknown; headers?: Record<string, string> };
+type AnyReply = { status: number; body?: unknown; headers?: HeadersInit };
 // Any entry, as the dispatcher sees it: the per-entry typing is checked where the entry is declared.
 export type AnyOp = Meta<Record<number, ResponseSpec>, z.ZodObject | undefined> & { handle: (input: never) => Promise<AnyReply> };
 

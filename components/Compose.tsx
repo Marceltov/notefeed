@@ -27,7 +27,8 @@ export function Compose({ feed, action, error: initialError, isNew }: { feed: st
       // The generated client returns a network failure instead of throwing it: no response at all.
       if (!response) throw new Error("no response");
       if (data) return router.push(`${action}?posted=${data.id}`); // the page remounts this box empty
-      if (response?.status === 401) return router.push(`/login?next=${encodeURIComponent(action)}`);
+      // The feed page shows its unlock form, or proxy.ts sends a missing instance login on to /login.
+      if (response?.status === 401) return router.push(action);
       setError(errorMessage(error?.code ?? "unknown", response?.headers.get("retry-after")));
     } catch {
       setError("Could not reach notefeed. Check your connection and try again.");
