@@ -1,13 +1,13 @@
 // POST /<feed>/<id>/edit and /<feed>/<id>/delete: the web UI's plain forms for changing a note.
 // Always answers with a redirect: back to the note on success (edit) or refusal, to the feed after a delete.
-import { InvalidBodyError, NoteTooLargeError, NotefeedError, RateLimitedError, AuthError } from "../errors";
+import { AuthError, InvalidBodyError, NotefeedError } from "../errors";
 import { assertFeed } from "../feeds";
 import { clientIp } from "../limits";
-import { MAX_BYTES } from "../notes";
 import { deleteNote, editNote } from "../posting";
 import { feedPath } from "../urls";
 import { errorResponse } from "./errors";
-import { authorize, feedAccess, parseForm, readCapped, sameOrigin, seeOther } from "./request";
+import { readMarkdown } from "./notes";
+import { authorize, errorRedirect, feedAccess, mediaType, sameOrigin, seeOther } from "./request";
 
 export async function noteFormRoute(req: Request, feed: string, id: string, action: string): Promise<Response> {
   if (action !== "edit" && action !== "delete") return new Response("Not found", { status: 404 });
@@ -28,12 +28,10 @@ export async function noteFormRoute(req: Request, feed: string, id: string, acti
       id,
       ip,
       async () => {
-        const bytes = await readCapped(req, MAX_BYTES);
-        if (!bytes) throw new NoteTooLargeError();
-        const form = await parseForm(bytes, h).catch(() => null);
-        const markdown = form?.get("markdown");
-        if (typeof markdown !== "string") throw new InvalidBodyError('form needs a "markdown" field');
-        return { markdown };
+        // Multipart, like the compose box: a urlencoded body is a third bigger for non-ASCII text and
+        // readMarkdown would take it for raw markdown.
+        if (mediaType(h) !== "multipart/form-data") throw new InvalidBodyError("form must be multipart");
+        return readMarkdown(req);
       },
       feedAccess(h, feed),
     );
@@ -41,7 +39,8 @@ export async function noteFormRoute(req: Request, feed: string, id: string, acti
   } catch (e) {
     if (!(e instanceof NotefeedError)) throw e;
     if (["invalid_feed", "reserved_feed"].includes(e.code)) return errorResponse(e);
-    const retry = e instanceof RateLimitedError ? `&retry=${e.retryAfter}` : "";
-    return seeOther(`${note}?error=${e.code}${retry}`);
+    // Already deleted (a double click on the form): the goal is met.
+    if (action === "delete" && e.code === "not_found") return seeOther(`${feedPath(feed)}?deleted=${encodeURIComponent(id)}`);
+    return errorRedirect(note, e);
   }
 }

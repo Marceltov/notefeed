@@ -5,7 +5,7 @@ import { beforeEach, expect, test } from "vitest";
 import { cookieValue, createProtected } from "./feedlock";
 import { readId, resetFeedsForTests } from "./feeds";
 import { feedUnlocked, getFeed } from "./index";
-import { createNote } from "./notes";
+import { createNote, removeNote } from "./notes";
 
 beforeEach(async () => {
   process.env.DATA_DIR = await mkdtemp(join(tmpdir(), "notefeed-index-"));
@@ -16,12 +16,19 @@ beforeEach(async () => {
 // The read id is derived from the name: shown for a name nobody has posted to yet, a stranger could
 // collect it and read the feed once someone creates it, protected or not.
 test("getFeed gives no read id until the feed has a note", async () => {
-  expect(await getFeed("soon")).toEqual({ notes: [], readId: null });
+  expect(await getFeed("soon")).toEqual({ notes: [], readId: null, exists: false });
   await createProtected("soon", "pw");
-  expect(await getFeed("soon")).toEqual({ notes: [], readId: null });
+  expect(await getFeed("soon")).toEqual({ notes: [], readId: null, exists: true });
   await createNote("soon", "# Hi");
   expect((await getFeed("soon"))!.readId).toBe(readId("soon"));
   expect(await getFeed("login")).toBeNull();
+});
+
+test("getFeed says whether the feed exists: an emptied one still does", async () => {
+  const { id } = await createNote("emptied", "# Hi");
+  expect((await getFeed("emptied"))!.exists).toBe(true);
+  await removeNote("emptied", id);
+  expect(await getFeed("emptied")).toEqual({ notes: [], readId: null, exists: true });
 });
 
 test("feedUnlocked: open without a password, unlocked only by this feed's cookie", async () => {

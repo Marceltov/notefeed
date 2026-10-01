@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { beforeEach, describe, expect, test } from "vitest";
 import { login } from "../auth";
+import { cookieValue } from "../feedlock";
 import { resetFeedsForTests, readId } from "../feeds";
 import { resetRateLimitsForTests } from "../limits";
 import { createNote } from "../notes";
@@ -356,6 +357,28 @@ describe("editing and deleting notes", () => {
     expect(await markdownOf("locked", id, fp)).toBe("# New");
     expect((await call("DELETE", path, { headers: fp })).status).toBe(204);
     expect((await post("locked", "# Again")).status).toBe(401);
+  });
+
+  test("the feed cookie authorises PUT and DELETE only from this instance's own pages", async () => {
+    const id = await make("locked", { "x-feed-password": "pw" });
+    const path = `/feeds/locked/notes/${id}`;
+    const cookie = `nf_feed_locked=${await cookieValue("locked")}`;
+    for (const origin of [{} as Record<string, string>, { origin: "https://evil.example" }]) {
+      expect((await put(path, "# Hacked", { cookie, ...origin })).status).toBe(401);
+      expect((await call("DELETE", path, { headers: { cookie, ...origin } })).status).toBe(401);
+    }
+    const own = { cookie, origin: BASE };
+    expect((await put(path, "# New", own)).status).toBe(200);
+    expect((await call("DELETE", path, { headers: own })).status).toBe(204);
+  });
+
+  test("a missing feed password is refused before the body is read", async () => {
+    const id = await make("locked", { "x-feed-password": "pw" });
+    let pulled = false;
+    const body = new ReadableStream({ pull: (c) => ((pulled = true), c.close()) }, { highWaterMark: 0 });
+    const req = new Request(`${BASE}${API_PREFIX}/feeds/locked/notes/${id}`, { method: "PUT", body, headers: { host: "localhost:3000", ...md }, duplex: "half" } as RequestInit);
+    expect((await dispatch(req, ["feeds", "locked", "notes", id])).status).toBe(401);
+    expect(pulled).toBe(false);
   });
 
   test("the instance password is needed first", async () => {

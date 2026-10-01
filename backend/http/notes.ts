@@ -1,6 +1,6 @@
 // POST /api/v1/feeds/<feed>/notes, also POST /<feed> (proxy.ts rewrites it): the only way to post a
 // note, for scripts, the client packages and the web UI's compose box alike.
-import { AuthError, InvalidBodyError, NoteTooLargeError, NotefeedError, RateLimitedError, UnsupportedTypeError } from "../errors";
+import { AuthError, InvalidBodyError, NoteTooLargeError, UnsupportedTypeError } from "../errors";
 import { readId } from "../feeds";
 import { cookieValue } from "../feedlock";
 import { clientIp } from "../limits";
@@ -8,7 +8,7 @@ import { MAX_BYTES } from "../notes";
 import { postNote } from "../posting";
 import { feedPath, publicUrl, rssPath } from "../urls";
 import { feedCookies } from "./feedsession";
-import { authorize, feedAccess, sameOrigin, mediaType, parseForm, readCapped, wantsHtml } from "./request";
+import { authorize, errorRedirect, feedAccess, sameOrigin, mediaType, parseForm, readCapped, wantsHtml } from "./request";
 import { type Created, PostForm, PostJson } from "./schemas";
 
 // curl --data-binary sends x-www-form-urlencoded by default; treat it (and no type) as raw markdown.
@@ -17,14 +17,6 @@ const TEXT_TYPES = ["", "text/markdown", "text/plain", "application/x-www-form-u
 // What the POST answers: the created note, or (to a browser form) a redirect.
 type PostReply = { status: 201; body: Created; headers?: HeadersInit } | { status: 303; body: undefined; headers: HeadersInit };
 const redirect = (location: string, more: [string, string][] = []): PostReply => ({ status: 303, body: undefined, headers: [["Location", location], ...more] });
-
-// A plain form post from the web UI without JavaScript: back to the feed page, which shows the outcome
-// (a wrong feed password shows its unlock screen). The instance login is handled by the caller.
-function formRedirect(feed: string, e: unknown): PostReply {
-  if (!(e instanceof NotefeedError)) throw e;
-  const retry = e instanceof RateLimitedError ? `&retry=${e.retryAfter}` : "";
-  return redirect(`${feedPath(feed)}?error=${e.code}${retry}`);
-}
 
 // The note's markdown (and the optional new-feed password) from a raw text body, JSON, or a form's fields.
 // The 100 KB cap counts the whole body, so a form's own framing takes a few bytes of it.
@@ -95,7 +87,9 @@ export async function handlePostNote(req: Request, feed: string): Promise<PostRe
       headers: unlocked,
     };
   } catch (e) {
-    if (wantsHtml(h)) return formRedirect(feed, e);
+    // A plain form post from the web UI without JavaScript goes back to the feed page, which shows the
+    // outcome (a wrong feed password shows its unlock screen).
+    if (wantsHtml(h)) return { status: 303, body: undefined, headers: errorRedirect(feedPath(feed), e).headers };
     throw e;
   }
 }
