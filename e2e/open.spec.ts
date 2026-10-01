@@ -156,3 +156,40 @@ test("an encoded slash or non-ASCII feed name is refused, through the real proxy
     expect((await res.json()).code).toBe("invalid_feed");
   }
 });
+
+// The exact headers and body a 2026-07-28 client sends (see `rpc` in backend/mcp.test.ts).
+const mcp = (method: string, params: Record<string, unknown>, headers: Record<string, string> = {}) => {
+  const V = "2026-07-28";
+  const _meta = {
+    "io.modelcontextprotocol/protocolVersion": V,
+    "io.modelcontextprotocol/clientInfo": { name: "e2e", version: "0" },
+    "io.modelcontextprotocol/clientCapabilities": {},
+  };
+  return {
+    headers: {
+      "content-type": "application/json",
+      accept: "application/json, text/event-stream",
+      "mcp-protocol-version": V,
+      "mcp-method": method,
+      ...(typeof params.name === "string" ? { "mcp-name": params.name } : {}),
+      ...headers,
+    },
+    data: { jsonrpc: "2.0", id: 1, method, params: { ...params, _meta } },
+  };
+};
+
+test("MCP: a note posted over /mcp appears on the feed page; OAuth is off", async ({ page, request }) => {
+  const name = feedName();
+  const res = await request.post("/mcp", mcp("tools/call", { name: "post_note", arguments: { feed: name, markdown: "# Posted over MCP" } }));
+  expect(res.status()).toBe(200);
+  const result = (await res.json()).result;
+  expect(result.isError).not.toBe(true);
+  expect(result.structuredContent.feed_url).toBe(`http://localhost:3100/${name}`);
+
+  await page.goto(`/${name}`);
+  await expect(page.getByRole("link", { name: "Posted over MCP" })).toBeVisible();
+
+  expect((await request.get("/mcp")).status()).toBe(405);
+  for (const path of ["/oauth/authorize", "/.well-known/oauth-authorization-server", "/.well-known/oauth-protected-resource/mcp"])
+    expect((await request.get(path)).status(), path).toBe(404);
+});

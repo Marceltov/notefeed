@@ -38,6 +38,16 @@ There is one password for the whole instance. Changing it logs out every browser
 !!! note "Logins don't expire"
     The login cookie is derived from the password alone and stays valid for a year. Logging out only removes it from that browser: a copied cookie keeps working until the password changes. If you think a cookie leaked, change `NOTEFEED_PASSWORD`.
 
+## OAuth
+
+Clients that can't send a header, such as the Claude.ai and Claude Desktop connectors for [MCP](mcp.md), log in through notefeed's own OAuth 2.1 login page with the instance password. It only exists on an instance with a password; on an open one these endpoints answer `404`.
+
+- **`PUBLIC_URL` is the issuer.** Every OAuth URL is built from it, so set it, with `https://`, on an instance that connectors reach over the internet.
+- **Nothing is stored.** Client ids, codes and tokens are signed with a key derived from the server secret and the password.
+- **Lifetimes:** a code lasts 5 minutes and works once, an access token 1 hour, a refresh token 30 days and is replaced each time it's used. A client's registration doesn't expire.
+- **Changing `NOTEFEED_PASSWORD` signs every client out:** all registrations, codes and tokens stop working, and each connector must log in again.
+- **Restarts:** the record of used codes and refresh tokens is in memory. After a restart, a stolen code or refresh token could be used once more within its lifetime.
+
 ## Rate limits and caps
 
 Each client may post `NOTEFEED_RATE_LIMIT` notes per minute (60 by default), from the API and the web UI together. Wrong passwords have their own budget of the same size. Over it, notefeed answers `429` with a `Retry-After` header, for the rest of the minute; the web UI says how many seconds to wait. The counters live in memory and reset on restart.

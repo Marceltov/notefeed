@@ -46,3 +46,62 @@ test("the read-only view and its RSS need no login", async ({ page, browser, req
   await expect(anonymous.getByText("Public note")).toBeVisible();
   await anonymous.close();
 });
+
+const V = "2026-07-28";
+const mcp = (headers: Record<string, string> = {}) => ({
+  headers: {
+    "content-type": "application/json",
+    accept: "application/json, text/event-stream",
+    "mcp-protocol-version": V,
+    "mcp-method": "tools/list",
+    ...headers,
+  },
+  data: {
+    jsonrpc: "2.0",
+    id: 1,
+    method: "tools/list",
+    params: {
+      _meta: {
+        "io.modelcontextprotocol/protocolVersion": V,
+        "io.modelcontextprotocol/clientInfo": { name: "e2e", version: "0" },
+        "io.modelcontextprotocol/clientCapabilities": {},
+      },
+    },
+  },
+});
+
+test("MCP: /mcp wants the password as a bearer and points at the OAuth metadata", async ({ request }) => {
+  const anon = await request.post("/mcp", mcp());
+  expect(anon.status()).toBe(401);
+  expect(anon.headers()["www-authenticate"]).toBe('Bearer resource_metadata="http://localhost:3101/.well-known/oauth-protected-resource/mcp"');
+  expect((await request.post("/mcp", mcp({ authorization: "Bearer wrong" }))).status()).toBe(401);
+  expect((await request.post("/mcp", mcp({ authorization: "Bearer e2e" }))).status()).toBe(200);
+});
+
+test("MCP: the OAuth login page, then the redirect with a code", async ({ page, request }) => {
+  const redirect = "http://localhost:3101/cb";
+  const reg = await request.post("/oauth/register", { data: { client_name: "E2E client", redirect_uris: [redirect] } });
+  expect(reg.status()).toBe(201);
+  const { client_id } = await reg.json();
+
+  const params = new URLSearchParams({
+    response_type: "code",
+    client_id,
+    redirect_uri: redirect,
+    // The challenge isn't checked until the token request, so any 43 base64url characters do.
+    code_challenge: "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
+    code_challenge_method: "S256",
+    state: "xyz",
+  });
+  const response = await page.goto(`/oauth/authorize?${params}`);
+  expect(response!.headers()["content-security-policy"]).toContain("frame-ancestors 'none'");
+  await expect(page.getByRole("heading", { name: "Connect E2E client" })).toBeVisible();
+
+  await page.getByLabel("Password").fill("e2e");
+  // /cb is itself sent to /login by the proxy on a locked instance, so check the request, not the final page.
+  const cb = page.waitForRequest((r) => r.url().startsWith(redirect));
+  await page.getByRole("button", { name: "Allow" }).click();
+  const url = new URL((await cb).url());
+  expect(url.searchParams.get("code")).toBeTruthy();
+  expect(url.searchParams.get("state")).toBe("xyz");
+});

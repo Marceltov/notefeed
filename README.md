@@ -41,6 +41,8 @@ The answer includes the feed's `read_url`: a read-only RSS link to give to feed 
 
 To require a password for posting and the web UI, set `NOTEFEED_PASSWORD`. Read links stay open. See [Configuration](https://docs.notefeed.me/configuration/).
 
+AI assistants can post and read notes over MCP at `/mcp`; see [MCP](https://docs.notefeed.me/mcp/).
+
 ## Development
 
 ```sh
