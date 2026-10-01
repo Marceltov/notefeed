@@ -113,6 +113,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.ref_name }}
         run: |
+          # checkout leaves the tag pointing at the commit, even an annotated one: fetch the tag itself.
+          git fetch -q --force origin "refs/tags/$TAG:refs/tags/$TAG"
           # Annotated tag message only: for a lightweight tag, %(contents) would be the commit message.
           if [ "$(git cat-file -t "refs/tags/$TAG")" = tag ]; then
             git for-each-ref "refs/tags/$TAG" --format='%(contents)' > notes.md
