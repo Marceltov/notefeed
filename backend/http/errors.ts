@@ -1,4 +1,5 @@
 // The HTTP status for each refusal, and the JSON error body every API endpoint answers with.
+import type { ErrorCode } from "../../shared/errors";
 import {
   AuthError,
   EmptyNoteError,
@@ -30,12 +31,19 @@ const STATUS: [new (...args: never[]) => NotefeedError, number][] = [
 
 export const statusOf = (e: NotefeedError) => STATUS.find(([cls]) => e instanceof cls)?.[1] ?? 500;
 
+export type ErrorReply = { status: number; body: { error: string; code?: ErrorCode }; headers?: Record<string, string> };
+
 // Anything that isn't a NotefeedError is a bug or a disk failure: logged, and a bare 500.
-export function errorResponse(e: unknown): Response {
+export function errorReply(e: unknown): ErrorReply {
   if (!(e instanceof NotefeedError)) {
     console.error("request failed", e);
-    return Response.json({ error: "internal error" }, { status: 500 });
+    return { status: 500, body: { error: "internal error" } };
   }
   const headers = e instanceof RateLimitedError ? { "Retry-After": String(e.retryAfter) } : undefined;
-  return Response.json({ error: e.message, code: e.code }, { status: statusOf(e), headers });
+  return { status: statusOf(e), body: { error: e.message, code: e.code }, headers };
+}
+
+export function errorResponse(e: unknown): Response {
+  const { status, body, headers } = errorReply(e);
+  return Response.json(body, { status, headers });
 }
