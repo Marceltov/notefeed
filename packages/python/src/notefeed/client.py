@@ -89,7 +89,10 @@ def _check_feed(feed: str) -> str:
 
 
 class Client:
-    """A notefeed server. The feed set here is the default for every call; each call can override it."""
+    """A notefeed server. The feed set here is the default for every call; each call can override it.
+
+    `timeout` (seconds) applies to connecting and to each read or write (httpx's semantics), not to a
+    whole request. Close the client when done, or use it in a `with` block."""
 
     def __init__(self, url: str, feed: str | None = None, password: str | None = None, timeout: float = 10.0):
         if not url:
