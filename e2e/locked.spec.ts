@@ -22,7 +22,7 @@ test("login returns to the requested page, log out locks it again", async ({ pag
   await expect(page).toHaveURL(/\/login/);
 });
 
-test("the read-only view needs no login", async ({ page, browser }) => {
+test("the read-only view and its RSS need no login", async ({ page, browser, request }) => {
   await page.goto("/login");
   await page.getByLabel("Password").fill("e2e");
   await page.getByRole("button", { name: "Log in" }).click();
@@ -37,5 +37,12 @@ test("the read-only view needs no login", async ({ page, browser }) => {
   await anonymous.goto(new URL(readHref!, page.url()).href);
   await expect(anonymous.getByRole("link", { name: "Public note" })).toBeVisible();
   await expect(anonymous.getByRole("button", { name: "Log out" })).toHaveCount(0);
+
+  // `request` shares no cookies with `page`: an anonymous feed reader.
+  const rss = await request.get(new URL(`${readHref}/feed.xml`, page.url()).href, { maxRedirects: 0 });
+  expect(rss.status()).toBe(200);
+  const link = /<item>.*?<link>(.*?)<\/link>/s.exec(await rss.text())![1];
+  await anonymous.goto(link);
+  await expect(anonymous.getByText("Public note")).toBeVisible();
   await anonymous.close();
 });
