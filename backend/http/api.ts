@@ -73,6 +73,8 @@ const OPS: AnyOp[] = [
     body: {
       "text/markdown": z.string(),
       "text/plain": z.string(),
+      // What `curl -d` sends: read as raw markdown, not as form fields.
+      "application/x-www-form-urlencoded": z.string(),
       "application/json": PostJson,
       "multipart/form-data": PostForm,
     },

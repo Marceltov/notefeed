@@ -19,3 +19,14 @@ test("every $ref points at a component", () => {
   expect(refs.length).toBeGreaterThan(0);
   for (const r of refs) expect((doc.components as { schemas: object }).schemas).toHaveProperty(r);
 });
+
+test("postNote lists every body type the server reads", () => {
+  const doc = openApiDocument("https://notefeed.me") as { paths: Record<string, { post?: { requestBody: { content: object } } }> };
+  expect(Object.keys(doc.paths["/api/v1/feeds/{feed}/notes"].post!.requestBody.content).sort()).toEqual([
+    "application/json",
+    "application/x-www-form-urlencoded",
+    "multipart/form-data",
+    "text/markdown",
+    "text/plain",
+  ]);
+});

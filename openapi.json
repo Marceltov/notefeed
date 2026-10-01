@@ -68,6 +68,11 @@
                 "type": "string"
               }
             },
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "type": "string"
+              }
+            },
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/PostJson"
