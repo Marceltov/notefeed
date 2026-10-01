@@ -55,7 +55,9 @@ export async function main(argv: string[], io: Io = process): Promise<number> {
       if (!Number.isInteger(limit) || limit < 1) throw new UsageError("--limit must be a whole number, 1 or more");
       let left = limit;
       for await (const n of client(values).notes({ pageSize: Math.min(limit, 100) })) {
-        io.stdout.write(values.json ? `${JSON.stringify(n)}\n` : `${n.created_at}  ${n.title || n.id}  ${n.url}\n`);
+        // To the second, UTC: the same form as the Python CLI, so scripts read either the same way.
+        const when = new Date(n.created_at).toISOString().replace(/\.\d+Z$/, "Z");
+        io.stdout.write(values.json ? `${JSON.stringify({ ...n, created_at: when })}\n` : `${when}  ${n.title || n.id}  ${n.url}\n`);
         if (--left === 0) break;
       }
       return 0;

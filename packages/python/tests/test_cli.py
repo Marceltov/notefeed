@@ -124,3 +124,72 @@ def test_invalid_feed_exits_2(server, capsys):
     assert main(["post", "hi", "--url", server.url, "--feed", "Not/Valid"]) == 2
     assert "invalid feed name" in capsys.readouterr().err
     assert server.requests == []
+
+
+# notefeed notes
+
+
+def serve_notes(server, count):
+    """A feed of `count` notes, served a page at a time like the server."""
+    from urllib.parse import parse_qs, urlparse
+
+    notes = [
+        {
+            "id": f"20260930T10{i:02d}00Z-n{i}",
+            "title": f"Note {i}",
+            "markdown": f"# Note {i}",
+            "created_at": f"2026-09-30T10:{i:02d}:00.000Z",
+            "url": f"https://n.example/inbox/n{i}",
+        }
+        for i in range(count)
+    ][::-1]
+
+    def route(method, path):
+        q = parse_qs(urlparse(path).query)
+        limit = int(q.get("limit", ["50"])[0])
+        before = q.get("before", [None])[0]
+        older = [n for n in notes if not before or n["id"] < before]
+        return 200, {"notes": older[:limit], "next": older[limit - 1]["id"] if len(older) > limit else None}
+
+    server.route = route
+
+
+def notes_args(server, *extra):
+    return ["notes", "--url", server.url, "--feed", "inbox", *extra]
+
+
+def test_notes_prints_newest_with_limit(server, capsys):
+    serve_notes(server, 5)
+    assert main(notes_args(server, "--limit", "3")) == 0
+    assert capsys.readouterr().out == (
+        "2026-09-30T10:04:00Z  Note 4  https://n.example/inbox/n4\n"
+        "2026-09-30T10:03:00Z  Note 3  https://n.example/inbox/n3\n"
+        "2026-09-30T10:02:00Z  Note 2  https://n.example/inbox/n2\n"
+    )
+
+
+def test_notes_defaults_to_twenty_across_pages(server, capsys):
+    serve_notes(server, 30)
+    assert main(notes_args(server)) == 0
+    assert len(capsys.readouterr().out.strip().splitlines()) == 20
+
+
+def test_notes_json(server, capsys):
+    serve_notes(server, 2)
+    assert main(notes_args(server, "--json")) == 0
+    assert [json.loads(line)["title"] for line in capsys.readouterr().out.strip().splitlines()] == ["Note 1", "Note 0"]
+
+
+def test_notes_without_feed_is_a_usage_error(server, capsys):
+    assert main(["notes", "--url", server.url]) == 2
+    assert "no feed given" in capsys.readouterr().err
+
+
+def test_notes_auth_error_exits_1(server, capsys):
+    server.route = lambda method, path: (401, {"error": "missing or wrong password", "code": "auth"})
+    assert main(notes_args(server)) == 1
+    assert capsys.readouterr().err == "notefeed: missing or wrong password\n"
+
+
+def test_notes_rejects_a_bad_limit(server, capsys):
+    assert main(notes_args(server, "--limit", "0")) == 2

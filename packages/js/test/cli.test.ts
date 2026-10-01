@@ -171,10 +171,10 @@ test("invalidFeedExits2", async () => {
 // notefeed notes: a feed of `count` notes, served a page at a time like the server.
 function serveNotes(count: number) {
   const notes = Array.from({ length: count }, (_, i) => ({
-    id: `20260930T${String(10 + i).padStart(2, "0")}0000Z-n${i}`,
+    id: `20260930T10${String(i).padStart(2, "0")}00Z-n${i}`,
     title: `Note ${i}`,
     markdown: `# Note ${i}`,
-    created_at: `2026-09-30T${String(10 + i).padStart(2, "0")}:00:00.000Z`,
+    created_at: `2026-09-30T10:${String(i).padStart(2, "0")}:00.000Z`,
     url: `https://n.example/inbox/n${i}`,
   })).reverse();
   server.route((r) => {
@@ -192,9 +192,9 @@ test("notesPrintsNewestWithLimit", async () => {
   expect(await main(args("--limit", "3"), x)).toBe(0);
   expect(out.stdout).toBe(
     [
-      "2026-09-30T14:00:00.000Z  Note 4  https://n.example/inbox/n4",
-      "2026-09-30T13:00:00.000Z  Note 3  https://n.example/inbox/n3",
-      "2026-09-30T12:00:00.000Z  Note 2  https://n.example/inbox/n2",
+      "2026-09-30T10:04:00Z  Note 4  https://n.example/inbox/n4",
+      "2026-09-30T10:03:00Z  Note 3  https://n.example/inbox/n3",
+      "2026-09-30T10:02:00Z  Note 2  https://n.example/inbox/n2",
       "",
     ].join("\n"),
   );
@@ -212,6 +212,7 @@ test("notesJson", async () => {
   const { out, io: x } = io();
   expect(await main(args("--json"), x)).toBe(0);
   expect(out.stdout.trim().split("\n").map((l) => JSON.parse(l).title)).toEqual(["Note 1", "Note 0"]);
+  expect(JSON.parse(out.stdout.split("\n")[0]).created_at).toBe("2026-09-30T10:01:00Z");
 });
 
 test("notesWithoutFeedIsUsageError", async () => {
