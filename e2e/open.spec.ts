@@ -100,3 +100,21 @@ test.describe("without JavaScript", () => {
     await expect(page.locator("#compose-error")).toHaveText("The note is empty.");
   });
 });
+
+test("the REST API: post with the short form, read back as JSON, by name and by read id", async ({ request }) => {
+  const name = feedName();
+  const created = await request.post(`/${name}`, { data: "# Via the API", headers: { "content-type": "text/markdown" } });
+  expect(created.status()).toBe(201);
+  const { id, read_url } = await created.json();
+
+  const byName = await (await request.get(`/api/v1/feeds/${name}/notes?limit=1`)).json();
+  expect(byName).toEqual({ notes: [expect.objectContaining({ id, title: "Via the API" })], next: null });
+
+  const rid = new URL(read_url).pathname.split("/")[2];
+  const byReadId = await request.get(`/api/v1/read/${rid}/notes/${id}`);
+  expect((await byReadId.json()).markdown).toBe("# Via the API");
+  expect(await byReadId.text()).not.toContain(name);
+
+  const spec = await (await request.get("/api/v1/openapi.json")).json();
+  expect(spec.paths).toHaveProperty("/api/v1/feeds/{feed}/notes");
+});

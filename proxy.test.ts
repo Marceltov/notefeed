@@ -17,11 +17,11 @@ const rewrite = (res: Response) => res.headers.get("x-middleware-rewrite");
 const isNext = (res: Response) => res.headers.get("x-middleware-next") === "1";
 
 test("POST /<feed> is rewritten to the notes route", () => {
-  expect(rewrite(proxy(req("/backups", { method: "POST" })))).toBe("http://localhost:3000/api/feeds/backups/notes");
+  expect(rewrite(proxy(req("/backups", { method: "POST" })))).toBe("http://localhost:3000/api/v1/feeds/backups/notes");
 });
 
 test("POST /<feed>/: one trailing slash is stripped (skipTrailingSlashRedirect lets it reach the proxy)", () => {
-  expect(rewrite(proxy(req("/backups/", { method: "POST" })))).toBe("http://localhost:3000/api/feeds/backups/notes");
+  expect(rewrite(proxy(req("/backups/", { method: "POST" })))).toBe("http://localhost:3000/api/v1/feeds/backups/notes");
 });
 
 test("other trailing slashes still get Next's usual 308 to the path without it", () => {
@@ -46,7 +46,7 @@ test.each<Record<string, string>>([
   { "content-type": "multipart/form-data; boundary=x", accept: "*/*" },
   { "content-type": "application/json", accept: "application/json" },
 ])("POST /<feed> with headers %j is rewritten to the notes route", (headers) => {
-  expect(rewrite(proxy(req("/backups", { method: "POST", headers })))).toBe("http://localhost:3000/api/feeds/backups/notes");
+  expect(rewrite(proxy(req("/backups", { method: "POST", headers })))).toBe("http://localhost:3000/api/v1/feeds/backups/notes");
 });
 
 test("POST /login goes to the login route, whatever the headers", () => {
@@ -78,9 +78,9 @@ test("GET /<feed> is not rewritten", () => {
 test("encoded traversal: %2e%2e normalizes to / (not rewritten); a%2Fb stays encoded for the handler to reject", () => {
   expect(rewrite(proxy(req("/%2e%2e", { method: "POST" })))).toBeNull();
   const target = rewrite(proxy(req("/a%2Fb", { method: "POST" })))!;
-  expect(target).toBe("http://localhost:3000/api/feeds/a%2Fb/notes");
+  expect(target).toBe("http://localhost:3000/api/v1/feeds/a%2Fb/notes");
   // Next decodes the [feed] param; the handler rejects "a/b" (see backend/http/notes.test.ts).
-  expect(decodeURIComponent(new URL(target).pathname.split("/")[3])).toBe("a/b");
+  expect(decodeURIComponent(new URL(target).pathname.split("/")[4])).toBe("a/b");
 });
 
 test("locked: pages without a session redirect to the absolute public /login", () => {
@@ -106,14 +106,14 @@ test("locked: POST /login is rewritten without a session (that's how you get one
   expect(rewrite(proxy(req("/login", { method: "POST" })))).toBe("http://localhost:3000/api/login");
 });
 
-test.each(["/r/x/feed.xml", "/login", "/_next/static/x.js", "/api/feeds/backups/notes", "/api/login"])("locked: %s passes", (p) => {
+test.each(["/r/x/feed.xml", "/login", "/_next/static/x.js", "/api/v1/feeds/backups/notes", "/api/login"])("locked: %s passes", (p) => {
   process.env.NOTEFEED_PASSWORD = "pw";
   expect(isNext(proxy(req(p)))).toBe(true);
 });
 
 test("locked: POST /<feed> is still rewritten (the handler checks the bearer)", () => {
   process.env.NOTEFEED_PASSWORD = "pw";
-  expect(rewrite(proxy(req("/backups", { method: "POST" })))).toBe("http://localhost:3000/api/feeds/backups/notes");
+  expect(rewrite(proxy(req("/backups", { method: "POST" })))).toBe("http://localhost:3000/api/v1/feeds/backups/notes");
 });
 
 test("matcher skips /r/ and /_next/", () => {
@@ -149,5 +149,5 @@ test("POST /logout (a real POST route) is not rewritten", () => {
 });
 
 test.each(["mcp", "api", "health", "r"])("POST /%s (reserved) goes to the handler, which answers 400", (name) => {
-  expect(rewrite(proxy(req(`/${name}`, { method: "POST" })))).toBe(`http://localhost:3000/api/feeds/${name}/notes`);
+  expect(rewrite(proxy(req(`/${name}`, { method: "POST" })))).toBe(`http://localhost:3000/api/v1/feeds/${name}/notes`);
 });

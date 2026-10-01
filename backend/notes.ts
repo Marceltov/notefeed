@@ -39,9 +39,13 @@ async function noteIds(feed: string): Promise<string[]> {
   return (await listNoteFiles(feed)).filter(isValidId);
 }
 
-// Newest first.
-export async function listNotes(feed: string, limit = 50): Promise<Note[]> {
-  const ids = (await noteIds(feed)).sort().reverse().slice(0, limit);
+// Newest first. `before` (a note id) pages backwards: ids sort by time, so older notes sort lower.
+export async function listNotes(feed: string, limit = 50, before?: string): Promise<Note[]> {
+  const ids = (await noteIds(feed))
+    .filter((id) => before === undefined || id < before)
+    .sort()
+    .reverse()
+    .slice(0, limit);
   const notes = await Promise.all(ids.map((id) => getNote(feed, id)));
   return notes.filter((n) => n !== null); // a note deleted between readdir and read
 }
