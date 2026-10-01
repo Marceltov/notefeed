@@ -47,10 +47,10 @@ To require a password for posting and the web UI, set `NOTEFEED_PASSWORD`. Read 
 npm ci
 npm run dev        # http://localhost:3000
 npm test           # unit tests; npm run test:e2e for the browser tests
-npm run generate   # after changing the API in backend/http/api.ts: regenerates openapi.json
+npm run generate   # after changing the API in backend/http/api.ts
 ```
 
-The REST API is defined in code (`backend/http/api.ts`); `openapi.json` is generated from it and committed. CI fails when it is stale. Use Node 22 (`.nvmrc`).
+The REST API is defined in code (`backend/http/api.ts`). `npm run generate` writes `openapi.json` from it, and from that the JS clients (`packages/js/src/generated/`, `app/_lib/api/`) and the Python client (`packages/python/src/notefeed/_generated/`). All of it is committed; CI fails when anything is stale. Generating needs Node 22.18 or newer (`.nvmrc`) and [uv](https://docs.astral.sh/uv/). The client packages: `cd packages/js && npm test`, `cd packages/python && uv run --extra test pytest`.
 
 ## License
 

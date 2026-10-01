@@ -24,11 +24,8 @@ jobs:
         working-directory: packages/python
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v7
-        with:
-          python-version: ${{ matrix.python }}
-      - run: pip install -e ".[test]"
-      - run: pytest -q
+      - uses: astral-sh/setup-uv@v6
+      - run: uv run -p ${{ matrix.python }} --extra test pytest -q
 
   js:
     runs-on: ubuntu-latest
@@ -72,10 +69,8 @@ jobs:
       id-token: write
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v7
-        with:
-          python-version: "3.13"
-      - run: python -m pip install build && python -m build packages/python
+      - uses: astral-sh/setup-uv@v6
+      - run: uv build packages/python
       - uses: pypa/gh-action-pypi-publish@v1.14.2
         with:
           packages-dir: packages/python/dist
