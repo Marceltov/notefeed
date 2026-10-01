@@ -20,7 +20,7 @@ export async function generateMetadata({ params }: PageProps<"/[feed]">): Promis
 
 export default async function FeedPage({ params, searchParams }: PageProps<"/[feed]">) {
   const { feed } = await params;
-  const { posted, error, retry } = await searchParams;
+  const { posted, deleted, error, retry } = await searchParams;
   const access = await feedUnlocked(feed, (await cookies()).get(feedCookieName(feed))?.value);
   // A locked feed shows nothing of itself: no notes, no read link.
   if (access === "locked") {
@@ -45,6 +45,11 @@ export default async function FeedPage({ params, searchParams }: PageProps<"/[fe
   return (
     <>
       <Header feed={feed} rss={readUrl} />
+      {deleted && (
+        <p role="status" className="mb-4 text-sm text-carbon">
+          Note deleted.
+        </p>
+      )}
       <Compose key={String(posted)} feed={feed} action={feedPath(feed)} error={settingsError ? undefined : errorMessage(error, retry)}
         isNew={access === "open" && notes.length === 0}
       />

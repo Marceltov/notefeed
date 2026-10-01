@@ -13,6 +13,7 @@ export { feedPath, publicUrl, readPath, rssPath, safeNext } from "./urls";
 export { dispatch } from "./http/api";
 export { feedCookieName, feedUnlocked } from "./feedlock";
 export { feedAccessRoute } from "./http/feedsession";
+export { noteFormRoute } from "./http/noteforms";
 export { loginRoute, logoutRoute } from "./http/session";
 export { rssRoute } from "./http/rss";
 export { mcpRoute } from "./mcp";
