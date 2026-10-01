@@ -34,7 +34,7 @@ Create the client with the server's URL and, usually, a default feed. Every call
         "https://notes.example.com",
         feed="homelab-7f3k2q9x4m8wz",
         password=os.environ.get("MY_NOTEFEED_PASSWORD"),  # None: the instance is open
-    )  # timeout=10 by default
+    )  # timeout=10 by default; use `with Client(...) as client:` or client.close() to free connections
     try:
         created = client.post("# Deploy done\nimmich v3.2.4 on host-2")
         print(created.id, created.url, created.read_url)
@@ -82,6 +82,8 @@ Create the client with the server's URL and, usually, a default feed. Every call
 | `read_note(read_id, id)` | `readNote(readId, id)` | One note by read id |
 
 A note has `id`, `title`, `markdown`, `created_at` (a `datetime` in Python, an ISO string in Node) and `url`, its page in the web UI.
+
+**Timeouts** default to 10 seconds, with one difference. In Python (httpx) the limit applies to connecting and to each read or write separately, so a server that keeps sending slowly doesn't trip it. In Node it covers the whole request.
 
 The feed is the call's if given, else the client's. With neither, the call raises `ConfigError` without sending anything. Feed names are checked on the client too (1–64 of `a`–`z`, `0`–`9`, `-`, `_`), so a typo fails with a clear `ConfigError` instead of a round trip. Reserved names come back from the server as `InvalidRequestError`.
 

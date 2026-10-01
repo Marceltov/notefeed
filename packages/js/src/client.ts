@@ -10,6 +10,7 @@ import type { Created, Error as ApiError, Note, NoteList } from "./generated/typ
 export type ErrorCode = NonNullable<ApiError["code"]>;
 
 export type { Created, Note };
+/** `timeoutMs` (default 10000) limits each whole request, including reading the answer. */
 export type ClientOptions = { url: string; feed?: string; password?: string; timeoutMs?: number };
 
 /** Any failure talking to notefeed. `status` and `code` are null when there was no API answer. */

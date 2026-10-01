@@ -57,7 +57,9 @@ export async function main(argv: string[], io: Io = process): Promise<number> {
       for await (const n of client(values).notes({ pageSize: Math.min(limit, 100) })) {
         // To the second, UTC: the same form as the Python CLI, so scripts read either the same way.
         const when = new Date(n.created_at).toISOString().replace(/\.\d+Z$/, "Z");
-        io.stdout.write(values.json ? `${JSON.stringify({ ...n, created_at: when })}\n` : `${when}  ${n.title || n.id}  ${n.url}\n`);
+        // --json: exactly the documented fields, like the Python CLI, even if the server adds more.
+        const fields = { id: n.id, title: n.title, markdown: n.markdown, created_at: when, url: n.url };
+        io.stdout.write(values.json ? `${JSON.stringify(fields)}\n` : `${when}  ${n.title || n.id}  ${n.url}\n`);
         if (--left === 0) break;
       }
       return 0;

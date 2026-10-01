@@ -193,3 +193,25 @@ def test_notes_auth_error_exits_1(server, capsys):
 
 def test_notes_rejects_a_bad_limit(server, capsys):
     assert main(notes_args(server, "--limit", "0")) == 2
+
+
+def test_notes_json_prints_exactly_the_documented_fields(server, capsys):
+    server.route = lambda method, path: (
+        200,
+        {"notes": [{"id": "20260930T100000Z-a", "title": "A", "markdown": "# A", "created_at": "2026-09-30T10:00:00.000Z", "url": "https://n/a", "mood": "new"}], "next": None},
+    )
+    assert main(notes_args(server, "--json")) == 0
+    assert list(json.loads(capsys.readouterr().out)) == ["id", "title", "markdown", "created_at", "url"]
+
+
+def test_notes_stops_quietly_when_the_reader_goes_away(server, capsys, monkeypatch):
+    """`notefeed notes --limit 1000 | head -1`: the pipe closes after the first line."""
+    serve_notes(server, 5)
+
+    class ClosedPipe(io.StringIO):
+        def write(self, s):
+            raise BrokenPipeError
+
+    monkeypatch.setattr(sys, "stdout", ClosedPipe())
+    assert main(notes_args(server, "--limit", "1000")) == 0
+    assert capsys.readouterr().err == ""
