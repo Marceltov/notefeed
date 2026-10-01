@@ -17,14 +17,16 @@ const NoteFull = NoteSummary.extend({ markdown: z.string() });
 // A tool result: the body as structured content and, for clients that only read text, as JSON text.
 const ok = <T extends object>(body: T) => ({ structuredContent: body, content: [{ type: "text" as const, text: JSON.stringify(body) }] });
 
-// Refusals the API words as 4xx are tool errors the model can read; anything else is a bug and rethrows.
+// NotefeedErrors are refusals the model can read. The SDK turns any other throw into a tool error carrying its
+// message (an ENOENT would leak a path), so those are logged here and the client only gets "internal error".
 function guard<A, R>(f: (args: A) => Promise<R>) {
   return async (args: A) => {
     try {
       return await f(args);
     } catch (e) {
       if (e instanceof NotefeedError) return { isError: true as const, content: [{ type: "text" as const, text: e.message }] };
-      throw e;
+      console.error("mcp tool failed", e);
+      return { isError: true as const, content: [{ type: "text" as const, text: "internal error" }] };
     }
   };
 }
@@ -80,7 +82,11 @@ function server(h: Headers): McpServer {
   return s;
 }
 
+// The SDK warns on every JSON-mode handler that mid-call notifications are dropped; none of our tools send any.
+const warn = console.warn;
+console.warn = () => {};
 const handler = createMcpHandler(({ requestInfo }) => server(requestInfo!.headers), { legacy: "reject", responseMode: "json" });
+console.warn = warn;
 
 const rpcError = (status: number, message: string) =>
   Response.json({ jsonrpc: "2.0", error: { code: -32600, message } }, { status });

@@ -1,7 +1,7 @@
-import { mkdtemp, readdir } from "node:fs/promises";
+import { mkdtemp, readdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { beforeEach, describe, expect, test } from "vitest";
+import { beforeEach, describe, expect, test, vi } from "vitest";
 import { readId, resetFeedsForTests } from "./feeds";
 import { resetRateLimitsForTests } from "./limits";
 import { createNote } from "./notes";
@@ -109,9 +109,21 @@ describe("tools", () => {
     expect(r.isError).toBe(true);
     expect(r.content[0].text).toBe("feed name is reserved");
     const res = await (await rpc("tools/call", { name: "post_note", arguments: { feed: "Backups ", markdown: "x" } })).json();
-    expect(res.error ?? res.result.isError).toBeTruthy();
+    expect(res.result.isError).toBe(true);
     const names = await readdir(dir);
     expect(names.filter((n) => n.toLowerCase().startsWith("backups"))).toEqual([]);
+  });
+
+  test("an unexpected failure is logged, not shown", async () => {
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    await writeFile(join(dir, "file"), "");
+    process.env.DATA_DIR = join(dir, "file"); // a file where the data directory should be
+    resetFeedsForTests();
+    const r = await call("post_note", { feed: "a", markdown: "x" });
+    expect(r.isError).toBe(true);
+    expect(r.content[0].text).toBe("internal error");
+    expect(log).toHaveBeenCalledOnce();
+    log.mockRestore();
   });
 
   test("empty note and rate limit", async () => {
