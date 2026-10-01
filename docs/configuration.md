@@ -38,6 +38,12 @@ There is one password for the whole instance. Changing it logs out every browser
 !!! note "Logins don't expire"
     The login cookie is derived from the password alone and stays valid for a year. Logging out only removes it from that browser: a copied cookie keeps working until the password changes. If you think a cookie leaked, change `NOTEFEED_PASSWORD`.
 
+## Feed passwords
+
+Besides the instance password, a single feed can have its own, set by whoever creates the feed: see [A feed with its own password](posting.md#a-feed-with-its-own-password). It needs no setting. The two work together: on a locked instance a protected feed needs `Authorization: Bearer <instance password>` and `X-Feed-Password`. The instance password does not open a protected feed. Read links stay open either way.
+
+Each feed's password is stored as a salted scrypt hash in `DATA_DIR/<feed>/.password`. If a password is lost, delete that file: the feed is open from the next request. See [Operations](operations.md#a-lost-feed-password). Wrong feed passwords count toward the same [failed-attempt limit](#rate-limits-and-caps) as the instance password.
+
 ## OAuth
 
 Clients that can't send a header, such as the Claude.ai and Claude Desktop connectors for [MCP](mcp.md), log in through notefeed's own OAuth 2.1 login page with the instance password. It only exists on an instance with a password; on an open one these endpoints answer `404`.

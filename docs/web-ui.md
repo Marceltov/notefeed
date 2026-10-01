@@ -32,6 +32,14 @@ Notes are listed newest first, grouped by day, with the time on the left. Times 
 
 Raw HTML in notes is shown as text, never run.
 
+## A password for a feed
+
+On a feed that doesn't exist yet, the box has an optional **Password** field. Fill it in and the first note creates a protected feed. The field is only there for a new feed: an existing feed can't get a password afterwards.
+
+A protected feed asks for its password before it shows anything, at `/<feed>`: an **Unlock** form. The browser then stays unlocked (a cookie for that feed, with no end date) until the password changes or you press **Lock**. Wrong passwords count toward the [rate limit](configuration.md#rate-limits-and-caps). Once unlocked, a **Feed password** section above the notes lets you change the password, remove it (the feed stays, open to anyone who knows its name; both need the current password) or lock this browser again. Changing the password signs every other browser out. The ready-to-copy `curl` command on an unlocked feed includes the `X-Feed-Password` header.
+
+The [read-only view](#the-read-only-view) and the RSS link stay open. See [A feed with its own password](posting.md#a-feed-with-its-own-password) for scripts, and [Operations](operations.md#a-lost-feed-password) if the password is lost.
+
 ## The read-only view
 
 `/r/<read id>` shows the same notes without the compose box, and never shows the feed's name. A trailing slash is fine: `/r/<read id>/` answers `200` with the same page, without a redirect. Each note opens at `/r/<read id>/<id>`, which is also the note's link in the RSS feed. It needs no login, even on a locked instance.

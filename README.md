@@ -39,7 +39,7 @@ Or with a client: `pip install notefeed` / `npm install notefeed`, then `notefee
 
 The answer includes the feed's `read_url`: a read-only RSS link to give to feed readers and dashboards. It doesn't reveal the feed name, and it can't post.
 
-To require a password for posting and the web UI, set `NOTEFEED_PASSWORD`. Read links stay open. See [Configuration](https://docs.notefeed.me/configuration/).
+To require a password for posting and the web UI, set `NOTEFEED_PASSWORD`. Read links stay open. See [Configuration](https://docs.notefeed.me/configuration/). To protect a single feed, create it with `curl -H "X-Feed-Password: ..."`; see [Posting notes](https://docs.notefeed.me/posting/#a-feed-with-its-own-password).
 
 AI assistants can post and read notes over MCP at `/mcp`; see [MCP](https://docs.notefeed.me/mcp/).
 

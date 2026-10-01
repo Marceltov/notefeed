@@ -13,7 +13,7 @@ A read link:
 - serves the feed as RSS 2.0 (`/r/<read id>/feed.xml`) and as a read-only web page (`/r/<read id>`),
 - never shows the feed's name, so it can't be turned into write access,
 - can't post,
-- needs no login, even when the instance has a password.
+- needs no login, even when the instance has a password, and no password when the feed has its own: protecting a feed with a [password](posting.md#a-feed-with-its-own-password) doesn't close its read link.
 
 That makes it the link to give to feed readers, dashboards and other people. Keep the feed name itself to the scripts that post.
 

@@ -24,6 +24,8 @@ Under the hood both are generated from the server's [OpenAPI description](api.md
 
 Create the client with the server's URL and, usually, a default feed. Every call can name another feed. Pass the password only if the instance has one. `Client.from_env()` / `Client.fromEnv()` reads `NOTEFEED_URL`, `NOTEFEED_FEED` and `NOTEFEED_PASSWORD` instead.
 
+A feed can also have its own password (see [A feed with its own password](posting.md#a-feed-with-its-own-password)). Pass `feed_password=` (Python) or `feedPassword:` (Node) to the client, or per call, for example `client.post(text, feed_password=...)`. It is sent as `X-Feed-Password`; the `password` option stays the instance password. Posting to a new feed with `feed_password` creates it protected. `from_env()` / `fromEnv()` and the command read `NOTEFEED_FEED_PASSWORD`.
+
 === "Python"
 
     ```python
@@ -99,7 +101,7 @@ The command takes its settings from flags, or else from these environment variab
 | `--feed` | `NOTEFEED_FEED` | the feed |
 | `--password` | `NOTEFEED_PASSWORD` | the instance password (`NOTEFEED_PASSWORD` on the server), only if it has one |
 
-Prefer the environment variables for the password and the feed name: flag values are visible to other users of the machine in the process list.
+A feed's own password is read from `NOTEFEED_FEED_PASSWORD`, and has no flag at all. Prefer the environment variables for the passwords and the feed name: flag values are visible to other users of the machine in the process list.
 
 ```sh
 export NOTEFEED_URL=https://notes.example.com NOTEFEED_FEED=homelab-7f3k2q9x4m8wz
@@ -130,7 +132,7 @@ Every error is a `NotefeedError` with `status` (the HTTP status) and `code` (the
 |---|---|---|
 | `ConfigError` | – | Empty URL; no feed given; an invalid feed name; a password with control characters (the password itself is never shown) |
 | `InvalidRequestError` | `invalid_feed`, `reserved_feed`, `empty_note`, `invalid_body`, `invalid_request`, `unsupported_type` | The server refused the request itself |
-| `AuthError` | `auth` | The instance has a password and it's missing or wrong |
+| `AuthError` | `auth` | The instance or the feed has a password and it's missing or wrong |
 | `NotFoundError` | `not_found` | No such note, or a malformed read id |
 | `NoteTooLargeError` | `too_large` | Over 100 KB |
 | `RateLimitedError` | `rate_limited`, `too_many_attempts` | Too many posts or wrong passwords. `retry_after` / `retryAfter` is the wait in seconds from `Retry-After`, or `None`/`null` |

@@ -35,6 +35,10 @@ OAuth needs the instance's public `https://` address: set `PUBLIC_URL=https://no
 
 A client may register only `https://` redirect URIs, or plain `http://` on `localhost` or `127.0.0.1`, and must return to exactly the one it registered, port included. Clients whose callback has its own scheme, such as `cursor://`, can't log in through OAuth: send the password as a `Bearer` header instead, as for [Claude Code](#claude-code).
 
+## Feeds with a password
+
+A feed can have its own password (see [Posting notes](posting.md#a-feed-with-its-own-password)). The three tools take an optional `password`. `post_note` with a password to a feed that doesn't exist yet creates it protected; to an existing feed that has none, it is refused as `feed_exists`. On a protected feed, `post_note`, `list_notes` and `get_note` all need the right `password`, or answer with an error. The password is not remembered between calls, and it is part of the conversation, so tell the assistant only passwords you would give that service. It is in addition to the instance login, which still decides who may use `/mcp` at all.
+
 ## Telling the assistant which feed
 
 The assistant needs a feed name. Put it in a project or custom instruction, for example "Post notes to the notefeed feed `homelab-7f3k2q9x4m8wz`."

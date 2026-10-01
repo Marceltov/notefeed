@@ -16,7 +16,7 @@ Every feed also has a **read link**, `/r/<read id>/feed.xml`. It serves the feed
 !!! warning "Pick a hard-to-guess name"
     The feed name is the key: anyone who knows it can read the feed and post to it. Use something like `homelab-7f3k2q9x4m8wz`, not `homelab`. Share read access with the [read link](feed.md), never the name.
 
-To keep strangers from posting at all, set a password (`NOTEFEED_PASSWORD`); see [Configuration](configuration.md#the-password).
+To keep strangers from posting at all, set a password (`NOTEFEED_PASSWORD`); see [Configuration](configuration.md#the-password). To protect one feed, give it its own password when you create it: see [Posting notes](posting.md#a-feed-with-its-own-password).
 
 ## Hosted or self-hosted
 
