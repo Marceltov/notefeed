@@ -112,6 +112,16 @@ class Client:
             else _GeneratedClient(base_url=self.url, timeout=t)
         )
 
+    def close(self) -> None:
+        """Close the connection pool. Or use the client as a context manager: `with Client(...) as c:`."""
+        self._api.get_httpx_client().close()
+
+    def __enter__(self) -> Client:
+        return self
+
+    def __exit__(self, *exc: object) -> None:
+        self.close()
+
     @classmethod
     def from_env(cls, environ: Mapping[str, str] = os.environ) -> Client:
         """NOTEFEED_URL, NOTEFEED_FEED and NOTEFEED_PASSWORD."""

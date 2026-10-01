@@ -237,3 +237,17 @@ def test_read_notes_needs_no_feed(server):
     server.route = lambda method, path: (200, {"notes": [note(10)], "next": None})
     assert [n.title for n in Client(server.url).read_notes(READ_ID)] == ["N10"]
     assert urlparse(server.requests[0]["path"]).path == f"/api/v1/read/{READ_ID}/notes"
+
+
+# --- lifetime ---
+
+
+def test_close_and_with_release_the_connection_pool(server):
+    with Client(server.url, "inbox") as c:
+        c.post("x")
+        pool = c._api.get_httpx_client()
+    assert pool.is_closed
+    c2 = Client(server.url, "inbox")
+    c2.post("x")
+    c2.close()
+    assert c2._api.get_httpx_client().is_closed
