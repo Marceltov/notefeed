@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { renderFeed } from "./feed";
+import { renderFeed } from "./rss";
 import type { Note } from "./notes";
 
 const notes: Note[] = [

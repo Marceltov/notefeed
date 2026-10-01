@@ -1,9 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { SESSION_COOKIE, locked, sessionOk } from "@/lib/auth";
-import { publicUrl } from "@/lib/url";
+import { SESSION_COOKIE, locked, publicUrl, sessionOk } from "@/backend";
 
 // Exactly one segment, after stripping one trailing slash. Kept percent-encoded: the route's
-// [feed] param is decoded by Next and handlePost rejects anything outside FEED_RE ("a%2Fb" → "a/b" → 400).
+// [feed] param is decoded by Next and the handler rejects anything outside FEED_RE ("a%2Fb" → "a/b" → 400).
 const ONE_SEGMENT = /^\/([^/]+)\/?$/;
 
 export function proxy(req: NextRequest) {
@@ -31,7 +30,7 @@ export function proxy(req: NextRequest) {
     return NextResponse.redirect(new URL(pathname.slice(0, -1) + search, publicUrl(h)), 308);
   }
 
-  // /api/feeds/** is exempt from the lock because handlePost checks the bearer password itself;
+  // /api/feeds/** is exempt from the lock because the handler checks the bearer password itself;
   // redirecting it to /login would turn a script's 401 into a success-looking 307.
   if (!locked() || pathname === "/login" || /^\/(r|_next|api\/feeds)\//.test(pathname)) return NextResponse.next();
   if (sessionOk(req.cookies.get(SESSION_COOKIE)?.value)) return NextResponse.next();

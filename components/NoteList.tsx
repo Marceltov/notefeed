@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { NoteView } from "@/components/NoteView";
-import type { Note } from "@/lib/notes";
-import { bodyAfterTitle } from "@/lib/slug";
+import type { Note } from "@/backend";
+import { bodyAfterTitle } from "@/shared/notes";
 
 // Times use the server's TZ (set TZ in compose.yaml).
 const dayKey = (d: Date) => d.toLocaleDateString("en-CA");

@@ -6,10 +6,7 @@ import { Compose } from "@/components/Compose";
 import { CopyButton } from "@/components/CopyButton";
 import { Header } from "@/components/Header";
 import { NoteList } from "@/components/NoteList";
-import { locked } from "@/lib/auth";
-import { checkFeed, readId } from "@/lib/feeds";
-import { listNotes } from "@/lib/notes";
-import { publicUrl } from "@/lib/url";
+import { checkFeed, feedPath, getFeed, locked, publicUrl, readPath, rssPath } from "@/backend";
 
 export const dynamic = "force-dynamic";
 
@@ -20,14 +17,14 @@ export async function generateMetadata({ params }: PageProps<"/[feed]">): Promis
 
 export default async function FeedPage({ params, searchParams }: PageProps<"/[feed]">) {
   const { feed } = await params;
-  if (checkFeed(feed)) notFound();
+  const data = await getFeed(feed);
+  if (!data) notFound();
+  const { notes, readId } = data;
   const { posted } = await searchParams;
-  const notes = await listNotes(feed, 50);
   const base = publicUrl(await headers());
-  const rid = readId(feed);
-  const readUrl = `${base}/r/${rid}/feed.xml`;
+  const readUrl = base + rssPath(readId);
   const auth = locked() ? ` -H "Authorization: Bearer $NOTEFEED_PASSWORD"` : "";
-  const curlExample = `curl${auth} -d "# Hello" ${base}/${feed}`;
+  const curlExample = `curl${auth} -d "# Hello" ${base}${feedPath(feed)}`;
 
   return (
     <>
@@ -39,7 +36,7 @@ export default async function FeedPage({ params, searchParams }: PageProps<"/[fe
         </h2>
         <p className="text-muted">
           For RSS readers and sharing: it shows the notes but not this feed&apos;s name, and can&apos;t post.{" "}
-          <Link href={`/r/${rid}`} className="text-carbon hover:underline">
+          <Link href={readPath(readId)} className="text-carbon hover:underline">
             Open read-only view
           </Link>
         </p>
@@ -59,7 +56,7 @@ export default async function FeedPage({ params, searchParams }: PageProps<"/[fe
             <summary className="cursor-pointer select-none hover:text-ink">Post from a script</summary>
             <pre className="mt-2 overflow-x-auto font-mono text-ink">{curlExample}</pre>
           </details>
-          <NoteList notes={notes} base={`/${feed}`} posted={typeof posted === "string" ? posted : undefined} />
+          <NoteList notes={notes} base={feedPath(feed)} posted={typeof posted === "string" ? posted : undefined} />
         </>
       )}
     </>

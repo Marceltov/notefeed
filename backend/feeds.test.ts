@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { beforeEach, describe, expect, test } from "vitest";
-import { FEED_RE, READ_ID_RE, RESERVED_FEEDS, checkFeed, feedForReadId, listFeeds, readId, resetSecretForTests } from "./feeds";
+import { FEED_RE, READ_ID_RE, RESERVED_FEEDS, checkFeed, feedForReadId, listFeeds, readId, resetFeedsForTests } from "./feeds";
 import { createNote } from "./notes";
 
 let dir: string;
@@ -10,7 +10,7 @@ beforeEach(async () => {
   dir = await mkdtemp(join(tmpdir(), "notefeed-feeds-"));
   process.env.DATA_DIR = dir;
   delete process.env.NOTEFEED_SECRET;
-  resetSecretForTests();
+  resetFeedsForTests();
 });
 
 describe("checkFeed", () => {
@@ -37,13 +37,13 @@ describe("readId", () => {
     process.env.NOTEFEED_SECRET = "1".repeat(32);
     const a = readId("a");
     process.env.NOTEFEED_SECRET = "2".repeat(32);
-    resetSecretForTests();
+    resetFeedsForTests();
     expect(readId("a")).not.toBe(a);
   });
   test("persists a 0600 .secret when no env is set", async () => {
     const id = readId("a");
     expect((await stat(join(dir, ".secret"))).mode & 0o777).toBe(0o600);
-    resetSecretForTests();
+    resetFeedsForTests();
     expect(readId("a")).toBe(id);
   });
 });
@@ -71,6 +71,11 @@ describe("feedForReadId", () => {
     expect(await feedForReadId(readId("alpha"))).toBe("alpha");
     expect(await feedForReadId("A".repeat(22))).toBeNull();
     expect(await feedForReadId("short")).toBeNull();
+  });
+
+  test("finds feeds that were on disk before the index was built", async () => {
+    await mkdir(join(dir, "beta"));
+    expect(await feedForReadId(readId("beta"))).toBe("beta");
   });
 
   test("picks the matching feed among several", async () => {

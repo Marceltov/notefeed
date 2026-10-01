@@ -1,5 +1,5 @@
-import { afterEach, describe, expect, test } from "vitest";
-import { publicUrl, safeNext } from "./url";
+import { afterEach, expect, test } from "vitest";
+import { feedPath, publicUrl, readPath, rssPath } from "./urls";
 
 afterEach(() => {
   delete process.env.PUBLIC_URL;
@@ -24,18 +24,8 @@ test("empty PUBLIC_URL counts as unset", () => {
   expect(publicUrl(new Headers({ host: "localhost:3000" }))).toBe("http://localhost:3000");
 });
 
-describe("safeNext", () => {
-  test.each(["/my-feed", "/my-feed?x=1", "/r/abc/x", "/"])("keeps %j", (v) => expect(safeNext(v)).toBe(v));
-  test.each([
-    null,
-    "",
-    "my-feed",
-    "//evil.example",
-    "https://evil.example",
-    "/\\evil.example",
-    "/x\\y",
-    "\\evil.example",
-    "/\t/evil.example", // browsers drop tabs and newlines, which would make this //evil.example
-    "/\n/evil.example",
-  ])("rejects %j", (v) => expect(safeNext(v)).toBe("/"));
+test("read-side paths go through the read id", () => {
+  expect(feedPath("backups")).toBe("/backups");
+  expect(readPath("AbCdEfGhIjKlMnOpQrSt_-")).toBe("/r/AbCdEfGhIjKlMnOpQrSt_-");
+  expect(rssPath("AbCdEfGhIjKlMnOpQrSt_-")).toBe("/r/AbCdEfGhIjKlMnOpQrSt_-/feed.xml");
 });

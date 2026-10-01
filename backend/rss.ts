@@ -1,5 +1,6 @@
 // RSS 2.0, written by hand. Descriptions carry the raw markdown in CDATA.
 import type { Note } from "./notes";
+import { readPath } from "./urls";
 
 // XML 1.0 forbids most C0 controls (e.g. ANSI color codes from scripts); one would break the whole feed.
 // Stripped on output only — the .md file keeps the original bytes.
@@ -13,7 +14,7 @@ const cdata = (s: string) => `<![CDATA[${xmlSafe(s).replaceAll("]]>", "]]]]><![C
 
 // Links go through the read id only, so the feed never reveals the (writable) feed name.
 export function renderFeed(notes: Note[], opts: { title: string; baseUrl: string; readId: string }): string {
-  const base = `${opts.baseUrl}/r/${opts.readId}`;
+  const base = opts.baseUrl + readPath(opts.readId);
   const items = notes.map((n) => {
     const url = `${base}/${n.id}`;
     return `<item>

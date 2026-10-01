@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { checkFeed } from "./feeds";
+import { checkFeed } from "@/backend";
 import { normalizeFeedInput, suggestFeedName } from "./names";
 
 test("suggestions are valid, unreserved and have three parts", () => {

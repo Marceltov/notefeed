@@ -35,6 +35,9 @@ openssl rand -hex 32
 
 There is one password for the whole instance. Changing it logs out every browser and breaks every script until you update them. Wrong passwords, over the API or on the login page, are rate-limited like posts.
 
+!!! note "Logins don't expire"
+    The login cookie is derived from the password alone and stays valid for a year. Logging out only removes it from that browser: a copied cookie keeps working until the password changes. If you think a cookie leaked, change `NOTEFEED_PASSWORD`.
+
 ## Rate limits and caps
 
 Each client may post `NOTEFEED_RATE_LIMIT` notes per minute (60 by default), from the API and the web UI together. Wrong passwords have their own budget of the same size. Over it, notefeed answers `429` with a `Retry-After` header, for the rest of the minute; the web UI says how many seconds to wait. The counters live in memory and reset on restart.

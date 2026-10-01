@@ -2,18 +2,9 @@ import { mkdtemp, readdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { beforeEach, describe, expect, test } from "vitest";
-import {
-  EmptyNoteError,
-  NoteTooLargeError,
-  createNote,
-  getNote,
-  isValidId,
-  countNotes,
-  feedExists,
-  InvalidFeedError,
-  listNotes,
-} from "./notes";
-import { bodyAfterTitle, extractTitle, idStamp, slugify } from "./slug";
+import { EmptyNoteError, InvalidFeedError, NoteTooLargeError, ReservedFeedError } from "./errors";
+import { hasFeed } from "./feeds";
+import { countNotes, createNote, getNote, isValidId, listNotes } from "./notes";
 
 let root: string;
 let dir: string; // the "test" feed's directory
@@ -24,48 +15,6 @@ beforeEach(async () => {
 });
 
 const at = (iso: string) => new Date(iso);
-
-describe("extractTitle", () => {
-  test("uses the first heading", () => {
-    expect(extractTitle("# Backup finished\nbody")).toBe("Backup finished");
-  });
-  test("falls back to the first non-empty line without markers", () => {
-    expect(extractTitle("\n\n- **hello** world")).toBe("hello world");
-    expect(extractTitle("> quoted")).toBe("quoted");
-  });
-  test("is empty for blank input", () => {
-    expect(extractTitle("")).toBe("");
-    expect(extractTitle("   \n")).toBe("");
-  });
-  test("caps at 100 chars", () => {
-    expect(extractTitle("x".repeat(150))).toHaveLength(100);
-  });
-  test("ignores BOM and CRLF", () => {
-    expect(extractTitle("﻿# Title\r\nbody")).toBe("Title");
-  });
-});
-
-describe("slugify", () => {
-  test("lowercases and dashes", () => {
-    expect(slugify("Backup finished!")).toBe("backup-finished");
-  });
-  test("drops diacritics", () => {
-    expect(slugify("Café notes")).toBe("cafe-notes");
-  });
-  test("falls back to note", () => {
-    expect(slugify("🎉🎉")).toBe("note");
-    expect(slugify("")).toBe("note");
-  });
-  test("caps at 50 chars with no trailing dash", () => {
-    const s = slugify("word ".repeat(16));
-    expect(s.length).toBeLessThanOrEqual(50);
-    expect(s.endsWith("-")).toBe(false);
-  });
-});
-
-test("idStamp formats UTC to the second", () => {
-  expect(idStamp(at("2026-09-29T14:05:12.345Z"))).toBe("20260929T140512Z");
-});
 
 describe("isValidId", () => {
   test("accepts a real id", () => {
@@ -143,13 +92,16 @@ describe("feeds", () => {
     expect(await listNotes("test")).toEqual([]);
     expect(await getNote("test", "20260929T140512Z-flat")).toBeNull();
   });
-  test.each(["Bad Name", "", "api", "login", "_next"])(
-    "createNote rejects invalid or reserved feed %j and writes nothing",
-    async (feed) => {
-      await expect(createNote(feed, "hi")).rejects.toBeInstanceOf(InvalidFeedError);
-      expect(await readdir(root)).toEqual([]);
-    },
-  );
+  test.each([
+    ["Bad Name", InvalidFeedError],
+    ["", InvalidFeedError],
+    ["api", ReservedFeedError],
+    ["login", ReservedFeedError],
+    ["_next", ReservedFeedError],
+  ])("createNote rejects invalid or reserved feed %j and writes nothing", async (feed, cls) => {
+    await expect(createNote(feed, "hi")).rejects.toBeInstanceOf(cls);
+    expect(await readdir(root)).toEqual([]);
+  });
   test("countNotes", async () => {
     expect(await countNotes("test")).toBe(0);
     await createNote("test", "# One");
@@ -157,11 +109,11 @@ describe("feeds", () => {
     await writeFile(join(dir, "README.txt"), "x");
     expect(await countNotes("test")).toBe(2);
   });
-  test("feedExists", async () => {
-    expect(await feedExists("test")).toBe(false);
+  test("hasFeed", async () => {
+    expect(await hasFeed("test")).toBe(false);
     await createNote("test", "hi");
-    expect(await feedExists("test")).toBe(true);
-    expect(await feedExists("api")).toBe(false);
+    expect(await hasFeed("test")).toBe(true);
+    expect(await hasFeed("api")).toBe(false);
   });
 });
 
@@ -177,29 +129,5 @@ describe("getNote", () => {
     const note = await getNote("test", created.id);
     expect(note?.markdown).toBe("# Hi\nthere");
     expect(note?.title).toBe("Hi");
-  });
-});
-
-describe("bodyAfterTitle", () => {
-  test("drops the heading used as title", () => {
-    expect(bodyAfterTitle("# Backup finished\nnas-01 ok")).toBe("nas-01 ok");
-  });
-  test("drops the first line when it was the title", () => {
-    expect(bodyAfterTitle("\n\nCert renewed\nmore")).toBe("more");
-    expect(bodyAfterTitle("Cert renewed")).toBe("");
-  });
-  test("keeps everything when the title heading is further down", () => {
-    expect(bodyAfterTitle("intro\n# Heading\nx")).toBe("intro\n# Heading\nx");
-  });
-});
-
-describe("extractTitle and bodyAfterTitle skip fenced code", () => {
-  const md = "Backup done\n\n```sh\n# run this\n```";
-  test("title ignores # inside a fence", () => {
-    expect(extractTitle(md)).toBe("Backup done");
-    expect(extractTitle("~~~\n# no\n~~~\n# Real")).toBe("Real");
-  });
-  test("body keeps the fence", () => {
-    expect(bodyAfterTitle(md)).toBe("```sh\n# run this\n```");
   });
 });

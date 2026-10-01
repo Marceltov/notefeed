@@ -2,24 +2,22 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { Header } from "@/components/Header";
 import { NoteArticle } from "@/components/NoteList";
-import { READ_ID_RE, feedForReadId } from "@/lib/feeds";
-import { getNote } from "@/lib/notes";
+import { getReadNote, instanceTitle, readPath, rssPath } from "@/backend";
 
 export const dynamic = "force-dynamic";
 
 // Never render the feed name here, not even in the title.
-export const generateMetadata = (): Metadata => ({ title: { absolute: process.env.NOTEFEED_TITLE || "notefeed" } });
+export const generateMetadata = (): Metadata => ({ title: { absolute: instanceTitle() } });
 
 export default async function ReadNotePage({ params }: PageProps<"/r/[readId]/[id]">) {
   const { readId, id } = await params;
-  const feed = READ_ID_RE.test(readId) ? await feedForReadId(readId) : null;
-  const note = feed ? await getNote(feed, id) : null;
+  const note = await getReadNote(readId, id);
   if (!note) notFound();
 
   return (
     <>
-      <Header rss={`/r/${readId}/feed.xml`} />
-      <NoteArticle note={note} back={`/r/${readId}`} />
+      <Header rss={rssPath(readId)} />
+      <NoteArticle note={note} back={readPath(readId)} />
     </>
   );
 }

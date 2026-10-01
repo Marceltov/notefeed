@@ -1,6 +1,6 @@
-import { handlePost } from "@/lib/post";
+import { postNoteRoute } from "@/backend";
 
 // Reached through proxy.ts, which rewrites POST /<feed> here.
-export async function POST(req: Request, { params }: { params: Promise<{ feed: string }> }) {
-  return handlePost(req, (await params).feed);
+export async function POST(req: Request, { params }: RouteContext<"/api/feeds/[feed]/notes">) {
+  return postNoteRoute(req, (await params).feed);
 }

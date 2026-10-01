@@ -2,10 +2,9 @@ import { mkdtemp, readdir, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { beforeEach, expect, test } from "vitest";
-import { readId, resetSecretForTests } from "./feeds";
-import { feedExists } from "./notes";
-import { resetRateLimitsForTests } from "./limits";
-import { handlePost } from "./post";
+import { hasFeed, readId, resetFeedsForTests } from "../feeds";
+import { resetRateLimitsForTests } from "../limits";
+import { postNoteRoute } from "./notes";
 
 const BASE = "http://localhost:3000";
 let dir: string;
@@ -13,7 +12,7 @@ beforeEach(async () => {
   dir = await mkdtemp(join(tmpdir(), "notefeed-post-"));
   process.env.DATA_DIR = dir;
   process.env.NOTEFEED_SECRET = "test-secret-".padEnd(32, "x");
-  resetSecretForTests();
+  resetFeedsForTests();
   resetRateLimitsForTests();
   delete process.env.NOTEFEED_RATE_LIMIT;
   delete process.env.NOTEFEED_MAX_FEEDS;
@@ -25,7 +24,7 @@ beforeEach(async () => {
 
 function post(body: BodyInit, headers: Record<string, string> = {}, feed = "test") {
   const h = new Headers({ host: "localhost:3000", ...headers });
-  return handlePost(new Request(`${BASE}/${feed}`, { method: "POST", body, headers: h }), feed);
+  return postNoteRoute(new Request(`${BASE}/${feed}`, { method: "POST", body, headers: h }), feed);
 }
 
 const file = (id: string, feed = "test") => readFile(join(dir, feed, `${id}.md`), "utf8");
@@ -142,7 +141,7 @@ test("locked: 401 without or with a wrong password, and the feed is not created"
     expect(res.status).toBe(401);
     expect(await res.json()).toEqual({ error: "missing or wrong password" });
   }
-  expect(await feedExists("test")).toBe(false);
+  expect(await hasFeed("test")).toBe(false);
   expect(await written()).toEqual([]);
 });
 
@@ -186,7 +185,7 @@ test("413 for a chunked body over the limit, cancelling the stream early", async
       cancelled = true;
     },
   });
-  const res = await handlePost(
+  const res = await postNoteRoute(
     new Request(`${BASE}/test`, { method: "POST", body, duplex: "half", headers: { "content-type": "text/plain" } } as RequestInit),
     "test",
   );
@@ -205,7 +204,7 @@ test("a chunked body at the limit is accepted", async () => {
       c.close();
     },
   });
-  const res = await handlePost(
+  const res = await postNoteRoute(
     new Request(`${BASE}/test`, { method: "POST", body, duplex: "half", headers: { "content-type": "text/plain" } } as RequestInit),
     "test",
   );

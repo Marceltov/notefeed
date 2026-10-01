@@ -34,7 +34,7 @@ Leave `.secret` out if the repository goes anywhere public (`echo .secret > .git
 
 ## Backups
 
-Back up the `data` folder, including `.secret`. There's no database: restoring the files restores the notes, and restoring `.secret` keeps the read links the same (unless `NOTEFEED_SECRET` is set, which then decides them).
+Back up the `data` folder, including `.secret`. There's no database: restoring the files restores the notes, and restoring `.secret` keeps the read links the same (unless `NOTEFEED_SECRET` is set, which then decides them). Restart notefeed after restoring: it reads the list of feeds once at startup, so the read links of restored feeds only work after a restart.
 
 ```sh
 tar czf notefeed-notes.tgz -C data .
@@ -42,7 +42,7 @@ tar czf notefeed-notes.tgz -C data .
 
 ## Deleting notes and feeds
 
-Delete a note's file, or a feed's whole folder. It disappears from the web UI and the feed straight away.
+Delete a note's file, or a feed's whole folder. It disappears from the web UI and the feed straight away. A deleted feed still counts toward `NOTEFEED_MAX_FEEDS` until notefeed restarts.
 
 ```sh
 rm data/homelab-7f3k2q9x4m8wz/20260929T140512Z-backup-finished.md
