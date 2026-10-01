@@ -31,6 +31,13 @@ const err = (description: string) => ({ description, schema: ErrorJson }) satisf
 const RETRY = { "Retry-After": { description: "Seconds to wait before trying again", type: "integer" } } as const;
 const UNAUTHORIZED = err("The instance has a password and it is missing or wrong");
 
+// For the Feeds reads: the password first (a locked instance tells strangers nothing else), then the name.
+// postNote does its own, because a browser form gets a redirect to the login page instead of a 401.
+function passwordAndFeed({ req, params }: { req: Request; params: Record<string, string> }) {
+  authorize(req.headers, clientIp(req.headers));
+  assertFeed(params.feed);
+}
+
 // Wire form of a note; `base` is the absolute URL its page lives under.
 const noteJson = (n: Note, base: string): NoteJson => ({
   id: n.id,
@@ -101,9 +108,8 @@ const OPS: AnyOp[] = [
       401: UNAUTHORIZED,
       429: { ...err("Too many wrong passwords from this client"), headers: RETRY },
     },
+    before: passwordAndFeed,
   }).handle(async ({ req, params, query }) => {
-    authorize(req.headers, clientIp(req.headers));
-    assertFeed(params.feed);
     return page((l, b) => listNotes(params.feed, l, b), query, publicUrl(req.headers) + feedPath(params.feed));
   }),
 
@@ -122,9 +128,8 @@ const OPS: AnyOp[] = [
       404: err("No such note"),
       429: { ...err("Too many wrong passwords from this client"), headers: RETRY },
     },
+    before: passwordAndFeed,
   }).handle(async ({ req, params }) => {
-    authorize(req.headers, clientIp(req.headers));
-    assertFeed(params.feed);
     const note = await getNote(params.feed, params.id);
     if (!note) throw new NotFoundError("no such note");
     return { status: 200, body: noteJson(note, publicUrl(req.headers) + feedPath(params.feed)) };

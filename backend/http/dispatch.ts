@@ -31,6 +31,9 @@ type Meta<R, Q> = {
   query?: Q;
   body?: Record<string, z.ZodType>;
   responses: R;
+  // Runs before the query is validated, so a refusal for who is asking or what they named (401,
+  // invalid feed) wins over a complaint about their parameters. Throws to refuse.
+  before?: (input: { req: Request; params: Record<string, string> }) => void;
 };
 export type Handler<R, Q> = (input: { req: Request; params: Record<string, string>; query: QueryOf<Q> }) => Promise<Reply<R>>;
 export type Op<
@@ -99,6 +102,7 @@ export function createDispatcher(ops: AnyOp[]): (req: Request, segments: string[
     }
     let reply: AnyReply;
     try {
+      entry.before?.({ req, params: m.params });
       let query: Record<string, unknown> = {};
       if (entry.query) {
         const parsed = entry.query.safeParse(queryOf(req));

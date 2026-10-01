@@ -88,6 +88,13 @@ describe("GET /feeds/{feed}/notes", () => {
     }
   });
 
+  test("the password and the name are checked before the query", async () => {
+    expect((await json(await call("GET", "/feeds/Bad/notes?limit=0"))).code).toBe("invalid_feed");
+    process.env.NOTEFEED_PASSWORD = "pw";
+    expect((await call("GET", "/feeds/backups/notes?limit=0")).status).toBe(401);
+    expect((await call("GET", "/feeds/backups/notes/20260101T000000Z-x")).status).toBe(401);
+  });
+
   test("locked: needs the bearer password", async () => {
     process.env.NOTEFEED_PASSWORD = "pw";
     expect((await call("GET", "/feeds/backups/notes")).status).toBe(401);
