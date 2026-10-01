@@ -112,10 +112,22 @@ test.each(["/r/x/feed.xml", "/login", "/_next/static/x.js", "/api/v1/feeds/backu
   expect(isNext(proxy(req(p)))).toBe(true);
 });
 
-test("MCP and OAuth paths are not sent to /login on a locked instance", () => {
+test.each(["/mcp", "/oauth/authorize?x=1", "/oauth/token", "/.well-known/oauth-authorization-server", "/.well-known/oauth-protected-resource/mcp"])("locked: %s is not sent to /login", (p) => {
   process.env.NOTEFEED_PASSWORD = "pw";
-  for (const p of ["/mcp", "/oauth/authorize?x=1", "/oauth/token", "/.well-known/oauth-authorization-server", "/.well-known/oauth-protected-resource/mcp"])
-    expect(isNext(proxy(req(p)))).toBe(true);
+  expect(isNext(proxy(req(p)))).toBe(true);
+});
+
+test("POST /mcp is not rewritten and passes (open instance)", () => {
+  const res = proxy(req("/mcp", { method: "POST" }));
+  expect(rewrite(res)).toBeNull();
+  expect(isNext(res)).toBe(true);
+});
+
+test("POST /mcp is not rewritten and passes (locked instance)", () => {
+  process.env.NOTEFEED_PASSWORD = "pw";
+  const res = proxy(req("/mcp", { method: "POST" }));
+  expect(rewrite(res)).toBeNull();
+  expect(isNext(res)).toBe(true);
 });
 
 test("locked: POST /<feed> is still rewritten (the handler checks the bearer)", () => {
@@ -156,6 +168,6 @@ test("POST /logout (a real POST route) is not rewritten", () => {
   expect(isNext(res)).toBe(true);
 });
 
-test.each(["mcp", "api", "health", "r"])("POST /%s (reserved) goes to the handler, which answers 400", (name) => {
+test.each(["api", "health", "r"])("POST /%s (reserved) goes to the handler, which answers 400", (name) => {
   expect(rewrite(proxy(req(`/${name}`, { method: "POST" })))).toBe(`http://localhost:3000/api/v1/feeds/${name}/notes`);
 });
