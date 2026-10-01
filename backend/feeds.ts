@@ -35,7 +35,7 @@ function strong(key: Buffer, where: string): Buffer {
   return key;
 }
 
-function secret(): Buffer {
+export function secret(): Buffer {
   if (state.secret) return state.secret;
   const env = config.secret();
   return (state.secret = env ? strong(Buffer.from(env), "NOTEFEED_SECRET") : strong(loadOrCreateSecret(), secretPath()));
