@@ -11,7 +11,7 @@ export const FEED_RE = /^[a-z0-9_-]{1,64}$/;
 export const READ_ID_RE = /^[A-Za-z0-9_-]{22}$/;
 // Names that collide with routes. "robots.txt" can't match FEED_RE; listed anyway.
 export const RESERVED_FEEDS: ReadonlySet<string> = new Set([
-  "r", "api", "login", "logout", "mcp", "n", "_next", "static", "robots.txt", "health",
+  "r", "api", "login", "logout", "mcp", "oauth", "n", "_next", "static", "robots.txt", "health",
 ]);
 
 export function checkFeed(name: string): null | "invalid" | "reserved" {

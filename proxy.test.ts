@@ -112,6 +112,12 @@ test.each(["/r/x/feed.xml", "/login", "/_next/static/x.js", "/api/v1/feeds/backu
   expect(isNext(proxy(req(p)))).toBe(true);
 });
 
+test("MCP and OAuth paths are not sent to /login on a locked instance", () => {
+  process.env.NOTEFEED_PASSWORD = "pw";
+  for (const p of ["/mcp", "/oauth/authorize?x=1", "/oauth/token", "/.well-known/oauth-authorization-server", "/.well-known/oauth-protected-resource/mcp"])
+    expect(isNext(proxy(req(p)))).toBe(true);
+});
+
 test("locked: POST /<feed> is still rewritten (the handler checks the bearer)", () => {
   process.env.NOTEFEED_PASSWORD = "pw";
   expect(rewrite(proxy(req("/backups", { method: "POST" })))).toBe("http://localhost:3000/api/v1/feeds/backups/notes");
