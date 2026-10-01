@@ -232,3 +232,13 @@ test("notesRejectsBadLimit", async () => {
   const { io: x } = io();
   expect(await main(args("--limit", "0"), x)).toBe(2);
 });
+
+test("notesJsonPrintsExactlyTheDocumentedFields", async () => {
+  server.route(() => [
+    200,
+    { notes: [{ id: "20260930T100000Z-a", title: "A", markdown: "# A", created_at: "2026-09-30T10:00:00.000Z", url: "https://n/a", mood: "new" }], next: null },
+  ]);
+  const { out, io: x } = io();
+  expect(await main(args("--json"), x)).toBe(0);
+  expect(Object.keys(JSON.parse(out.stdout))).toEqual(["id", "title", "markdown", "created_at", "url"]);
+});

@@ -193,3 +193,12 @@ def test_notes_auth_error_exits_1(server, capsys):
 
 def test_notes_rejects_a_bad_limit(server, capsys):
     assert main(notes_args(server, "--limit", "0")) == 2
+
+
+def test_notes_json_prints_exactly_the_documented_fields(server, capsys):
+    server.route = lambda method, path: (
+        200,
+        {"notes": [{"id": "20260930T100000Z-a", "title": "A", "markdown": "# A", "created_at": "2026-09-30T10:00:00.000Z", "url": "https://n/a", "mood": "new"}], "next": None},
+    )
+    assert main(notes_args(server, "--json")) == 0
+    assert list(json.loads(capsys.readouterr().out)) == ["id", "title", "markdown", "created_at", "url"]
