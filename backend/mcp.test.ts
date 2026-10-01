@@ -36,8 +36,11 @@ const call = async (tool: string, args: Record<string, unknown>) => (await (awai
 describe("protocol", () => {
   test("tools/list", async () => {
     const tools = (await (await rpc("tools/list")).json()).result.tools;
-    expect(tools.map((t: { name: string }) => t.name).sort()).toEqual(["get_note", "list_notes", "post_note"]);
-    for (const t of tools) expect(t.annotations?.readOnlyHint === true).toBe(t.name !== "post_note");
+    expect(tools.map((t: { name: string }) => t.name).sort()).toEqual(["delete_note", "edit_note", "get_note", "list_notes", "post_note"]);
+    for (const t of tools) {
+      expect(t.annotations?.readOnlyHint === true).toBe(["get_note", "list_notes"].includes(t.name));
+      expect(t.annotations?.destructiveHint === true).toBe(t.name === "delete_note");
+    }
   });
   test("server/discover lists the version", async () => {
     const res = await rpc("server/discover");
@@ -239,5 +242,33 @@ describe("gate on a locked instance", () => {
   test("an open instance ignores the bearer", async () => {
     delete process.env.NOTEFEED_PASSWORD;
     expect((await rpc("tools/list", {}, bearer("garbage"))).status).toBe(200);
+  });
+});
+
+describe("edit_note and delete_note", () => {
+  test("work on an open feed", async () => {
+    const id = (await call("post_note", { feed: "o", markdown: "# Old" })).structuredContent.id;
+    const e = await call("edit_note", { feed: "o", id, markdown: "# New" });
+    expect(e.structuredContent).toMatchObject({ id, title: "New", markdown: "# New" });
+    expect((await call("get_note", { feed: "o", id })).structuredContent.markdown).toBe("# New");
+    expect((await call("delete_note", { feed: "o", id })).structuredContent).toEqual({ deleted: true });
+    expect((await call("get_note", { feed: "o", id })).isError).toBe(true);
+  });
+  test("a protected feed needs the password", async () => {
+    const id = (await call("post_note", { feed: "p", markdown: "# Old", password: "pw" })).structuredContent.id;
+    for (const [tool, args] of [["edit_note", { markdown: "# New" }], ["delete_note", {}]] as const) {
+      expect((await call(tool, { feed: "p", id, ...args })).content[0].text).toBe("missing or wrong password");
+      expect((await call(tool, { feed: "p", id, ...args, password: "bad" })).isError).toBe(true);
+    }
+    expect((await call("edit_note", { feed: "p", id, markdown: "# New", password: "pw" })).isError).toBeUndefined();
+    expect((await call("delete_note", { feed: "p", id, password: "pw" })).isError).toBeUndefined();
+  });
+  test("a missing note is a readable error", async () => {
+    await call("post_note", { feed: "o", markdown: "# Old" });
+    for (const [tool, args] of [["edit_note", { markdown: "# New" }], ["delete_note", {}]] as const) {
+      const r = await call(tool, { feed: "o", id: "20260101T000000Z-x", ...args });
+      expect(r.isError).toBe(true);
+      expect(r.content[0].text).toBe("no such note");
+    }
   });
 });

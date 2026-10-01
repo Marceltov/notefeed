@@ -408,6 +408,259 @@
             }
           }
         }
+      },
+      "put": {
+        "operationId": "editNote",
+        "summary": "Edit a note",
+        "description": "Replaces the note's markdown; its id and creation time stay, the title follows the new text. Needs the feed's password if it has one, and counts against the post rate limit. Read links can't edit. The body is as for posting: at most 102400 bytes, UTF-8, a `password` field is ignored.",
+        "tags": [
+          "Feeds"
+        ],
+        "security": [
+          {},
+          {
+            "password": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "feed",
+            "in": "path",
+            "required": true,
+            "description": "The feed's name. It is the write key: anyone who knows it can post.",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9_-]{1,64}$"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "The note's id",
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{8}T\\d{6}Z-[a-z0-9-]+$"
+            }
+          },
+          {
+            "name": "X-Feed-Password",
+            "in": "header",
+            "required": false,
+            "description": "The feed's own password, when it has one: to post, list or get, and (as the current password) to change or remove it. On the `POST` that creates a feed it sets the feed's password; on a `POST` to an existing feed that has none it answers 409. An empty value is the same as no header, so a `POST` with an empty one creates an open feed.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "text/markdown": {
+              "schema": {
+                "type": "string"
+              }
+            },
+            "text/plain": {
+              "schema": {
+                "type": "string"
+              }
+            },
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "type": "string"
+              }
+            },
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PostJson"
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/PostForm"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The note as it is now",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Note"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid or reserved feed name; empty note; bad JSON, form or UTF-8",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The instance has a password, or the feed has its own, and it is missing or wrong",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such note",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Body over 102400 bytes",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported content type",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many posts, edits and deletes, or wrong passwords, from this client",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before trying again",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteNote",
+        "summary": "Delete a note",
+        "description": "Needs the feed's password if it has one, and counts against the post rate limit. The feed stays, even with no notes left. Read links can't delete.",
+        "tags": [
+          "Feeds"
+        ],
+        "security": [
+          {},
+          {
+            "password": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "feed",
+            "in": "path",
+            "required": true,
+            "description": "The feed's name. It is the write key: anyone who knows it can post.",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9_-]{1,64}$"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "The note's id",
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{8}T\\d{6}Z-[a-z0-9-]+$"
+            }
+          },
+          {
+            "name": "X-Feed-Password",
+            "in": "header",
+            "required": false,
+            "description": "The feed's own password, when it has one: to post, list or get, and (as the current password) to change or remove it. On the `POST` that creates a feed it sets the feed's password; on a `POST` to an existing feed that has none it answers 409. An empty value is the same as no header, so a `POST` with an empty one creates an open feed.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Deleted"
+          },
+          "400": {
+            "description": "Invalid or reserved feed name",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The instance has a password, or the feed has its own, and it is missing or wrong",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such note",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many posts, edits and deletes, or wrong passwords, from this client",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before trying again",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/v1/feeds/{feed}/password": {

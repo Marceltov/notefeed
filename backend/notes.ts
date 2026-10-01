@@ -1,6 +1,6 @@
 // Notes: validation, ids and reading them back. Storage itself is in data/notes.ts.
 import { extractTitle, idStamp, slugify } from "../shared/notes";
-import { writeNote, listNoteFiles, readNote } from "./data/notes";
+import { deleteNoteFile, replaceNote, writeNote, listNoteFiles, readNote } from "./data/notes";
 import { EmptyNoteError, NoteTooLargeError } from "./errors";
 import { addFeed, assertFeed, checkFeed } from "./feeds";
 
@@ -62,4 +62,15 @@ export async function getNote(feed: string, id: string): Promise<Note | null> {
   if (checkFeed(feed) || !isValidId(id)) return null;
   const markdown = await readNote(feed, id);
   return markdown === null ? null : toNote(id, markdown);
+}
+
+// The id never changes, so neither does createdAt. null: invalid feed or id, or no such note.
+export async function updateNote(feed: string, id: string, markdown: string): Promise<Note | null> {
+  checkMarkdown(markdown);
+  if (checkFeed(feed) || !isValidId(id)) return null;
+  return (await replaceNote(feed, id, markdown)) ? toNote(id, markdown) : null;
+}
+
+export async function removeNote(feed: string, id: string): Promise<boolean> {
+  return !checkFeed(feed) && isValidId(id) && (await deleteNoteFile(feed, id));
 }

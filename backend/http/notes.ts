@@ -28,7 +28,7 @@ function formRedirect(feed: string, e: unknown): PostReply {
 
 // The note's markdown (and the optional new-feed password) from a raw text body, JSON, or a form's fields.
 // The 100 KB cap counts the whole body, so a form's own framing takes a few bytes of it.
-async function readMarkdown(req: Request): Promise<{ markdown: string; password?: string }> {
+export async function readMarkdown(req: Request): Promise<{ markdown: string; password?: string }> {
   const type = mediaType(req.headers);
   const isJson = type === "application/json";
   const isForm = type === "multipart/form-data";
