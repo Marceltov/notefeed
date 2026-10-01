@@ -9,7 +9,7 @@ Open notefeed in a browser. The start page asks for a feed name and suggests a r
 
 ## A feed page
 
-`/<feed>` shows one feed: a box to write a note, the feed's read link, and its newest 50 notes. A feed with no notes yet shows an empty list and a `curl` command to post the first one; it's saved to disk with its first note.
+`/<feed>` shows one feed: a box to write a note, the feed's read link, and its newest 50 notes. A feed with no notes yet shows an empty list and a `curl` command to post the first one; it's saved to disk with its first note, and its read link appears then too.
 
 ![A notefeed feed page: a compose box, the feed's read link, and notes grouped by day](assets/screenshot-light.png#only-light)
 ![A notefeed feed page: a compose box, the feed's read link, and notes grouped by day](assets/screenshot-dark.png#only-dark)
@@ -24,7 +24,7 @@ Once the feed has notes, **Post from a script** expands to a ready-to-copy `curl
 
 ### The read link
 
-Under the box is the feed's read link, with a copy button, and **Open read-only view**. The **RSS** link at the top is the same read link. Give it to feed readers and to people who should see the notes but not post. See [Read links and RSS](feed.md).
+Once the feed has a note, its read link is under the box, with a copy button and **Open read-only view**. The **RSS** link at the top is the same read link. Give it to feed readers and to people who should see the notes but not post. See [Read links and RSS](feed.md).
 
 ### Reading notes
 
@@ -34,9 +34,9 @@ Raw HTML in notes is shown as text, never run.
 
 ## A password for a feed
 
-On a feed that doesn't exist yet, the box has an optional **Password** field. Fill it in and the first note creates a protected feed. The field is only there for a new feed: an existing feed can't get a password afterwards.
+On a feed that doesn't exist yet, the box has an optional **Password** field. Fill it in and the first note creates a protected feed. A password is 1 to 256 printable ASCII characters (unaccented letters, digits, symbols and spaces) with no space at the start or end, so that it also works from a script; the browser refuses anything else. The field is only there for a new feed: an existing feed can't get a password afterwards.
 
-A protected feed asks for its password before it shows anything, at `/<feed>`: an **Unlock** form. The browser then stays unlocked (a cookie for that feed, with no end date) until the password changes or you press **Lock**. Wrong passwords count toward the [rate limit](configuration.md#rate-limits-and-caps). Once unlocked, a **Feed password** section above the notes lets you change the password, remove it (the feed stays, open to anyone who knows its name; both need the current password) or lock this browser again. Changing the password signs every other browser out. The ready-to-copy `curl` command on an unlocked feed includes the `X-Feed-Password` header.
+A protected feed asks for its password before it shows anything, at `/<feed>`: an **Unlock** form. The browser then stays unlocked (a cookie for that feed, with no end date) until the password changes or you press **Lock**. Wrong passwords count toward the [rate limit](configuration.md#rate-limits-and-caps); opening the page without entering one does not. Once unlocked, a **Feed password** section above the notes lets you change the password, remove it (the feed stays, open to anyone who knows its name; both need the current password) or lock this browser again. Changing the password signs every other browser out. The ready-to-copy `curl` command on an unlocked feed includes the `X-Feed-Password` header.
 
 The [read-only view](#the-read-only-view) and the RSS link stay open. See [A feed with its own password](posting.md#a-feed-with-its-own-password) for scripts, and [Operations](operations.md#a-lost-feed-password) if the password is lost.
 

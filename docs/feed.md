@@ -18,7 +18,7 @@ A read link:
 That makes it the link to give to feed readers, dashboards and other people. Keep the feed name itself to the scripts that post.
 
 !!! note "An unknown read link shows an empty feed"
-    A read link that doesn't belong to any feed answers with an empty feed, not an error. That's on purpose: nobody can probe which read links exist, and you can subscribe to a feed's read link before its first note. A read link that isn't 22 characters of `A`–`Z`, `a`–`z`, `0`–`9`, `-`, `_` is a `404`.
+    A read link that doesn't belong to any feed answers with an empty feed, not an error. That's on purpose: nobody can probe which read links exist. The web UI shows a feed's read link once the feed has its first note. A read link that isn't 22 characters of `A`–`Z`, `a`–`z`, `0`–`9`, `-`, `_` is a `404`.
 
 !!! warning "The secret behind read links"
     Read ids are computed from the feed name and a server secret: `NOTEFEED_SECRET` if set, otherwise a random one that notefeed creates once in `DATA_DIR/.secret`. Changing `NOTEFEED_SECRET`, or deleting `.secret` without setting it, **changes every read link**, and readers must resubscribe. Back up `.secret` with your notes. See [Configuration](configuration.md).

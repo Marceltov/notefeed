@@ -24,7 +24,7 @@ Under the hood both are generated from the server's [OpenAPI description](api.md
 
 Create the client with the server's URL and, usually, a default feed. Every call can name another feed. Pass the password only if the instance has one. `Client.from_env()` / `Client.fromEnv()` reads `NOTEFEED_URL`, `NOTEFEED_FEED` and `NOTEFEED_PASSWORD` instead.
 
-A feed can also have its own password (see [A feed with its own password](posting.md#a-feed-with-its-own-password)). Pass `feed_password=` (Python) or `feedPassword:` (Node) to the client, or per call, for example `client.post(text, feed_password=...)`. It is sent as `X-Feed-Password`; the `password` option stays the instance password. Posting to a new feed with `feed_password` creates it protected. `from_env()` / `fromEnv()` and the command read `NOTEFEED_FEED_PASSWORD`.
+A feed can also have its own password (see [A feed with its own password](posting.md#a-feed-with-its-own-password)). Pass `feed_password=` (Python) or `feedPassword:` (Node) to the client, or per call, for example `client.post(text, feed_password=...)`. It is sent as `X-Feed-Password`; the `password` option stays the instance password. Posting to a new feed with `feed_password` creates it protected; the server accepts 1 to 256 printable ASCII characters with no space at the start or end, and an empty value is the same as none. `from_env()` / `fromEnv()` and the command read `NOTEFEED_FEED_PASSWORD`.
 
 === "Python"
 

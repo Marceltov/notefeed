@@ -49,19 +49,22 @@ Without a password set, the header isn't needed and is ignored.
 A feed can have a password of its own, so that strangers who guess or learn its name can't read or post. It is set only when the feed is created: send it as `X-Feed-Password` with the feed's first note.
 
 ```sh
-curl -H "X-Feed-Password: $FEED_PASSWORD" \
+curl -H "X-Feed-Password: ${FEED_PASSWORD:?}" \
   --data-binary @note.md https://notes.example.com/homelab-7f3k2q9x4m8wz
 ```
 
-The password is 1 to 256 characters. A JSON or form body can carry it as a `password` field instead (`{"markdown": "# Hi", "password": "..."}`, or `curl -F markdown=@note.md -F password=...`); the header wins if both are sent. A password sent to a feed that already exists and has none is refused with `409` and `feed_exists`: an open feed can't be claimed afterwards. That includes an empty header, such as `-H "X-Feed-Password: $UNSET_VARIABLE"` with the variable unset. The first post to a name that doesn't exist yet creates a protected feed only if the note itself is valid.
+!!! warning "An empty password creates an open feed"
+    An empty `X-Feed-Password` is the same as none, and curl leaves out a header whose value is empty. So with `$FEED_PASSWORD` unset, a plain `"X-Feed-Password: $FEED_PASSWORD"` on the first post creates an open feed without any error, and an open feed can never get a password afterwards. `${FEED_PASSWORD:?}` makes the shell stop with an error instead of sending the request.
+
+The password is 1 to 256 printable ASCII characters: unaccented letters, digits, symbols and spaces, with no space at the start or end. That way the same password arrives unchanged in a header, a form and JSON. Anything else (`ä`, an emoji, a tab) is refused with `400`. A JSON or form body can carry the password as a `password` field instead (`{"markdown": "# Hi", "password": "..."}`, or `curl -F markdown=@note.md -F password=...`); the header wins if both are sent, and an empty field is the same as none. A password sent to a feed that already exists and has none is refused with `409` and `feed_exists`: an open feed can't be claimed afterwards. The first post to a name that doesn't exist yet creates a protected feed only if the note itself is valid.
 
 After that, posting to the feed, reading its notes (`GET /api/v1/feeds/<feed>/notes`, and one note by id) and opening `/<feed>` in a browser all need the password. Scripts send it on every request:
 
 ```sh
-curl -H "X-Feed-Password: $FEED_PASSWORD" \
+curl -H "X-Feed-Password: ${FEED_PASSWORD:?}" \
   --data-binary @note.md https://notes.example.com/homelab-7f3k2q9x4m8wz
 
-curl -H "X-Feed-Password: $FEED_PASSWORD" \
+curl -H "X-Feed-Password: ${FEED_PASSWORD:?}" \
   https://notes.example.com/api/v1/feeds/homelab-7f3k2q9x4m8wz/notes
 ```
 
@@ -70,15 +73,15 @@ On an instance with a password, send both: `Authorization: Bearer $NOTEFEED_PASS
 To change the password, `PUT /api/v1/feeds/<feed>/password` with the current password in `X-Feed-Password` and the new one in a JSON body. To remove it, `DELETE` the same URL. The feed stays, open to anyone who knows its name. Both answer `204`, and both answer `409` on a feed that has no password: they can't add one.
 
 ```sh
-curl -X PUT -H "X-Feed-Password: $FEED_PASSWORD" -H "Content-Type: application/json" \
+curl -X PUT -H "X-Feed-Password: ${FEED_PASSWORD:?}" -H "Content-Type: application/json" \
   -d '{"password": "a-new-password"}' \
   https://notes.example.com/api/v1/feeds/homelab-7f3k2q9x4m8wz/password
 
-curl -X DELETE -H "X-Feed-Password: $FEED_PASSWORD" \
+curl -X DELETE -H "X-Feed-Password: ${FEED_PASSWORD:?}" \
   https://notes.example.com/api/v1/feeds/homelab-7f3k2q9x4m8wz/password
 ```
 
-Changing the password signs every browser out of the feed. A wrong or missing feed password is `401`; note that this tells a stranger that a protected feed of that name exists, though not what is in it or its read id. Wrong passwords count toward the same per-client limit as the instance password. If the password is lost, see [Operations](operations.md#a-lost-feed-password).
+Changing the password signs every browser out of the feed. A wrong or missing feed password is `401`; note that this tells a stranger that a protected feed of that name exists, though not what is in it or its read id. Wrong passwords count toward the same per-client limit as the instance password; a request with no feed password at all is refused but not counted. If the password is lost, see [Operations](operations.md#a-lost-feed-password).
 
 ## Formats
 
@@ -113,7 +116,7 @@ EOF
 
 | Status | When |
 |---|---|
-| `400` | The feed name is invalid or reserved; the note is empty; the JSON is invalid or has no string `markdown`; the body is not UTF-8 |
+| `400` | The feed name is invalid or reserved; the note is empty; the JSON is invalid or has no string `markdown`; the body is not UTF-8; the password for a new feed is not valid (see [A feed with its own password](#a-feed-with-its-own-password)) |
 | `401` | The instance has a password and the `Authorization` header is missing or wrong, or the feed has its own password and `X-Feed-Password` is missing or wrong |
 | `409` | A password was sent for a feed that already exists without one (`feed_exists`) |
 | `404` | No feed in the URL: `POST /`, for example from an empty variable in `$NOTEFEED_URL/$FEED` |

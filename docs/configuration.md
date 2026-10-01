@@ -42,7 +42,7 @@ There is one password for the whole instance. Changing it logs out every browser
 
 Besides the instance password, a single feed can have its own, set by whoever creates the feed: see [A feed with its own password](posting.md#a-feed-with-its-own-password). It needs no setting. The two work together: on a locked instance a protected feed needs `Authorization: Bearer <instance password>` and `X-Feed-Password`. The instance password does not open a protected feed. Read links stay open either way.
 
-Each feed's password is stored as a salted scrypt hash in `DATA_DIR/<feed>/.password`. If a password is lost, delete that file: the feed is open from the next request. See [Operations](operations.md#a-lost-feed-password). Wrong feed passwords count toward the same [failed-attempt limit](#rate-limits-and-caps) as the instance password.
+Each feed's password is stored as a salted scrypt hash in `DATA_DIR/<feed>/.password`. If a password is lost, delete that file: the feed is open from the next request. See [Operations](operations.md#a-lost-feed-password). Wrong feed passwords count toward the same [failed-attempt limit](#rate-limits-and-caps) as the instance password. A request that sends no feed password at all is refused without being counted, so strangers who merely open a protected feed can't lock its owner out.
 
 ## OAuth
 

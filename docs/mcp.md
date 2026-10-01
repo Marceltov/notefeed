@@ -37,7 +37,7 @@ A client may register only `https://` redirect URIs, or plain `http://` on `loca
 
 ## Feeds with a password
 
-A feed can have its own password (see [Posting notes](posting.md#a-feed-with-its-own-password)). The three tools take an optional `password`. `post_note` with a password to a feed that doesn't exist yet creates it protected; to an existing feed that has none, it is refused as `feed_exists`. On a protected feed, `post_note`, `list_notes` and `get_note` all need the right `password`, or answer with an error. The password is not remembered between calls, and it is part of the conversation, so tell the assistant only passwords you would give that service. It is in addition to the instance login, which still decides who may use `/mcp` at all.
+A feed can have its own password (see [Posting notes](posting.md#a-feed-with-its-own-password)). The three tools take an optional `password`; an empty one is the same as none. `post_note` with a password to a feed that doesn't exist yet creates it protected; to an existing feed that has none, it answers with the error "feed already exists and has no password". On a protected feed, `post_note`, `list_notes` and `get_note` all need the right `password`, or answer with the error "missing or wrong password". Wrong passwords count toward the [failed-attempt limit](configuration.md#rate-limits-and-caps); a call without a password does not. The password is not remembered between calls, and it is part of the conversation, so tell the assistant only passwords you would give that service. It is in addition to the instance login, which still decides who may use `/mcp` at all.
 
 ## Telling the assistant which feed
 
