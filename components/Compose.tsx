@@ -22,6 +22,8 @@ export function Compose({ feed, action, error: initialError }: { feed: string; a
     try {
       // baseUrl: this page's origin, not the spec's default server.
       const { data, error, response } = await postNote({ baseUrl: window.location.origin, path: { feed }, body: { markdown: text } });
+      // The generated client returns a network failure instead of throwing it: no response at all.
+      if (!response) throw new Error("no response");
       if (data) return router.push(`${action}?posted=${data.id}`); // the page remounts this box empty
       if (response?.status === 401) return router.push(`/login?next=${encodeURIComponent(action)}`);
       setError(errorMessage(error?.code ?? "unknown", response?.headers.get("retry-after")));

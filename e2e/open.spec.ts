@@ -54,6 +54,14 @@ test("with JavaScript, the box posts through the API client and shows a refusal 
   await expect(page).toHaveURL(`/${name}`);
 });
 
+test("with JavaScript, a network failure says so", async ({ page }) => {
+  await page.goto(`/${feedName()}`);
+  await page.route("**/api/v1/feeds/**", (route) => route.abort());
+  await page.getByLabel("Note in markdown").fill("# Offline");
+  await page.getByRole("button", { name: "Post note" }).click();
+  await expect(page.locator("#compose-error")).toHaveText("Could not reach notefeed. Check your connection and try again.");
+});
+
 test("a note opens on its own page, with raw HTML shown as text", async ({ page }) => {
   const name = feedName();
   await page.goto(`/${name}`);
