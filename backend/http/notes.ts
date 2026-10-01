@@ -2,19 +2,21 @@
 // note, for scripts, the client packages and the web UI's compose box alike.
 import { AuthError, InvalidBodyError, NoteTooLargeError, NotefeedError, RateLimitedError, UnsupportedTypeError } from "../errors";
 import { readId } from "../feeds";
+import { cookieValue } from "../feedlock";
 import { clientIp } from "../limits";
 import { MAX_BYTES } from "../notes";
 import { postNote } from "../posting";
 import { feedPath, publicUrl, rssPath } from "../urls";
-import { authorize, feedAccess, mediaType, parseForm, readCapped, wantsHtml } from "./request";
+import { feedCookie } from "./feedsession";
+import { authorize, feedAccess, sameOrigin, mediaType, parseForm, readCapped, wantsHtml } from "./request";
 import { type Created, PostForm, PostJson } from "./schemas";
 
 // curl --data-binary sends x-www-form-urlencoded by default; treat it (and no type) as raw markdown.
 const TEXT_TYPES = ["", "text/markdown", "text/plain", "application/x-www-form-urlencoded"];
 
 // What the POST answers: the created note, or (to a browser form) a redirect.
-type PostReply = { status: 201; body: Created } | { status: 303; body: undefined; headers: { Location: string } };
-const redirect = (location: string): PostReply => ({ status: 303, body: undefined, headers: { Location: location } });
+type PostReply = { status: 201; body: Created; headers?: Record<string, string> } | { status: 303; body: undefined; headers: { Location: string } };
+const redirect = (location: string, more: Record<string, string> = {}): PostReply => ({ status: 303, body: undefined, headers: { Location: location, ...more } });
 
 // A plain form post from the web UI without JavaScript: back to the feed page, which shows the outcome
 // (a wrong feed password shows its unlock screen). The instance login is handled by the caller.
@@ -39,7 +41,7 @@ async function readMarkdown(req: Request): Promise<{ markdown: string; password?
     const form = await parseForm(bytes, req.headers).then(Object.fromEntries, () => null);
     const parsed = PostForm.safeParse(form);
     if (!parsed.success) throw new InvalidBodyError('form needs a "markdown" field');
-    return parsed.data;
+    return { ...parsed.data, password: parsed.data.password || undefined }; // an empty optional input means none
   }
 
   let text: string;
@@ -76,7 +78,10 @@ export async function handlePostNote(req: Request, feed: string): Promise<PostRe
       throw e;
     }
     const note = await postNote(feed, ip, () => readMarkdown(req), feedAccess(h, feed));
-    if (wantsHtml(h)) return redirect(`${feedPath(feed)}?posted=${note.id}`);
+    // The post proved access (or created the feed), so this browser stays unlocked without asking again.
+    const value = sameOrigin(h) ? await cookieValue(feed) : null;
+    const unlocked = value === null ? undefined : feedCookie(h, feed, value);
+    if (wantsHtml(h)) return redirect(`${feedPath(feed)}?posted=${note.id}`, unlocked);
     const base = publicUrl(h);
     return {
       status: 201,
@@ -86,6 +91,7 @@ export async function handlePostNote(req: Request, feed: string): Promise<PostRe
         feed_url: base + feedPath(feed),
         read_url: base + rssPath(readId(feed)),
       },
+      headers: unlocked,
     };
   } catch (e) {
     if (wantsHtml(h)) return formRedirect(feed, e);

@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, test } from "vitest";
 import { SESSION_COOKIE, login } from "../auth";
 import { hasFeed, readId, resetFeedsForTests } from "../feeds";
 import { resetRateLimitsForTests } from "../limits";
-import { cookieValue, feedCookieName } from "../feedlock";
+import { cookieValue, feedCookieName, protectedFeed } from "../feedlock";
 import { dispatch } from "./api";
 
 // POST /<feed> as proxy.ts hands it on: through the dispatcher.
@@ -141,6 +141,12 @@ test("multipart (curl -F markdown=..., the compose box): the markdown field is t
   const res = await post(form({ markdown: "# From a form\r\nbody" }));
   expect(res.status).toBe(201);
   expect(await file((await res.json()).id)).toBe("# From a form\r\nbody");
+});
+
+test("an empty password field (the compose box's optional input) means no password", async () => {
+  const res = await post(form({ markdown: "# Open", password: "" }));
+  expect(res.status).toBe(201);
+  expect(await protectedFeed("test")).toBe(false);
 });
 
 test("400 for multipart without a markdown field; nothing written", async () => {
@@ -392,4 +398,12 @@ describe("feed passwords", () => {
     expect((await post(form({ markdown: "# Hi" }), { cookie: c, origin: BASE })).status).toBe(201);
     expect((await post(form({ markdown: "# Hi" }), { cookie: c })).status).toBe(401);
   });
+});
+
+test("a same-origin post that creates a protected feed leaves this browser unlocked", async () => {
+  const res = await post(JSON.stringify({ markdown: "# Mine", password: "pw" }), { "content-type": "application/json", origin: BASE }, "mine");
+  expect(res.status).toBe(201);
+  expect(res.headers.get("set-cookie")).toContain(`${feedCookieName("mine")}=${await cookieValue("mine")}; Path=/mine`);
+  const script = await post(JSON.stringify({ markdown: "# Mine", password: "pw2" }), { "content-type": "application/json" }, "mine2");
+  expect(script.headers.get("set-cookie")).toBeNull();
 });

@@ -25,3 +25,10 @@ export function errorMessage(code: unknown, retry?: unknown): string | undefined
   const text = MESSAGES[code as ErrorCode] ?? "Something went wrong.";
   return text.replace("{retry}", /^\d+$/.test(String(retry)) ? String(retry) : "a few");
 }
+
+// The same, on the feed password screens, where "auth" and "invalid_body" are about a feed password.
+export function feedErrorMessage(code: unknown, retry?: unknown): string | undefined {
+  if (code === "auth") return "That password is wrong.";
+  if (code === "invalid_body") return "The new password must be 1 to 256 characters.";
+  return errorMessage(code, retry);
+}

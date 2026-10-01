@@ -1,7 +1,9 @@
 // The backend's boundary: the only module the frontend (app/, components/, proxy.ts) may import from
 // backend/ (enforced in eslint.config.mjs). Calls are in-process today. Each query below is shaped like
 // the endpoint it would become if the backend moved out, so the cut would be here and nowhere else.
+import { timingSafeEqual } from "node:crypto";
 import { config } from "./config";
+import { cookieValue } from "./feedlock";
 import { READ_ID_RE, checkFeed, feedForReadId, readId } from "./feeds";
 import { getNote, listNotes, type Note } from "./notes";
 
@@ -11,6 +13,8 @@ export { checkFeed } from "./feeds";
 export { feedPath, publicUrl, readPath, rssPath, safeNext } from "./urls";
 // Every write is one of these HTTP handlers; the frontend only mounts them and renders.
 export { dispatch } from "./http/api";
+export { feedCookieName } from "./feedlock";
+export { feedAccessRoute } from "./http/feedsession";
 export { loginRoute, logoutRoute } from "./http/session";
 export { rssRoute } from "./http/rss";
 export { mcpRoute } from "./mcp";
@@ -19,6 +23,15 @@ export { authServerRoute, authorizeRoute, checkAuthorize, metadataPreflight, pro
 export const instanceTitle = config.title;
 
 const PAGE = 50;
+
+/** open: the feed has no password; unlocked: the cookie is the valid one; locked: anything else. Counts no attempts. */
+export async function feedUnlocked(feed: string, cookie: string | undefined): Promise<"open" | "unlocked" | "locked"> {
+  if (checkFeed(feed)) return "open"; // the page 404s on its own
+  const want = await cookieValue(feed);
+  if (want === null) return "open";
+  const a = Buffer.from(want), b = Buffer.from(cookie ?? "");
+  return a.length === b.length && timingSafeEqual(a, b) ? "unlocked" : "locked";
+}
 
 /** A feed by its (writable) name: newest notes and its read id; null for an invalid or reserved name. */
 export async function getFeed(feed: string): Promise<{ notes: Note[]; readId: string } | null> {
