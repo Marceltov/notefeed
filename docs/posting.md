@@ -26,12 +26,39 @@ The feed is created by its first note; there's nothing to set up first. notefeed
 !!! tip "Use `--data-binary`, not `-d`"
     `curl -d` strips newlines from files. `--data-binary` sends the file unchanged.
 
+## Editing and deleting notes
+
+A note can be changed or removed after it was posted. Both use the note's URL in the API, `/api/v1/feeds/<feed>/notes/<id>`, where `<id>` is the `id` that posting returned.
+
+`PUT` replaces the note's markdown with the body, which is read as for posting (same formats and the same 100 KB limit), and answers `200` with the note as it is now:
+
+```sh
+curl -X PUT --data-binary @note.md \
+  https://notes.example.com/api/v1/feeds/homelab-7f3k2q9x4m8wz/notes/20260929T140512Z-backup-finished
+```
+
+`DELETE` removes the note for good and answers `204` with no body. There is no undo and no trash:
+
+```sh
+curl -X DELETE \
+  https://notes.example.com/api/v1/feeds/homelab-7f3k2q9x4m8wz/notes/20260929T140512Z-backup-finished
+```
+
+What to know:
+
+- **Who may:** whoever may post to the feed. On an open feed the name is the key, so anyone who knows it can edit and delete its notes, not only add to them. A feed with [its own password](#a-feed-with-its-own-password) needs `X-Feed-Password` for both, and an instance with a password needs `Authorization: Bearer` first, as for posting. The [read link](feed.md) can neither edit nor delete.
+- **The id stays.** An edit keeps the note's id, so its URLs, its place in the feed and its RSS `guid` stay the same. The title is taken from the new markdown, so the title can end up different from the slug in the id. Notes have no edit time and no history: the old text is gone, and the note keeps its original time.
+- **A feed reader may not show the change.** Because the `guid` stays, a reader that has already seen the item may keep showing the old text.
+- **The feed stays,** even when you delete its last note. Its name and its password remain, and the feed is then empty.
+- **Limits:** edits and deletes count toward the same per-client [rate limit](configuration.md#rate-limits-and-caps) as posts. An edit must pass the same checks as a post: not empty, UTF-8, at most 100 KB. A refused edit leaves the note unchanged. A `password` field in the body of an edit is ignored.
+- **Errors:** `404` (`not_found`) means no note has that id in that feed. That includes a feed that does not exist and an id that could not belong to a note. A protected feed answers `401` before it says anything about its notes. The other statuses are those of posting: `400`, `401`, `413`, `415` and `429`. Neither request creates a feed.
+
 ## Feed names
 
 A feed name is 1 to 64 characters of `a`–`z`, `0`–`9`, `-` and `_`. Anything else is rejected with `400`. These names are taken by notefeed itself and are reserved: `r`, `api`, `login`, `logout`, `mcp`, `n`, `_next`, `static`, `health`. Posting to a reserved name answers `400`, except `logout`: that's the web UI's log-out route, which answers with a redirect and stores nothing. A trailing slash is fine: `POST /<feed>/` works like `POST /<feed>`.
 
 !!! warning "The name is the key"
-    Anyone who knows a feed's name can read it and post to it. Pick one that's hard to guess, like `homelab-7f3k2q9x4m8wz`, and share the read link instead of the name.
+    Anyone who knows a feed's name can read it, post to it, and edit and delete its notes. Pick one that's hard to guess, like `homelab-7f3k2q9x4m8wz`, and share the read link instead of the name.
 
 ## With a password
 
@@ -119,7 +146,7 @@ EOF
 | `400` | The feed name is invalid or reserved; the note is empty; the JSON is invalid or has no string `markdown`; the body is not UTF-8; the password for a new feed is not valid (see [A feed with its own password](#a-feed-with-its-own-password)) |
 | `401` | The instance has a password and the `Authorization` header is missing or wrong, or the feed has its own password and `X-Feed-Password` is missing or wrong |
 | `409` | A password was sent for a feed that already exists without one (`feed_exists`) |
-| `404` | No feed in the URL: `POST /`, for example from an empty variable in `$NOTEFEED_URL/$FEED` |
+| `404` | No feed in the URL: `POST /`, for example from an empty variable in `$NOTEFEED_URL/$FEED`. For [editing and deleting](#editing-and-deleting-notes): no such note |
 | `413` | The body is larger than 100 KB (102400 bytes) |
 | `415` | The content type is not one of those above |
 | `429` | Too many posts, or too many wrong passwords, from this client in the last minute. `Retry-After` says how many seconds to wait. See [Rate limits and caps](configuration.md#rate-limits-and-caps). |

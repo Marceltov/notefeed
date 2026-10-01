@@ -25,7 +25,7 @@ class FakeServer:
                     status, payload, ctype, headers = fake.replies.pop(0)
                 else:
                     status, payload, ctype, headers = 201, {"id": "20260930T100000Z-i", "url": "http://n/u", "feed_url": "http://n/f", "read_url": "http://n/r"}, "application/json", {}
-                data = payload.encode() if isinstance(payload, str) else json.dumps(payload).encode()
+                data = b"" if status == 204 else payload.encode() if isinstance(payload, str) else json.dumps(payload).encode()
                 self.send_response(status)
                 self.send_header("Content-Type", ctype)
                 self.send_header("Content-Length", str(len(data)))
@@ -39,6 +39,12 @@ class FakeServer:
 
             def do_GET(self):
                 self._handle("GET")
+
+            def do_PUT(self):
+                self._handle("PUT")
+
+            def do_DELETE(self):
+                self._handle("DELETE")
 
             def log_message(self, *args):
                 pass

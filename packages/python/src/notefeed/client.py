@@ -12,7 +12,7 @@ import httpx
 
 from ._generated import AuthenticatedClient
 from ._generated import Client as _GeneratedClient
-from ._generated.api.feeds import get_note, list_notes, post_note
+from ._generated.api.feeds import delete_note, edit_note, get_note, list_notes, post_note
 from ._generated.api.read import get_read_note, list_read_notes
 from ._generated.models import Created, Note, NoteList, PostJson
 from ._generated.types import UNSET
@@ -158,6 +158,17 @@ class Client:
         )
         return self._parse(Created, self._call(kwargs))
 
+    def edit(self, id: str, markdown: str, feed: str | None = None, feed_password: str | None = None) -> Note:
+        """Replace a note's markdown; its id and URLs stay. Same options as post()."""
+        kwargs = edit_note._get_kwargs(
+            feed=self._feed_for(feed), id=id, body=PostJson(markdown=markdown), x_feed_password=self._fp(feed_password)
+        )
+        return self._parse(Note, self._call(kwargs))
+
+    def delete(self, id: str, feed: str | None = None, feed_password: str | None = None) -> None:
+        """Remove a note for good. The feed stays, even with no notes left. Same options as post()."""
+        self._call(delete_note._get_kwargs(feed=self._feed_for(feed), id=id, x_feed_password=self._fp(feed_password)))
+
     def notes(self, feed: str | None = None, page_size: int = 50, feed_password: str | None = None) -> Iterator[Note]:
         """Every note in the feed, newest first, fetched a page at a time; stop iterating whenever you like."""
         feed, fp = self._feed_for(feed), self._fp(feed_password)
@@ -211,6 +222,8 @@ class Client:
             body = response.json()
         except ValueError:
             body = None
+        if response.status_code == 204:  # delete: no body
+            return {}
         if response.is_success and isinstance(body, dict):
             return body
         if response.is_success:

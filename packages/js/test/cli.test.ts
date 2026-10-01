@@ -264,3 +264,47 @@ test("notesJsonPrintsExactlyTheDocumentedFields", async () => {
   expect(await main(args("--json"), x)).toBe(0);
   expect(Object.keys(JSON.parse(out.stdout))).toEqual(["id", "title", "markdown", "created_at", "url"]);
 });
+
+const NOTE = { id: "i", title: "T", markdown: "x", created_at: "2026-09-30T10:00:00.000Z", url: "https://n.example/inbox/i" };
+
+test("editTextPrintsUrl", async () => {
+  server.reply(200, NOTE);
+  const t = io();
+  expect(await main(["edit", "i", "new", "--url", server.url, "--feed", "inbox"], t.io)).toBe(0);
+  expect(t.out.stdout).toBe("https://n.example/inbox/i\n");
+  expect([server.requests[0].method, server.requests[0].path]).toEqual(["PUT", "/api/v1/feeds/inbox/notes/i"]);
+  expect(sent(0)).toBe("new");
+});
+
+test("editStdinAndFile", async () => {
+  expect(await main(["edit", "i", "-", "--url", server.url, "--feed", "inbox"], io("from stdin").io)).toBe(0);
+  expect(sent(0)).toBe("from stdin");
+  const f = join(mkdtempSync(join(tmpdir(), "nf-")), "n.md");
+  writeFileSync(f, "from file");
+  expect(await main(["edit", "i", "--file", f, "--url", server.url, "--feed", "inbox"], io().io)).toBe(0);
+  expect(sent(1)).toBe("from file");
+});
+
+test("editNeedsAnIdAndText", async () => {
+  expect(await main(["edit", "--url", "http://x", "--feed", "inbox"], io().io)).toBe(2);
+  expect(await main(["edit", "i", "--url", "http://x", "--feed", "inbox"], io().io)).toBe(2);
+});
+
+test("deletePrintsNothingAndSendsFeedPassword", async () => {
+  process.env.NOTEFEED_FEED_PASSWORD = "fp";
+  server.reply(204, "", "text/plain");
+  const t = io();
+  expect(await main(["delete", "i", "--url", server.url, "--feed", "inbox", "--password", "pw"], t.io)).toBe(0);
+  expect(t.out).toEqual({ stdout: "", stderr: "" });
+  const r = server.requests[0];
+  expect([r.method, r.path, r.headers["x-feed-password"], r.headers.authorization]).toEqual(["DELETE", "/api/v1/feeds/inbox/notes/i", "fp", "Bearer pw"]);
+});
+
+test("deleteErrors", async () => {
+  server.reply(404, { error: "no such note", code: "not_found" });
+  const t = io();
+  expect(await main(["delete", "i", "--url", server.url, "--feed", "inbox"], t.io)).toBe(1);
+  expect(t.out.stderr).toBe("notefeed: no such note\n");
+  expect(await main(["delete", "--url", server.url, "--feed", "inbox"], io().io)).toBe(2);
+  expect(await main(["delete", "i", "--url", server.url], io().io)).toBe(2);
+});

@@ -8,6 +8,8 @@ export NOTEFEED_URL=https://notes.example.com NOTEFEED_FEED=homelab-7f3k2q9x4m8w
 npx notefeed post "# Backup finished"
 backup.sh 2>&1 | npx notefeed post -
 npx notefeed notes --limit 5
+npx notefeed edit 20260929T140512Z-backup-finished "# Backup finished, verified"
+npx notefeed delete 20260929T140512Z-backup-finished
 ```
 
 ```js
@@ -24,3 +26,5 @@ for await (const note of client.notes()) console.log(note.created_at, note.title
 A feed can have its own password, which gates reading, listing and posting to it. Pass `feedPassword: "..."` to `new Client(...)` (or per call, e.g. `client.post(text, { feedPassword })`), or set `NOTEFEED_FEED_PASSWORD`, which `fromEnv()` and the `notefeed` command both read (there is deliberately no flag, so it stays out of shell history). It is sent as `X-Feed-Password`; `Authorization` stays the instance password. A feed password is 1 to 256 printable ASCII characters with no space at the start or end; an empty one is the same as none.
 
 Full documentation: https://docs.notefeed.me/clients/
+
+A posted note can be changed or removed: `await client.edit(id, markdown)` replaces its text and returns the note (its id and URLs stay), and `await client.delete(id)` removes it. Both take the same `{ feed, feedPassword }` options as `post`, and a missing note is a `NotFoundError`. `notefeed edit <id> <text | - | --file PATH>` prints the note URL; `notefeed delete <id>` prints nothing. Anyone who can post to a feed can edit and delete its notes, and deleting is permanent.

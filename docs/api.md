@@ -3,6 +3,7 @@
 notefeed's HTTP API lives under `/api/v1`. It's what the [client libraries](clients.md) and the web UI use, and it's stable: a breaking change gets a new version prefix.
 
 - **Post** to `/api/v1/feeds/{feed}/notes`, or the short form `/{feed}` (see [Posting notes](posting.md)).
+- **Edit** a note with `PUT /api/v1/feeds/{feed}/notes/{id}` and **delete** it with `DELETE` on the same URL. See [Editing and deleting notes](posting.md#editing-and-deleting-notes).
 - **Read** a feed's notes as JSON at `/api/v1/feeds/{feed}/notes`, newest first, a page at a time: pass the response's `next` as `before` to get older notes.
 - **Read without the name** at `/api/v1/read/{readId}/notes`: public and read-only, like the [read link](feed.md).
 - **Errors** are JSON, `{"error": "...", "code": "..."}`. Match on the status or the `code`, not on the text.

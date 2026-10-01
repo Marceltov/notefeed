@@ -3,7 +3,7 @@
  * OpenAPI description (./generated, `npm run generate` in the repo). No runtime dependencies.
  */
 import { createClient, createConfig } from "./generated/client/index.js";
-import { getNote, getReadNote, listNotes, listReadNotes, postNote } from "./generated/sdk.gen.js";
+import { deleteNote, editNote, getNote, getReadNote, listNotes, listReadNotes, postNote } from "./generated/sdk.gen.js";
 import type { Created, Error as ApiError, Note, NoteList } from "./generated/types.gen.js";
 
 /** The stable error codes the API answers with. */
@@ -104,6 +104,18 @@ export class Client {
     return this.call(postNote({ client: this.api, path: { feed }, body: { markdown }, ...this.opts(options.feedPassword) }));
   }
 
+  /** Replace a note's markdown; its id and URLs stay. Same options as post(). */
+  async edit(id: string, markdown: string, options: { feed?: string; feedPassword?: string } = {}): Promise<Note> {
+    const feed = this.feedFor(options.feed);
+    return this.call(editNote({ client: this.api, path: { feed, id }, body: { markdown }, ...this.opts(options.feedPassword) }));
+  }
+
+  /** Remove a note for good. The feed stays, even with no notes left. Same options as post(). */
+  async delete(id: string, options: { feed?: string; feedPassword?: string } = {}): Promise<void> {
+    const feed = this.feedFor(options.feed);
+    await this.call(deleteNote({ client: this.api, path: { feed, id }, ...this.opts(options.feedPassword) }));
+  }
+
   /** Every note in the feed, newest first, fetched a page at a time; stop iterating whenever you like. */
   notes(options: { feed?: string; feedPassword?: string; pageSize?: number } = {}): AsyncGenerator<Note> {
     const feed = this.feedFor(options.feed);
@@ -161,6 +173,7 @@ export class Client {
     if (response.redirected) {
       throw new NotefeedError(`${this.url} redirected to ${new URL(response.url).origin}: use that address as the URL`, response.status);
     }
+    if (response.status === 204 && error === undefined) return undefined as T; // delete: no body
     if (response.ok) {
       if (error === undefined && isObject(data)) return data as T;
       throw new NotefeedError(`unexpected response from ${this.url} (not a notefeed server?)`, response.status);

@@ -232,3 +232,47 @@ def test_notes_stops_quietly_when_the_reader_goes_away(server, capsys, monkeypat
     monkeypatch.setattr(sys, "stdout", ClosedPipe())
     assert main(notes_args(server, "--limit", "1000")) == 0
     assert capsys.readouterr().err == ""
+
+
+NOTE = {"id": "i", "title": "T", "markdown": "x", "created_at": "2026-09-30T10:00:00.000Z", "url": "https://n.example/inbox/i"}
+
+
+def test_edit_text_prints_url(server, capsys):
+    server.reply(200, NOTE)
+    assert main(["edit", "i", "new", "--url", server.url, "--feed", "inbox"]) == 0
+    assert capsys.readouterr().out == "https://n.example/inbox/i\n"
+    assert (server.requests[0]["method"], server.requests[0]["path"]) == ("PUT", "/api/v1/feeds/inbox/notes/i")
+    assert sent(server) == "new"
+
+
+def test_edit_stdin_and_file(server, monkeypatch, tmp_path):
+    monkeypatch.setattr(sys, "stdin", io.TextIOWrapper(io.BytesIO(b"from stdin")))
+    server.reply(200, NOTE)
+    assert main(["edit", "i", "-", "--url", server.url, "--feed", "inbox"]) == 0
+    assert sent(server) == "from stdin"
+    f = tmp_path / "n.md"
+    f.write_text("from file")
+    server.reply(200, NOTE)
+    assert main(["edit", "i", "--file", str(f), "--url", server.url, "--feed", "inbox"]) == 0
+    assert sent(server, 1) == "from file"
+
+
+def test_edit_needs_text(capsys):
+    assert main(["edit", "i", "--url", "http://x", "--feed", "inbox"]) == 2
+
+
+def test_delete_prints_nothing_and_sends_feed_password(server, capsys, monkeypatch):
+    monkeypatch.setenv("NOTEFEED_FEED_PASSWORD", "fp")
+    server.reply(204, "")
+    assert main(["delete", "i", "--url", server.url, "--feed", "inbox", "--password", "pw"]) == 0
+    assert capsys.readouterr() == ("", "")
+    r = server.requests[0]
+    assert (r["method"], r["path"], r["headers"]["X-Feed-Password"], r["headers"]["Authorization"]) == (
+        "DELETE", "/api/v1/feeds/inbox/notes/i", "fp", "Bearer pw")
+
+
+def test_delete_errors(server, capsys):
+    server.reply(404, {"error": "no such note", "code": "not_found"})
+    assert main(["delete", "i", "--url", server.url, "--feed", "inbox"]) == 1
+    assert capsys.readouterr().err == "notefeed: no such note\n"
+    assert main(["delete", "i", "--url", server.url]) == 2
