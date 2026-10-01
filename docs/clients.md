@@ -140,7 +140,8 @@ The message is the server's own reason. See the [REST API](api.md) for every sta
 
 0.5 uses the versioned API (`/api/v1`), so it needs a notefeed server that has it:
 
-- `post()` returns the created note with `feed_url` too. In Node, `readUrl` is now `read_url`, as in the API.
-- `InvalidNoteError` is now `InvalidRequestError`. Errors carry `code`, and there's a new `NotFoundError`.
+- `post()` returns `Created` (`id`, `url`, `feed_url`, `read_url`); in 0.4 that type was called `Note`. `Note` is now a full note from the feed (`title`, `markdown`, `created_at`, …). In Node, `readUrl` is now `read_url`, as in the API, and the `PostOptions` type is gone (`post(markdown, { feed })` still works).
+- `InvalidNoteError` is now `InvalidRequestError`. Errors carry `code` (in Node, `RateLimitedError`'s constructor takes it before `retryAfter`), and there's a new `NotFoundError`.
+- A server that redirects (for example `http://` to `https://`) is now an error that names the address to use, in both packages. In Node it used to be followed.
 - New: `notes()`, `note()`, `read_notes()` / `readNotes()`, `read_note()` / `readNote()`, `from_env()` / `fromEnv()`, and `notefeed notes`.
-- Python needs 3.11 or newer and now depends on httpx (with attrs and python-dateutil).
+- Python needs 3.11 or newer and now depends on httpx and attrs.

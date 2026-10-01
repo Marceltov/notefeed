@@ -12,7 +12,8 @@ npx openapi-ts
 
 # 3. The Python client. Needs uv. openapi-python-client 0.29.1 generates broken code for a request
 #    body with several content types (an optional union, `Unset` not imported), so it gets a copy of
-#    the spec where postNote's body is JSON only: the one the Python client sends.
+#    the spec where postNote's body is JSON only: the one the Python client sends. ruff (which the
+#    generator formats its output with) is pinned too, so a ruff release can't change the output.
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 node -e '
@@ -21,5 +22,5 @@ node -e '
   body.content = { "application/json": body.content["application/json"] };
   require("fs").writeFileSync(process.argv[1], JSON.stringify(spec));
 ' "$tmp/openapi.json"
-uvx openapi-python-client@0.29.1 generate --path "$tmp/openapi.json" --meta none \
+uvx --with ruff==0.16.9 openapi-python-client@0.29.1 generate --path "$tmp/openapi.json" --meta none \
   --output-path packages/python/src/notefeed/_generated --overwrite

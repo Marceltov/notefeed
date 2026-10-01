@@ -6,7 +6,7 @@ from __future__ import annotations
 import os
 import re
 from collections.abc import Callable, Iterator, Mapping
-from typing import Any
+from typing import Any, TypeVar
 
 import httpx
 
@@ -16,6 +16,9 @@ from ._generated.api.feeds import get_note, list_notes, post_note
 from ._generated.api.read import get_read_note, list_read_notes
 from ._generated.models import Created, Note, NoteList, PostJson
 from ._generated.types import UNSET
+
+
+_M = TypeVar("_M", Created, Note, NoteList)
 
 
 class NotefeedError(Exception):
@@ -93,6 +96,10 @@ class Client:
             raise ConfigError("no url given")
         self.url = url.rstrip("/")
         self.feed = _check_feed(feed) if feed else None
+        try:
+            httpx.URL(self.url)
+        except httpx.InvalidURL:
+            raise ConfigError("invalid url") from None
         password = (password or "").strip() or None
         if password and re.search(r"[\x00-\x1f\x7f]", password):
             # Never echo the value: it would end up in terminals and CI logs.
@@ -112,7 +119,7 @@ class Client:
 
     def post(self, markdown: str, feed: str | None = None) -> Created:
         kwargs = post_note._get_kwargs(feed=self._feed_for(feed), body=PostJson(markdown=markdown))
-        return Created.from_dict(self._call(kwargs))
+        return self._parse(Created, self._call(kwargs))
 
     def notes(self, feed: str | None = None, page_size: int = 50) -> Iterator[Note]:
         """Every note in the feed, newest first, fetched a page at a time; stop iterating whenever you like."""
@@ -120,14 +127,14 @@ class Client:
         return self._pages(lambda before: list_notes._get_kwargs(feed=feed, limit=page_size, before=before))
 
     def note(self, id: str, feed: str | None = None) -> Note:
-        return Note.from_dict(self._call(get_note._get_kwargs(feed=self._feed_for(feed), id=id)))
+        return self._parse(Note, self._call(get_note._get_kwargs(feed=self._feed_for(feed), id=id)))
 
     def read_notes(self, read_id: str, page_size: int = 50) -> Iterator[Note]:
         """Like notes(), by the feed's read id: public, read-only, needs no password."""
         return self._pages(lambda before: list_read_notes._get_kwargs(read_id=read_id, limit=page_size, before=before))
 
     def read_note(self, read_id: str, id: str) -> Note:
-        return Note.from_dict(self._call(get_read_note._get_kwargs(read_id=read_id, id=id)))
+        return self._parse(Note, self._call(get_read_note._get_kwargs(read_id=read_id, id=id)))
 
     def _feed_for(self, feed: str | None) -> str:
         feed = feed or self.feed
@@ -139,11 +146,18 @@ class Client:
     def _pages(self, kwargs_for: Callable[[Any], dict[str, Any]]) -> Iterator[Note]:
         before: Any = UNSET
         while True:
-            page = NoteList.from_dict(self._call(kwargs_for(before)))
+            page = self._parse(NoteList, self._call(kwargs_for(before)))
             yield from page.notes
             if not page.next_:
                 return
             before = page.next_
+
+    # A 2xx body the generated model can't read (missing fields, a bad date) is not the API's answer.
+    def _parse(self, model: type[_M], body: dict[str, Any]) -> _M:
+        try:
+            return model.from_dict(body)
+        except (KeyError, TypeError, ValueError):
+            raise NotefeedError(f"unexpected response from {self.url} (not a notefeed server?)") from None
 
     # The generated request builders (_get_kwargs) and httpx client, but the response is read here: the
     # generated parsers assume every declared error status has a JSON body, and a proxy's HTML page doesn't.
@@ -160,7 +174,12 @@ class Client:
             return body
         if response.is_success:
             raise NotefeedError(f"unexpected response from {self.url} (not a notefeed server?)", response.status_code)
+        if response.is_redirect:
+            target = httpx.URL(response.headers.get("Location", ""))
+            where = f"{target.scheme}://{target.netloc.decode()}" if target.scheme else response.headers.get("Location", "elsewhere")
+            raise NotefeedError(f"{self.url} redirected to {where}: use that address as the URL", response.status_code)
         code = body.get("code") if isinstance(body, dict) else None
+        code = code if isinstance(code, str) else None
         if isinstance(body, dict) and isinstance(body.get("error"), str):
             message = body["error"]
         else:

@@ -12,7 +12,7 @@ license-files = ["LICENSE"]
 authors = [{ name = "Marcel Bruckner" }]
 keywords = ["notefeed", "notes", "markdown", "rss", "self-hosted", "homelab", "cli"]
 requires-python = ">=3.11"
-dependencies = ["httpx>=0.28", "attrs>=24", "python-dateutil>=2.9"]
+dependencies = ["httpx>=0.28", "attrs>=24"]
 classifiers = [
   "Programming Language :: Python :: 3",
   "Environment :: Console",

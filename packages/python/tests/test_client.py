@@ -128,6 +128,47 @@ def test_an_unreachable_server_is_a_notefeed_error_without_status(server):
     assert str(e.value).startswith("could not reach")
 
 
+# --- answers that aren't the API's ---
+
+
+def test_a_redirect_says_which_address_to_use(server):
+    server.reply(301, "", headers={"Location": "https://notes.example.com/api/v1/feeds/inbox/notes"})
+    with pytest.raises(NotefeedError) as e:
+        Client(server.url, "inbox").post("x")
+    assert "redirected to https://notes.example.com" in str(e.value)
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        {"foo": 1},  # missing fields
+        ["not", "an", "object"],
+    ],
+)
+def test_a_2xx_that_isnt_a_created_note_is_a_notefeed_error(server, body):
+    server.reply(201, body)
+    with pytest.raises(NotefeedError, match="unexpected response"):
+        Client(server.url, "inbox").post("x")
+
+
+def test_a_note_with_a_bad_date_is_a_notefeed_error(server):
+    server.route = lambda method, path: (200, {"notes": [{**note(10), "created_at": "garbage"}], "next": None})
+    with pytest.raises(NotefeedError, match="unexpected response"):
+        list(Client(server.url, "inbox").notes())
+
+
+def test_a_code_that_isnt_a_string_is_ignored(server):
+    server.reply(400, {"error": "odd", "code": ["x"]})
+    with pytest.raises(NotefeedError) as e:
+        Client(server.url, "inbox").post("x")
+    assert type(e.value) is NotefeedError and e.value.code is None
+
+
+def test_a_malformed_url_is_a_config_error():
+    with pytest.raises(ConfigError):
+        Client("http://[::1", "inbox")
+
+
 # --- config ---
 
 
