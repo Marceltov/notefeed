@@ -180,6 +180,7 @@ describe("locked: the web UI's session cookie works, from this instance's own pa
     expect((await post(form({ markdown: "# Hi" }), { cookie: session(), origin: BASE })).status).toBe(201);
   });
   test("behind a proxy, the origin is checked against the public host", async () => {
+    process.env.NOTEFEED_TRUST_PROXY = "1";
     const headers = { cookie: session(), origin: "https://notes.example", "x-forwarded-host": "notes.example", "x-forwarded-proto": "https" };
     expect((await post(form({ markdown: "# Hi" }), headers)).status).toBe(201);
   });

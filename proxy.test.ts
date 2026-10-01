@@ -9,6 +9,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   delete process.env.PUBLIC_URL;
+  delete process.env.NOTEFEED_TRUST_PROXY;
 });
 
 const req = (path: string, init: { method?: string; headers?: Record<string, string> } = {}) =>
@@ -126,6 +127,7 @@ test("matcher skips /r/ and /_next/", () => {
 // and point at the public address, not the internal one.
 test("redirects to the public /login behind a reverse proxy", () => {
   process.env.NOTEFEED_PASSWORD = "pw";
+  process.env.NOTEFEED_TRUST_PROXY = "1";
   const res = proxy(
     new NextRequest("http://internal:3000/n/x", {
       headers: { "x-forwarded-proto": "https", "x-forwarded-host": "notes.example" },

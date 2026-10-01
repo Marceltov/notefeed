@@ -6,7 +6,7 @@ notefeed is configured with environment variables. With Compose, set them under 
 |---|---|---|
 | `PUBLIC_URL` | derived from the request | Absolute base URL used for links in the feed and API responses, e.g. `https://notes.example.com`. Set it on a public instance, see [below](#public_url). |
 | `NOTEFEED_PASSWORD` | none: open instance | Instance password. When set, posting needs it as a bearer token and the web UI needs a login. Read links stay open. See [The password](#the-password). |
-| `NOTEFEED_TRUST_PROXY` | off | Set to `1` behind a reverse proxy, so rate limits apply per client IP from `X-Forwarded-For`. See [Rate limits and caps](#rate-limits-and-caps). |
+| `NOTEFEED_TRUST_PROXY` | off | Set to `1` behind a reverse proxy, so rate limits apply per client IP from `X-Forwarded-For`, and links without `PUBLIC_URL` follow `X-Forwarded-Proto` and `X-Forwarded-Host`. See [Rate limits and caps](#rate-limits-and-caps). |
 | `NOTEFEED_RATE_LIMIT` | `60` | Posts per client per minute, and separately wrong passwords per client per minute. `0` or less turns the limit off. |
 | `NOTEFEED_MAX_FEEDS` | `0`: no limit (so is any value below 1) | Most feeds on the instance. Posting to a new feed beyond it answers `507`. |
 | `NOTEFEED_MAX_NOTES_PER_FEED` | `0`: no limit (so is any value below 1) | Most notes in one feed. Posting beyond it answers `507`. |
@@ -27,7 +27,7 @@ Without a password, notefeed works like [ntfy](https://ntfy.sh): anyone who can 
 
 ## The password
 
-Set `NOTEFEED_PASSWORD` to lock the instance: posting then needs `Authorization: Bearer <password>`, and every page except the login page and the read-only views needs a login. Read links keep working without it, so feed readers need no change. Generate a long random password:
+Set `NOTEFEED_PASSWORD` to lock the instance: posting then needs `Authorization: Bearer <password>`, and every page except the login page, the read-only views and the favicon needs a login. Read links keep working without it, so feed readers need no change. Generate a long random password:
 
 ```sh
 openssl rand -hex 32
@@ -59,9 +59,9 @@ Over a cap, posting answers `507`. The caps are checked, not locked, so several 
 
 ## `PUBLIC_URL`
 
-When `PUBLIC_URL` is unset, notefeed builds links from `X-Forwarded-Proto` and `X-Forwarded-Host` from a reverse proxy, and falls back to the `Host` header.
+When `PUBLIC_URL` is unset, notefeed builds links from the `Host` header over `http`. With `NOTEFEED_TRUST_PROXY=1` it uses `X-Forwarded-Proto` and `X-Forwarded-Host` from the reverse proxy first; without it, it ignores them, since any client can send them.
 
 !!! warning "Set `PUBLIC_URL` on a public instance"
-    Otherwise the links in the RSS feed and in API responses follow whatever `Host` header the client sent.
+    Otherwise the links in the RSS feed, in API responses and in redirects follow whatever `Host` header the client sent. A cache in front could then hand those links to everyone.
 
 Also set it when feed readers reach notefeed by a different address than people do, for example over the LAN.
