@@ -90,7 +90,9 @@ export function createDispatcher(ops: AnyOp[]): (req: Request, segments: string[
   return async (req, segments) => {
     const m = matchOps(ops, segments);
     if (!m) return Response.json(errorReply(new NotFoundError("no such endpoint")).body, { status: 404 });
-    const entry = m.ops.find((o) => o.method === req.method);
+    // Next answers HEAD by calling the GET export with the request as is; it drops the body itself.
+    const method = req.method === "HEAD" ? "GET" : req.method;
+    const entry = m.ops.find((o) => o.method === method);
     if (!entry) {
       const allow = m.ops.map((o) => o.method).join(", ");
       return Response.json({ error: "method not allowed" }, { status: 405, headers: { Allow: allow } });

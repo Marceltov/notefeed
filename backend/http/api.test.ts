@@ -2,6 +2,7 @@ import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { beforeEach, describe, expect, test } from "vitest";
+import { login } from "../auth";
 import { resetFeedsForTests, readId } from "../feeds";
 import { resetRateLimitsForTests } from "../limits";
 import { createNote } from "../notes";
@@ -154,5 +155,55 @@ describe("the OpenAPI document", () => {
     const doc = await json(await call("GET", "/openapi.json"));
     expect(doc.openapi).toBe("3.1.1");
     expect(doc.servers).toEqual([{ url: "https://notes.example" }]);
+  });
+});
+
+// Every error each entry can raise reaches the client with that status (the dispatcher turns an
+// undeclared one into a 500, so these fail if an entry starts throwing something it doesn't declare).
+describe("each entry's errors arrive with their declared status", () => {
+  const feedNote = async () => (await createNote("backups", "# Hi")).id;
+  const locked = (rate = "60") => {
+    process.env.NOTEFEED_PASSWORD = "pw";
+    process.env.NOTEFEED_RATE_LIMIT = rate;
+  };
+  const wrong = { authorization: "Bearer nope" };
+
+  test.each([
+    ["listNotes", async () => "/feeds/backups/notes"],
+    ["getNote", async () => `/feeds/backups/notes/${await feedNote()}`],
+  ])("%s: 401 for a wrong password or a cross-site session cookie, then 429 with Retry-After", async (_, path) => {
+    const p = await path();
+    locked("2");
+    const cookie = { cookie: `nf_session=${login("pw", "x")}`, origin: "https://evil.example" };
+    expect((await call("GET", p, { headers: cookie })).status).toBe(401);
+    expect((await call("GET", p, { headers: wrong })).status).toBe(401);
+    const res = await call("GET", p, { headers: wrong });
+    expect(res.status).toBe(429);
+    expect((await json(res)).code).toBe("too_many_attempts");
+    expect(Number(res.headers.get("retry-after"))).toBeGreaterThanOrEqual(1);
+  });
+
+  test("getNote: 400 for a reserved feed, 404 for an unknown note", async () => {
+    expect((await json(await call("GET", "/feeds/api/notes/20260101T000000Z-x"))).code).toBe("reserved_feed");
+    expect((await call("GET", "/feeds/backups/notes/20260101T000000Z-x")).status).toBe(404);
+  });
+
+  test("getReadNote: 404 for a malformed read id", async () => {
+    expect((await call("GET", `/read/short/notes/${await feedNote()}`)).status).toBe(404);
+  });
+
+  test("postNote: 401, 413, 415, 429 and 507 through the API", async () => {
+    process.env.NOTEFEED_MAX_FEEDS = "1";
+    try {
+      expect((await post("backups", "# One")).status).toBe(201);
+      expect((await json(await post("other", "# Two"))).code).toBe("feed_limit");
+      expect((await post("backups", "x".repeat(102401))).status).toBe(413);
+      expect((await call("POST", "/feeds/backups/notes", { body: "x", headers: { "content-type": "image/png" } })).status).toBe(415);
+      locked("1");
+      expect((await post("backups", "# Hi", wrong)).status).toBe(401);
+      expect((await post("backups", "# Hi", wrong)).status).toBe(429);
+    } finally {
+      delete process.env.NOTEFEED_MAX_FEEDS;
+    }
   });
 });

@@ -60,6 +60,10 @@ describe("routing", () => {
     expect(res.status).toBe(404);
     expect(await res.json()).toEqual({ error: "no such endpoint", code: "not_found" });
   });
+  test("HEAD is served like GET (Next calls the GET export for HEAD)", async () => {
+    const res = await call("things/a", "HEAD");
+    expect(res.status).toBe(200);
+  });
   test("a known path with the wrong method is a 405 with Allow", async () => {
     const res = await call("things/a", "PUT");
     expect(res.status).toBe(405);
@@ -104,6 +108,15 @@ describe("replies", () => {
     expect(res.status).toBe(429);
     expect(res.headers.get("retry-after")).toBe("7");
     expect(await res.json()).toEqual({ error: "rate limit exceeded", code: "rate_limited" });
+  });
+  test("a thrown error whose status the entry doesn't declare never leaves either: logged, 500", async () => {
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    behave = async () => {
+      throw new RateLimitedError(7); // 429, which getThing doesn't declare
+    };
+    const res = await call("things/a");
+    expect(res.status).toBe(500);
+    expect(log).toHaveBeenCalled();
   });
   test("a thrown plain Error is a 500", async () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
