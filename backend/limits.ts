@@ -43,6 +43,21 @@ export const rateLimit = (ip: string, now = Date.now()) => check(posts, ip, now,
 export const authWait = (ip: string, now = Date.now()) => check(failures, ip, now, false);
 export const authFailed = (ip: string, now = Date.now()) => void check(failures, ip, now, true);
 
+// The same bucket, for a password check that awaits (scrypt): the attempt is counted before the check, or a
+// burst of guesses would all pass authWait while the first ones are still hashing. Returns the seconds to
+// wait if over the limit, else a function that gives this attempt back, to call when the password was right.
+// It holds on to the window it counted in, so a window that began later is never touched.
+// ponytail: checks still running count as failures, so more right passwords at once than the limit get a
+// short 429 for the rest. Count running checks separately if that ever bites.
+export function authAttempt(ip: string, now = Date.now()): number | (() => void) {
+  const wait = check(failures, ip, now, true);
+  if (wait !== null) return wait;
+  const counted = failures.get(ip); // none when the limit is off
+  return () => {
+    if (counted && counted.count > 0) counted.count--;
+  };
+}
+
 export const resetRateLimitsForTests = () => {
   posts.clear();
   failures.clear();

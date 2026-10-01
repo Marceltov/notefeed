@@ -41,8 +41,9 @@ export async function postNote(
   // The sender decides how long read() takes, and the feed may have been created protected meanwhile:
   // a post that proved nothing above is checked again, with nothing to show.
   if (!proved && !created) await checkFeedAccess(feed, {}, ip);
-  // ponytail: checked, not locked. A protected creation can still land between this check and the note's
-  // file when its rename() claims the directory writeNote just made (empty for a few microseconds), and
-  // that one note is then in the protected feed. A lock around creation, per feed, would close it.
+  // ponytail: checked, not locked. A protected creation can still land in the few microseconds between
+  // this check and the note's file, in two ways: it completes before writeNote's mkdir, or its rename()
+  // claims the directory writeNote just made while that is still empty. Either way this one note is then
+  // in the protected feed. A lock around creation, per feed, would close both.
   return { note: await createNote(feed, markdown), created };
 }

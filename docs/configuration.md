@@ -56,7 +56,7 @@ Clients that can't send a header, such as the Claude.ai and Claude Desktop conne
 
 ## Rate limits and caps
 
-Each client may post `NOTEFEED_RATE_LIMIT` notes per minute (60 by default), from the API and the web UI together. Wrong passwords have their own budget of the same size. Over it, notefeed answers `429` with a `Retry-After` header, for the rest of the minute; the web UI says how many seconds to wait. The counters live in memory and reset on restart.
+Each client may post `NOTEFEED_RATE_LIMIT` notes per minute (60 by default), from the API and the web UI together. Wrong passwords have their own budget of the same size. A feed password check that is still running counts toward it until it turns out right, so a script that sends more than that many requests to protected feeds at the same instant can see a `429` for some of them. Over it, notefeed answers `429` with a `Retry-After` header, for the rest of the minute; the web UI says how many seconds to wait. The counters live in memory and reset on restart.
 
 !!! warning "Behind a reverse proxy, set `NOTEFEED_TRUST_PROXY=1`"
     notefeed can't see a client's IP on its own, so without `NOTEFEED_TRUST_PROXY` **all clients share one rate-limit bucket**. On an exposed instance, one busy script can then slow everyone down, and an attacker's wrong password guesses can lock the owner out of posting and logging in for up to a minute.

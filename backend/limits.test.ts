@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test } from "vitest";
-import { authFailed, authWait, clientIp, rateLimit, resetRateLimitsForTests } from "./limits";
+import { authAttempt, authFailed, authWait, clientIp, rateLimit, resetRateLimitsForTests } from "./limits";
 
 beforeEach(() => {
   resetRateLimitsForTests();
@@ -60,4 +60,35 @@ test("an expired entry doesn't limit, even before the next prune", () => {
   rateLimit("z", t + 60_000); // prunes again; a is still live
   expect(rateLimit("a", t + 89_000)).not.toBeNull();
   expect(rateLimit("a", t + 95_000)).toBeNull(); // a expired at t + 90_000, next prune only at t + 120_000
+});
+
+test("authAttempt counts before the check and gives the attempt back when it succeeded", () => {
+  const t = 1_000_000;
+  const held = [authAttempt("a", t), authAttempt("a", t), authAttempt("a", t)];
+  expect(authAttempt("a", t)).toBeGreaterThanOrEqual(1); // three checks still running: the limit holds
+  expect(authWait("a", t)).not.toBeNull();
+  for (const back of held) (back as () => void)();
+  expect(authWait("a", t)).toBeNull();
+  for (let i = 0; i < 3; i++) expect(authAttempt("a", t)).toBeTypeOf("function"); // kept: these were wrong
+  expect(authAttempt("a", t)).toBeTypeOf("number");
+});
+
+test("giving an attempt back never goes below zero, and never touches a later window", () => {
+  const t = 1_000_000;
+  const back = authAttempt("a", t) as () => void;
+  back();
+  back();
+  for (let i = 0; i < 3; i++) authFailed("a", t);
+  expect(authWait("a", t)).not.toBeNull(); // a count below zero would have left room for a fourth
+
+  const old = authAttempt("b", t) as () => void;
+  for (let i = 0; i < 3; i++) authFailed("b", t + 60_000); // a new window, filled by others
+  old();
+  expect(authWait("b", t + 60_001)).not.toBeNull();
+});
+
+test("with the limit off, authAttempt always allows", () => {
+  process.env.NOTEFEED_RATE_LIMIT = "0";
+  for (let i = 0; i < 5; i++) (authAttempt("a", 1) as () => void)();
+  expect(authAttempt("a", 1)).toBeTypeOf("function");
 });

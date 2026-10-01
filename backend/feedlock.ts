@@ -6,7 +6,7 @@ import { PASSWORD_PATTERN, PASSWORD_RULE } from "../shared/password";
 import { createFeedDirWithHash, readHash, removeHash, writeHash } from "./data/password";
 import { AuthError, FeedExistsError, InvalidBodyError, TooManyAttemptsError } from "./errors";
 import { addFeed, checkFeed, secret } from "./feeds";
-import { authFailed, authWait } from "./limits";
+import { authAttempt } from "./limits";
 
 // An empty password means none, wherever it comes from (header, body field, MCP argument).
 export type FeedAccess = { password?: string; cookie?: string };
@@ -63,12 +63,13 @@ function cookieUnlocks(feed: string, hash: string, cookie: string | undefined): 
 
 // No password at all is refused first: no scrypt, and nothing counted, or anyone could lock the owner out
 // just by asking. Only a wrong password is a failed attempt; over the limit it is not even compared.
+// The attempt is counted before the hashing and given back if the password was right: counted afterwards,
+// every guess of a concurrent burst would get past the limit while the first ones are still hashing.
 async function checkPassword(password: string | undefined, hash: string, ip: string): Promise<void> {
   if (!password) throw new AuthError();
-  const wait = authWait(ip);
-  if (wait !== null) throw new TooManyAttemptsError(wait);
-  if (await verifyHash(password, hash)) return;
-  authFailed(ip);
+  const attempt = authAttempt(ip);
+  if (typeof attempt === "number") throw new TooManyAttemptsError(attempt);
+  if (await verifyHash(password, hash)) return attempt();
   throw new AuthError();
 }
 

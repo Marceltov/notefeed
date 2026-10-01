@@ -154,6 +154,30 @@ describe("protected feed", () => {
     await expect(ok("a", { cookie })).resolves.toBe(true);
   });
 
+  // The password check awaits scrypt, so the attempt has to be counted before it, not after.
+  test("a burst of concurrent guesses gets no more compared than the limit allows", async () => {
+    process.env.NOTEFEED_RATE_LIMIT = "3";
+    await createProtected("a", "pw");
+    const guesses = [...Array.from({ length: 40 }, (_, i) => `wrong-${i}`), "pw"];
+    const res = await Promise.allSettled(guesses.map((password) => ok("a", { password })));
+    const compared = res.filter((r) => r.status === "fulfilled" || r.reason instanceof AuthError);
+    expect(compared.length).toBeLessThanOrEqual(3);
+    for (const r of res) if (!compared.includes(r)) expect((r as PromiseRejectedResult).reason).toBeInstanceOf(TooManyAttemptsError);
+  });
+
+  test("right passwords, one after another or at once, never use up the limit", async () => {
+    process.env.NOTEFEED_RATE_LIMIT = "3";
+    await createProtected("a", "pw");
+    for (let i = 0; i < 10; i++) await expect(ok("a", { password: "pw" })).resolves.toBe(true);
+    // At once, those beyond the limit may be asked to wait while the first are still hashing, but none fails.
+    const burst = await Promise.allSettled(Array.from({ length: 20 }, () => ok("a", { password: "pw" })));
+    expect(burst.filter((r) => r.status === "fulfilled").length).toBeGreaterThanOrEqual(3);
+    for (const r of burst) if (r.status === "rejected") expect(r.reason).toBeInstanceOf(TooManyAttemptsError);
+    // Afterwards the budget is whole again: three wrong ones are still compared, and only then is it used up.
+    for (let i = 0; i < 3; i++) await expect(ok("a", { password: `wrong-${i}` })).rejects.toBeInstanceOf(AuthError);
+    await expect(ok("a", { password: "pw" })).rejects.toBeInstanceOf(TooManyAttemptsError);
+  });
+
   test("failed attempts are limited, even for the right password", async () => {
     process.env.NOTEFEED_RATE_LIMIT = "2";
     await createProtected("a", "pw");
