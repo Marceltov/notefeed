@@ -42,10 +42,17 @@ export const ErrorJson = z
   })
   .meta({ id: "Error" });
 
-export const PostJson = z.object({ markdown: z.string() }).meta({ id: "PostJson" });
-export const PostForm = z.object({ markdown: z.string() }).meta({ id: "PostForm" });
+const NewPassword = z.string().describe("Protects the feed, 1 to 256 characters. Only honored on the post that creates the feed; an existing open feed answers 409.");
+export const PostJson = z.object({ markdown: z.string(), password: NewPassword.optional() }).meta({ id: "PostJson" });
+export const PostForm = z.object({ markdown: z.string(), password: NewPassword.optional() }).meta({ id: "PostForm" });
+export const PasswordJson = z.object({ password: z.string().describe("The new password, 1 to 256 characters") }).meta({ id: "PasswordJson" });
 
-export const COMPONENTS = [NoteJson, NoteList, Created, ErrorJson, PostJson, PostForm];
+export const FeedPasswordHeader = z
+  .string()
+  .describe("The feed's own password, when it has one: to post, list or get, and (as the current password) to change or remove it. Not needed on a feed without one, except that sending it to an existing open feed with `POST` answers 409.");
+export const CurrentPasswordHeader = z.string().describe("The feed's current password");
+
+export const COMPONENTS = [NoteJson, NoteList, Created, ErrorJson, PostJson, PostForm, PasswordJson];
 
 export const FeedParam = z.string().regex(FEED_RE).describe("The feed's name. It is the write key: anyone who knows it can post.");
 export const ReadIdParam = z.string().regex(READ_ID_RE).describe("The feed's read id, from its read link. Read-only; never reveals the name.");

@@ -1,5 +1,6 @@
 // Reading requests, for the handlers in backend/http.
 import { SESSION_COOKIE, checkBearer, locked, sessionOk } from "../auth";
+import { type FeedAccess, feedCookieName } from "../feedlock";
 import { publicUrl } from "../urls";
 
 // Reads at most `max` bytes; null (and the stream cancelled) as soon as the body is larger.
@@ -57,4 +58,11 @@ export function authorize(h: Headers, ip: string): void {
   if (!locked()) return;
   if (!h.has("authorization") && sameOrigin(h) && sessionOk(cookie(h, SESSION_COOKIE))) return;
   checkBearer(h.get("authorization"), ip);
+}
+
+// The feed password header, or (like the instance cookie) the feed's unlock cookie from this instance's own pages.
+export function feedAccess(h: Headers, feed: string): FeedAccess {
+  const password = h.get("x-feed-password") ?? undefined;
+  const cookieOk = password === undefined && sameOrigin(h);
+  return { password, cookie: cookieOk ? cookie(h, feedCookieName(feed)) : undefined };
 }

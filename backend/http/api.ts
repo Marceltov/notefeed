@@ -3,23 +3,27 @@
 // generated from. Each handler is typed from its own declared responses (see op() in dispatch.ts).
 import * as z from "zod";
 import { config } from "../config";
-import { NotFoundError } from "../errors";
+import { InvalidBodyError, NotFoundError } from "../errors";
+import { changePassword, checkFeedAccess, removePassword } from "../feedlock";
 import { READ_ID_RE, assertFeed, feedForReadId } from "../feeds";
 import { clientIp } from "../limits";
 import { MAX_BYTES, getNote, listNotes, type Note } from "../notes";
 import { feedPath, publicUrl, readPath } from "../urls";
 import { createDispatcher, op, type AnyOp, type ResponseSpec } from "./dispatch";
 import { handlePostNote } from "./notes";
-import { authorize } from "./request";
+import { authorize, feedAccess, readCapped } from "./request";
 import {
   COMPONENTS,
   Created,
+  CurrentPasswordHeader,
   ErrorJson,
   FeedParam,
+  FeedPasswordHeader,
   NoteIdParam,
   NoteJson,
   NoteList,
   PageQuery,
+  PasswordJson,
   PostForm,
   PostJson,
   ReadIdParam,
@@ -29,13 +33,18 @@ export const API_PREFIX = "/api/v1";
 
 const err = (description: string) => ({ description, schema: ErrorJson }) satisfies ResponseSpec;
 const RETRY = { "Retry-After": { description: "Seconds to wait before trying again", type: "integer" } } as const;
-const UNAUTHORIZED = err("The instance has a password and it is missing or wrong");
+const UNAUTHORIZED = err("The instance has a password, or the feed has its own, and it is missing or wrong");
 
 // For the Feeds reads: the password first (a locked instance tells strangers nothing else), then the name.
 // postNote does its own, because a browser form gets a redirect to the login page instead of a 401.
+// The feed's own password comes after both: the instance lock is always checked first.
 function passwordAndFeed({ req, params }: { req: Request; params: Record<string, string> }) {
   authorize(req.headers, clientIp(req.headers));
   assertFeed(params.feed);
+}
+async function passwordFeedAndFeedPassword(input: { req: Request; params: Record<string, string> }) {
+  passwordAndFeed(input);
+  await checkFeedAccess(input.params.feed, feedAccess(input.req.headers, input.params.feed), clientIp(input.req.headers));
 }
 
 // Wire form of a note; `base` is the absolute URL its page lives under.
@@ -64,12 +73,14 @@ const OPS: AnyOp[] = [
     operationId: "postNote",
     summary: "Post a note",
     description:
-      "Creates the feed with its first note. Also served at `POST /{feed}`, the short form the client packages and curl one-liners use. " +
+      "Creates the feed with its first note, optionally protected by its own password (`X-Feed-Password` header or a `password` field in the JSON or form body). " +
+      "Posting to a protected feed needs that password. Also served at `POST /{feed}`, the short form the client packages and curl one-liners use. " +
       `The body is at most ${MAX_BYTES} bytes and must be UTF-8. ` +
       "`application/x-www-form-urlencoded` (what `curl -d` sends) is read as raw markdown, not as form fields.",
     tags: ["Feeds"],
     password: true,
     params: { feed: FeedParam },
+    headers: { "X-Feed-Password": FeedPasswordHeader },
     body: {
       "text/markdown": z.string(),
       "text/plain": z.string(),
@@ -87,6 +98,7 @@ const OPS: AnyOp[] = [
       },
       400: err("Invalid or reserved feed name; empty note; bad JSON, form or UTF-8"),
       401: UNAUTHORIZED,
+      409: err("A password was sent for a feed that already exists without one: it can't be claimed"),
       413: err(`Body over ${MAX_BYTES} bytes`),
       415: err("Unsupported content type"),
       429: { ...err("Too many posts, or wrong passwords, from this client"), headers: RETRY },
@@ -103,6 +115,7 @@ const OPS: AnyOp[] = [
     tags: ["Feeds"],
     password: true,
     params: { feed: FeedParam },
+    headers: { "X-Feed-Password": FeedPasswordHeader },
     query: PageQuery,
     responses: {
       200: { description: "A page of notes", schema: NoteList },
@@ -110,7 +123,7 @@ const OPS: AnyOp[] = [
       401: UNAUTHORIZED,
       429: { ...err("Too many wrong passwords from this client"), headers: RETRY },
     },
-    before: passwordAndFeed,
+    before: passwordFeedAndFeedPassword,
   }).handle(async ({ req, params, query }) => {
     return page((l, b) => listNotes(params.feed, l, b), query, publicUrl(req.headers) + feedPath(params.feed));
   }),
@@ -123,6 +136,7 @@ const OPS: AnyOp[] = [
     tags: ["Feeds"],
     password: true,
     params: { feed: FeedParam, id: NoteIdParam },
+    headers: { "X-Feed-Password": FeedPasswordHeader },
     responses: {
       200: { description: "The note", schema: NoteJson },
       400: err("Invalid or reserved feed name"),
@@ -130,11 +144,64 @@ const OPS: AnyOp[] = [
       404: err("No such note"),
       429: { ...err("Too many wrong passwords from this client"), headers: RETRY },
     },
-    before: passwordAndFeed,
+    before: passwordFeedAndFeedPassword,
   }).handle(async ({ req, params }) => {
     const note = await getNote(params.feed, params.id);
     if (!note) throw new NotFoundError("no such note");
     return { status: 200, body: noteJson(note, publicUrl(req.headers) + feedPath(params.feed)) };
+  }),
+
+  op({
+    method: "PUT",
+    path: `${API_PREFIX}/feeds/{feed}/password`,
+    operationId: "changeFeedPassword",
+    summary: "Change a feed's password",
+    description: "Needs the current password in `X-Feed-Password`. A feed can only get a password when it is created, so an open feed answers 409.",
+    tags: ["Feeds"],
+    password: true,
+    params: { feed: FeedParam },
+    headers: { "X-Feed-Password": CurrentPasswordHeader },
+    body: { "application/json": PasswordJson },
+    responses: {
+      204: { description: "Changed; the old password and unlock cookies stop working" },
+      400: err("Invalid or reserved feed name, bad JSON, or a new password not 1 to 256 characters"),
+      401: UNAUTHORIZED,
+      409: err("The feed has no password"),
+      429: { ...err("Too many wrong passwords from this client"), headers: RETRY },
+    },
+    before: passwordAndFeed,
+  }).handle(async ({ req, params }) => {
+    const bytes = await readCapped(req, 4096);
+    let body: ReturnType<typeof PasswordJson.safeParse> | undefined;
+    try {
+      body = PasswordJson.safeParse(JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes ?? new Uint8Array())));
+    } catch {}
+    if (!body?.success) throw new InvalidBodyError('JSON needs a "password" string');
+    await changePassword(params.feed, req.headers.get("x-feed-password") ?? "", body.data.password, clientIp(req.headers));
+    return { status: 204, body: undefined };
+  }),
+
+  op({
+    method: "DELETE",
+    path: `${API_PREFIX}/feeds/{feed}/password`,
+    operationId: "removeFeedPassword",
+    summary: "Remove a feed's password",
+    description: "Needs the current password in `X-Feed-Password`. The feed stays, open to anyone who knows its name. An open feed answers 409.",
+    tags: ["Feeds"],
+    password: true,
+    params: { feed: FeedParam },
+    headers: { "X-Feed-Password": CurrentPasswordHeader },
+    responses: {
+      204: { description: "Removed" },
+      400: err("Invalid or reserved feed name"),
+      401: UNAUTHORIZED,
+      409: err("The feed has no password"),
+      429: { ...err("Too many wrong passwords from this client"), headers: RETRY },
+    },
+    before: passwordAndFeed,
+  }).handle(async ({ req, params }) => {
+    await removePassword(params.feed, req.headers.get("x-feed-password") ?? "", clientIp(req.headers));
+    return { status: 204, body: undefined };
   }),
 
   op({
@@ -223,6 +290,10 @@ export function openApiDocument(serverUrl: string): Json {
       ...Object.entries(entry.params).map(([name, s]) => {
         const { description, ...schema } = jsonSchema(s);
         return { name, in: "path", required: true, description, schema };
+      }),
+      ...Object.entries(entry.headers ?? {}).map(([name, s]) => {
+        const { description, ...schema } = jsonSchema(s);
+        return { name, in: "header", required: false, description, schema };
       }),
       ...Object.entries(entry.query?.shape ?? {}).map(([name, s]) => {
         const field = s as z.ZodType;

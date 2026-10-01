@@ -2,7 +2,7 @@
 
 import { client } from './client.gen.js';
 import type { Client, ClientMeta, Options as Options2, RequestResult, TDataShape } from './client/index.js';
-import type { GetNoteData, GetNoteErrors, GetNoteResponses, GetOpenApiData, GetOpenApiResponses, GetReadNoteData, GetReadNoteErrors, GetReadNoteResponses, ListNotesData, ListNotesErrors, ListNotesResponses, ListReadNotesData, ListReadNotesErrors, ListReadNotesResponses, PostNoteData, PostNoteErrors, PostNoteResponses } from './types.gen.js';
+import type { ChangeFeedPasswordData, ChangeFeedPasswordErrors, ChangeFeedPasswordResponses, GetNoteData, GetNoteErrors, GetNoteResponses, GetOpenApiData, GetOpenApiResponses, GetReadNoteData, GetReadNoteErrors, GetReadNoteResponses, ListNotesData, ListNotesErrors, ListNotesResponses, ListReadNotesData, ListReadNotesErrors, ListReadNotesResponses, PostNoteData, PostNoteErrors, PostNoteResponses, RemoveFeedPasswordData, RemoveFeedPasswordErrors, RemoveFeedPasswordResponses } from './types.gen.js';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -32,7 +32,7 @@ export const listNotes = <ThrowOnError extends boolean = false>(options: Options
 /**
  * Post a note
  *
- * Creates the feed with its first note. Also served at `POST /{feed}`, the short form the client packages and curl one-liners use. The body is at most 102400 bytes and must be UTF-8. `application/x-www-form-urlencoded` (what `curl -d` sends) is read as raw markdown, not as form fields.
+ * Creates the feed with its first note, optionally protected by its own password (`X-Feed-Password` header or a `password` field in the JSON or form body). Posting to a protected feed needs that password. Also served at `POST /{feed}`, the short form the client packages and curl one-liners use. The body is at most 102400 bytes and must be UTF-8. `application/x-www-form-urlencoded` (what `curl -d` sends) is read as raw markdown, not as form fields.
  */
 export const postNote = <ThrowOnError extends boolean = false>(options: Options<PostNoteData, ThrowOnError>): RequestResult<PostNoteResponses, PostNoteErrors, ThrowOnError> => (options.client ?? client).post<PostNoteResponses, PostNoteErrors, ThrowOnError>({
     security: [{ scheme: 'bearer', type: 'http' }],
@@ -51,6 +51,32 @@ export const getNote = <ThrowOnError extends boolean = false>(options: Options<G
     security: [{ scheme: 'bearer', type: 'http' }],
     url: '/api/v1/feeds/{feed}/notes/{id}',
     ...options
+});
+
+/**
+ * Remove a feed's password
+ *
+ * Needs the current password in `X-Feed-Password`. The feed stays, open to anyone who knows its name. An open feed answers 409.
+ */
+export const removeFeedPassword = <ThrowOnError extends boolean = false>(options: Options<RemoveFeedPasswordData, ThrowOnError>): RequestResult<RemoveFeedPasswordResponses, RemoveFeedPasswordErrors, ThrowOnError> => (options.client ?? client).delete<RemoveFeedPasswordResponses, RemoveFeedPasswordErrors, ThrowOnError>({
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/api/v1/feeds/{feed}/password',
+    ...options
+});
+
+/**
+ * Change a feed's password
+ *
+ * Needs the current password in `X-Feed-Password`. A feed can only get a password when it is created, so an open feed answers 409.
+ */
+export const changeFeedPassword = <ThrowOnError extends boolean = false>(options: Options<ChangeFeedPasswordData, ThrowOnError>): RequestResult<ChangeFeedPasswordResponses, ChangeFeedPasswordErrors, ThrowOnError> => (options.client ?? client).put<ChangeFeedPasswordResponses, ChangeFeedPasswordErrors, ThrowOnError>({
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/api/v1/feeds/{feed}/password',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
 });
 
 /**

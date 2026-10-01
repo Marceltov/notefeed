@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, test } from "vitest";
 import { SESSION_COOKIE, login } from "../auth";
 import { hasFeed, readId, resetFeedsForTests } from "../feeds";
 import { resetRateLimitsForTests } from "../limits";
+import { cookieValue, feedCookieName } from "../feedlock";
 import { dispatch } from "./api";
 
 // POST /<feed> as proxy.ts hands it on: through the dispatcher.
@@ -313,4 +314,72 @@ test("NOTEFEED_MAX_NOTES_PER_FEED=2: third note 507, other feeds unaffected", as
   expect(res.status).toBe(507);
   expect(await res.json()).toEqual({ error: "note limit reached", code: "note_limit" });
   expect((await post("d", {}, "two")).status).toBe(201);
+});
+
+describe("feed passwords", () => {
+  const text = { "content-type": "text/plain" };
+  const pw = { ...text, "x-feed-password": "pw" };
+  const notes = async (feed = "test") => (await readdir(join(dir, feed))).filter((f) => f.endsWith(".md"));
+
+  test("X-Feed-Password on a new feed protects it before the first note", async () => {
+    expect((await post("# One", pw)).status).toBe(201);
+    expect(await readdir(join(dir, "test"))).toContain(".password");
+    expect(await notes()).toHaveLength(1);
+    for (const h of [text, { ...text, "x-feed-password": "nope" }]) {
+      const res = await post("# Two", h);
+      expect(res.status).toBe(401);
+      expect((await res.json()).code).toBe("auth");
+    }
+    expect(await notes()).toHaveLength(1);
+    expect((await post("# Three", pw)).status).toBe(201);
+    expect(await notes()).toHaveLength(2);
+  });
+
+  test("JSON {markdown, password} on a new feed protects it", async () => {
+    const res = await post(JSON.stringify({ markdown: "x", password: "pw" }), { "content-type": "application/json" });
+    expect(res.status).toBe(201);
+    expect((await post("y", text)).status).toBe(401);
+    expect((await post("y", pw)).status).toBe(201);
+  });
+
+  test("a password for an existing open feed: 409, and the feed stays open", async () => {
+    expect((await post("# Open", text)).status).toBe(201);
+    const viaHeader = await post("# Claim", pw);
+    expect(viaHeader.status).toBe(409);
+    expect((await viaHeader.json()).code).toBe("feed_exists");
+    const viaBody = await post(JSON.stringify({ markdown: "x", password: "pw" }), { "content-type": "application/json" });
+    expect(viaBody.status).toBe(409);
+    expect(await readdir(join(dir, "test"))).not.toContain(".password");
+    expect((await post("# Still open", text)).status).toBe(201);
+  });
+
+  test("a 257-character password on creation: 400, no feed directory", async () => {
+    const res = await post("# Hi", { ...text, "x-feed-password": "x".repeat(257) });
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe("invalid_body");
+    expect(await written()).toEqual([]);
+  });
+
+  test("a reserved name or an over-cap creation with a password creates no directory", async () => {
+    expect((await post("# Hi", pw, "login")).status).toBe(400);
+    expect(await written()).toEqual([]);
+    process.env.NOTEFEED_MAX_FEEDS = "1";
+    expect((await post("a", text, "one")).status).toBe(201);
+    expect((await post("b", pw, "two")).status).toBe(507);
+    expect(await written()).toEqual(["one"]);
+  });
+
+  test("a browser form post without the password: back to the feed's unlock screen", async () => {
+    await post("# One", pw);
+    const res = await post(form({ markdown: "# Hi" }), { accept: "text/html" });
+    expect(res.status).toBe(303);
+    expect(res.headers.get("location")).toBe("/test?error=auth");
+  });
+
+  test("the feed cookie works from this instance's own pages only", async () => {
+    await post("# One", pw);
+    const c = `${feedCookieName("test")}=${await cookieValue("test")}`;
+    expect((await post(form({ markdown: "# Hi" }), { cookie: c, origin: BASE })).status).toBe(201);
+    expect((await post(form({ markdown: "# Hi" }), { cookie: c })).status).toBe(401);
+  });
 });

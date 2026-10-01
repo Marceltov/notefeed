@@ -62,19 +62,40 @@ export type Error = {
     /**
      * Stable machine-readable code; absent only on a 500
      */
-    code?: 'invalid_feed' | 'reserved_feed' | 'auth' | 'rate_limited' | 'too_many_attempts' | 'feed_limit' | 'note_limit' | 'empty_note' | 'too_large' | 'unsupported_type' | 'invalid_body' | 'invalid_request' | 'not_found';
+    code?: 'invalid_feed' | 'reserved_feed' | 'auth' | 'rate_limited' | 'too_many_attempts' | 'feed_limit' | 'note_limit' | 'empty_note' | 'too_large' | 'unsupported_type' | 'invalid_body' | 'invalid_request' | 'not_found' | 'feed_exists';
 };
 
 export type PostJson = {
     markdown: string;
+    /**
+     * Protects the feed, 1 to 256 characters. Only honored on the post that creates the feed; an existing open feed answers 409.
+     */
+    password?: string;
 };
 
 export type PostForm = {
     markdown: string;
+    /**
+     * Protects the feed, 1 to 256 characters. Only honored on the post that creates the feed; an existing open feed answers 409.
+     */
+    password?: string;
+};
+
+export type PasswordJson = {
+    /**
+     * The new password, 1 to 256 characters
+     */
+    password: string;
 };
 
 export type ListNotesData = {
     body?: never;
+    headers?: {
+        /**
+         * The feed's own password, when it has one: to post, list or get, and (as the current password) to change or remove it. Not needed on a feed without one, except that sending it to an existing open feed with `POST` answers 409.
+         */
+        'X-Feed-Password'?: string;
+    };
     path: {
         /**
          * The feed's name. It is the write key: anyone who knows it can post.
@@ -100,7 +121,7 @@ export type ListNotesErrors = {
      */
     400: Error;
     /**
-     * The instance has a password and it is missing or wrong
+     * The instance has a password, or the feed has its own, and it is missing or wrong
      */
     401: Error;
     /**
@@ -122,6 +143,12 @@ export type ListNotesResponse = ListNotesResponses[keyof ListNotesResponses];
 
 export type PostNoteData = {
     body: PostJson;
+    headers?: {
+        /**
+         * The feed's own password, when it has one: to post, list or get, and (as the current password) to change or remove it. Not needed on a feed without one, except that sending it to an existing open feed with `POST` answers 409.
+         */
+        'X-Feed-Password'?: string;
+    };
     path: {
         /**
          * The feed's name. It is the write key: anyone who knows it can post.
@@ -138,9 +165,13 @@ export type PostNoteErrors = {
      */
     400: Error;
     /**
-     * The instance has a password and it is missing or wrong
+     * The instance has a password, or the feed has its own, and it is missing or wrong
      */
     401: Error;
+    /**
+     * A password was sent for a feed that already exists without one: it can't be claimed
+     */
+    409: Error;
     /**
      * Body over 102400 bytes
      */
@@ -172,6 +203,12 @@ export type PostNoteResponse = PostNoteResponses[keyof PostNoteResponses];
 
 export type GetNoteData = {
     body?: never;
+    headers?: {
+        /**
+         * The feed's own password, when it has one: to post, list or get, and (as the current password) to change or remove it. Not needed on a feed without one, except that sending it to an existing open feed with `POST` answers 409.
+         */
+        'X-Feed-Password'?: string;
+    };
     path: {
         /**
          * The feed's name. It is the write key: anyone who knows it can post.
@@ -192,7 +229,7 @@ export type GetNoteErrors = {
      */
     400: Error;
     /**
-     * The instance has a password and it is missing or wrong
+     * The instance has a password, or the feed has its own, and it is missing or wrong
      */
     401: Error;
     /**
@@ -215,6 +252,102 @@ export type GetNoteResponses = {
 };
 
 export type GetNoteResponse = GetNoteResponses[keyof GetNoteResponses];
+
+export type RemoveFeedPasswordData = {
+    body?: never;
+    headers?: {
+        /**
+         * The feed's current password
+         */
+        'X-Feed-Password'?: string;
+    };
+    path: {
+        /**
+         * The feed's name. It is the write key: anyone who knows it can post.
+         */
+        feed: string;
+    };
+    query?: never;
+    url: '/api/v1/feeds/{feed}/password';
+};
+
+export type RemoveFeedPasswordErrors = {
+    /**
+     * Invalid or reserved feed name
+     */
+    400: Error;
+    /**
+     * The instance has a password, or the feed has its own, and it is missing or wrong
+     */
+    401: Error;
+    /**
+     * The feed has no password
+     */
+    409: Error;
+    /**
+     * Too many wrong passwords from this client
+     */
+    429: Error;
+};
+
+export type RemoveFeedPasswordError = RemoveFeedPasswordErrors[keyof RemoveFeedPasswordErrors];
+
+export type RemoveFeedPasswordResponses = {
+    /**
+     * Removed
+     */
+    204: void;
+};
+
+export type RemoveFeedPasswordResponse = RemoveFeedPasswordResponses[keyof RemoveFeedPasswordResponses];
+
+export type ChangeFeedPasswordData = {
+    body: PasswordJson;
+    headers?: {
+        /**
+         * The feed's current password
+         */
+        'X-Feed-Password'?: string;
+    };
+    path: {
+        /**
+         * The feed's name. It is the write key: anyone who knows it can post.
+         */
+        feed: string;
+    };
+    query?: never;
+    url: '/api/v1/feeds/{feed}/password';
+};
+
+export type ChangeFeedPasswordErrors = {
+    /**
+     * Invalid or reserved feed name, bad JSON, or a new password not 1 to 256 characters
+     */
+    400: Error;
+    /**
+     * The instance has a password, or the feed has its own, and it is missing or wrong
+     */
+    401: Error;
+    /**
+     * The feed has no password
+     */
+    409: Error;
+    /**
+     * Too many wrong passwords from this client
+     */
+    429: Error;
+};
+
+export type ChangeFeedPasswordError = ChangeFeedPasswordErrors[keyof ChangeFeedPasswordErrors];
+
+export type ChangeFeedPasswordResponses = {
+    /**
+     * Changed; the old password and unlock cookies stop working
+     */
+    204: void;
+};
+
+export type ChangeFeedPasswordResponse = ChangeFeedPasswordResponses[keyof ChangeFeedPasswordResponses];
 
 export type ListReadNotesData = {
     body?: never;

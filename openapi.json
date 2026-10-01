@@ -33,7 +33,7 @@
       "post": {
         "operationId": "postNote",
         "summary": "Post a note",
-        "description": "Creates the feed with its first note. Also served at `POST /{feed}`, the short form the client packages and curl one-liners use. The body is at most 102400 bytes and must be UTF-8. `application/x-www-form-urlencoded` (what `curl -d` sends) is read as raw markdown, not as form fields.",
+        "description": "Creates the feed with its first note, optionally protected by its own password (`X-Feed-Password` header or a `password` field in the JSON or form body). Posting to a protected feed needs that password. Also served at `POST /{feed}`, the short form the client packages and curl one-liners use. The body is at most 102400 bytes and must be UTF-8. `application/x-www-form-urlencoded` (what `curl -d` sends) is read as raw markdown, not as form fields.",
         "tags": [
           "Feeds"
         ],
@@ -52,6 +52,15 @@
             "schema": {
               "type": "string",
               "pattern": "^[a-z0-9_-]{1,64}$"
+            }
+          },
+          {
+            "name": "X-Feed-Password",
+            "in": "header",
+            "required": false,
+            "description": "The feed's own password, when it has one: to post, list or get, and (as the current password) to change or remove it. Not needed on a feed without one, except that sending it to an existing open feed with `POST` answers 409.",
+            "schema": {
+              "type": "string"
             }
           }
         ],
@@ -118,7 +127,17 @@
             }
           },
           "401": {
-            "description": "The instance has a password and it is missing or wrong",
+            "description": "The instance has a password, or the feed has its own, and it is missing or wrong",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "A password was sent for a feed that already exists without one: it can't be claimed",
             "content": {
               "application/json": {
                 "schema": {
@@ -202,6 +221,15 @@
             }
           },
           {
+            "name": "X-Feed-Password",
+            "in": "header",
+            "required": false,
+            "description": "The feed's own password, when it has one: to post, list or get, and (as the current password) to change or remove it. Not needed on a feed without one, except that sending it to an existing open feed with `POST` answers 409.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
             "name": "limit",
             "in": "query",
             "required": false,
@@ -246,7 +274,7 @@
             }
           },
           "401": {
-            "description": "The instance has a password and it is missing or wrong",
+            "description": "The instance has a password, or the feed has its own, and it is missing or wrong",
             "content": {
               "application/json": {
                 "schema": {
@@ -309,6 +337,15 @@
               "type": "string",
               "pattern": "^\\d{8}T\\d{6}Z-[a-z0-9-]+$"
             }
+          },
+          {
+            "name": "X-Feed-Password",
+            "in": "header",
+            "required": false,
+            "description": "The feed's own password, when it has one: to post, list or get, and (as the current password) to change or remove it. Not needed on a feed without one, except that sending it to an existing open feed with `POST` answers 409.",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -333,7 +370,7 @@
             }
           },
           "401": {
-            "description": "The instance has a password and it is missing or wrong",
+            "description": "The instance has a password, or the feed has its own, and it is missing or wrong",
             "content": {
               "application/json": {
                 "schema": {
@@ -344,6 +381,194 @@
           },
           "404": {
             "description": "No such note",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many wrong passwords from this client",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before trying again",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/feeds/{feed}/password": {
+      "put": {
+        "operationId": "changeFeedPassword",
+        "summary": "Change a feed's password",
+        "description": "Needs the current password in `X-Feed-Password`. A feed can only get a password when it is created, so an open feed answers 409.",
+        "tags": [
+          "Feeds"
+        ],
+        "security": [
+          {},
+          {
+            "password": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "feed",
+            "in": "path",
+            "required": true,
+            "description": "The feed's name. It is the write key: anyone who knows it can post.",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9_-]{1,64}$"
+            }
+          },
+          {
+            "name": "X-Feed-Password",
+            "in": "header",
+            "required": false,
+            "description": "The feed's current password",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PasswordJson"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Changed; the old password and unlock cookies stop working"
+          },
+          "400": {
+            "description": "Invalid or reserved feed name, bad JSON, or a new password not 1 to 256 characters",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The instance has a password, or the feed has its own, and it is missing or wrong",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The feed has no password",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many wrong passwords from this client",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before trying again",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "removeFeedPassword",
+        "summary": "Remove a feed's password",
+        "description": "Needs the current password in `X-Feed-Password`. The feed stays, open to anyone who knows its name. An open feed answers 409.",
+        "tags": [
+          "Feeds"
+        ],
+        "security": [
+          {},
+          {
+            "password": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "feed",
+            "in": "path",
+            "required": true,
+            "description": "The feed's name. It is the write key: anyone who knows it can post.",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9_-]{1,64}$"
+            }
+          },
+          {
+            "name": "X-Feed-Password",
+            "in": "header",
+            "required": false,
+            "description": "The feed's current password",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Removed"
+          },
+          "400": {
+            "description": "Invalid or reserved feed name",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The instance has a password, or the feed has its own, and it is missing or wrong",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The feed has no password",
             "content": {
               "application/json": {
                 "schema": {
@@ -665,6 +890,10 @@
         "properties": {
           "markdown": {
             "type": "string"
+          },
+          "password": {
+            "type": "string",
+            "description": "Protects the feed, 1 to 256 characters. Only honored on the post that creates the feed; an existing open feed answers 409."
           }
         },
         "required": [
@@ -677,10 +906,27 @@
         "properties": {
           "markdown": {
             "type": "string"
+          },
+          "password": {
+            "type": "string",
+            "description": "Protects the feed, 1 to 256 characters. Only honored on the post that creates the feed; an existing open feed answers 409."
           }
         },
         "required": [
           "markdown"
+        ],
+        "additionalProperties": false
+      },
+      "PasswordJson": {
+        "type": "object",
+        "properties": {
+          "password": {
+            "type": "string",
+            "description": "The new password, 1 to 256 characters"
+          }
+        },
+        "required": [
+          "password"
         ],
         "additionalProperties": false
       }
