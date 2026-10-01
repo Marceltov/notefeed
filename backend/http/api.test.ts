@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, test } from "vitest";
 import { resetFeedsForTests, readId } from "../feeds";
 import { resetRateLimitsForTests } from "../limits";
 import { createNote } from "../notes";
-import { API_PREFIX, apiRoute, declaredResponse, openApiDocument } from "./api";
+import { API_PREFIX, dispatch, openApiDocument } from "./api";
 
 const BASE = "http://localhost:3000";
 beforeEach(async () => {
@@ -16,18 +16,11 @@ beforeEach(async () => {
   for (const k of ["NOTEFEED_PASSWORD", "NOTEFEED_RATE_LIMIT", "PUBLIC_URL", "NOTEFEED_TITLE"]) delete process.env[k];
 });
 
-// Every call goes through the contract check: the status must be declared for the operation in the
-// table, and the body must parse with the schema it declares.
+// Through the dispatcher, which (outside production) checks every reply against what its entry declares.
 async function call(method: string, path: string, init: { body?: BodyInit; headers?: Record<string, string> } = {}) {
   const url = new URL(API_PREFIX + path, BASE);
   const segments = url.pathname.slice(API_PREFIX.length + 1).split("/").map(decodeURIComponent);
-  const res = await apiRoute(new Request(url, { method, body: init.body, headers: { host: "localhost:3000", ...init.headers } }), segments);
-  if (res.status !== 405) {
-    const declared = declaredResponse(method, segments, res.status);
-    if (typeof declared === "string") throw new Error(declared);
-    if (declared.schema) declared.schema.parse(await res.clone().json());
-  }
-  return res;
+  return dispatch(new Request(url, { method, body: init.body, headers: { host: "localhost:3000", ...init.headers } }), segments);
 }
 const json = async (res: Response) => res.json();
 const post = (feed: string, markdown: string, headers: Record<string, string> = {}) =>
@@ -101,6 +94,15 @@ describe("GET /feeds/{feed}/notes", () => {
   });
 });
 
+test("a percent-encoded or non-ASCII feed name is a 400 invalid_feed", async () => {
+  for (const feed of ["a%2Fb", "%E2%9C%93"]) {
+    for (const res of [await call("GET", `/feeds/${feed}/notes`), await post(feed, "# Hi")]) {
+      expect(res.status).toBe(400);
+      expect((await json(res)).code).toBe("invalid_feed");
+    }
+  }
+});
+
 describe("GET /feeds/{feed}/notes/{id}", () => {
   test("one note, or 404", async () => {
     const n = await createNote("backups", "# Hi");
@@ -138,7 +140,7 @@ describe("GET /read/{readId}/notes", () => {
 });
 
 test("unknown endpoints are a JSON 404, wrong methods a 405 with Allow", async () => {
-  const unknown = await apiRoute(new Request(`${BASE}/api/v1/nope`), ["nope"]);
+  const unknown = await dispatch(new Request(`${BASE}/api/v1/nope`), ["nope"]);
   expect(unknown.status).toBe(404);
   expect((await json(unknown)).code).toBe("not_found");
   const wrong = await call("POST", `/read/${"A".repeat(22)}/notes`);

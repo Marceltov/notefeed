@@ -5,7 +5,12 @@ import * as z from "zod";
 import { InvalidRequestError, NotFoundError } from "../errors";
 import { errorReply } from "./errors";
 
-export type ResponseSpec = { description: string; schema?: z.ZodType; headers?: Record<string, string> };
+// A response without a schema has no body (e.g. a 303); headers are documented, not enforced.
+export type ResponseSpec = {
+  description: string;
+  schema?: z.ZodType;
+  headers?: Record<string, { description: string; type: "integer" | "string" }>;
+};
 
 type BodyOf<R> = R extends { schema: infer S extends z.ZodType } ? z.infer<S> : undefined;
 export type Reply<R> = {

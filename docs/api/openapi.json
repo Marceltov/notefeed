@@ -92,7 +92,7 @@
             }
           },
           "303": {
-            "description": "Only when the request accepts `text/html` (a browser submitting a form): back to the feed page",
+            "description": "Only when the request accepts `text/html` (a browser submitting a form): back to the feed page with `?posted=<id>` or `?error=<code>`, or to the login page",
             "headers": {
               "Location": {
                 "description": "Where to go",
@@ -504,17 +504,22 @@
       "get": {
         "operationId": "openapi",
         "summary": "This API's OpenAPI document",
+        "description": "Generated from the server's route table, with `servers` set to this instance's URL.",
         "tags": [
           "Meta"
         ],
         "security": [],
         "responses": {
           "200": {
-            "description": "OpenAPI 3.1, generated from the server's route table",
+            "description": "OpenAPI 3.1",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object"
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "additionalProperties": {}
                 }
               }
             }

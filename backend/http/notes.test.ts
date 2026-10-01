@@ -5,7 +5,10 @@ import { beforeEach, describe, expect, test } from "vitest";
 import { SESSION_COOKIE, login } from "../auth";
 import { hasFeed, readId, resetFeedsForTests } from "../feeds";
 import { resetRateLimitsForTests } from "../limits";
-import { postNoteRoute } from "./notes";
+import { dispatch } from "./api";
+
+// POST /<feed> as proxy.ts hands it on: through the dispatcher.
+const postNoteRoute = (req: Request, feed: string) => dispatch(req, ["feeds", feed, "notes"]);
 
 const BASE = "http://localhost:3000";
 let dir: string;

@@ -10,7 +10,7 @@ export { SESSION_COOKIE, locked, sessionOk } from "./auth";
 export { checkFeed } from "./feeds";
 export { feedPath, publicUrl, readPath, rssPath, safeNext } from "./urls";
 // Every write is one of these HTTP handlers; the frontend only mounts them and renders.
-export { apiRoute } from "./http/api";
+export { dispatch } from "./http/api";
 export { loginRoute, logoutRoute } from "./http/session";
 export { rssRoute } from "./http/rss";
 
