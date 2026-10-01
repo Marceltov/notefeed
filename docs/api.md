@@ -11,4 +11,4 @@ On an instance with a password, the `feeds` endpoints need `Authorization: Beare
 
 Every instance serves its own spec at `/api/v1/openapi.json`, generated from the server's route table, so it always matches the version you run. Point a code generator or an API client at it. The reference below is the spec of the latest release.
 
-<swagger-ui src="openapi.json"/>
+<swagger-ui src="api/openapi.json"/>
