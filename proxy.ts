@@ -31,7 +31,8 @@ export function proxy(req: NextRequest) {
 
   // /login, /mcp, OAuth, and well-known paths are exempt from the lock because each checks credentials itself;
   // redirecting them to /login would turn a script's 401 into a success-looking 307.
-  if (!locked() || pathname === "/login" || pathname === "/mcp" || /^\/(r|_next|api|oauth|\.well-known)\//.test(pathname)) return NextResponse.next();
+  const exempt = pathname === "/login" || pathname === "/mcp" || /^\/(r|_next|api|oauth|\.well-known)\//.test(pathname);
+  if (!locked() || exempt) return NextResponse.next();
   if (sessionOk(req.cookies.get(SESSION_COOKIE)?.value)) return NextResponse.next();
   // Must be absolute (Next rejects a relative Location here); built from the public base,
   // not req.url, so it is right behind a reverse proxy.
