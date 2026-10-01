@@ -3,6 +3,7 @@ import { feedPath, publicUrl, readPath, rssPath, safeNext } from "./urls";
 
 afterEach(() => {
   delete process.env.PUBLIC_URL;
+  delete process.env.NOTEFEED_TRUST_PROXY;
 });
 
 test("PUBLIC_URL wins, without trailing slash", () => {
@@ -10,8 +11,10 @@ test("PUBLIC_URL wins, without trailing slash", () => {
   expect(publicUrl(new Headers({ host: "x" }))).toBe("https://notes.example");
 });
 
-test("forwarded headers come next", () => {
+test("forwarded headers come next, only with NOTEFEED_TRUST_PROXY=1", () => {
   const h = new Headers({ "x-forwarded-proto": "https", "x-forwarded-host": "notes.lan, proxy", host: "internal:3000" });
+  expect(publicUrl(h)).toBe("http://internal:3000");
+  process.env.NOTEFEED_TRUST_PROXY = "1";
   expect(publicUrl(h)).toBe("https://notes.lan");
 });
 
