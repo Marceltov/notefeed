@@ -129,3 +129,11 @@ test("the REST API answers unknown paths and methods in JSON, not with Next's pa
   expect(await put.json()).toEqual({ error: "method not allowed" });
   expect((await request.head("/api/v1/openapi.json")).status()).toBe(200);
 });
+
+test("an encoded slash or non-ASCII feed name is refused, through the real proxy rewrite", async ({ request }) => {
+  for (const feed of ["a%2Fb", "%E2%9C%93"]) {
+    const res = await request.post(`/${feed}`, { data: "# Hi", headers: { "content-type": "text/markdown" } });
+    expect(res.status()).toBe(400);
+    expect((await res.json()).code).toBe("invalid_feed");
+  }
+});
