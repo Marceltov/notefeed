@@ -75,11 +75,19 @@ _BY_CODE: dict[str, type[NotefeedError]] = {
     "empty_note": InvalidRequestError,
     "invalid_body": InvalidRequestError,
     "invalid_request": InvalidRequestError,
+    "feed_exists": InvalidRequestError,
     "unsupported_type": InvalidRequestError,
 }
 
 # Same rule as the server; reserved names still come back as a 400.
 _FEED_RE = re.compile(r"[a-z0-9_-]{1,64}")
+
+
+def _check_feed_password(value: str | None) -> str | None:
+    value = (value or "").strip() or None
+    if value and re.search(r"[\x00-\x1f\x7f]", value):
+        raise ConfigError("feed password contains invalid characters")  # never echo the value
+    return value
 
 
 def _check_feed(feed: str) -> str:
@@ -94,7 +102,14 @@ class Client:
     `timeout` (seconds) applies to connecting and to each read or write (httpx's semantics), not to a
     whole request. Close the client when done, or use it in a `with` block."""
 
-    def __init__(self, url: str, feed: str | None = None, password: str | None = None, timeout: float = 10.0):
+    def __init__(
+        self,
+        url: str,
+        feed: str | None = None,
+        password: str | None = None,
+        timeout: float = 10.0,
+        feed_password: str | None = None,
+    ):
         if not url:
             raise ConfigError("no url given")
         self.url = url.rstrip("/")
@@ -107,6 +122,7 @@ class Client:
         if password and re.search(r"[\x00-\x1f\x7f]", password):
             # Never echo the value: it would end up in terminals and CI logs.
             raise ConfigError("password contains invalid characters")
+        self._feed_password = _check_feed_password(feed_password)
         # The generated clients: the authenticated one sends `Authorization: Bearer <password>` on every call.
         t = httpx.Timeout(timeout)
         self._api = (
@@ -127,20 +143,29 @@ class Client:
 
     @classmethod
     def from_env(cls, environ: Mapping[str, str] = os.environ) -> Client:
-        """NOTEFEED_URL, NOTEFEED_FEED and NOTEFEED_PASSWORD."""
-        return cls(environ.get("NOTEFEED_URL", ""), environ.get("NOTEFEED_FEED") or None, environ.get("NOTEFEED_PASSWORD"))
+        """NOTEFEED_URL, NOTEFEED_FEED, NOTEFEED_PASSWORD and NOTEFEED_FEED_PASSWORD."""
+        return cls(
+            environ.get("NOTEFEED_URL", ""),
+            environ.get("NOTEFEED_FEED") or None,
+            environ.get("NOTEFEED_PASSWORD"),
+            feed_password=environ.get("NOTEFEED_FEED_PASSWORD"),
+        )
 
-    def post(self, markdown: str, feed: str | None = None) -> Created:
-        kwargs = post_note._get_kwargs(feed=self._feed_for(feed), body=PostJson(markdown=markdown))
+    def post(self, markdown: str, feed: str | None = None, feed_password: str | None = None) -> Created:
+        """`feed_password` overrides the client's, for a feed that has its own password."""
+        kwargs = post_note._get_kwargs(
+            feed=self._feed_for(feed), body=PostJson(markdown=markdown), x_feed_password=self._fp(feed_password)
+        )
         return self._parse(Created, self._call(kwargs))
 
-    def notes(self, feed: str | None = None, page_size: int = 50) -> Iterator[Note]:
+    def notes(self, feed: str | None = None, page_size: int = 50, feed_password: str | None = None) -> Iterator[Note]:
         """Every note in the feed, newest first, fetched a page at a time; stop iterating whenever you like."""
-        feed = self._feed_for(feed)
-        return self._pages(lambda before: list_notes._get_kwargs(feed=feed, limit=page_size, before=before))
+        feed, fp = self._feed_for(feed), self._fp(feed_password)
+        return self._pages(lambda before: list_notes._get_kwargs(feed=feed, limit=page_size, before=before, x_feed_password=fp))
 
-    def note(self, id: str, feed: str | None = None) -> Note:
-        return self._parse(Note, self._call(get_note._get_kwargs(feed=self._feed_for(feed), id=id)))
+    def note(self, id: str, feed: str | None = None, feed_password: str | None = None) -> Note:
+        kwargs = get_note._get_kwargs(feed=self._feed_for(feed), id=id, x_feed_password=self._fp(feed_password))
+        return self._parse(Note, self._call(kwargs))
 
     def read_notes(self, read_id: str, page_size: int = 50) -> Iterator[Note]:
         """Like notes(), by the feed's read id: public, read-only, needs no password."""
@@ -148,6 +173,9 @@ class Client:
 
     def read_note(self, read_id: str, id: str) -> Note:
         return self._parse(Note, self._call(get_read_note._get_kwargs(read_id=read_id, id=id)))
+
+    def _fp(self, override: str | None) -> Any:
+        return _check_feed_password(override) or self._feed_password or UNSET
 
     def _feed_for(self, feed: str | None) -> str:
         feed = feed or self.feed

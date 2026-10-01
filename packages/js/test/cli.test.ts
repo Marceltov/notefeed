@@ -11,6 +11,7 @@ beforeEach(async () => {
   delete process.env.NOTEFEED_URL;
   delete process.env.NOTEFEED_FEED;
   delete process.env.NOTEFEED_PASSWORD;
+  delete process.env.NOTEFEED_FEED_PASSWORD;
   server = await fakeServer();
 });
 afterEach(() => server.close());
@@ -146,6 +147,27 @@ test("flagsWinOverEnv", async () => {
   expect(await main(["post", "hi", "--url", server.url, "--feed", "argfeed", "--password", "argpw"], io().io)).toBe(0);
   expect(server.requests[0].path).toBe("/api/v1/feeds/argfeed/notes");
   expect(server.requests[0].headers.authorization).toBe("Bearer argpw");
+});
+
+test("feedPasswordFromEnv", async () => {
+  process.env.NOTEFEED_FEED_PASSWORD = "fp";
+  expect(await main(["post", "hi", "--url", server.url, "--feed", "inbox"], io().io)).toBe(0);
+  expect(server.requests[0].headers["x-feed-password"]).toBe("fp");
+  server.reply(200, { notes: [], next: null });
+  expect(await main(["notes", "--url", server.url, "--feed", "inbox"], io().io)).toBe(0);
+  expect(server.requests[1].headers["x-feed-password"]).toBe("fp");
+});
+
+test("noFeedPasswordSendsNoHeader", async () => {
+  expect(await main(["post", "hi", "--url", server.url, "--feed", "inbox"], io().io)).toBe(0);
+  expect(server.requests[0].headers["x-feed-password"]).toBeUndefined();
+});
+
+test("feedExistsExits1", async () => {
+  server.reply(409, { error: "feed exists", code: "feed_exists" });
+  const t = io();
+  expect(await main(["post", "hi", "--url", server.url, "--feed", "inbox"], t.io)).toBe(1);
+  expect(t.out.stderr).toBe("notefeed: feed exists\n");
 });
 
 test("noPasswordSendsNoAuth", async () => {

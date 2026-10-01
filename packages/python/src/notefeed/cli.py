@@ -57,14 +57,19 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def _client(args: argparse.Namespace) -> Client:
-    """Flags win over NOTEFEED_URL, NOTEFEED_FEED and NOTEFEED_PASSWORD."""
+    """Flags win over NOTEFEED_URL, NOTEFEED_FEED and NOTEFEED_PASSWORD. NOTEFEED_FEED_PASSWORD has no flag: it would end up in shell history."""
     url = args.url or os.environ.get("NOTEFEED_URL")
     feed = args.feed or os.environ.get("NOTEFEED_FEED")
     if not url:
         raise _UsageError("no URL given; pass --url or set NOTEFEED_URL")
     if not feed:
         raise _UsageError("no feed given; pass --feed or set NOTEFEED_FEED")
-    return Client(url, feed, args.password or os.environ.get("NOTEFEED_PASSWORD"))
+    return Client(
+        url,
+        feed,
+        args.password or os.environ.get("NOTEFEED_PASSWORD"),
+        feed_password=os.environ.get("NOTEFEED_FEED_PASSWORD"),
+    )
 
 
 def _line(note: Note, as_json: bool) -> str:

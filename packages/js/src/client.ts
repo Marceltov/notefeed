@@ -11,7 +11,7 @@ export type ErrorCode = NonNullable<ApiError["code"]>;
 
 export type { Created, Note };
 /** `timeoutMs` (default 10000) limits each whole request, including reading the answer. */
-export type ClientOptions = { url: string; feed?: string; password?: string; timeoutMs?: number };
+export type ClientOptions = { url: string; feed?: string; password?: string; feedPassword?: string; timeoutMs?: number };
 
 /** Any failure talking to notefeed. `status` and `code` are null when there was no API answer. */
 export class NotefeedError extends Error {
@@ -59,6 +59,7 @@ const BY_CODE: Partial<Record<ErrorCode, typeof NotefeedError>> = {
   empty_note: InvalidRequestError,
   invalid_body: InvalidRequestError,
   invalid_request: InvalidRequestError,
+  feed_exists: InvalidRequestError,
   unsupported_type: InvalidRequestError,
 };
 
@@ -71,41 +72,49 @@ export class Client {
   readonly feed: string | null;
   private readonly api;
   private readonly timeoutMs: number;
+  private readonly feedPassword: string | null;
 
   /** A notefeed server. The feed set here is the default for every call; each call can override it. */
   constructor(options: ClientOptions) {
-    const { url, feed, password, timeoutMs } = options ?? ({} as Partial<ClientOptions>);
+    const { url, feed, password, feedPassword, timeoutMs } = options ?? ({} as Partial<ClientOptions>);
     if (!url) throw new ConfigError("no url given");
     this.url = url.replace(/\/+$/, "");
     this.feed = feed ? checkFeed(feed) : null;
     const pw = password?.trim() || null;
     // Never echo the value: it would end up in terminals and CI logs.
     if (pw && /[\x00-\x1f\x7f]/.test(pw)) throw new ConfigError("password contains invalid characters");
+    this.feedPassword = checkFeedPassword(feedPassword);
     this.timeoutMs = timeoutMs ?? 10_000;
     this.api = createClient(createConfig({ baseUrl: this.url, headers: pw ? { Authorization: `Bearer ${pw}` } : {} }));
   }
 
-  /** NOTEFEED_URL, NOTEFEED_FEED and NOTEFEED_PASSWORD. */
+  /** NOTEFEED_URL, NOTEFEED_FEED, NOTEFEED_PASSWORD and NOTEFEED_FEED_PASSWORD. */
   static fromEnv(env: Record<string, string | undefined> = process.env): Client {
-    return new Client({ url: env.NOTEFEED_URL ?? "", feed: env.NOTEFEED_FEED || undefined, password: env.NOTEFEED_PASSWORD });
+    return new Client({
+      url: env.NOTEFEED_URL ?? "",
+      feed: env.NOTEFEED_FEED || undefined,
+      password: env.NOTEFEED_PASSWORD,
+      feedPassword: env.NOTEFEED_FEED_PASSWORD,
+    });
   }
 
-  async post(markdown: string, options: { feed?: string } = {}): Promise<Created> {
+  /** `feedPassword` overrides the client's, for a feed that has its own password. */
+  async post(markdown: string, options: { feed?: string; feedPassword?: string } = {}): Promise<Created> {
     const feed = this.feedFor(options.feed);
-    return this.call(postNote({ client: this.api, path: { feed }, body: { markdown }, ...this.opts() }));
+    return this.call(postNote({ client: this.api, path: { feed }, body: { markdown }, ...this.opts(options.feedPassword) }));
   }
 
   /** Every note in the feed, newest first, fetched a page at a time; stop iterating whenever you like. */
-  notes(options: { feed?: string; pageSize?: number } = {}): AsyncGenerator<Note> {
+  notes(options: { feed?: string; feedPassword?: string; pageSize?: number } = {}): AsyncGenerator<Note> {
     const feed = this.feedFor(options.feed);
     return this.pages((before) =>
-      listNotes({ client: this.api, path: { feed }, query: { limit: options.pageSize, before }, ...this.opts() }),
+      listNotes({ client: this.api, path: { feed }, query: { limit: options.pageSize, before }, ...this.opts(options.feedPassword) }),
     );
   }
 
-  async note(id: string, options: { feed?: string } = {}): Promise<Note> {
+  async note(id: string, options: { feed?: string; feedPassword?: string } = {}): Promise<Note> {
     const feed = this.feedFor(options.feed);
-    return this.call(getNote({ client: this.api, path: { feed, id }, ...this.opts() }));
+    return this.call(getNote({ client: this.api, path: { feed, id }, ...this.opts(options.feedPassword) }));
   }
 
   /** Like notes(), by the feed's read id: public, read-only, needs no password. */
@@ -125,8 +134,9 @@ export class Client {
     return checkFeed(f);
   }
 
-  private opts() {
-    return { signal: AbortSignal.timeout(this.timeoutMs) };
+  private opts(feedPassword?: string) {
+    const fp = checkFeedPassword(feedPassword) ?? this.feedPassword;
+    return { signal: AbortSignal.timeout(this.timeoutMs), headers: fp ? { "X-Feed-Password": fp } : {} };
   }
 
   // `before` is the previous page's `next`: older notes only, so notes posted meanwhile never repeat.
@@ -177,4 +187,11 @@ function checkFeed(feed: string): string {
   // Never echo the name: it is the write key.
   if (!FEED_RE.test(feed)) throw new ConfigError("invalid feed name: use 1-64 of a-z, 0-9, _ and -");
   return feed;
+}
+
+function checkFeedPassword(value: string | undefined): string | null {
+  const v = value?.trim() || null;
+  // Never echo the value: it would end up in terminals and CI logs.
+  if (v && /[\x00-\x1f\x7f]/.test(v)) throw new ConfigError("feed password contains invalid characters");
+  return v;
 }

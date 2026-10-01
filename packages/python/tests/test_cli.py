@@ -108,6 +108,23 @@ def test_flags_win_over_env(server, monkeypatch):
     assert req["headers"]["Authorization"] == "Bearer argpw"
 
 
+def test_feed_password_from_env(server, monkeypatch):
+    monkeypatch.setenv("NOTEFEED_FEED_PASSWORD", "fp")
+    assert main(["post", "hi", "--url", server.url, "--feed", "inbox"]) == 0
+    assert server.requests[0]["headers"]["X-Feed-Password"] == "fp"
+
+
+def test_no_feed_password_sends_no_header(server):
+    assert main(["post", "hi", "--url", server.url, "--feed", "inbox"]) == 0
+    assert "X-Feed-Password" not in server.requests[0]["headers"]
+
+
+def test_feed_exists_exits_1(server, capsys):
+    server.reply(409, {"error": "feed exists", "code": "feed_exists"})
+    assert main(["post", "hi", "--url", server.url, "--feed", "inbox"]) == 1
+    assert capsys.readouterr().err == "notefeed: feed exists\n"
+
+
 def test_no_password_sends_no_auth(server):
     assert main(["post", "hi", "--url", server.url, "--feed", "inbox"]) == 0
     assert "Authorization" not in server.requests[0]["headers"]

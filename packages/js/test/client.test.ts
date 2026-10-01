@@ -53,6 +53,21 @@ describe("post", () => {
     expect(server.requests[0].path).toBe("/api/v1/feeds/other/notes");
     expect(server.requests[0].headers.authorization).toBe("Bearer pw");
   });
+  test("feedPassword goes as X-Feed-Password on post, notes and note; a per-call one wins; none sends no header", async () => {
+    server.route((r) => (r.path.includes("/notes/") ? [200, note(10)] : r.method === "GET" ? [200, { notes: [], next: null }] : [201, CREATED]));
+    const c = new Client({ url: server.url, feed: "inbox", feedPassword: "fp" });
+    await c.post("x");
+    for await (const _ of c.notes()); // eslint-disable-line no-empty
+    await c.note("20260930T100000Z-n10");
+    await c.post("x", { feedPassword: "other" });
+    await new Client({ url: server.url, feed: "inbox" }).post("x");
+    const h = server.requests.map((r) => r.headers["x-feed-password"]);
+    expect(h).toEqual(["fp", "fp", "fp", "other", undefined]);
+    expect(server.requests[0].headers.authorization).toBeUndefined();
+  });
+  test("a feed password with a control character is a ConfigError", () => {
+    expect(() => new Client({ url: server.url, feedPassword: "p\nw" })).toThrow(ConfigError);
+  });
   test("a base URL with a path prefix and a trailing slash keeps the prefix", async () => {
     await new Client({ url: `${server.url}/prefix/`, feed: "inbox" }).post("x");
     expect(server.requests[0].path).toBe("/prefix/api/v1/feeds/inbox/notes");
@@ -74,6 +89,7 @@ describe("errors map from the response's code", () => {
     ["invalid_body", 400, InvalidRequestError],
     ["invalid_request", 400, InvalidRequestError],
     ["unsupported_type", 415, InvalidRequestError],
+    ["feed_exists", 409, InvalidRequestError],
   ] as const)("%s → %s", async (code, status, cls) => {
     server.reply(status, { error: `because ${code}`, code });
     const e = await new Client({ url: server.url, feed: "inbox" }).post("x").catch((e: unknown) => e);
@@ -152,9 +168,10 @@ describe("config", () => {
   test("no url is a ConfigError", () => {
     expect(() => new Client({ url: "" })).toThrow(ConfigError);
   });
-  test("fromEnv reads NOTEFEED_URL, NOTEFEED_FEED and NOTEFEED_PASSWORD", async () => {
-    const c = Client.fromEnv({ NOTEFEED_URL: server.url, NOTEFEED_FEED: "inbox", NOTEFEED_PASSWORD: "pw" });
+  test("fromEnv reads NOTEFEED_URL, NOTEFEED_FEED, NOTEFEED_PASSWORD and NOTEFEED_FEED_PASSWORD", async () => {
+    const c = Client.fromEnv({ NOTEFEED_URL: server.url, NOTEFEED_FEED: "inbox", NOTEFEED_PASSWORD: "pw", NOTEFEED_FEED_PASSWORD: "fp" });
     await c.post("x");
+    expect(server.requests[0].headers["x-feed-password"]).toBe("fp");
     expect(server.requests[0].path).toBe("/api/v1/feeds/inbox/notes");
     expect(server.requests[0].headers.authorization).toBe("Bearer pw");
   });

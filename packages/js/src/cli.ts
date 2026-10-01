@@ -73,13 +73,18 @@ export async function main(argv: string[], io: Io = process): Promise<number> {
   }
 }
 
-// Flags win over NOTEFEED_URL, NOTEFEED_FEED and NOTEFEED_PASSWORD.
+// Flags win over NOTEFEED_URL, NOTEFEED_FEED and NOTEFEED_PASSWORD. NOTEFEED_FEED_PASSWORD has no flag: it would end up in shell history.
 function client(values: { url?: string; feed?: string; password?: string }): Client {
   const url = values.url || process.env.NOTEFEED_URL;
   const feed = values.feed || process.env.NOTEFEED_FEED;
   if (!url) throw new UsageError("no URL given; pass --url or set NOTEFEED_URL");
   if (!feed) throw new UsageError("no feed given; pass --feed or set NOTEFEED_FEED");
-  return new Client({ url, feed, password: values.password || process.env.NOTEFEED_PASSWORD });
+  return new Client({
+    url,
+    feed,
+    password: values.password || process.env.NOTEFEED_PASSWORD,
+    feedPassword: process.env.NOTEFEED_FEED_PASSWORD,
+  });
 }
 
 async function read(text: string | undefined, file: string | undefined, io: Io): Promise<string> {
