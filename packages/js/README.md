@@ -27,4 +27,6 @@ A feed can have its own password, which gates reading, listing and posting to it
 
 A posted note can be changed or removed: `await client.edit(id, markdown)` replaces its text and returns the note (its id and URLs stay), and `await client.delete(id)` removes it. Both take the same `{ feed, feedPassword }` options as `post`, and a missing note is a `NotFoundError`. `notefeed edit <id> <text | - | --file PATH>` prints the note URL; `notefeed delete <id>` prints nothing. Anyone who can post to a feed can edit and delete its notes, and deleting is permanent.
 
+A feed can have a title and a description, and can be deleted: `await client.feedInfo()` returns `{ name, title, description, protected, read_url }`, `await client.updateFeed({ title, description })` replaces both (an empty string clears one) and returns the feed, and `await client.deleteFeed()` removes the feed with all its notes for good. All three take the same `{ feed, feedPassword }` options as `post`, and a feed that doesn't exist is a `NotFoundError`. Anyone who can post to a feed can do this, and deleting is permanent; there are no `notefeed` commands for it.
+
 Full documentation: https://docs.notefeed.me/clients/

@@ -10,6 +10,8 @@ notefeed has an [MCP](https://modelcontextprotocol.io) endpoint, so AI assistant
 | `edit_note` | Replaces a note's markdown; its id stays. Takes `feed`, `id` and `markdown`, and returns the note. |
 | `delete_note` | Permanently deletes a note. Takes `feed` and `id`, and returns `{ "deleted": true }`. It is marked as destructive, so clients can ask you before running it. |
 
+There are no tools for a feed's title, description or deletion: assistants work with notes, and changing or deleting a whole feed is done in the web UI, the [API](posting.md#feed-settings-and-deleting-a-feed) or a client.
+
 Posting follows the same rules as the [HTTP API](posting.md): size limit, rate limit, caps, and the first post creates the feed. Editing and deleting follow [Editing and deleting notes](posting.md#editing-and-deleting-notes): the same access as posting, the same rate limit, and a note that does not exist is the error "no such note". Anyone who can post to a feed can use these tools on it, and a deleted note cannot be brought back, so think before giving an assistant a feed it should only add to. Results use the API's field names.
 
 !!! note "Protocol version"
@@ -46,6 +48,6 @@ A feed can have its own password (see [Posting notes](posting.md#a-feed-with-its
 The assistant needs a feed name. Put it in a project or custom instruction, for example "Post notes to the notefeed feed `homelab-7f3k2q9x4m8wz`."
 
 !!! warning "The feed name works like a password"
-    Anyone who knows it can read the feed, post to it, and edit and delete its notes, and the assistant sees it. The tool descriptions ask the model not to repeat it, but don't give it a name you wouldn't share with that service. Use a [hard-to-guess name](index.md#how-feeds-work).
+    Anyone who knows it can read the feed, post to it, and edit and delete its notes, and delete the feed, and the assistant sees it. The tool descriptions ask the model not to repeat it, but don't give it a name you wouldn't share with that service. Use a [hard-to-guess name](index.md#how-feeds-work).
 
 Notes the assistant reads are text from your feed: don't point it at a feed that strangers can post to.

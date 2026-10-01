@@ -10,8 +10,8 @@ notefeed is configured with environment variables. With Compose, set them under 
 | `NOTEFEED_RATE_LIMIT` | `60` | Posts, edits and deletes per client per minute, and separately wrong passwords per client per minute. `0` or less turns the limit off. |
 | `NOTEFEED_MAX_FEEDS` | `0`: no limit (so is any value below 1) | Most feeds on the instance. Posting to a new feed beyond it answers `507`. |
 | `NOTEFEED_MAX_NOTES_PER_FEED` | `0`: no limit (so is any value below 1) | Most notes in one feed. Posting beyond it answers `507`. |
-| `NOTEFEED_SECRET` | random, kept in `DATA_DIR/.secret` | Secret the [read links](feed.md) are derived from, at least 32 characters (`openssl rand -hex 32`); notefeed refuses a shorter one, or a `.secret` file shorter than 32 bytes. Changing it changes every read link. |
-| `NOTEFEED_TITLE` | `notefeed` | Title of the RSS feed and of the read-only view. |
+| `NOTEFEED_SECRET` | random, kept in `DATA_DIR/.secret` | Secret the [read links](feed.md) of feeds created before feed deletion existed are derived from, at least 32 characters (`openssl rand -hex 32`); notefeed refuses a shorter one, or a `.secret` file shorter than 32 bytes. Changing it changes the read link of each of those feeds; feeds created since have a stored read id and keep theirs. |
+| `NOTEFEED_TITLE` | `notefeed` | Title of the RSS feed and of the read-only view, for a feed that has no title of its own. |
 | `DATA_DIR` | `/data` | Folder holding the feeds, one subfolder each. |
 | `TZ` | `UTC` | Time zone for the times shown in the web UI, e.g. `Europe/Berlin`. |
 | `PUID`, `PGID` | owner of `DATA_DIR` | User and group notefeed runs as, and so the owner of new note files. By default the owner of the data folder; uid/gid 1000 if that is root. Docker image only. |

@@ -312,3 +312,57 @@ def test_edit_and_delete_404_is_not_found_and_no_feed_is_config_error(server):
             call()
     with pytest.raises(ConfigError):
         Client(server.url).delete(NOTE_ID)
+
+
+# --- feed settings and deletion ---
+
+FEED = {"name": "inbox", "title": "My inbox", "description": "Things", "protected": False, "read_url": None}
+
+
+def test_feed_info_gets_the_feed(server):
+    server.reply(200, FEED)
+    with Client(server.url, "inbox", "pw", feed_password="fp") as c:
+        info = c.feed_info()
+        assert (info.name, info.title, info.description, info.protected) == ("inbox", "My inbox", "Things", False)
+        req = server.requests[0]
+        assert (req["method"], req["path"]) == ("GET", "/api/v1/feeds/inbox")
+        assert req["headers"]["Authorization"] == "Bearer pw"
+        assert req["headers"]["X-Feed-Password"] == "fp"
+        server.reply(200, FEED)
+        c.feed_info(feed="other", feed_password="o")
+        assert server.requests[1]["path"] == "/api/v1/feeds/other"
+        assert server.requests[1]["headers"]["X-Feed-Password"] == "o"
+
+
+def test_update_feed_puts_title_and_description(server):
+    server.reply(200, FEED)
+    with Client(server.url, "inbox", feed_password="fp") as c:
+        assert c.update_feed("My inbox", "Things").title == "My inbox"
+        req = server.requests[0]
+        assert (req["method"], req["path"]) == ("PUT", "/api/v1/feeds/inbox")
+        assert json.loads(req["body"]) == {"title": "My inbox", "description": "Things"}
+        assert req["headers"]["X-Feed-Password"] == "fp"
+        server.reply(200, FEED)
+        c.update_feed("", "", feed="other", feed_password="o")
+        assert server.requests[1]["path"] == "/api/v1/feeds/other"
+        assert server.requests[1]["headers"]["X-Feed-Password"] == "o"
+
+
+def test_delete_feed_sends_delete_and_returns_none(server):
+    server.reply(204, "")
+    with Client(server.url, "inbox", feed_password="fp") as c:
+        assert c.delete_feed() is None
+    req = server.requests[0]
+    assert (req["method"], req["path"]) == ("DELETE", "/api/v1/feeds/inbox")
+    assert req["headers"]["X-Feed-Password"] == "fp"
+    assert req["body"] == b""
+
+
+def test_feed_calls_404_is_not_found_and_no_feed_is_config_error(server):
+    c = Client(server.url, "inbox")
+    for call in (lambda: c.feed_info(), lambda: c.update_feed("", ""), lambda: c.delete_feed()):
+        server.reply(404, {"error": "no such feed", "code": "not_found"})
+        with pytest.raises(NotFoundError):
+            call()
+    with pytest.raises(ConfigError):
+        Client(server.url).delete_feed()

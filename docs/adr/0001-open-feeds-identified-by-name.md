@@ -28,6 +28,7 @@ Until 0.3, a notefeed instance held one feed protected by a shared `NOTEFEED_TOK
 Chosen option: "Feed name for writing, plus a read-only link derived from it", because it keeps ntfy's zero-setup model while letting a feed's RSS URL be shared or committed without handing out posting rights.
 
 * A feed is `DATA_DIR/<feed>/`, name `^[a-z0-9_-]{1,64}$`; app paths (`r`, `api`, `login`, `logout`, `mcp`, …) are reserved.
+* *Amended by ADR 0010: feeds created from now on get a stored random read id; the derived id below is what feeds that already existed keep.*
 * Read id = first 22 chars of `base64url(HMAC-SHA256(secret, feed))` (128 bits); the secret comes from `NOTEFEED_SECRET` or a generated `DATA_DIR/.secret` (≥ 32 bytes, mode 0600, never silently regenerated). Unknown read ids return an empty feed, so links can't be probed.
 * `NOTEFEED_PASSWORD` optionally locks everything except read links; failed password attempts are rate-limited because a human-chosen password is guessable where the old random token was not.
 * Posts are rate-limited per client IP (`NOTEFEED_RATE_LIMIT`), bodies are capped while streaming, and `NOTEFEED_MAX_FEEDS` / `NOTEFEED_MAX_NOTES_PER_FEED` optionally cap growth. Behind a proxy (`NOTEFEED_TRUST_PROXY=1`) the **last** `X-Forwarded-For` entry is used: it is the address the trusted proxy saw, whether the proxy appends or overwrites.

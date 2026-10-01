@@ -28,4 +28,6 @@ A feed can have its own password, which gates reading, listing and posting to it
 
 A posted note can be changed or removed: `client.edit(id, markdown)` replaces its text and returns the note (its id and URLs stay), and `client.delete(id)` removes it. Both take the same `feed` and `feed_password` arguments as `post`, and a missing note is a `NotFoundError`. `notefeed edit <id> <text | - | --file PATH>` prints the note URL; `notefeed delete <id>` prints nothing. Anyone who can post to a feed can edit and delete its notes, and deleting is permanent.
 
+A feed can have a title and a description, and can be deleted: `client.feed_info()` returns the feed (`name`, `title`, `description`, `protected`, `read_url`), `client.update_feed(title, description)` replaces both (an empty string clears one) and returns the feed, and `client.delete_feed()` removes the feed with all its notes for good. All three take the same `feed` and `feed_password` arguments as `post`, and a feed that doesn't exist is a `NotFoundError`. Anyone who can post to a feed can do this, and deleting is permanent; there are no `notefeed` commands for it.
+
 Full documentation: https://docs.notefeed.me/clients/

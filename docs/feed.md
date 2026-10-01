@@ -6,7 +6,7 @@ Every feed has a **read link**:
 https://notes.example.com/r/<read id>/feed.xml
 ```
 
-The read id is 22 characters derived from the feed's name, e.g. `q2Zc9kD0bTnVx4LmAe7sWp`. You find the link on the feed page, and in every `POST /<feed>` answer as `read_url`.
+The read id is 22 characters, e.g. `q2Zc9kD0bTnVx4LmAe7sWp`. A feed created since the feed settings and deletion release gets a random read id that notefeed stores in the feed's folder (`.readid`). A feed that existed before keeps the read id computed from its name and the server secret, so no read link has changed. You find the link on the feed page, and in every `POST /<feed>` answer as `read_url`.
 
 A read link:
 
@@ -20,12 +20,19 @@ That makes it the link to give to feed readers, dashboards and other people. Kee
 !!! note "An unknown read link shows an empty feed"
     A read link that doesn't belong to any feed answers with an empty feed, not an error. That's on purpose: nobody can probe which read links exist. The web UI shows a feed's read link once the feed has its first note. A read link that isn't 22 characters of `A`–`Z`, `a`–`z`, `0`–`9`, `-`, `_` is a `404`.
 
-!!! warning "The secret behind read links"
-    Read ids are computed from the feed name and a server secret: `NOTEFEED_SECRET` if set, otherwise a random one that notefeed creates once in `DATA_DIR/.secret`. Changing `NOTEFEED_SECRET`, or deleting `.secret` without setting it, **changes every read link**, and readers must resubscribe. Back up `.secret` with your notes. See [Configuration](configuration.md).
+!!! warning "The secret behind older read links"
+    The read ids of feeds created before this release are computed from the feed name and a server secret: `NOTEFEED_SECRET` if set, otherwise a random one that notefeed creates once in `DATA_DIR/.secret`. Changing `NOTEFEED_SECRET`, or deleting `.secret` without setting it, **changes the read link of every such feed**, and readers must resubscribe. Feeds created since have a stored read id and are not affected. Back up `.secret` with your notes. See [Configuration](configuration.md).
+
+!!! note "A deleted feed's read link stays dead"
+    When a feed is [deleted](posting.md#feed-settings-and-deleting-a-feed), its read link answers with an empty feed from then on, and a feed created later under the same name gets a different read link. Someone who still has the old link learns nothing about the new feed, and subscribers of the old feed don't start receiving the new feed's notes.
+
+## Title and description
+
+A feed can have a title and a description, which anyone with the read link can see: they are the RSS channel's title and description, and they show above the notes in the read-only view. They are [set with the feed's settings](posting.md#feed-settings-and-deleting-a-feed). Don't put anything private in them. The feed's name is never shown.
 
 ## What's in the feed
 
-The RSS feed holds the newest 50 notes. Its title is `NOTEFEED_TITLE` (`notefeed` by default). Each item has:
+The RSS feed holds the newest 50 notes. Its title is the feed's title, or `NOTEFEED_TITLE` (`notefeed` by default) when the feed has none; its description is the feed's description, or the title when there is none. Each item has:
 
 - the note's title
 - a link to the note's read-only page, `<PUBLIC_URL>/r/<read id>/<id>`
