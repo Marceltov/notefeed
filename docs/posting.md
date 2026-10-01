@@ -50,8 +50,9 @@ Without a password set, the header isn't needed and is ignored.
 | `text/markdown`, `text/plain` | raw markdown |
 | `application/x-www-form-urlencoded` | raw markdown (what `curl --data-binary` sends by default) |
 | `application/json` | an object with a string field `markdown` |
+| `multipart/form-data` | a form with a field `markdown` (`curl -F markdown=@note.md`; it's also what the web UI's compose box sends) |
 
-Any other content type is rejected with `415`, including `multipart/form-data` (`curl -F`). The body must be UTF-8.
+Any other content type is rejected with `415`. The body must be UTF-8, and the 100 KB limit counts the whole body, a form's framing included.
 
 From Python or Node, use the [client libraries](clients.md) instead of building requests yourself. From other languages, JSON is often easier than a raw body:
 
@@ -80,11 +81,11 @@ EOF
 | `413` | The body is larger than 100 KB (102400 bytes) |
 | `415` | The content type is not one of those above |
 | `429` | Too many posts, or too many wrong passwords, from this client in the last minute. `Retry-After` says how many seconds to wait. See [Rate limits and caps](configuration.md#rate-limits-and-caps). |
-| `303` | Only for `POST /logout`: that's the web UI's log-out route, not a feed, so a script gets a redirect instead of an API error, and nothing is stored |
+| `303` | The request asked for HTML (`Accept: text/html`, as a browser submitting a form does): back to the feed page with `?posted=<id>` or `?error=<code>`. Also for `POST /login` and `POST /logout`: those are the web UI's log-in and log-out routes, not feeds, so a script gets a redirect, and nothing is stored |
 | `500` | The note could not be written. No partial file is left behind. |
 | `507` | A cap is reached: a new feed when there are already `NOTEFEED_MAX_FEEDS` feeds, or a note to a feed that already has `NOTEFEED_MAX_NOTES_PER_FEED` notes |
 
-Error responses are JSON: `{"error": "<short reason>"}`.
+Error responses are JSON: `{"error": "<short reason>", "code": "<code>"}`. The reason is for people; match on the status or the `code` (`invalid_feed`, `reserved_feed`, `auth`, `rate_limited`, `too_many_attempts`, `feed_limit`, `note_limit`, `empty_note`, `too_large`, `unsupported_type`, `invalid_body`).
 
 ## From a script
 

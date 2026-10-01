@@ -1,7 +1,8 @@
 import { mkdtemp, readdir, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { beforeEach, expect, test } from "vitest";
+import { beforeEach, describe, expect, test } from "vitest";
+import { SESSION_COOKIE, login } from "../auth";
 import { hasFeed, readId, resetFeedsForTests } from "../feeds";
 import { resetRateLimitsForTests } from "../limits";
 import { postNoteRoute } from "./notes";
@@ -65,29 +66,29 @@ test("accepts JSON {markdown}", async () => {
 test("400 for JSON without a markdown string, or invalid JSON", async () => {
   const noMd = await post(JSON.stringify({ text: "x" }), { "content-type": "application/json" });
   expect(noMd.status).toBe(400);
-  expect(await noMd.json()).toEqual({ error: 'JSON needs a "markdown" string' });
+  expect(await noMd.json()).toEqual({ error: 'JSON needs a "markdown" string', code: "invalid_body" });
   const bad = await post("{not json", { "content-type": "application/json" });
   expect(bad.status).toBe(400);
-  expect(await bad.json()).toEqual({ error: "invalid JSON" });
+  expect(await bad.json()).toEqual({ error: "invalid JSON", code: "invalid_body" });
 });
 
 test("415 for other content types", async () => {
   const res = await post("x", { "content-type": "image/png" });
   expect(res.status).toBe(415);
-  expect(await res.json()).toEqual({ error: "send text/markdown, text/plain or application/json" });
+  expect(await res.json()).toEqual({ error: "send text/markdown, text/plain, application/json or a form with a markdown field", code: "unsupported_type" });
 });
 
 test("400 for an empty body", async () => {
   const res = await post("  \n", { "content-type": "text/plain" });
   expect(res.status).toBe(400);
-  expect(await res.json()).toEqual({ error: "note is empty" });
+  expect(await res.json()).toEqual({ error: "note is empty", code: "empty_note" });
 });
 
 test("size limit is 102400 bytes", async () => {
   expect((await post("a".repeat(102400), { "content-type": "text/plain" })).status).toBe(201);
   const res = await post("a".repeat(102401), { "content-type": "text/plain" });
   expect(res.status).toBe(413);
-  expect(await res.json()).toEqual({ error: "note exceeds 100 KB" });
+  expect(await res.json()).toEqual({ error: "note exceeds 100 KB", code: "too_large" });
 });
 
 test("413 from the Content-Length header alone", async () => {
@@ -104,7 +105,7 @@ test("400 for a body that is not UTF-8, and nothing written", async () => {
   const latin1 = new Uint8Array([0x23, 0x20, 0x43, 0x61, 0x66, 0xe9]); // "# Café" in Latin-1
   const res = await post(latin1, { "content-type": "text/plain" });
   expect(res.status).toBe(400);
-  expect(await res.json()).toEqual({ error: "body must be UTF-8" });
+  expect(await res.json()).toEqual({ error: "body must be UTF-8", code: "invalid_body" });
   expect(await written()).toEqual([]);
 });
 
@@ -113,7 +114,7 @@ test.each(["..", "a/b", decodeURIComponent("%2e%2e"), decodeURIComponent("a%2Fb"
   async (feed) => {
     const res = await post("# Hi", { "content-type": "text/plain" }, feed);
     expect(res.status).toBe(400);
-    expect(await res.json()).toEqual({ error: "invalid feed name" });
+    expect(await res.json()).toEqual({ error: "invalid feed name", code: "invalid_feed" });
     expect(await written()).toEqual([]);
   },
 );
@@ -122,16 +123,74 @@ test.each(["..", "a/b", decodeURIComponent("%2e%2e"), decodeURIComponent("a%2Fb"
 test.each(["login", "mcp", "api", "health", "r"])("400 feed name is reserved (%s)", async (feed) => {
   const res = await post("# Hi", { "content-type": "text/plain" }, feed);
   expect(res.status).toBe(400);
-  expect(await res.json()).toEqual({ error: "feed name is reserved" });
+  expect(await res.json()).toEqual({ error: "feed name is reserved", code: "reserved_feed" });
   expect(await written()).toEqual([]);
 });
 
-test("415 for multipart (curl -F), which proxy.ts forwards here; nothing written", async () => {
-  const form = new FormData();
-  form.set("markdown", "# Hi");
-  const res = await post(form);
-  expect(res.status).toBe(415);
+const form = (fields: Record<string, string>) => {
+  const f = new FormData();
+  for (const [k, v] of Object.entries(fields)) f.set(k, v);
+  return f;
+};
+
+test("multipart (curl -F markdown=..., the compose box): the markdown field is the note", async () => {
+  const res = await post(form({ markdown: "# From a form\r\nbody" }));
+  expect(res.status).toBe(201);
+  expect(await file((await res.json()).id)).toBe("# From a form\r\nbody");
+});
+
+test("400 for multipart without a markdown field; nothing written", async () => {
+  const res = await post(form({ text: "# Hi" }));
+  expect(res.status).toBe(400);
+  expect(await res.json()).toEqual({ error: 'form needs a "markdown" field', code: "invalid_body" });
   expect(await written()).toEqual([]);
+});
+
+describe("a browser form post (Accept: text/html) gets a 303 back to the feed page", () => {
+  const html = { accept: "text/html,application/xhtml+xml,*/*;q=0.8" };
+  test("posted", async () => {
+    const res = await post(form({ markdown: "# Hi" }), html);
+    expect(res.status).toBe(303);
+    expect(res.headers.get("location")).toMatch(/^\/test\?posted=\d{8}T\d{6}Z-hi$/);
+  });
+  test("refused: the error code, and the wait when rate-limited", async () => {
+    expect((await post(form({ markdown: " " }), html)).headers.get("location")).toBe("/test?error=empty_note");
+    process.env.NOTEFEED_RATE_LIMIT = "1";
+    resetRateLimitsForTests();
+    await post(form({ markdown: "a" }), html);
+    expect((await post(form({ markdown: "b" }), html)).headers.get("location")).toMatch(/^\/test\?error=rate_limited&retry=\d+$/);
+  });
+  test("locked without a session: to the login page, coming back to the feed", async () => {
+    process.env.NOTEFEED_PASSWORD = "pw";
+    const res = await post(form({ markdown: "# Hi" }), html);
+    expect(res.headers.get("location")).toBe("/login?next=%2Ftest");
+    expect(await written()).toEqual([]);
+  });
+});
+
+describe("locked: the web UI's session cookie works, from this instance's own pages only", () => {
+  const session = () => `${SESSION_COOKIE}=${login("pw", "test")}`;
+  beforeEach(() => {
+    process.env.NOTEFEED_PASSWORD = "pw";
+  });
+  test("same origin: 201", async () => {
+    expect((await post(form({ markdown: "# Hi" }), { cookie: session(), origin: BASE })).status).toBe(201);
+  });
+  test("behind a proxy, the origin is checked against the public host", async () => {
+    const headers = { cookie: session(), origin: "https://notes.example", "x-forwarded-host": "notes.example", "x-forwarded-proto": "https" };
+    expect((await post(form({ markdown: "# Hi" }), headers)).status).toBe(201);
+  });
+  test.each([
+    ["another site", { origin: "https://evil.example" }],
+    ["no Origin", {}],
+    ["a bad Origin", { origin: "null" }],
+  ])("%s: 401, nothing written", async (_, extra) => {
+    expect((await post(form({ markdown: "# Hi" }), { cookie: session(), ...extra })).status).toBe(401);
+    expect(await written()).toEqual([]);
+  });
+  test("a wrong cookie: 401", async () => {
+    expect((await post(form({ markdown: "# Hi" }), { cookie: `${SESSION_COOKIE}=nope`, origin: BASE })).status).toBe(401);
+  });
 });
 
 test("locked: 401 without or with a wrong password, and the feed is not created", async () => {
@@ -139,7 +198,7 @@ test("locked: 401 without or with a wrong password, and the feed is not created"
   for (const auth of [undefined, "Bearer nope", "pw"]) {
     const res = await post("# Hi", { "content-type": "text/plain", ...(auth ? { authorization: auth } : {}) });
     expect(res.status).toBe(401);
-    expect(await res.json()).toEqual({ error: "missing or wrong password" });
+    expect(await res.json()).toEqual({ error: "missing or wrong password", code: "auth" });
   }
   expect(await hasFeed("test")).toBe(false);
   expect(await written()).toEqual([]);
@@ -190,7 +249,7 @@ test("413 for a chunked body over the limit, cancelling the stream early", async
     "test",
   );
   expect(res.status).toBe(413);
-  expect(await res.json()).toEqual({ error: "note exceeds 100 KB" });
+  expect(await res.json()).toEqual({ error: "note exceeds 100 KB", code: "too_large" });
   expect(cancelled).toBe(true);
   expect(pulled).toBeLessThan(20);
   expect(await written()).toEqual([]);
@@ -238,7 +297,7 @@ test("NOTEFEED_MAX_FEEDS=1: second new feed 507, first feed still accepts", asyn
   expect((await post("a", {}, "one")).status).toBe(201);
   const res = await post("b", {}, "two");
   expect(res.status).toBe(507);
-  expect(await res.json()).toEqual({ error: "feed limit reached" });
+  expect(await res.json()).toEqual({ error: "feed limit reached", code: "feed_limit" });
   expect((await post("c", {}, "one")).status).toBe(201);
 });
 
@@ -248,6 +307,6 @@ test("NOTEFEED_MAX_NOTES_PER_FEED=2: third note 507, other feeds unaffected", as
   expect((await post("b", {}, "one")).status).toBe(201);
   const res = await post("c", {}, "one");
   expect(res.status).toBe(507);
-  expect(await res.json()).toEqual({ error: "note limit reached" });
+  expect(await res.json()).toEqual({ error: "note limit reached", code: "note_limit" });
   expect((await post("d", {}, "two")).status).toBe(201);
 });

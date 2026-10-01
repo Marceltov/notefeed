@@ -6,6 +6,7 @@ import { Compose } from "@/components/Compose";
 import { CopyButton } from "@/components/CopyButton";
 import { Header } from "@/components/Header";
 import { NoteList } from "@/components/NoteList";
+import { errorMessage } from "@/app/_lib/messages";
 import { checkFeed, feedPath, getFeed, locked, publicUrl, readPath, rssPath } from "@/backend";
 
 export const dynamic = "force-dynamic";
@@ -20,7 +21,7 @@ export default async function FeedPage({ params, searchParams }: PageProps<"/[fe
   const data = await getFeed(feed);
   if (!data) notFound();
   const { notes, readId } = data;
-  const { posted } = await searchParams;
+  const { posted, error, retry } = await searchParams;
   const base = publicUrl(await headers());
   const readUrl = base + rssPath(readId);
   const auth = locked() ? ` -H "Authorization: Bearer $NOTEFEED_PASSWORD"` : "";
@@ -29,7 +30,7 @@ export default async function FeedPage({ params, searchParams }: PageProps<"/[fe
   return (
     <>
       <Header feed={feed} rss={readUrl} />
-      <Compose key={String(posted)} feed={feed} />
+      <Compose key={String(posted)} action={feedPath(feed)} error={errorMessage(error, retry)} />
       <section aria-labelledby="read-link" className="-mt-6 mb-10 text-sm">
         <h2 id="read-link" className="font-bold">
           Read link

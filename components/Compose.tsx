@@ -1,16 +1,36 @@
 "use client";
 
-import { useActionState, useState } from "react";
-import { postNoteAction } from "@/app/actions";
+import { useRouter } from "next/navigation";
+import { useState, type FormEvent } from "react";
+import { errorMessage } from "@/app/_lib/messages";
 import { extractTitle, idStamp, slugify } from "@/shared/notes";
 
-export function Compose({ feed }: { feed: string }) {
+// A plain multipart form to POST /<feed>, the same endpoint scripts use. Without JavaScript the browser
+// follows the 303 back to the feed page; with it, fetch() asks for JSON and errors show inline.
+export function Compose({ action, error: initialError }: { action: string; error?: string }) {
+  const router = useRouter();
   const [text, setText] = useState("");
-  const [error, action, pending] = useActionState(postNoteAction.bind(null, feed), null);
+  const [error, setError] = useState(initialError);
+  const [pending, setPending] = useState(false);
   const filename = `${idStamp(new Date())}-${slugify(extractTitle(text))}.md`;
 
+  async function submit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setPending(true);
+    try {
+      const res = await fetch(action, { method: "POST", body: new FormData(e.currentTarget), headers: { Accept: "application/json" } });
+      const body = await res.json().catch(() => ({}));
+      if (res.ok) return router.push(`${action}?posted=${body.id}`); // the page remounts this box empty
+      if (res.status === 401) return router.push(`/login?next=${encodeURIComponent(action)}`);
+      setError(errorMessage(body.code ?? "unknown", res.headers.get("retry-after")));
+    } catch {
+      setError("Could not reach notefeed. Check your connection and try again.");
+    }
+    setPending(false);
+  }
+
   return (
-    <form action={action} className="mb-12">
+    <form method="post" action={action} encType="multipart/form-data" onSubmit={submit} className="mb-12">
       <label htmlFor="markdown" className="sr-only">
         Note in markdown
       </label>

@@ -1,7 +1,13 @@
-// Everything the backend refuses, as classes. Messages are the API's wording (lower case, no period);
-// each adapter maps the class to its own form: an HTTP status in backend/http, a sentence in the web UI.
+// Everything the backend refuses, as classes. `message` is the API's wording (lower case, no period),
+// `code` the stable key the web UI words itself (shared/errors.ts). Each adapter maps the class to
+// its own form; nothing parses a message.
+import type { ErrorCode } from "../shared/errors";
+
 export class NotefeedError extends Error {
-  constructor(message: string) {
+  constructor(
+    readonly code: ErrorCode,
+    message: string,
+  ) {
     super(message);
     this.name = new.target.name;
   }
@@ -9,18 +15,18 @@ export class NotefeedError extends Error {
 
 export class InvalidFeedError extends NotefeedError {
   constructor() {
-    super("invalid feed name");
+    super("invalid_feed", "invalid feed name");
   }
 }
 export class ReservedFeedError extends NotefeedError {
   constructor() {
-    super("feed name is reserved");
+    super("reserved_feed", "feed name is reserved");
   }
 }
 
 export class AuthError extends NotefeedError {
   constructor() {
-    super("missing or wrong password");
+    super("auth", "missing or wrong password");
   }
 }
 
@@ -28,15 +34,16 @@ export class AuthError extends NotefeedError {
 export class RateLimitedError extends NotefeedError {
   constructor(
     readonly retryAfter: number,
+    code: ErrorCode = "rate_limited",
     message = "rate limit exceeded",
   ) {
-    super(message);
+    super(code, message);
   }
 }
 /** Too many failed passwords: not even compared until the window ends. */
 export class TooManyAttemptsError extends RateLimitedError {
   constructor(retryAfter: number) {
-    super(retryAfter, "too many attempts");
+    super(retryAfter, "too_many_attempts", "too many attempts");
   }
 }
 
@@ -44,29 +51,33 @@ export class TooManyAttemptsError extends RateLimitedError {
 export class LimitReachedError extends NotefeedError {}
 export class FeedLimitError extends LimitReachedError {
   constructor() {
-    super("feed limit reached");
+    super("feed_limit", "feed limit reached");
   }
 }
 export class NoteLimitError extends LimitReachedError {
   constructor() {
-    super("note limit reached");
+    super("note_limit", "note limit reached");
   }
 }
 
 export class EmptyNoteError extends NotefeedError {
   constructor() {
-    super("note is empty");
+    super("empty_note", "note is empty");
   }
 }
 export class NoteTooLargeError extends NotefeedError {
   constructor() {
-    super("note exceeds 100 KB");
+    super("too_large", "note exceeds 100 KB");
   }
 }
 /** The request body can't be read as a note: the content type, or (InvalidBodyError) not UTF-8 or bad JSON. */
 export class UnsupportedTypeError extends NotefeedError {
   constructor() {
-    super("send text/markdown, text/plain or application/json");
+    super("unsupported_type", "send text/markdown, text/plain, application/json or a form with a markdown field");
   }
 }
-export class InvalidBodyError extends NotefeedError {}
+export class InvalidBodyError extends NotefeedError {
+  constructor(message: string) {
+    super("invalid_body", message);
+  }
+}

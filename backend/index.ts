@@ -6,13 +6,12 @@ import { READ_ID_RE, checkFeed, feedForReadId, readId } from "./feeds";
 import { getNote, listNotes, type Note } from "./notes";
 
 export type { Note };
-export * from "./errors";
-export { SESSION_COOKIE, locked, login, sessionOk } from "./auth";
+export { SESSION_COOKIE, locked, sessionOk } from "./auth";
 export { checkFeed } from "./feeds";
-export { clientIp } from "./limits";
-export { postNote } from "./posting";
-export { feedPath, publicUrl, readPath, rssPath } from "./urls";
+export { feedPath, publicUrl, readPath, rssPath, safeNext } from "./urls";
+// Every write is one of these HTTP handlers; the frontend only mounts them and renders.
 export { postNoteRoute } from "./http/notes";
+export { loginRoute, logoutRoute } from "./http/session";
 export { rssRoute } from "./http/rss";
 
 export const instanceTitle = config.title;
