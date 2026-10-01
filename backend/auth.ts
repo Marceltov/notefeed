@@ -18,7 +18,7 @@ function safeEqual(a: string, b: string): boolean {
 }
 
 // Over the failed-attempt limit the password is not even compared; only failures are counted.
-function checkPassword(candidate: string, ip: string): void {
+export function checkPassword(candidate: string, ip: string): void {
   const wait = authWait(ip);
   if (wait !== null) throw new TooManyAttemptsError(wait);
   if (safeEqual(candidate, config.password())) return;
