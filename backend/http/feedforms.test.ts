@@ -35,7 +35,7 @@ test("settings are saved and the feed page says so", async () => {
   const res = await send(feedSettingsRoute, "openfeed", { title: " Ideas ", description: "Things" });
   expect(res.status).toBe(303);
   expect(loc(res)).toBe("/openfeed?saved=1");
-  expect(await getSettings("openfeed")).toEqual({ title: "Ideas", description: "Things" });
+  expect(await getSettings("openfeed")).toEqual({ title: "Ideas", description: "Things", image: "" });
 });
 
 test("an invalid title goes back with the code", async () => {
@@ -62,7 +62,7 @@ test("deleting a feed that is already gone still lands on the notice (a double c
 test.each([["another site", "https://evil.example"], ["no Origin", null]])("from %s: refused, nothing changed", async (_, origin) => {
   expect(loc(await send(feedSettingsRoute, "openfeed", { title: "Hacked", description: "" }, origin))).toBe("/openfeed?error=auth");
   expect(loc(await send(feedDeleteRoute, "openfeed", { confirm: "openfeed" }, origin))).toBe("/openfeed?error=auth");
-  expect(await getSettings("openfeed")).toEqual({ title: "", description: "" });
+  expect(await getSettings("openfeed")).toEqual({ title: "", description: "", image: "" });
   expect(await hasFeed("openfeed")).toBe(true);
 });
 

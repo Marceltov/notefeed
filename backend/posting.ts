@@ -1,10 +1,11 @@
 // The one way a note gets posted, edited or deleted, for the HTTP API, MCP and the web UI alike. Credentials are the
 // caller's job (bearer vs. session cookie); everything after that is here, in this order.
 import { config } from "./config";
-import { FeedExistsError, FeedLimitError, NotFoundError, NoteLimitError, RateLimitedError } from "./errors";
+import { FeedExistsError, FeedLimitError, ImageTooLargeError, InvalidBodyError, NotFoundError, NoteLimitError, RateLimitedError } from "./errors";
 import { type FeedAccess, checkFeedAccess, createProtected } from "./feedlock";
-import { type FeedSettings, checkSettings, saveSettings } from "./feedsettings";
+import { type FeedSettings, checkSettings, getSettings, saveSettings } from "./feedsettings";
 import { assertFeed, deleteFeed as removeWholeFeed, feedCount, hasFeed } from "./feeds";
+import { knownImage, storeImage } from "./images";
 import { rateLimit } from "./limits";
 import { checkMarkdown, countNotes, createNote, removeNote, updateNote, type Note } from "./notes";
 
@@ -77,10 +78,23 @@ export async function deleteNote(feed: string, id: string, ip: string, access: F
 // changed by anyone who knows its name, as it is posted to (ADR 0001); a protected one needs its password.
 export async function updateFeed(feed: string, ip: string, settings: unknown, access: FeedAccess): Promise<FeedSettings> {
   await admit(feed, ip, access);
-  const checked = checkSettings(typeof settings === "function" ? await settings() : settings); // a reader runs after admit: a refused request never has its body read
+  const given = checkSettings(typeof settings === "function" ? await settings() : settings); // a reader runs after admit: a refused request never has its body read
   if (!(await hasFeed(feed))) throw new NotFoundError("no such feed");
+  const image = given.image ?? (await getSettings(feed)).image; // omitted: the title image stays
+  if (image && !(await knownImage(feed, image))) throw new InvalidBodyError("image must be empty or the name of an image uploaded to this feed");
+  const checked = { ...given, image };
   await saveSettings(feed, checked);
   return checked;
+}
+
+// Uploading an image: the same gate as posting, and the feed must exist (it is created by its first note).
+// `read` runs once admitted and gives null for a body over the cap. Returns the stored file's name.
+export async function uploadImage(feed: string, ip: string, read: () => Promise<Uint8Array | null>, access: FeedAccess): Promise<string> {
+  await admit(feed, ip, access);
+  if (!(await hasFeed(feed))) throw new NotFoundError("no such feed");
+  const bytes = await read();
+  if (!bytes) throw new ImageTooLargeError();
+  return storeImage(feed, bytes);
 }
 
 export async function deleteFeed(feed: string, ip: string, access: FeedAccess): Promise<void> {

@@ -54,6 +54,21 @@ export type Created = {
     read_url: string;
 };
 
+export type ImageUploaded = {
+    /**
+     * The stored file's name: 32 hex characters of the SHA-256 plus the extension. Pass it as a feed's `image` setting
+     */
+    file: string;
+    /**
+     * Where the image is served, absolute, under the feed's read id; public like the read link
+     */
+    url: string;
+    /**
+     * `![](url)`, to paste into a note
+     */
+    markdown: string;
+};
+
 export type Error = {
     /**
      * A short reason, for people
@@ -62,7 +77,7 @@ export type Error = {
     /**
      * Stable machine-readable code; absent only on a 500
      */
-    code?: 'invalid_feed' | 'reserved_feed' | 'auth' | 'rate_limited' | 'too_many_attempts' | 'feed_limit' | 'note_limit' | 'empty_note' | 'too_large' | 'unsupported_type' | 'invalid_body' | 'invalid_request' | 'not_found' | 'feed_exists';
+    code?: 'invalid_feed' | 'reserved_feed' | 'auth' | 'rate_limited' | 'too_many_attempts' | 'feed_limit' | 'note_limit' | 'image_limit' | 'empty_note' | 'too_large' | 'unsupported_type' | 'invalid_body' | 'invalid_request' | 'not_found' | 'feed_exists';
 };
 
 export type PostJson = {
@@ -97,6 +112,10 @@ export type FeedSettings = {
      * Description, at most 500 characters, one line; may be empty
      */
     description: string;
+    /**
+     * The file name of an image uploaded to this feed (see uploadImage), shown as the feed's title image; empty removes it, omitted leaves it as it is
+     */
+    image?: string;
 };
 
 export type Feed = {
@@ -120,6 +139,10 @@ export type Feed = {
      * The feed's read-only RSS link; null while the feed has no notes
      */
     read_url: string | null;
+    /**
+     * The feed's title image (absolute URL, served under the read id), or null
+     */
+    image_url: string | null;
 };
 
 export type ReadFeed = {
@@ -131,6 +154,10 @@ export type ReadFeed = {
      * Description, at most 500 characters, one line; may be empty
      */
     description: string;
+    /**
+     * The feed's title image (absolute URL, served under the read id), or null
+     */
+    image_url: string | null;
 };
 
 export type ListNotesData = {
@@ -409,6 +436,69 @@ export type EditNoteResponses = {
 };
 
 export type EditNoteResponse = EditNoteResponses[keyof EditNoteResponses];
+
+export type UploadImageData = {
+    /**
+     * The image's bytes: PNG, JPEG, GIF or WebP, recognized by their first bytes, not by the Content-Type
+     */
+    body: Blob | File;
+    headers?: {
+        /**
+         * The feed's own password, when it has one: to post, list or get, and (as the current password) to change or remove it. On the `POST` that creates a feed it sets the feed's password; on a `POST` to an existing feed that has none it answers 409. An empty value is the same as no header, so a `POST` with an empty one creates an open feed.
+         */
+        'X-Feed-Password'?: string;
+    };
+    path: {
+        /**
+         * The feed's name. It is the write key: anyone who knows it can post.
+         */
+        feed: string;
+    };
+    query?: never;
+    url: '/api/v1/feeds/{feed}/images';
+};
+
+export type UploadImageErrors = {
+    /**
+     * Invalid or reserved feed name
+     */
+    400: Error;
+    /**
+     * The instance has a password, or the feed has its own, and it is missing or wrong
+     */
+    401: Error;
+    /**
+     * No such feed
+     */
+    404: Error;
+    /**
+     * Body over NOTEFEED_MAX_IMAGE_BYTES
+     */
+    413: Error;
+    /**
+     * Not a PNG, JPEG, GIF or WebP image
+     */
+    415: Error;
+    /**
+     * Too many posts, uploads, edits and deletes, or wrong passwords, from this client
+     */
+    429: Error;
+    /**
+     * NOTEFEED_MAX_IMAGES_PER_FEED reached
+     */
+    507: Error;
+};
+
+export type UploadImageError = UploadImageErrors[keyof UploadImageErrors];
+
+export type UploadImageResponses = {
+    /**
+     * Stored (or already there)
+     */
+    201: ImageUploaded;
+};
+
+export type UploadImageResponse = UploadImageResponses[keyof UploadImageResponses];
 
 export type DeleteFeedData = {
     body?: never;

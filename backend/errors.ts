@@ -60,6 +60,12 @@ export class NoteLimitError extends LimitReachedError {
   }
 }
 
+export class ImageLimitError extends LimitReachedError {
+  constructor() {
+    super("image_limit", "image limit reached");
+  }
+}
+
 /** A feed password was asked for (set, change, remove) on a feed that exists and has none. */
 export class FeedExistsError extends NotefeedError {
   constructor() {
@@ -79,8 +85,13 @@ export class NoteTooLargeError extends NotefeedError {
 }
 /** The request body can't be read as a note: the content type, or (InvalidBodyError) not UTF-8 or bad JSON. */
 export class UnsupportedTypeError extends NotefeedError {
+  constructor(message = "send text/markdown, text/plain, application/json or a form with a markdown field") {
+    super("unsupported_type", message);
+  }
+}
+export class ImageTooLargeError extends NotefeedError {
   constructor() {
-    super("unsupported_type", "send text/markdown, text/plain, application/json or a form with a markdown field");
+    super("too_large", "image exceeds the size limit");
   }
 }
 export class InvalidBodyError extends NotefeedError {

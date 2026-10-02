@@ -14,6 +14,7 @@ const MESSAGES: Record<ErrorCode, string> = {
   too_many_attempts: "Too many attempts, try again in {retry} seconds.",
   feed_limit: "This instance has reached its feed limit.",
   note_limit: "This feed has reached its note limit.",
+  image_limit: "This feed has reached its image limit.",
   empty_note: "The note is empty.",
   too_large: "The note is over 100 KB.",
   unsupported_type: "The note could not be read.",

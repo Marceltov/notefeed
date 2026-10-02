@@ -316,7 +316,7 @@ def test_edit_and_delete_404_is_not_found_and_no_feed_is_config_error(server):
 
 # --- feed settings and deletion ---
 
-FEED = {"name": "inbox", "title": "My inbox", "description": "Things", "protected": False, "read_url": None}
+FEED = {"name": "inbox", "title": "My inbox", "description": "Things", "protected": False, "read_url": None, "image_url": None}
 
 
 def test_feed_info_gets_the_feed(server):

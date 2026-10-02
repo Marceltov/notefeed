@@ -35,10 +35,10 @@ describe("settings", () => {
     const res = await put("mine", { title: "My <feed> & ]]> 🎉", description: "About <b>it</b> & more" });
     expect(res.status).toBe(200);
     const rid = (await readIdOf("mine"))!;
-    const want = { name: "mine", title: "My <feed> & ]]> 🎉", description: "About <b>it</b> & more", protected: false, read_url: `${BASE}/r/${rid}/feed.xml` };
+    const want = { name: "mine", title: "My <feed> & ]]> 🎉", description: "About <b>it</b> & more", protected: false, read_url: `${BASE}/r/${rid}/feed.xml`, image_url: null };
     expect(await res.json()).toEqual(want);
     expect(await (await call("GET", "/feeds/mine")).json()).toEqual(want);
-    expect(await (await call("GET", `/read/${rid}`)).json()).toEqual({ title: want.title, description: want.description });
+    expect(await (await call("GET", `/read/${rid}`)).json()).toEqual({ title: want.title, description: want.description, image_url: null });
     const xml = await (await rssRoute(new Request(`${BASE}/r/${rid}/feed.xml`, { headers: { host: "localhost:3000" } }), rid)).text();
     expect(xml).toContain("<title>My &lt;feed&gt; &amp; ]]&gt; 🎉</title>");
     expect(xml).toContain("<description>About &lt;b&gt;it&lt;/b&gt; &amp; more</description>");
@@ -56,7 +56,7 @@ describe("settings", () => {
   test("a feed with no notes has no read_url; settings default to empty", async () => {
     await createNote("mine", "x");
     await (await import("../notes")).removeNote("mine", (await (await call("GET", "/feeds/mine/notes")).json()).notes[0].id);
-    expect(await (await call("GET", "/feeds/mine")).json()).toEqual({ name: "mine", title: "", description: "", protected: false, read_url: null });
+    expect(await (await call("GET", "/feeds/mine")).json()).toEqual({ name: "mine", title: "", description: "", protected: false, read_url: null, image_url: null });
   });
 
   test("whitespace is trimmed", async () => {
@@ -123,7 +123,7 @@ describe("settings", () => {
     expect((await put("locked", { title: "t", description: "" }, fp)).status).toBe(200);
     // the public read side shows the title but never asks for a password
     const rid = (await readIdOf("locked"))!;
-    expect(await (await call("GET", `/read/${rid}`)).json()).toEqual({ title: "t", description: "" });
+    expect(await (await call("GET", `/read/${rid}`)).json()).toEqual({ title: "t", description: "", image_url: null });
   });
 
   test("a locked instance needs the bearer password", async () => {
@@ -148,7 +148,7 @@ describe("settings", () => {
   });
 
   test("an unknown read id has empty settings, a malformed one is 404", async () => {
-    expect(await (await call("GET", `/read/${"A".repeat(22)}`)).json()).toEqual({ title: "", description: "" });
+    expect(await (await call("GET", `/read/${"A".repeat(22)}`)).json()).toEqual({ title: "", description: "", image_url: null });
     expect((await call("GET", "/read/short")).status).toBe(404);
   });
 
@@ -172,7 +172,7 @@ describe("DELETE /feeds/{feed}", () => {
     expect((await call("GET", "/feeds/doomed")).status).toBe(404);
     expect(await (await call("GET", "/feeds/doomed/notes")).json()).toEqual({ notes: [], next: null });
     expect(await (await call("GET", `/read/${old}/notes`)).json()).toEqual({ notes: [], next: null });
-    expect(await (await call("GET", `/read/${old}`)).json()).toEqual({ title: "", description: "" });
+    expect(await (await call("GET", `/read/${old}`)).json()).toEqual({ title: "", description: "", image_url: null });
     expect((await call("DELETE", "/feeds/doomed", { headers: { "x-feed-password": "correct horse" } })).status).toBe(404);
 
     expect((await post("doomed", "# again", { "x-feed-password": "another pass" })).status).toBe(201);
