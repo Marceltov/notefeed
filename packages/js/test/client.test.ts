@@ -74,6 +74,41 @@ describe("post", () => {
   });
 });
 
+describe("edit and delete", () => {
+  const ID = "20260930T100000Z-n10";
+  test("edit PUTs {markdown} to the note and returns it; feed and feedPassword work as for post", async () => {
+    server.reply(200, note(10));
+    const c = new Client({ url: server.url, feed: "inbox", password: "pw", feedPassword: "fp" });
+    expect(await c.edit(ID, "# New\r\nx")).toEqual(note(10));
+    const req = server.requests[0];
+    expect([req.method, req.path]).toEqual(["PUT", `/api/v1/feeds/inbox/notes/${ID}`]);
+    expect(JSON.parse(req.body.toString())).toEqual({ markdown: "# New\r\nx" });
+    expect(req.headers.authorization).toBe("Bearer pw");
+    expect(req.headers["x-feed-password"]).toBe("fp");
+    server.reply(200, note(10));
+    await c.edit(ID, "x", { feed: "other", feedPassword: "o" });
+    expect(server.requests[1].path).toBe(`/api/v1/feeds/other/notes/${ID}`);
+    expect(server.requests[1].headers["x-feed-password"]).toBe("o");
+  });
+  test("delete sends DELETE and resolves to nothing on 204", async () => {
+    server.reply(204, "", "text/plain");
+    const c = new Client({ url: server.url, feed: "inbox", feedPassword: "fp" });
+    expect(await c.delete(ID)).toBeUndefined();
+    const req = server.requests[0];
+    expect([req.method, req.path]).toEqual(["DELETE", `/api/v1/feeds/inbox/notes/${ID}`]);
+    expect(req.headers["x-feed-password"]).toBe("fp");
+    expect(req.body.length).toBe(0);
+  });
+  test("a 404 is a NotFoundError for both; no feed is a ConfigError", async () => {
+    const c = new Client({ url: server.url, feed: "inbox" });
+    server.reply(404, { error: "no such note", code: "not_found" });
+    await expect(c.edit(ID, "x")).rejects.toBeInstanceOf(NotFoundError);
+    server.reply(404, { error: "no such note", code: "not_found" });
+    await expect(c.delete(ID)).rejects.toBeInstanceOf(NotFoundError);
+    await expect(new Client({ url: server.url }).delete(ID)).rejects.toBeInstanceOf(ConfigError);
+  });
+});
+
 describe("errors map from the response's code", () => {
   test.each([
     ["auth", 401, AuthError],

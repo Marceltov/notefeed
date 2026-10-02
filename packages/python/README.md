@@ -8,6 +8,8 @@ export NOTEFEED_URL=https://notes.example.com NOTEFEED_FEED=homelab-7f3k2q9x4m8w
 notefeed post "# Backup finished"
 backup.sh 2>&1 | notefeed post -
 notefeed notes --limit 5
+notefeed edit 20260929T140512Z-backup-finished "# Backup finished, verified"
+notefeed delete 20260929T140512Z-backup-finished
 ```
 
 ```python
@@ -23,5 +25,7 @@ for note in client.notes():  # newest first, page by page
 `Client.from_env()` reads `NOTEFEED_URL` / `NOTEFEED_FEED` / `NOTEFEED_PASSWORD`; so does the `notefeed` command, unless given `--url` / `--feed` / `--password`.
 
 A feed can have its own password, which gates reading, listing and posting to it. Pass `feed_password="..."` to `Client(...)` (or per call, e.g. `client.post(text, feed_password=...)`), or set `NOTEFEED_FEED_PASSWORD`, which `from_env()` and the `notefeed` command both read (there is deliberately no flag, so it stays out of shell history). It is sent as `X-Feed-Password`; `Authorization` stays the instance password. A feed password is 1 to 256 printable ASCII characters with no space at the start or end; an empty one is the same as none.
+
+A posted note can be changed or removed: `client.edit(id, markdown)` replaces its text and returns the note (its id and URLs stay), and `client.delete(id)` removes it. Both take the same `feed` and `feed_password` arguments as `post`, and a missing note is a `NotFoundError`. `notefeed edit <id> <text | - | --file PATH>` prints the note URL; `notefeed delete <id>` prints nothing. Anyone who can post to a feed can edit and delete its notes, and deleting is permanent.
 
 Full documentation: https://docs.notefeed.me/clients/

@@ -20,7 +20,7 @@ export async function generateMetadata({ params }: PageProps<"/[feed]">): Promis
 
 export default async function FeedPage({ params, searchParams }: PageProps<"/[feed]">) {
   const { feed } = await params;
-  const { posted, error, retry } = await searchParams;
+  const { posted, deleted, error, retry } = await searchParams;
   const access = await feedUnlocked(feed, (await cookies()).get(feedCookieName(feed))?.value);
   // A locked feed shows nothing of itself: no notes, no read link.
   if (access === "locked") {
@@ -33,7 +33,7 @@ export default async function FeedPage({ params, searchParams }: PageProps<"/[fe
   }
   const data = await getFeed(feed);
   if (!data) notFound();
-  const { notes, readId } = data;
+  const { notes, readId, exists } = data;
   const settingsError = access === "unlocked" && ["auth", "invalid_body", "too_many_attempts"].includes(String(error));
   const base = publicUrl(await headers());
   const readUrl = readId ? base + rssPath(readId) : undefined; // none until the feed has a note
@@ -45,8 +45,13 @@ export default async function FeedPage({ params, searchParams }: PageProps<"/[fe
   return (
     <>
       <Header feed={feed} rss={readUrl} />
+      {deleted && (
+        <p role="status" className="mb-4 text-sm text-carbon">
+          Note deleted.
+        </p>
+      )}
       <Compose key={String(posted)} feed={feed} action={feedPath(feed)} error={settingsError ? undefined : errorMessage(error, retry)}
-        isNew={access === "open" && notes.length === 0}
+        isNew={access === "open" && !exists}
       />
       {readId && readUrl && (
         <section aria-labelledby="read-link" className="-mt-6 mb-10 text-sm">

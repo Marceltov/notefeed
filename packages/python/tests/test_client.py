@@ -271,3 +271,44 @@ def test_close_and_with_release_the_connection_pool(server):
     c2.post("x")
     c2.close()
     assert c2._api.get_httpx_client().is_closed
+
+
+# --- edit and delete ---
+
+NOTE_ID = "20260930T100000Z-n10"
+
+
+def test_edit_puts_markdown_and_returns_the_note(server):
+    server.reply(200, note(10))
+    with Client(server.url, "inbox", "pw", feed_password="fp") as c:
+        edited = c.edit(NOTE_ID, "# New\r\nx")
+        assert edited.id == note(10)["id"]
+        req = server.requests[0]
+        assert (req["method"], req["path"]) == ("PUT", f"/api/v1/feeds/inbox/notes/{NOTE_ID}")
+        assert json.loads(req["body"]) == {"markdown": "# New\r\nx"}
+        assert req["headers"]["Authorization"] == "Bearer pw"
+        assert req["headers"]["X-Feed-Password"] == "fp"
+        server.reply(200, note(10))
+        c.edit(NOTE_ID, "x", feed="other", feed_password="o")
+        assert server.requests[1]["path"] == f"/api/v1/feeds/other/notes/{NOTE_ID}"
+        assert server.requests[1]["headers"]["X-Feed-Password"] == "o"
+
+
+def test_delete_sends_delete_and_returns_none(server):
+    server.reply(204, "")
+    with Client(server.url, "inbox", feed_password="fp") as c:
+        assert c.delete(NOTE_ID) is None
+    req = server.requests[0]
+    assert (req["method"], req["path"]) == ("DELETE", f"/api/v1/feeds/inbox/notes/{NOTE_ID}")
+    assert req["headers"]["X-Feed-Password"] == "fp"
+    assert req["body"] == b""
+
+
+def test_edit_and_delete_404_is_not_found_and_no_feed_is_config_error(server):
+    c = Client(server.url, "inbox")
+    for call in (lambda: c.edit(NOTE_ID, "x"), lambda: c.delete(NOTE_ID)):
+        server.reply(404, {"error": "no such note", "code": "not_found"})
+        with pytest.raises(NotFoundError):
+            call()
+    with pytest.raises(ConfigError):
+        Client(server.url).delete(NOTE_ID)

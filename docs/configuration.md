@@ -7,7 +7,7 @@ notefeed is configured with environment variables. With Compose, set them under 
 | `PUBLIC_URL` | derived from the request | Absolute base URL used for links in the feed and API responses, e.g. `https://notes.example.com`. Set it on a public instance, see [below](#public_url). |
 | `NOTEFEED_PASSWORD` | none: open instance | Instance password. When set, posting needs it as a bearer token and the web UI needs a login. Read links stay open. See [The password](#the-password). |
 | `NOTEFEED_TRUST_PROXY` | off | Set to `1` behind a reverse proxy, so rate limits apply per client IP from `X-Forwarded-For`, and links without `PUBLIC_URL` follow `X-Forwarded-Proto` and `X-Forwarded-Host`. See [Rate limits and caps](#rate-limits-and-caps). |
-| `NOTEFEED_RATE_LIMIT` | `60` | Posts per client per minute, and separately wrong passwords per client per minute. `0` or less turns the limit off. |
+| `NOTEFEED_RATE_LIMIT` | `60` | Posts, edits and deletes per client per minute, and separately wrong passwords per client per minute. `0` or less turns the limit off. |
 | `NOTEFEED_MAX_FEEDS` | `0`: no limit (so is any value below 1) | Most feeds on the instance. Posting to a new feed beyond it answers `507`. |
 | `NOTEFEED_MAX_NOTES_PER_FEED` | `0`: no limit (so is any value below 1) | Most notes in one feed. Posting beyond it answers `507`. |
 | `NOTEFEED_SECRET` | random, kept in `DATA_DIR/.secret` | Secret the [read links](feed.md) are derived from, at least 32 characters (`openssl rand -hex 32`); notefeed refuses a shorter one, or a `.secret` file shorter than 32 bytes. Changing it changes every read link. |
@@ -56,7 +56,7 @@ Clients that can't send a header, such as the Claude.ai and Claude Desktop conne
 
 ## Rate limits and caps
 
-Each client may post `NOTEFEED_RATE_LIMIT` notes per minute (60 by default), from the API and the web UI together. Wrong passwords have their own budget of the same size. A feed password check that is still running counts toward it until it turns out right, so a script that sends more than that many requests to protected feeds at the same instant can see a `429` for some of them. Over it, notefeed answers `429` with a `Retry-After` header, for the rest of the minute; the web UI says how many seconds to wait. The counters live in memory and reset on restart.
+Each client may post, edit or delete `NOTEFEED_RATE_LIMIT` notes per minute (60 by default), from the API and the web UI together. Wrong passwords have their own budget of the same size. A feed password check that is still running counts toward it until it turns out right, so a script that sends more than that many requests to protected feeds at the same instant can see a `429` for some of them. Over it, notefeed answers `429` with a `Retry-After` header, for the rest of the minute; the web UI says how many seconds to wait. The counters live in memory and reset on restart.
 
 !!! warning "Behind a reverse proxy, set `NOTEFEED_TRUST_PROXY=1`"
     notefeed can't see a client's IP on its own, so without `NOTEFEED_TRUST_PROXY` **all clients share one rate-limit bucket**. On an exposed instance, one busy script can then slow everyone down, and an attacker's wrong password guesses can lock the owner out of posting and logging in for up to a minute.

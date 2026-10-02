@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { beforeEach, describe, expect, test } from "vitest";
 import { EmptyNoteError, InvalidFeedError, NoteTooLargeError, ReservedFeedError } from "./errors";
 import { hasFeed } from "./feeds";
-import { countNotes, createNote, getNote, isValidId, listNotes } from "./notes";
+import { countNotes, createNote, getNote, isValidId, listNotes, removeNote, updateNote } from "./notes";
 
 let root: string;
 let dir: string; // the "test" feed's directory
@@ -129,5 +129,40 @@ describe("getNote", () => {
     const note = await getNote("test", created.id);
     expect(note?.markdown).toBe("# Hi\nthere");
     expect(note?.title).toBe("Hi");
+  });
+});
+
+describe("updateNote and removeNote", () => {
+  const now = at("2026-09-29T14:05:12Z");
+  test("an edit keeps the id and createdAt, changes markdown and title", async () => {
+    const n = await createNote("test", "# Old", now);
+    const u = await updateNote("test", n.id, "# New\nbody");
+    expect(u).toEqual({ id: n.id, title: "New", markdown: "# New\nbody", createdAt: now });
+    expect((await getNote("test", n.id))?.markdown).toBe("# New\nbody");
+  });
+  test("a missing note is null and creates no file", async () => {
+    await createNote("test", "# Old", now);
+    expect(await updateNote("test", "20260101T000000Z-x", "# New")).toBeNull();
+    expect(await readdir(dir)).toHaveLength(1);
+  });
+  test("a refused edit leaves the file and no temp file", async () => {
+    const n = await createNote("test", "# Old", now);
+    await expect(updateNote("test", n.id, "  ")).rejects.toThrow(EmptyNoteError);
+    expect(await readFile(join(dir, `${n.id}.md`), "utf8")).toBe("# Old");
+    expect(await readdir(dir)).toEqual([`${n.id}.md`]);
+  });
+  test("removeNote is true once, then false", async () => {
+    const n = await createNote("test", "# Old", now);
+    expect(await removeNote("test", n.id)).toBe(true);
+    expect(await removeNote("test", n.id)).toBe(false);
+    expect(await getNote("test", n.id)).toBeNull();
+  });
+  test.each(["../x", ".password", "a/b"])("id %j touches nothing", async (id) => {
+    await createNote("test", "# Old", now);
+    await writeFile(join(dir, ".password"), "hash");
+    expect(await updateNote("test", id, "# New")).toBeNull();
+    expect(await removeNote("test", id)).toBe(false);
+    expect(await readFile(join(dir, ".password"), "utf8")).toBe("hash");
+    expect(await readdir(dir)).toHaveLength(2);
   });
 });

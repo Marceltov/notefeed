@@ -94,3 +94,22 @@ test("MCP: the OAuth login page, then the redirect with a code", async ({ page, 
   expect(url.searchParams.get("code")).toBeTruthy();
   expect(url.searchParams.get("state")).toBe("xyz");
 });
+
+test("with the login, a note can be edited and deleted from the browser", async ({ page }) => {
+  const name = feed();
+  await page.goto("/login");
+  await page.getByLabel("Password").fill("e2e");
+  await page.getByRole("button", { name: "Log in" }).click();
+  await page.waitForURL("/");
+  await page.goto(`/${name}`);
+  await page.getByLabel("Note in markdown").fill("# Locked note");
+  await page.getByRole("button", { name: "Post note" }).click();
+  await page.getByRole("link", { name: "Locked note" }).click();
+  await page.getByText("Edit", { exact: true }).click();
+  await page.getByLabel("Note in markdown").fill("# Locked edited");
+  await page.getByRole("button", { name: "Save" }).click();
+  await expect(page.getByRole("heading", { name: "Locked edited" })).toBeVisible();
+  await page.getByText("Delete", { exact: true }).click();
+  await page.getByRole("button", { name: "Delete note" }).click();
+  await expect(page.getByRole("status")).toHaveText("Note deleted.");
+});

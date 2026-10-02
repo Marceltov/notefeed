@@ -2,7 +2,7 @@
 
 import type { Client, ClientMeta, Options as Options2, RequestResult, TDataShape } from './client';
 import { client } from './client.gen';
-import type { ChangeFeedPasswordData, ChangeFeedPasswordErrors, ChangeFeedPasswordResponses, GetNoteData, GetNoteErrors, GetNoteResponses, GetOpenApiData, GetOpenApiResponses, GetReadNoteData, GetReadNoteErrors, GetReadNoteResponses, ListNotesData, ListNotesErrors, ListNotesResponses, ListReadNotesData, ListReadNotesErrors, ListReadNotesResponses, PostNoteData, PostNoteErrors, PostNoteResponses, RemoveFeedPasswordData, RemoveFeedPasswordErrors, RemoveFeedPasswordResponses } from './types.gen';
+import type { ChangeFeedPasswordData, ChangeFeedPasswordErrors, ChangeFeedPasswordResponses, DeleteNoteData, DeleteNoteErrors, DeleteNoteResponses, EditNoteData, EditNoteErrors, EditNoteResponses, GetNoteData, GetNoteErrors, GetNoteResponses, GetOpenApiData, GetOpenApiResponses, GetReadNoteData, GetReadNoteErrors, GetReadNoteResponses, ListNotesData, ListNotesErrors, ListNotesResponses, ListReadNotesData, ListReadNotesErrors, ListReadNotesResponses, PostNoteData, PostNoteErrors, PostNoteResponses, RemoveFeedPasswordData, RemoveFeedPasswordErrors, RemoveFeedPasswordResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -45,12 +45,38 @@ export const postNote = <ThrowOnError extends boolean = false>(options: Options<
 });
 
 /**
+ * Delete a note
+ *
+ * Needs the feed's password if it has one, and counts against the post rate limit. The feed stays, even with no notes left. Read links can't delete.
+ */
+export const deleteNote = <ThrowOnError extends boolean = false>(options: Options<DeleteNoteData, ThrowOnError>): RequestResult<DeleteNoteResponses, DeleteNoteErrors, ThrowOnError> => (options.client ?? client).delete<DeleteNoteResponses, DeleteNoteErrors, ThrowOnError>({
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/api/v1/feeds/{feed}/notes/{id}',
+    ...options
+});
+
+/**
  * Get one note
  */
 export const getNote = <ThrowOnError extends boolean = false>(options: Options<GetNoteData, ThrowOnError>): RequestResult<GetNoteResponses, GetNoteErrors, ThrowOnError> => (options.client ?? client).get<GetNoteResponses, GetNoteErrors, ThrowOnError>({
     security: [{ scheme: 'bearer', type: 'http' }],
     url: '/api/v1/feeds/{feed}/notes/{id}',
     ...options
+});
+
+/**
+ * Edit a note
+ *
+ * Replaces the note's markdown; its id and creation time stay, the title follows the new text. Needs the feed's password if it has one, and counts against the post rate limit. Read links can't edit. The body is as for posting: at most 102400 bytes, UTF-8, a `password` field is ignored.
+ */
+export const editNote = <ThrowOnError extends boolean = false>(options: Options<EditNoteData, ThrowOnError>): RequestResult<EditNoteResponses, EditNoteErrors, ThrowOnError> => (options.client ?? client).put<EditNoteResponses, EditNoteErrors, ThrowOnError>({
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/api/v1/feeds/{feed}/notes/{id}',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
 });
 
 /**

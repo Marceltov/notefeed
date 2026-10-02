@@ -10,7 +10,7 @@ const MESSAGES: Record<ErrorCode, string> = {
   invalid_feed: "Invalid feed name.",
   reserved_feed: "That feed name is reserved.",
   auth: "That password doesn't match NOTEFEED_PASSWORD.",
-  rate_limited: "Too many notes, try again in {retry} seconds.",
+  rate_limited: "Too many requests, try again in {retry} seconds.",
   too_many_attempts: "Too many attempts, try again in {retry} seconds.",
   feed_limit: "This instance has reached its feed limit.",
   note_limit: "This feed has reached its note limit.",
@@ -35,4 +35,9 @@ export function feedErrorMessage(code: unknown, retry?: unknown): string | undef
   if (code === "auth") return "That password is wrong.";
   if (code === "invalid_body") return `The new password must be ${PASSWORD_RULE}.`;
   return errorMessage(code, retry);
+}
+
+// The same, on a note page, where "auth" is a form refused for coming from outside (no feed or instance password involved).
+export function noteErrorMessage(code: unknown, retry?: unknown): string | undefined {
+  return code === "auth" ? "That didn't work. Reload the page and try again." : errorMessage(code, retry);
 }

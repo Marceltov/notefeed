@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { beforeEach, describe, expect, test } from "vitest";
 import { login } from "../auth";
+import { cookieValue } from "../feedlock";
 import { resetFeedsForTests, readId } from "../feeds";
 import { resetRateLimitsForTests } from "../limits";
 import { createNote } from "../notes";
@@ -298,5 +299,110 @@ describe("feed passwords", () => {
     expect((await call("DELETE", "/feeds/locked/password", { headers: fp })).status).toBe(204);
     expect((await call("GET", "/feeds/locked/notes")).status).toBe(200);
     expect((await post("locked", "# Open")).status).toBe(201);
+  });
+});
+
+describe("editing and deleting notes", () => {
+  const md = { "content-type": "text/markdown" };
+  const put = (path: string, body: string, headers: Record<string, string> = {}) => call("PUT", path, { body, headers: { ...md, ...headers } });
+  const make = async (feed = "backups", headers: Record<string, string> = {}) => (await json(await post(feed, "# Old", headers))).id as string;
+  const markdownOf = async (feed: string, id: string, headers: Record<string, string> = {}) => (await json(await call("GET", `/feeds/${feed}/notes/${id}`, { headers }))).markdown;
+
+  test("PUT with markdown or JSON: 200, same id and created_at, new title, readable everywhere", async () => {
+    const id = await make();
+    const before = await json(await call("GET", `/feeds/backups/notes/${id}`));
+    const res = await put(`/feeds/backups/notes/${id}`, "# New");
+    expect(res.status).toBe(200);
+    expect(await json(res)).toEqual({ ...before, title: "New", markdown: "# New" });
+    const viaJson = await put(`/feeds/backups/notes/${id}`, JSON.stringify({ markdown: "# Json" }), { "content-type": "application/json" });
+    expect((await json(viaJson)).title).toBe("Json");
+    expect(await markdownOf("backups", id)).toBe("# Json");
+    expect((await json(await call("GET", `/read/${readId("backups")}/notes/${id}`))).markdown).toBe("# Json");
+  });
+
+  test("PUT empty is 400 empty_note, over 100 KB is 413, both leave the note", async () => {
+    const id = await make();
+    expect((await json(await put(`/feeds/backups/notes/${id}`, "  "))).code).toBe("empty_note");
+    expect((await put(`/feeds/backups/notes/${id}`, "x".repeat(102401))).status).toBe(413);
+    expect(await markdownOf("backups", id)).toBe("# Old");
+  });
+
+  test("PUT and DELETE on an unknown or invalid id: 404; a reserved feed: 400", async () => {
+    await make();
+    for (const id of ["20260101T000000Z-x", "not-an-id", ".password"]) {
+      expect((await put(`/feeds/backups/notes/${id}`, "# New")).status).toBe(404);
+      const res = await call("DELETE", `/feeds/backups/notes/${id}`);
+      expect(res.status).toBe(404);
+      expect(await json(res)).toEqual({ error: "no such note", code: "not_found" });
+    }
+    expect((await call("DELETE", "/feeds/api/notes/20260101T000000Z-x")).status).toBe(400);
+    expect((await put("/feeds/nofeed/notes/20260101T000000Z-x", "# New")).status).toBe(404);
+  });
+
+  test("DELETE: 204, then the note is gone from get and list", async () => {
+    const id = await make();
+    const res = await call("DELETE", `/feeds/backups/notes/${id}`);
+    expect(res.status).toBe(204);
+    expect((await call("GET", `/feeds/backups/notes/${id}`)).status).toBe(404);
+    expect((await json(await call("GET", "/feeds/backups/notes"))).notes).toEqual([]);
+  });
+
+  test("a protected feed needs its password for both; deleting its last note keeps it protected", async () => {
+    const fp = { "x-feed-password": "pw" };
+    const id = await make("locked", fp);
+    const path = `/feeds/locked/notes/${id}`;
+    expect((await put(path, "# New")).status).toBe(401);
+    expect((await call("DELETE", path)).status).toBe(401);
+    expect((await put(path, "# New", fp)).status).toBe(200);
+    expect(await markdownOf("locked", id, fp)).toBe("# New");
+    expect((await call("DELETE", path, { headers: fp })).status).toBe(204);
+    expect((await post("locked", "# Again")).status).toBe(401);
+  });
+
+  test("the feed cookie authorises PUT and DELETE only from this instance's own pages", async () => {
+    const id = await make("locked", { "x-feed-password": "pw" });
+    const path = `/feeds/locked/notes/${id}`;
+    const cookie = `nf_feed_locked=${await cookieValue("locked")}`;
+    for (const origin of [{} as Record<string, string>, { origin: "https://evil.example" }]) {
+      expect((await put(path, "# Hacked", { cookie, ...origin })).status).toBe(401);
+      expect((await call("DELETE", path, { headers: { cookie, ...origin } })).status).toBe(401);
+    }
+    const own = { cookie, origin: BASE };
+    expect((await put(path, "# New", own)).status).toBe(200);
+    expect((await call("DELETE", path, { headers: own })).status).toBe(204);
+  });
+
+  test("a missing feed password is refused before the body is read", async () => {
+    const id = await make("locked", { "x-feed-password": "pw" });
+    let pulled = false;
+    const body = new ReadableStream({ pull: (c) => ((pulled = true), c.close()) }, { highWaterMark: 0 });
+    const req = new Request(`${BASE}${API_PREFIX}/feeds/locked/notes/${id}`, { method: "PUT", body, headers: { host: "localhost:3000", ...md }, duplex: "half" } as RequestInit);
+    expect((await dispatch(req, ["feeds", "locked", "notes", id])).status).toBe(401);
+    expect(pulled).toBe(false);
+  });
+
+  test("the instance password is needed first", async () => {
+    const id = await make();
+    process.env.NOTEFEED_PASSWORD = "pw";
+    const path = `/feeds/backups/notes/${id}`;
+    expect((await put(path, "# New")).status).toBe(401);
+    expect((await call("DELETE", path)).status).toBe(401);
+    expect((await call("DELETE", path, { headers: { authorization: "Bearer pw" } })).status).toBe(204);
+  });
+
+  test("edits and deletes count against the post rate limit", async () => {
+    const id = await make();
+    process.env.NOTEFEED_RATE_LIMIT = "1";
+    resetRateLimitsForTests();
+    expect((await post("backups", "# Two")).status).toBe(201);
+    const res = await put(`/feeds/backups/notes/${id}`, "# New");
+    expect(res.status).toBe(429);
+    expect((await call("DELETE", `/feeds/backups/notes/${id}`)).status).toBe(429);
+    expect(await markdownOf("backups", id)).toBe("# Old");
+  });
+
+  test("the read paths answer 405 to PUT and DELETE", async () => {
+    const id = await make();
+    for (const method of ["PUT", "DELETE"]) expect((await call(method, `/read/${readId("backups")}/notes/${id}`)).status).toBe(405);
   });
 });
