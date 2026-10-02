@@ -40,33 +40,38 @@ export default async function AuthorizePage({ searchParams }: PageProps<"/oauth/
         </form>
       )}
       {passwordSet() && (
-      <form method="post" action="/api/oauth/authorize" className="max-w-sm">
-        {Object.entries(checked.fields).map(([name, value]) => (
-          <input key={name} type="hidden" name={name} value={value} />
-        ))}
-        <label htmlFor="password" className="mb-1 block text-sm text-muted">
-          Password
-        </label>
-        <div className="flex gap-2">
-          <input
-            id="password"
-            name="password"
-            type="password"
-            autoComplete="current-password"
-            required
-            autoFocus
-            aria-describedby="login-error"
-            aria-invalid={error ? true : undefined}
-            className="min-w-0 flex-1 rounded-sm border border-rule bg-transparent px-3 py-1.5 focus:border-carbon focus:outline-none"
-          />
-          <button type="submit" className="rounded-sm bg-carbon px-4 py-1.5 font-bold text-on-carbon">
-            Allow
-          </button>
-        </div>
+        <form method="post" action="/api/oauth/authorize" className="max-w-sm">
+          {Object.entries(checked.fields).map(([name, value]) => (
+            <input key={name} type="hidden" name={name} value={value} />
+          ))}
+          <label htmlFor="password" className="mb-1 block text-sm text-muted">
+            Password
+          </label>
+          <div className="flex gap-2">
+            <input
+              id="password"
+              name="password"
+              type="password"
+              autoComplete="current-password"
+              required
+              autoFocus
+              aria-describedby="login-error"
+              aria-invalid={error ? true : undefined}
+              className="min-w-0 flex-1 rounded-sm border border-rule bg-transparent px-3 py-1.5 focus:border-carbon focus:outline-none"
+            />
+            <button type="submit" className="rounded-sm bg-carbon px-4 py-1.5 font-bold text-on-carbon">
+              Allow
+            </button>
+          </div>
+          <p id="login-error" role="alert" className="mt-2 text-sm text-error">
+            {errorMessage(error, retry)}
+          </p>
+        </form>
+      )}
+      {!passwordSet() && (
         <p id="login-error" role="alert" className="mt-2 text-sm text-error">
           {errorMessage(error, retry)}
         </p>
-      </form>
       )}
     </main>
   );
