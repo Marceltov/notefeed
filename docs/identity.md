@@ -120,7 +120,7 @@ The provider has to support:
 
 Two details trip people up:
 
-- `NOTEFEED_OIDC_ISSUER` must equal the `issuer` value in the discovery document **exactly**, including a trailing slash: Authentik's ends in `/`, Keycloak's does not. Copy it from the document.
+- `NOTEFEED_OIDC_ISSUER` must equal the `issuer` value in the discovery document: scheme, host, port and path. Only one trailing slash may differ, so `https://authentik.example.com/application/o/notefeed` and `.../notefeed/` both work. Copy it from the document to be sure.
 - The redirect URI is built from `PUBLIC_URL`. Without it notefeed uses the `Host` header the request arrived with, and `http` unless `NOTEFEED_TRUST_PROXY` is set, which behind a proxy gives a redirect URI the provider rejects. Set `PUBLIC_URL` to the address people really use, see [Reverse proxy](reverse-proxy.md).
 
 For a try-out on your own machine, `http://localhost:3000` works as `PUBLIC_URL`, with the redirect URI `http://localhost:3000/api/oidc/callback`, if the provider accepts a plain-http redirect for localhost.
@@ -131,7 +131,7 @@ This table lists examples only: notefeed has no built-in list, and any OpenID Co
 
 | Provider | Issuer | Notes |
 |---|---|---|
-| Authentik | `https://authentik.example.com/application/o/<slug>/` | Trailing slash. See the [example](#example-authentik). |
+| Authentik | `https://authentik.example.com/application/o/<slug>/` | The document's issuer ends in a slash; setting it with or without one works. See the [example](#example-authentik). |
 | Keycloak | `https://keycloak.example.com/realms/<realm>` | Older versions have `/auth` before `/realms`. Create an OpenID Connect client with **Client authentication** on and the standard flow enabled. |
 | Authelia | `https://auth.example.com` | Set the client's `token_endpoint_auth_method` to `client_secret_post`; Authelia defaults to `client_secret_basic`. |
 | Google | `https://accounts.google.com` | Create an OAuth client of type **Web application** and add the redirect URI. Use an address or domain allow-list, not `*`: `*` would let any Google account sign in. |
@@ -139,7 +139,7 @@ This table lists examples only: notefeed has no built-in list, and any OpenID Co
 
 ## Check that it works
 
-1. Open `<issuer>/.well-known/openid-configuration` in a browser, or run `curl -s <issuer>/.well-known/openid-configuration | jq -r .issuer`. It must return JSON whose `issuer` is exactly what you set in `NOTEFEED_OIDC_ISSUER`.
+1. Open `<issuer>/.well-known/openid-configuration` in a browser, or run `curl -s <issuer>/.well-known/openid-configuration | jq -r .issuer`. It must return JSON whose `issuer` is what you set in `NOTEFEED_OIDC_ISSUER`, apart from at most one trailing slash.
 2. Restart notefeed and open `https://notes.example.com/login`. There is a **Sign in with** button for each provider, named after its `_LABEL` or its host. If one is missing, one of that provider's four variables is empty or unset.
 3. Click one and sign in at the provider. You land back on notefeed, signed in.
 4. Post a note from the web UI. It shows **by** and your name or address next to the time.
@@ -188,9 +188,13 @@ Take them off the allow-list (`NOTEFEED_OIDC_ALLOW`, or `NOTEFEED_OIDC_<NAME>_AL
 - Failed sign-ins count toward the [rate limit](configuration.md#rate-limits-and-caps). Without `NOTEFEED_TRUST_PROXY`, all clients share one bucket.
 - A note file stored by an older notefeed (it has no header) whose first lines are `---`, then only `key: <JSON>` lines or nothing, then `---` reads as having a header: that part is hidden from the displayed body (the file is untouched), and a `sender: "X"` line in it reads as a note from `X`, with sign-in on or off. A legacy note starting `---` and `---` loses that pair from the displayed body. Notes written since always start with the header, so text typed into a note can never read as a sender or other metadata.
 
+## Logs
+
+notefeed logs one line starting with `oidc:` for each failed sign-in. It names the step that failed and, where it helps, the provider, the issuer, the HTTP status or an error code, and never a secret, token, address or name. Read them with `docker compose logs notefeed`, or your container runtime's equivalent, for example `docker compose logs notefeed | grep oidc:`. A sign-in that works logs nothing.
+
 ## Troubleshooting
 
-Every failed sign-in shows the same message, "Sign-in didn't work. Try again.", and notefeed logs nothing, so use this list. To tell an allow-list problem from a provider problem, set `NOTEFEED_OIDC_ALLOW` to `*` for a moment: if signing in then works, the allow-list was the cause.
+Every failed sign-in shows the same message, "Sign-in didn't work. Try again.", so start with the [logs](#logs): the `oidc:` line names the cause, see [What the log says](#what-the-log-says). To tell an allow-list problem from a provider problem, set `NOTEFEED_OIDC_ALLOW` to `*` for a moment: if signing in then works, the allow-list was the cause.
 
 | What you see | Likely cause |
 |---|---|
@@ -198,7 +202,7 @@ Every failed sign-in shows the same message, "Sign-in didn't work. Try again.", 
 | A button is missing for one provider | One of that provider's four variables is missing, or its allow-list is empty. The other providers are not affected. |
 | A named provider doesn't show at all | Its name isn't recognised: it has a lowercase letter or a hyphen. Use capital letters, digits and underscores, as in `NOTEFEED_OIDC_MY_IDP_ISSUER`. |
 | The provider shows a redirect or `redirect_uri` error before you return | The registered redirect URI differs from `<PUBLIC_URL>/api/oidc/callback`: scheme, host, port, path or a trailing slash. Behind a proxy, `PUBLIC_URL` is not set. |
-| Back on notefeed with "Sign-in didn't work" | The issuer differs from the discovery document's `issuer`, often a missing or extra trailing slash. |
+| Back on notefeed with "Sign-in didn't work" | The issuer differs from the discovery document's `issuer` in more than one trailing slash: another scheme, host, port or path. |
 | The same | The provider can't be reached from the notefeed container (DNS, a firewall, a certificate it doesn't trust), or its URLs are plain `http`. |
 | The same | The person isn't on the allow-list, or the provider doesn't report their e-mail address as verified. |
 | The same | The `id_token` has none of the sender claims, which by default are `name` and `email`. Check the scopes and the provider's claim settings, or set `NOTEFEED_OIDC_SENDER_CLAIM`. |
@@ -207,6 +211,28 @@ Every failed sign-in shows the same message, "Sign-in didn't work. Try again.", 
 | The same, after many tries | Failed sign-ins count toward the [rate limit](configuration.md#rate-limits-and-caps). Wait a minute. |
 | Signed out after a while, or after changing the password | Expected: a sign-in lasts 7 days, and a changed `NOTEFEED_PASSWORD` or `NOTEFEED_SECRET` signs everyone out. |
 | A note has no sender | It was posted with the instance password or by a script, which never carries a sender. |
+
+### What the log says
+
+| Log line starts with | Cause | Fix |
+|---|---|---|
+| `oidc: unknown provider` | The sign-in named a provider that isn't configured, or none while several are. | Use the buttons on the login page; check the provider's four variables. |
+| `oidc: issuer is not an https URL` | `NOTEFEED_OIDC_ISSUER` is not a URL, or plain `http` on a host other than `localhost`. | Set the issuer to the `https` URL from the discovery document. |
+| `oidc: discovery failed` with `status=` | The discovery document answered with that HTTP status, or with something other than JSON (`status=200 error="not a JSON object"`). | Open `<issuer>/.well-known/openid-configuration`; a 404 usually means a wrong issuer path. |
+| `oidc: discovery failed` with `error=` | The provider can't be reached from the notefeed container: `ENOTFOUND` (DNS), `ECONNREFUSED` (nothing listening), `CERT_HAS_EXPIRED` or another certificate error, `TimeoutError` (no answer within 10 seconds). | Fix DNS, the firewall or the certificate between notefeed and the provider. |
+| `oidc: issuer does not match the discovery document` | The configured issuer (`issuer=`) and the document's (`document=`) differ in more than one trailing slash. | Copy the document's `issuer` into `NOTEFEED_OIDC_ISSUER`. |
+| `oidc: discovery endpoint is not https` | The document's authorize or token endpoint, named by `endpoint=`, is missing or plain `http`. | Serve the provider over `https`, or set its external URL so its endpoints use it. |
+| `oidc: provider denied the sign-in` | The provider sent the person back with an error, such as `error="access_denied"` when they declined or aren't allowed in the provider. | Check the provider's own policies and logs for that person. |
+| `oidc: state mismatch or missing sign-in cookie` | The sign-in cookie is missing, expired (after 10 minutes) or from another sign-in, or the browser blocks cookies. | Try again from the login page in one tab. |
+| `oidc: no code in the callback` | The provider came back without an authorization code. | Check that the provider's client uses the authorization code flow. |
+| `oidc: provider no longer configured` | The provider was removed or switched off while the sign-in was under way. | Try again; check that provider's variables. |
+| `oidc: token request rejected` with `error="invalid_client"` | The client id or secret is wrong, or the provider expects `client_secret_basic`. | Copy the client id and secret again; switch the client to `client_secret_post`. |
+| `oidc: token request rejected` with another `error=` or `status=` | `invalid_grant` usually means the redirect URI or the PKCE verifier didn't match, or the code was used already; a network `error=` means the token endpoint can't be reached. | Check the redirect URI and that the provider supports PKCE `S256`. |
+| `oidc: token response has no id_token` | The token endpoint answered without an `id_token`. | Make sure the client requests the `openid` scope and is an OpenID Connect client, not plain OAuth 2. |
+| `oidc: id_token invalid` with `check=` | The `id_token` failed one check: `iss` (another issuer), `aud` (another client id), `azp` (several audiences without this client as `azp`), `exp` (expired: check the server clocks), `nonce` (not the one sent), `malformed` (not a readable JWT). | Fix what the named check points to; for `iss`, the provider's issuer setting. |
+| `oidc: person not on the allow-list` | The person's verified address matches no entry of that provider's allow-list. | Add the address or its `@domain` to the allow-list, if they should get in. |
+| `oidc: address needs a verified email` | The allow-list matches by address, but the `id_token` has no `email`, or `email_verified` isn't `true`. | Have the provider include `email` and `email_verified` and verify the address, or use `*` with access restricted at the provider. |
+| `oidc: no sender claim in the id_token` | None of the claims named by `claims=` is a non-empty string in the `id_token`. | Add the `profile` and `email` scopes or claims at the provider, or set `NOTEFEED_OIDC_SENDER_CLAIM`. |
 
 ## Privacy page and imprint
 
