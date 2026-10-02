@@ -58,7 +58,7 @@ export default function Imprint() {
             <h2 className="pt-2 font-bold">Sign-in</h2>
             <p>
               Signing in is optional and enabled on this instance. A sender name
-              (from the provider&apos;s name or email) is stored with the notes
+              (a name or other identifier from the provider, as configured) is stored with the notes
               you post and shown on the feed page, the public read link and RSS
               unless the feed hides it. I am the controller of that data. It is
               removed by deleting or editing the notes. See the data privacy

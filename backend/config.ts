@@ -38,5 +38,7 @@ export const config = {
     clientId: env("NOTEFEED_OIDC_CLIENT_ID"),
     clientSecret: env("NOTEFEED_OIDC_CLIENT_SECRET"),
     allow: env("NOTEFEED_OIDC_ALLOW").split(",").map((n) => n.trim().toLowerCase()).filter(Boolean),
+    // id_token claims tried in order for the sender (case-sensitive); not part of "identity is on".
+    senderClaim: ((l) => (l.length ? l : ["name", "email"]))(env("NOTEFEED_OIDC_SENDER_CLAIM").split(",").map((n) => n.trim()).filter(Boolean)),
   }),
 };

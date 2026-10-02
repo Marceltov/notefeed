@@ -23,6 +23,7 @@ Set all four variables. The mode is on only when all four are set; with one miss
 | `NOTEFEED_OIDC_CLIENT_ID` | The client id the provider gave notefeed. |
 | `NOTEFEED_OIDC_CLIENT_SECRET` | The client secret the provider gave notefeed. |
 | `NOTEFEED_OIDC_ALLOW` | Who may sign in: comma-separated e-mail addresses, `@domain` entries, or `*`. |
+| `NOTEFEED_OIDC_SENDER_CLAIM` | Optional, default `name,email`. Comma-separated id_token claims tried in order; the first non-empty string is the sender. It is shown on notes and stored in the note file, so pick a claim that is fine to publish: `sub` is stable but opaque, `email` exposes an address. It does not switch sign-in on and does not change who may sign in. |
 
 The allow-list is required and is matched case-insensitively:
 
@@ -66,7 +67,7 @@ sender: "Ann Example"
 The deploy finished.
 ```
 
-The sender is the provider's `name` claim, or the e-mail address when there is no name. There is no user table, no session list and no record of who signed in. The sign-in itself is a signed cookie in the person's browser.
+The sender is the first non-empty claim of `NOTEFEED_OIDC_SENDER_CLAIM` in the provider's id_token, by default the `name` claim, or the e-mail address when there is no name. There is no user table, no session list and no record of who signed in. The sign-in itself is a signed cookie in the person's browser.
 
 ## Where the sender is shown
 

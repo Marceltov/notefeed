@@ -62,8 +62,8 @@ function check(c: Record<string, unknown>, meta: Meta, nonce: string, now: numbe
   const audOk = aud.includes(clientId) && (aud.length === 1 || c.azp === clientId) && (c.azp === undefined || c.azp === clientId);
   const expOk = typeof c.exp === "number" && c.exp * 1000 > now;
   if (c.iss !== meta.issuer || !audOk || !expOk || c.nonce !== nonce) throw new AuthError();
-  const person = { name: str(c.name), email: str(c.email), email_verified: c.email_verified === true };
-  const sender = senderFrom(person);
+  const person = { email: str(c.email), email_verified: c.email_verified === true };
+  const sender = senderFrom(c, config.oidc().senderClaim);
   if (!allowed(person) || sender === undefined) throw new AuthError();
   return sender;
 }

@@ -127,6 +127,16 @@ describe("exchange", () => {
     expect(await exchange(META, P, issuer({ claims: { ...GOOD, name: undefined } }), NOW)).toEqual({ sender: "ann@x.com" });
   });
 
+  test("NOTEFEED_OIDC_SENDER_CLAIM picks the sender; the allow-list still needs a verified email", async () => {
+    vi.stubEnv("NOTEFEED_OIDC_SENDER_CLAIM", "sub");
+    const claims = { ...GOOD, sub: "u-1", preferred_username: "ann" };
+    expect(await exchange(META, P, issuer({ claims }), NOW)).toEqual({ sender: "u-1" });
+    expect(await exchange(META, P, issuer({ claims: { ...claims, sub: undefined } }), NOW).catch((e) => e)).toBeInstanceOf(AuthError);
+    await expect(exchange(META, P, issuer({ claims: { ...claims, email_verified: false } }), NOW)).rejects.toBeInstanceOf(AuthError);
+    vi.stubEnv("NOTEFEED_OIDC_SENDER_CLAIM", "preferred_username,email");
+    expect(await exchange(META, P, issuer({ claims }), NOW)).toEqual({ sender: "ann" });
+  });
+
   test("aud may be an array holding the client id; with several entries azp must be the client id", async () => {
     expect(await exchange(META, P, issuer({ claims: { ...GOOD, aud: ["id"] } }), NOW)).toEqual({ sender: "Ann" });
     expect(await exchange(META, P, issuer({ claims: { ...GOOD, aud: ["id", "other"], azp: "id" } }), NOW)).toEqual({ sender: "Ann" });

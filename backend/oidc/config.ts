@@ -17,5 +17,11 @@ export function allowed(c: { email?: string; email_verified?: boolean }): boolea
   return allow.some((a) => (a.startsWith("@") ? email.endsWith(a) : email === a));
 }
 
-// Who a note is from: the trimmed name, else the email.
-export const senderFrom = (c: { name?: string; email?: string }): string | undefined => c.name?.trim() || c.email || undefined;
+// Who a note is from: the first of the claims, in the given order, that is a non-empty string (trimmed).
+export function senderFrom(claims: Record<string, unknown>, order: string[]): string | undefined {
+  for (const k of order) {
+    const v = claims[k];
+    if (typeof v === "string" && v.trim()) return v.trim();
+  }
+  return undefined;
+}

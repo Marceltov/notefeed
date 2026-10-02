@@ -61,8 +61,8 @@ export default function Privacy() {
             <h2 className="pt-2 font-bold">Sign-in and sender name</h2>
             <p>
               <strong>What:</strong> signing in is optional and enabled on this
-              instance. If you sign in, a sender name (the <code>name</code> or
-              else the <code>email</code> claim from the sign-in provider) is
+              instance. If you sign in, a sender name (a name or other identifier
+              from your sign-in provider, as the operator configured) is
               stored with the notes you post. It is shown on the feed page, on
               the public read link and in RSS, unless the feed hides it.
               <br />
