@@ -7,8 +7,8 @@ export default function manifest(): MetadataRoute.Manifest {
     description: "Markdown notes and RSS. Post from where you need it, follow where you want.",
     start_url: "/",
     display: "standalone",
-    background_color: "#f3ead6",
-    theme_color: "#f3ead6",
+    background_color: "#f2f3f0",
+    theme_color: "#f2f3f0",
     icons: [
       { src: "/icon-192.png", sizes: "192x192", type: "image/png" },
       { src: "/icon-512.png", sizes: "512x512", type: "image/png" },
