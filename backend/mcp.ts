@@ -1,7 +1,8 @@
-// The MCP endpoint: POST /mcp, protocol 2026-07-28 only, eight tools over the same backend the HTTP API uses.
+// The MCP endpoint: POST /mcp, protocol 2026-07-28 only, nine tools over the same backend the HTTP API uses.
 import { McpServer, createMcpHandler, type AuthInfo } from "@modelcontextprotocol/server";
 import * as z from "zod";
 import { bearerOf, checkBearer, locked } from "./auth";
+import { config } from "./config";
 import { AuthError, NotefeedError, NotFoundError, TooManyAttemptsError } from "./errors";
 import { checkFeedAccess } from "./feedlock";
 import { assertFeed, FEED_RE, hasFeed } from "./feeds";
@@ -9,8 +10,8 @@ import { feedJson } from "./http/api";
 import { clientIp } from "./limits";
 import { getNote, listNotes, type Note } from "./notes";
 import { verify } from "./oauth/tokens";
-import { deleteFeed, deleteNote, editNote, postNote, updateFeed } from "./posting";
-import { feedPath, mcpResource, publicUrl, rssPath } from "./urls";
+import { deleteFeed, deleteNote, editNote, postNote, updateFeed, uploadImage } from "./posting";
+import { feedPath, imagePath, mcpResource, publicUrl, rssPath } from "./urls";
 
 const SECRET_NOTE = "The feed name works like a password: anyone who knows it can read and post. Don't repeat it in replies.";
 
@@ -121,12 +122,12 @@ function server(h: Headers): McpServer {
     }),
   );
 
-  const FeedOut = z.object({ name: z.string(), title: z.string(), description: z.string(), protected: z.boolean(), read_url: z.string().nullable() });
+  const FeedOut = z.object({ name: z.string(), title: z.string(), description: z.string(), protected: z.boolean(), read_url: z.string().nullable(), image_url: z.string().nullable() });
 
   s.registerTool(
     "get_feed",
     {
-      description: `Get a feed's title, description, whether it is protected, and its read link (null while it has no notes). ${PROTECTED} ${SECRET_NOTE}`,
+      description: `Get a feed's title, description, title image, whether it is protected, and its read link (null while it has no notes). ${PROTECTED} ${SECRET_NOTE}`,
       inputSchema: z.object({ feed, password }),
       outputSchema: FeedOut,
       annotations: { readOnlyHint: true },
@@ -141,13 +142,13 @@ function server(h: Headers): McpServer {
   s.registerTool(
     "update_feed",
     {
-      description: `Replace a feed's title (at most 100 characters) and description (at most 500), both one line; an empty title shows the feed's name. The feed must exist. ${PROTECTED} ${SECRET_NOTE}`,
-      inputSchema: z.object({ feed, title: z.string(), description: z.string(), password }),
+      description: `Replace a feed's title (at most 100 characters) and description (at most 500), both one line; an empty title shows the feed's name. image is the file name upload_image returned for this feed (the title image), empty to remove it, left out to keep it. The feed must exist. ${PROTECTED} ${SECRET_NOTE}`,
+      inputSchema: z.object({ feed, title: z.string(), description: z.string(), image: z.string().optional(), password }),
       outputSchema: FeedOut,
       annotations: { destructiveHint: true, idempotentHint: true },
     },
-    guard(async ({ feed, title, description, password }) => {
-      await updateFeed(feed, clientIp(h), async () => ({ title, description }), { password });
+    guard(async ({ feed, title, description, image, password }) => {
+      await updateFeed(feed, clientIp(h), async () => ({ title, description, image }), { password });
       return ok(await feedJson(feed, h));
     }),
   );
@@ -163,6 +164,24 @@ function server(h: Headers): McpServer {
     guard(async ({ feed, password }) => {
       await deleteFeed(feed, clientIp(h), { password });
       return ok({ deleted: true as const });
+    }),
+  );
+
+  s.registerTool(
+    "upload_image",
+    {
+      description: `Upload a PNG, JPEG, GIF or WebP image (not SVG) to an existing feed, as base64 in data, and get back a URL and the markdown ![](url) to put in a note. The URL is public like the feed's read link. Stored as sent, EXIF included. The feed must have notes. ${PROTECTED} ${SECRET_NOTE}`,
+      inputSchema: z.object({ feed, data: z.string().describe("The image's bytes, base64"), password }),
+      outputSchema: z.object({ file: z.string(), url: z.string(), markdown: z.string() }),
+    },
+    guard(async ({ feed, data, password }) => {
+      const read = async () => {
+        const bytes = Buffer.from(data, "base64");
+        return bytes.length > config.maxImageBytes() ? null : bytes;
+      };
+      const { file, readId } = await uploadImage(feed, clientIp(h), read, { password });
+      const url = base + imagePath(readId, file);
+      return ok({ file, url, markdown: `![](${url})` });
     }),
   );
   return s;
