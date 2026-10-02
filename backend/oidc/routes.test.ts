@@ -287,6 +287,14 @@ describe("several providers", () => {
     expect((await start("provider=default")).loc!.origin).toBe(ISS);
   });
 
+  test("provider=default is refused when only named providers are configured", async () => {
+    vi.stubEnv("NOTEFEED_OIDC_ISSUER", "");
+    const res = await oidcStartRoute(get("/api/oidc/start?provider=default"));
+    expect(res.headers.get("location")).toBe("/login?error=sign_in_failed");
+    expect(res.headers.getSetCookie()).toEqual([]);
+    expect(fetchStub).not.toHaveBeenCalled();
+  });
+
   test("a single named provider works without the parameter", async () => {
     vi.stubEnv("NOTEFEED_OIDC_ISSUER", "");
     vi.stubEnv("NOTEFEED_OIDC_ALPHA_ISSUER", "");

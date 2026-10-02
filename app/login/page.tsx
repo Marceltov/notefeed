@@ -13,12 +13,17 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
       <h1 className="mb-6 text-xl font-bold tracking-tight">notefeed</h1>
       {identityOn() && (
         <div className="mb-6 max-w-sm">
-          <a
-            href={`/api/oidc/start?next=${encodeURIComponent(safeNext(next))}`}
-            className="inline-block rounded-sm bg-carbon px-4 py-1.5 font-bold text-on-carbon"
-          >
-            Sign in with {signInProviders()[0]?.label ?? ""}
-          </a>
+          <div className="flex flex-col items-start gap-2">
+            {signInProviders().map(({ id, label }) => (
+              <a
+                key={id}
+                href={`/api/oidc/start?provider=${encodeURIComponent(id)}&next=${encodeURIComponent(safeNext(next))}`}
+                className="inline-block rounded-sm bg-carbon px-4 py-1.5 font-bold text-on-carbon"
+              >
+                {label ? `Sign in with ${label}` : "Sign in"}
+              </a>
+            ))}
+          </div>
           <p className="mt-2 text-sm text-muted">{SENDER_NOTICE}</p>
         </div>
       )}

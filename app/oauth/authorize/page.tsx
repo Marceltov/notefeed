@@ -29,15 +29,22 @@ export default async function AuthorizePage({ searchParams }: PageProps<"/oauth/
       <p className="mb-6 text-muted">After login you&apos;ll be sent to {checked.redirectHost}.</p>
       {identityOn() && (
         // A form POST, not a link: a cross-site GET must never start an MCP sign-in.
-        <form method="post" action="/api/oidc/start" className="mb-6 max-w-sm">
-          {Object.entries(checked.fields).map(([name, value]) => (
-            <input key={name} type="hidden" name={name} value={value} />
-          ))}
-          <button type="submit" className="rounded-sm bg-carbon px-4 py-1.5 font-bold text-on-carbon">
-            Sign in with {signInProviders()[0]?.label ?? ""}
-          </button>
+        <div className="mb-6 max-w-sm">
+          <div className="flex flex-col items-start gap-2">
+            {signInProviders().map(({ id, label }) => (
+              <form key={id} method="post" action="/api/oidc/start">
+                {Object.entries(checked.fields).map(([name, value]) => (
+                  <input key={name} type="hidden" name={name} value={value} />
+                ))}
+                <input type="hidden" name="provider" value={id} />
+                <button type="submit" className="rounded-sm bg-carbon px-4 py-1.5 font-bold text-on-carbon">
+                  {label ? `Sign in with ${label}` : "Sign in"}
+                </button>
+              </form>
+            ))}
+          </div>
           <p className="mt-2 text-sm text-muted">{SENDER_NOTICE}</p>
-        </form>
+        </div>
       )}
       {passwordSet() && (
         <form method="post" action="/api/oauth/authorize" className="max-w-sm">

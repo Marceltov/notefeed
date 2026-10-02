@@ -10,7 +10,7 @@ type Fetch = typeof fetch;
 
 const HOUR = 3_600_000;
 // Per issuer, so several providers don't evict each other.
-const cache = processState("oidc-discovery", () => new Map<string, { at: number; meta: Meta }>());
+const cache = processState("oidc-discovery-v2", () => new Map<string, { at: number; meta: Meta }>());
 export const resetDiscoveryForTests = (): void => cache.clear();
 
 // The JSON object a provider answers with; anything else (unreachable, non-2xx, not JSON, not an object) refuses.
