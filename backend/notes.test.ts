@@ -29,10 +29,15 @@ describe("isValidId", () => {
 });
 
 describe("createNote", () => {
+  test.each(["# Backup finished", "Café notes", "🎉🎉", "# "])("id and file name carry nothing of the title: %j", async (title) => {
+    const { note } = await createNote("test", title + "\nok", at("2026-09-29T14:05:12Z"));
+    expect(note.id).toMatch(/^20260929T140512Z-[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+    expect(await readFile(join(dir, `${note.id}.md`), "utf8")).toContain("ok");
+  });
   test("writes the body byte-for-byte under a timestamped id", async () => {
     const md = "# Backup finished\nok";
     const { note } = await createNote("test", md, at("2026-09-29T14:05:12Z"));
-    expect(note.id).toBe("20260929T140512Z-backup-finished");
+    expect(note.id).toMatch(/^20260929T140512Z-[0-9a-f-]{36}$/);
     expect(note.title).toBe("Backup finished");
     expect(note.createdAt).toEqual(at("2026-09-29T14:05:12Z"));
     expect(await readFile(join(dir, `${note.id}.md`), "utf8")).toBe("---\n---\n" + md);

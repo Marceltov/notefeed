@@ -33,7 +33,6 @@ test("start page rejects reserved and invalid names", async ({ page }) => {
 test("posting with the button and with Ctrl+Enter puts the note on top", async ({ page }) => {
   await page.goto(`/${feedName()}`);
   await page.getByLabel("Note in markdown").fill("# Backup finished");
-  await expect(page.getByText(/Saves as \d{8}T\d{6}Z-backup-finished\.md/)).toBeVisible();
   await page.getByRole("button", { name: "Post note" }).click();
   await expect(page.getByRole("listitem").first()).toContainText("Backup finished");
 

@@ -12,7 +12,7 @@ export const MAX_LIMIT = 100;
 
 export const NoteJson = z
   .object({
-    id: z.string().regex(NOTE_ID).describe("UTC time to the second plus a slug of the title"),
+    id: z.string().regex(NOTE_ID).describe("UTC time to the second plus a random UUID"),
     title: z.string().describe("The first heading, or the first non-empty line; may be empty"),
     markdown: z.string().describe("The note, byte-for-byte as posted"),
     created_at: z.iso.datetime().describe("When the note was posted (UTC)"),

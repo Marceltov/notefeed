@@ -6,7 +6,7 @@ export type ClientOptions = {
 
 export type Note = {
     /**
-     * UTC time to the second plus a slug of the title
+     * UTC time to the second plus a random UUID
      */
     id: string;
     /**

@@ -1548,7 +1548,7 @@
           "id": {
             "type": "string",
             "pattern": "^\\d{8}T\\d{6}Z-[a-z0-9-]+$",
-            "description": "UTC time to the second plus a slug of the title"
+            "description": "UTC time to the second plus a random UUID"
           },
           "title": {
             "type": "string",

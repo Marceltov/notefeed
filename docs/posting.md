@@ -49,7 +49,7 @@ curl -X DELETE \
 What to know:
 
 - **Who may:** whoever may post to the feed. On an open feed the name is the key, so anyone who knows it can edit and delete its notes, not only add to them. A feed with [its own password](#a-feed-with-its-own-password) needs `X-Feed-Password` for both, and an instance with a password needs `Authorization: Bearer` first, as for posting. The [read link](feed.md) can neither edit nor delete.
-- **The id stays.** An edit keeps the note's id, so its URLs, its place in the feed and its RSS `guid` stay the same. The title is taken from the new markdown, so the title can end up different from the slug in the id. Notes have no edit time and no history: the old text is gone, and the note keeps its original time.
+- **The id stays.** An edit keeps the note's id, so its URLs, its place in the feed and its RSS `guid` stay the same. The title is taken from the new markdown, Notes have no edit time and no history: the old text is gone, and the note keeps its original time.
 - **A feed reader may not show the change.** Because the `guid` stays, a reader that has already seen the item may keep showing the old text.
 - **The feed stays,** even when you delete its last note. Its name and its password remain, and the feed is then empty.
 - **Limits:** edits and deletes count toward the same per-client [rate limit](configuration.md#rate-limits-and-caps) as posts. An edit must pass the same checks as a post: not empty, UTF-8, at most 100 KB. A refused edit leaves the note unchanged. A `password` field in the body of an edit is ignored.
@@ -229,7 +229,7 @@ EOF
 ## Titles and filenames
 
 - **Title:** the first `# ` heading. Without one, it's the first non-empty line, with list and quote markers removed. `#` lines inside fenced code blocks are ignored. Titles are cut to 100 characters.
-- **File:** `<DATA_DIR>/<feed>/<id>.md`, a `---` header block (`---` and `---` on two lines when empty) followed by the body, where the id is the UTC time to the second plus a slug of the title, e.g. `20260929T140512Z-backup-finished`. Accented letters become plain ones (`Café` → `cafe`). A title with no usable letters becomes `note`.
+- **File:** `<DATA_DIR>/<feed>/<id>.md`, a `---` header block (`---` and `---` on two lines when empty) followed by the body, where the id is the UTC time to the second plus a random UUID, e.g. `20261002T091400Z-3f2b8c1e-7d4a-4e6b-9a15-c0d2e8f41b73`, so neither the id nor the file name nor the note's URLs carry its title. Notes created before that keep their slugged ids.
 - **Collisions:** two notes with the same title in the same second get `-2`, `-3` and so on. An existing note is never overwritten.
 
 ## Errors

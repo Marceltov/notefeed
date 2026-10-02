@@ -6,7 +6,6 @@ import { postNote } from "@/app/_lib/api";
 import { MarkdownInput } from "@/components/MarkdownInput";
 import { useApiForm } from "@/app/_lib/useApiForm";
 import { PASSWORD_HINT, SENDER_NOTICE } from "@/app/_lib/messages";
-import { extractTitle, idStamp, slugify } from "@/shared/notes";
 import { PASSWORD_PATTERN } from "@/shared/password";
 import { TAGS_HINT, TAGS_PATTERN } from "@/shared/tags";
 
@@ -21,7 +20,6 @@ export function Compose({ feed, action, error: initialError, isNew, exists = tru
   const [password, setPassword] = useState("");
   const [tags, setTags] = useState("");
   const [busy, setBusy] = useState(false); // an image is uploading
-  const filename = `${idStamp(new Date())}-${slugify(extractTitle(text))}.md`;
 
   const tagList = tags.split(",").map((t) => t.trim()).filter(Boolean);
   const submit = (e: FormEvent) =>
@@ -43,13 +41,7 @@ export function Compose({ feed, action, error: initialError, isNew, exists = tru
         onBusy={setBusy}
       />
       <div className="mt-2 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-2">
-        <p id="compose-hint" className="min-w-0 break-all text-sm text-muted">
-          {text.trim() && (
-            <>
-              Saves as <span className="font-mono text-carbon">{filename}</span>
-            </>
-          )}
-        </p>
+        <p id="compose-hint" className="min-w-0 break-all text-sm text-muted" />
         <button
           type="submit"
           disabled={pending || busy}
