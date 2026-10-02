@@ -16,6 +16,7 @@ def _get_kwargs(
     *,
     limit: int | Unset = 50,
     before: str | Unset = UNSET,
+    tag: str | Unset = UNSET,
     x_feed_password: str | Unset = UNSET,
 ) -> dict[str, Any]:
     headers: dict[str, Any] = {}
@@ -27,6 +28,8 @@ def _get_kwargs(
     params["limit"] = limit
 
     params["before"] = before
+
+    params["tag"] = tag
 
     params = {k: v for k, v in params.items() if v is not UNSET and v is not None}
 
@@ -88,6 +91,7 @@ def sync_detailed(
     client: AuthenticatedClient,
     limit: int | Unset = 50,
     before: str | Unset = UNSET,
+    tag: str | Unset = UNSET,
     x_feed_password: str | Unset = UNSET,
 ) -> Response[Error | NoteList]:
     """List a feed's notes
@@ -98,6 +102,7 @@ def sync_detailed(
         feed (str):
         limit (int | Unset):  Default: 50.
         before (str | Unset):
+        tag (str | Unset):
         x_feed_password (str | Unset):
 
     Raises:
@@ -112,6 +117,7 @@ def sync_detailed(
         feed=feed,
         limit=limit,
         before=before,
+        tag=tag,
         x_feed_password=x_feed_password,
     )
 
@@ -128,6 +134,7 @@ def sync(
     client: AuthenticatedClient,
     limit: int | Unset = 50,
     before: str | Unset = UNSET,
+    tag: str | Unset = UNSET,
     x_feed_password: str | Unset = UNSET,
 ) -> Error | NoteList | None:
     """List a feed's notes
@@ -138,6 +145,7 @@ def sync(
         feed (str):
         limit (int | Unset):  Default: 50.
         before (str | Unset):
+        tag (str | Unset):
         x_feed_password (str | Unset):
 
     Raises:
@@ -153,6 +161,7 @@ def sync(
         client=client,
         limit=limit,
         before=before,
+        tag=tag,
         x_feed_password=x_feed_password,
     ).parsed
 
@@ -163,6 +172,7 @@ async def asyncio_detailed(
     client: AuthenticatedClient,
     limit: int | Unset = 50,
     before: str | Unset = UNSET,
+    tag: str | Unset = UNSET,
     x_feed_password: str | Unset = UNSET,
 ) -> Response[Error | NoteList]:
     """List a feed's notes
@@ -173,6 +183,7 @@ async def asyncio_detailed(
         feed (str):
         limit (int | Unset):  Default: 50.
         before (str | Unset):
+        tag (str | Unset):
         x_feed_password (str | Unset):
 
     Raises:
@@ -187,6 +198,7 @@ async def asyncio_detailed(
         feed=feed,
         limit=limit,
         before=before,
+        tag=tag,
         x_feed_password=x_feed_password,
     )
 
@@ -201,6 +213,7 @@ async def asyncio(
     client: AuthenticatedClient,
     limit: int | Unset = 50,
     before: str | Unset = UNSET,
+    tag: str | Unset = UNSET,
     x_feed_password: str | Unset = UNSET,
 ) -> Error | NoteList | None:
     """List a feed's notes
@@ -211,6 +224,7 @@ async def asyncio(
         feed (str):
         limit (int | Unset):  Default: 50.
         before (str | Unset):
+        tag (str | Unset):
         x_feed_password (str | Unset):
 
     Raises:
@@ -227,6 +241,7 @@ async def asyncio(
             client=client,
             limit=limit,
             before=before,
+            tag=tag,
             x_feed_password=x_feed_password,
         )
     ).parsed

@@ -193,7 +193,7 @@ describe("updateNote and removeNote", () => {
   test("an edit keeps the id and createdAt, changes markdown and title", async () => {
     const { note: n } = await createNote("test", "# Old", now);
     const u = await updateNote("test", n.id, "# New\nbody");
-    expect(u).toEqual({ id: n.id, title: "New", markdown: "# New\nbody", createdAt: now });
+    expect(u).toEqual({ id: n.id, title: "New", markdown: "# New\nbody", createdAt: now, tags: [] });
     expect((await getNote("test", n.id))?.markdown).toBe("# New\nbody");
   });
   test("a missing note is null and creates no file", async () => {

@@ -13,11 +13,11 @@ type Io = {
 class UsageError extends Error {}
 
 const USAGE = [
-  "usage: notefeed post <text | - | --file PATH> [--url URL] [--feed FEED] [--password PASSWORD]",
+  "usage: notefeed post <text | - | --file PATH> [--tag TAG]... [--url URL] [--feed FEED] [--password PASSWORD]",
   "       notefeed edit <id> <text | - | --file PATH> [--url URL] [--feed FEED] [--password PASSWORD]",
   "       notefeed delete <id> [--url URL] [--feed FEED] [--password PASSWORD]",
   "       notefeed image <PATH> [--url URL] [--feed FEED] [--password PASSWORD]",
-  "       notefeed notes [--limit N] [--json] [--url URL] [--feed FEED] [--password PASSWORD]",
+  "       notefeed notes [--limit N] [--tag TAG] [--json] [--url URL] [--feed FEED] [--password PASSWORD]",
 ].join("\n");
 
 /** Returns the exit code: 0 ok, 1 server/network error, 2 usage/config error. */
@@ -31,6 +31,7 @@ export async function main(argv: string[], io: Io = process): Promise<number> {
         feed: { type: "string" },
         password: { type: "string" },
         file: { type: "string" },
+        tag: { type: "string", multiple: true },
         limit: { type: "string" },
         json: { type: "boolean" },
         version: { type: "boolean" },
@@ -49,7 +50,7 @@ export async function main(argv: string[], io: Io = process): Promise<number> {
     const [command, text, ...rest] = positionals;
     if (command === "post" && !rest.length) {
       const markdown = await read(text, values.file, io);
-      const note = await client(values).post(markdown);
+      const note = await client(values).post(markdown, { tags: values.tag });
       io.stdout.write(`${note.url}\n`);
       return 0;
     }
@@ -76,7 +77,7 @@ export async function main(argv: string[], io: Io = process): Promise<number> {
       const limit = Number(values.limit ?? 20);
       if (!Number.isInteger(limit) || limit < 1) throw new UsageError("--limit must be a whole number, 1 or more");
       let left = limit;
-      for await (const n of client(values).notes({ pageSize: Math.min(limit, 100) })) {
+      for await (const n of client(values).notes({ pageSize: Math.min(limit, 100), tag: values.tag?.[0] })) {
         // To the second, UTC: the same form as the Python CLI, so scripts read either the same way.
         const when = new Date(n.created_at).toISOString().replace(/\.\d+Z$/, "Z");
         // --json: exactly the documented fields, like the Python CLI, even if the server adds more.

@@ -7,6 +7,7 @@ import { type FeedSettings, checkSettings, getStoredSettings, saveSettings } fro
 import { assertFeed, deleteFeed as removeWholeFeed, feedCount, hasFeed, readIdOf } from "./feeds";
 import { knownImage, storeImage } from "./images";
 import { capReached, rateLimit } from "./limits";
+import { checkTags } from "./tags";
 import { checkMarkdown, countNotes, createNote, removeNote, updateNote, type Note } from "./notes";
 
 // `readMarkdown` runs only once the post is admitted, so a refused request never has its body read.
@@ -16,7 +17,7 @@ import { checkMarkdown, countNotes, createNote, removeNote, updateNote, type Not
 export async function postNote(
   feed: string,
   ip: string,
-  read: () => Promise<{ markdown: string; password?: string }>,
+  read: () => Promise<{ markdown: string; password?: string; tags?: string[] }>,
   access: FeedAccess,
   sender?: string, // verified by the caller (identity cookie or OAuth token), never taken from a request body
 ): Promise<{ note: Note; created: boolean; readId: string | null }> {
@@ -32,8 +33,9 @@ export async function postNote(
   if (maxFeeds && !exists && (await feedCount()) >= maxFeeds) throw capReached("feed", new FeedLimitError());
   if (maxNotes && exists && (await countNotes(feed)) >= maxNotes) throw capReached("note", new NoteLimitError());
 
-  const { markdown, password: bodyPassword } = await read();
+  const { markdown, password: bodyPassword, tags: given } = await read();
   checkMarkdown(markdown); // before createProtected: a refused note must not leave a protected, empty feed
+  const tags = checkTags(given);
   const password = (access.password ?? bodyPassword) || undefined; // empty means none
   let created = false;
   // A protected feed was already unlocked above; an open existing one can't be claimed.
@@ -48,7 +50,7 @@ export async function postNote(
   // ponytail: checked, not locked. A protected creation can still complete in the few microseconds between
   // this check and createNote's ensureFeed, which then finds the feed and writes into it: this one note is
   // then in the protected feed. A lock around creation, per feed, would close it.
-  return { ...(await createNote(feed, markdown, undefined, sender)), created };
+  return { ...(await createNote(feed, markdown, undefined, sender, tags)), created };
 }
 
 // Same gate as posting, minus the caps. An edit or delete targets an existing note, so its feed

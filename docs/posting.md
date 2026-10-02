@@ -10,7 +10,7 @@ curl --data-binary @note.md https://notes.example.com/homelab-7f3k2q9x4m8wz
 
 A note posted with the password has no sender. Only a person signed in through [sign-in](identity.md), which is opt-in, posts with one.
 
-The feed is created by its first note; there's nothing to set up first. The API returns the body exactly as posted. The file on disk starts with a small `---` header block (empty unless the note has a sender), then the body, so a `---` block you type at the start of a body stays body text. notefeed answers `201 Created`:
+The feed is created by its first note; there's nothing to set up first. The API returns the body exactly as posted. The file on disk starts with a small `---` header block (empty unless the note has a sender or tags), then the body, so a `---` block you type at the start of a body stays body text. notefeed answers `201 Created`:
 
 ```json
 {
@@ -54,6 +54,23 @@ What to know:
 - **The feed stays,** even when you delete its last note. Its name and its password remain, and the feed is then empty.
 - **Limits:** edits and deletes count toward the same per-client [rate limit](configuration.md#rate-limits-and-caps) as posts. An edit must pass the same checks as a post: not empty, UTF-8, at most 100 KB. A refused edit leaves the note unchanged. A `password` field in the body of an edit is ignored.
 - **Errors:** `404` (`not_found`) means no note has that id in that feed. That includes a feed that does not exist and an id that could not belong to a note. A protected feed answers `401` before it says anything about its notes. The other statuses are those of posting: `400`, `401`, `413`, `415` and `429`. Neither request creates a feed.
+
+## Tags
+
+A note can carry tags: short labels that say what it is, such as `ci`, `deploy` or `failed`, so readers and tools can tell notes apart and filter them. Set them when you post:
+
+```bash
+curl -H "X-Note-Tags: ci,deploy" --data-binary '# Deploy finished' "$NOTEFEED_URL/$FEED"
+curl -H "Content-Type: application/json" -d '{"markdown": "# Deploy finished", "tags": ["ci", "deploy"]}' "$NOTEFEED_URL/$FEED"
+```
+
+- **Where:** the `X-Note-Tags` header (comma-separated) for a raw markdown body, a `tags` array in a JSON body, or a repeated `tags` field in a multipart form. When a JSON or form body has `tags`, it wins over the header. An empty header or an empty list is no tags.
+- **Rules:** at most 10 tags per note, each 1 to 32 characters of lowercase letters, digits, `-`, `_`, `.` and `:` (so `env:prod` works). Capitals are folded to lowercase and duplicates are dropped. Anything else is a `400` (`invalid_body`) that names the tag.
+- **Not verified:** tags are free labels set by whoever posts. They are no identity and give no access, and `source:github-actions` is a convention you choose, not something notefeed checks. They are shown on the public read link and in RSS like the note itself, and a feed's **Show who posted** setting does not hide them.
+- **Where they show:** the `tags` array of the note in the API (an empty list for a note without any, including every note posted before tags existed), the [web UI](web-ui.md#tags), the [MCP](mcp.md) tools, and the RSS item as one `<category>` per tag.
+- **Filtering:** `?tag=ci` on the note list (`GET /api/v1/feeds/<feed>/notes`, the read API, the feed page and the read-only page) and on the RSS feed (`/r/<read id>/feed.xml?tag=ci`), so a reader can subscribe to one kind of note. A tag nobody used gives an empty list.
+- **Editing:** an edit keeps the note's tags; there is no way to change them after posting. A `tags` field sent with an edit is ignored.
+- **Stored** in the note file's `---` header block as `tags: ["ci","deploy"]`.
 
 ## Images
 

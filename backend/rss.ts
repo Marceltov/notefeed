@@ -23,7 +23,7 @@ export function renderFeed(notes: Note[], opts: { title: string; description: st
 <guid isPermaLink="true">${url}</guid>
 <pubDate>${n.createdAt.toUTCString()}</pubDate>
 <description>${cdata(n.markdown)}</description>
-${n.sender ? `<dc:creator>${escapeXml(n.sender)}</dc:creator>\n` : ""}</item>`;
+${n.sender ? `<dc:creator>${escapeXml(n.sender)}</dc:creator>\n` : ""}${n.tags.map((t) => `<category>${escapeXml(t)}</category>\n`).join("")}</item>`;
   });
   return `<?xml version="1.0" encoding="UTF-8"?>
 <rss version="2.0"${notes.some((n) => n.sender) ? ' xmlns:dc="http://purl.org/dc/elements/1.1/"' : ""}>

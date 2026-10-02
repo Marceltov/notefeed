@@ -10,11 +10,11 @@ const file = (feed: string, id: string) => join(feedDir(feed), `${id}.md`);
 // Stores `markdown` as `<base>.md`, or `<base>-2.md`, `-3`, … if taken; returns the id used.
 // The feed directory must exist (ensureFeed creates it): a feed deleted meanwhile is ENOENT here, never
 // a directory made again without its `.readid`. Never overwrites, never leaves a partial file behind.
-export async function writeNote(feed: string, base: string, markdown: string, sender?: string): Promise<string> {
+export async function writeNote(feed: string, base: string, markdown: string, sender?: string, tags: string[] = []): Promise<string> {
   const dir = feedDir(feed);
   const tmp = join(dir, `.${randomBytes(6).toString("hex")}.tmp`);
   try {
-    await writeFile(/*turbopackIgnore: true*/ tmp, encode(markdown, sender === undefined ? {} : { sender }));
+    await writeFile(/*turbopackIgnore: true*/ tmp, encode(markdown, { ...(sender !== undefined && { sender }), ...(tags.length && { tags }) }));
     // link() fails with EEXIST instead of overwriting, so the final name appears atomically and exclusively.
     for (let n = 1; ; n++) {
       const id = n === 1 ? base : `${base}-${n}`;

@@ -99,10 +99,11 @@ export class Client {
     });
   }
 
-  /** `feedPassword` overrides the client's, for a feed that has its own password. */
-  async post(markdown: string, options: { feed?: string; feedPassword?: string } = {}): Promise<Created> {
+  /** `feedPassword` overrides the client's, for a feed that has its own password. `tags` label the note (at most 10, each 1 to 32 characters of letters, digits, `-`, `_`, `.`, `:`; not verified). */
+  async post(markdown: string, options: { feed?: string; feedPassword?: string; tags?: string[] } = {}): Promise<Created> {
     const feed = this.feedFor(options.feed);
-    return this.call(postNote({ client: this.api, path: { feed }, body: { markdown }, ...this.opts(options.feedPassword) }));
+    const body = { markdown, ...(options.tags?.length && { tags: options.tags }) };
+    return this.call(postNote({ client: this.api, path: { feed }, body, ...this.opts(options.feedPassword) }));
   }
 
   /** Upload a PNG, JPEG, GIF or WebP image to an existing feed. The server decides the format by the bytes, so no content type is needed. `markdown` in the answer is `![](url)`, to put in a note. Same options as post(). */
@@ -144,11 +145,11 @@ export class Client {
     await this.call(deleteFeed({ client: this.api, path: { feed }, ...this.opts(options.feedPassword) }));
   }
 
-  /** Every note in the feed, newest first, fetched a page at a time; stop iterating whenever you like. */
-  notes(options: { feed?: string; feedPassword?: string; pageSize?: number } = {}): AsyncGenerator<Note> {
+  /** Every note in the feed, newest first, fetched a page at a time; stop iterating whenever you like. `tag`: only notes carrying it. */
+  notes(options: { feed?: string; feedPassword?: string; pageSize?: number; tag?: string } = {}): AsyncGenerator<Note> {
     const feed = this.feedFor(options.feed);
     return this.pages((before) =>
-      listNotes({ client: this.api, path: { feed }, query: { limit: options.pageSize, before }, ...this.opts(options.feedPassword) }),
+      listNotes({ client: this.api, path: { feed }, query: { limit: options.pageSize, before, tag: options.tag }, ...this.opts(options.feedPassword) }),
     );
   }
 
@@ -158,9 +159,9 @@ export class Client {
   }
 
   /** Like notes(), by the feed's read id: public, read-only, needs no password. */
-  readNotes(readId: string, options: { pageSize?: number } = {}): AsyncGenerator<Note> {
+  readNotes(readId: string, options: { pageSize?: number; tag?: string } = {}): AsyncGenerator<Note> {
     return this.pages((before) =>
-      listReadNotes({ client: this.api, path: { readId }, query: { limit: options.pageSize, before }, ...this.opts() }),
+      listReadNotes({ client: this.api, path: { readId }, query: { limit: options.pageSize, before, tag: options.tag }, ...this.opts() }),
     );
   }
 

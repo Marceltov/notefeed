@@ -29,6 +29,15 @@ function groupByDay(notes: Note[]): [string, Note[]][] {
   return [...groups];
 }
 
+// Tags link to the list filtered by that tag (`${base}?tag=…`).
+function Tags({ tags, base }: { tags: string[]; base: string }) {
+  return tags.map((t) => (
+    <Link key={t} href={`${base}?tag=${encodeURIComponent(t)}`} className="ml-2 rounded-sm border border-rule px-1.5 text-sm text-muted hover:text-carbon hover:underline">
+      {t}
+    </Link>
+  ));
+}
+
 // Notes grouped by day; each title links to `${base}/${id}`.
 export function NoteList({ notes, base, posted }: { notes: Note[]; base: string; posted?: string }) {
   return groupByDay(notes).map(([day, items]) => (
@@ -50,6 +59,7 @@ export function NoteList({ notes, base, posted }: { notes: Note[]; base: string;
                 {n.title || n.id}
               </Link>
               {n.sender && <span className="ml-2 text-sm text-muted">by {n.sender}</span>}
+              <Tags tags={n.tags} base={base} />
               {bodyAfterTitle(n.markdown) && (
                 <div className="mt-1">
                   <NoteView markdown={bodyAfterTitle(n.markdown)} />
@@ -71,6 +81,7 @@ export function NoteArticle({ note, back }: { note: Note; back: string }) {
           {note.createdAt.toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" })}
         </time>
         {note.sender && <span className="text-sm text-muted"> by {note.sender}</span>}
+        <Tags tags={note.tags} base={back} />
         <div className="mt-2">
           <NoteView markdown={note.markdown} />
         </div>
@@ -81,5 +92,17 @@ export function NoteArticle({ note, back }: { note: Note; back: string }) {
         </Link>
       </p>
     </>
+  );
+}
+
+// Shown above a filtered list: what it is filtered by, and the way back to all notes.
+export function TagFilter({ tag, base }: { tag: string; base: string }) {
+  return (
+    <p className="mb-6 text-sm text-muted">
+      Notes tagged <span className="font-mono text-ink">{tag}</span> ·{" "}
+      <Link href={base} className="text-carbon hover:underline">
+        Show all notes
+      </Link>
+    </p>
   );
 }

@@ -31,3 +31,9 @@
 [data-md-color-scheme="slate"] .md-typeset img[src*="assets/screenshot-"] {
   box-shadow: 0 0.6rem 2rem rgb(0 0 0 / 45%);
 }
+
+/* Tables whose first column is a name in code (the MCP tools, settings): keep it on one line instead of breaking `post_note` mid-word. */
+.md-typeset td:first-child > code {
+  white-space: nowrap;
+  word-break: normal;
+}

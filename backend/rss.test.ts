@@ -8,8 +8,9 @@ const notes: Note[] = [
     title: "A & <B>",
     markdown: "# A & <B>\ncode: a]]>b ]]> end",
     createdAt: new Date("2026-09-29T14:05:12Z"),
+    tags: ["env:prod", "a&b"],
   },
-  { id: "20260928T090000Z-plain", title: "Plain", markdown: "Plain", createdAt: new Date("2026-09-28T09:00:00Z") },
+  { id: "20260928T090000Z-plain", title: "Plain", markdown: "Plain", createdAt: new Date("2026-09-28T09:00:00Z"), tags: [] },
 ];
 const xml = renderFeed(notes, { title: "my feed", description: "about it", baseUrl: "https://x.test", readId: "AbCdEfGhIjKlMnOpQrSt_-" });
 
@@ -40,9 +41,14 @@ test("pubDate is RFC 822", () => {
   expect(xml).toContain("<pubDate>Tue, 29 Sep 2026 14:05:12 GMT</pubDate>");
 });
 
+test("lists tags as category elements", () => {
+  expect(xml).toContain("<category>env:prod</category>\n<category>a&amp;b</category>");
+  expect(xml.match(/<category>/g)).toHaveLength(2);
+});
+
 test("strips XML-forbidden control characters", () => {
   const out = renderFeed(
-    [{ id: "20260929T140512Z-red", title: "\x1b[31mred", markdown: "\x1b[31mred\x1b[0m\ttab\r\nok", createdAt: new Date() }],
+    [{ id: "20260929T140512Z-red", title: "\x1b[31mred", markdown: "\x1b[31mred\x1b[0m\ttab\r\nok", createdAt: new Date(), tags: [] }],
     { title: "t", description: "t", baseUrl: "https://x.test", readId: "AbCdEfGhIjKlMnOpQrSt_-" },
   );
   expect(out).not.toMatch(/[\x00-\x08\x0B\x0C\x0E-\x1F￾￿]/);

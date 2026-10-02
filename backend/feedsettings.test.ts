@@ -28,8 +28,8 @@ test("showSender is written only when false, so a file stays as it was without s
 });
 
 test("forReaders drops the sender only when showSender is false", () => {
-  const a = { id: "1", title: "a", markdown: "a", createdAt: new Date(0), sender: "x@y.z" };
-  const b = { id: "2", title: "b", markdown: "b", createdAt: new Date(0) };
+  const a = { id: "1", title: "a", markdown: "a", createdAt: new Date(0), sender: "x@y.z", tags: [] };
+  const b = { id: "2", title: "b", markdown: "b", createdAt: new Date(0), tags: [] };
   expect(forReaders([a, b], { showSender: true })).toEqual([a, b]);
   const hidden = forReaders([a, b], { showSender: false });
   expect(hidden[0]).not.toHaveProperty("sender");

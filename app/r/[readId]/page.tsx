@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { cache } from "react";
 import { Header } from "@/components/Header";
-import { NoteList } from "@/components/NoteList";
+import { NoteList, TagFilter } from "@/components/NoteList";
 import { getReadFeed, instanceTitle, readPath, rssPath } from "@/backend";
 
 export const dynamic = "force-dynamic";
@@ -19,9 +19,11 @@ export async function generateMetadata({ params }: PageProps<"/r/[readId]">): Pr
 }
 
 // Like the RSS route: a malformed id is a 404, an unknown one an empty feed.
-export default async function ReadPage({ params }: PageProps<"/r/[readId]">) {
+export default async function ReadPage({ params, searchParams }: PageProps<"/r/[readId]">) {
   const { readId } = await params;
-  const data = await readFeed(readId);
+  const { tag: tagParam } = await searchParams;
+  const tag = typeof tagParam === "string" ? tagParam.toLowerCase() : undefined;
+  const data = tag ? await getReadFeed(readId, tag) : await readFeed(readId);
   if (!data) notFound();
   const { notes, title, description } = data;
 
@@ -34,8 +36,9 @@ export default async function ReadPage({ params }: PageProps<"/r/[readId]">) {
           {description && <p className="mt-1 text-muted">{description}</p>}
         </div>
       )}
+      {tag && <TagFilter tag={tag} base={readPath(readId)} />}
       {notes.length === 0 ? (
-        <p className="text-muted">No notes yet.</p>
+        <p className="text-muted">{tag ? "No notes with this tag." : "No notes yet."}</p>
       ) : (
         <NoteList notes={notes} base={readPath(readId)} />
       )}

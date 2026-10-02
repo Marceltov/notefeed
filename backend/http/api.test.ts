@@ -57,6 +57,7 @@ describe("GET /feeds/{feed}/notes", () => {
         markdown: "# One\nbody",
         created_at: "2026-09-29T10:00:00.000Z",
         url: `${BASE}/backups/20260929T100000Z-one`,
+        tags: [],
       },
     ]);
   });

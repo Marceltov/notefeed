@@ -58,6 +58,17 @@ describe("post", () => {
     expect(server.requests[0].path).toBe("/api/v1/feeds/other/notes");
     expect(server.requests[0].headers.authorization).toBe("Bearer pw");
   });
+  test("tags go in the JSON body, none sends no key; notes({ tag }) goes as ?tag=", async () => {
+    const c = new Client({ url: server.url, feed: "inbox" });
+    await c.post("x", { tags: ["ci", "deploy"] });
+    await c.post("x", { tags: [] });
+    expect(JSON.parse(server.requests[0].body.toString())).toEqual({ markdown: "x", tags: ["ci", "deploy"] });
+    expect(JSON.parse(server.requests[1].body.toString())).toEqual({ markdown: "x" });
+    server.reply(200, { notes: [], next: null });
+    for await (const _ of c.notes({ tag: "ci" })) void _;
+    expect(new URL(server.requests[2].path, "http://x").searchParams.get("tag")).toBe("ci");
+  });
+
   test("feedPassword goes as X-Feed-Password on post, notes and note; a per-call one wins; none sends no header", async () => {
     server.route((r) => (r.path.includes("/notes/") ? [200, note(10)] : r.method === "GET" ? [200, { notes: [], next: null }] : [201, CREATED]));
     const c = new Client({ url: server.url, feed: "inbox", feedPassword: "fp" });

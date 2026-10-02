@@ -10,6 +10,7 @@ import { forReaders, getSettings } from "../feedsettings";
 import { clientIp } from "../limits";
 import { MAX_BYTES, countNotes, getNote, listNotes, type Note } from "../notes";
 import { PASSWORD_RULE } from "../../shared/password";
+import { TAG_RULE } from "../tags";
 import { API_PREFIX, feedPath, imagePath, publicUrl, readPath, rssPath } from "../urls";
 import { createDispatcher, op, type AnyOp, type ResponseSpec } from "./dispatch";
 import { deleteFeed, deleteNote, editNote, updateFeed, uploadImage } from "../posting";
@@ -29,6 +30,7 @@ import {
   NoteIdParam,
   NoteJson,
   NoteList,
+  NoteTagsHeader,
   PageQuery,
   PasswordJson,
   PostForm,
@@ -63,11 +65,12 @@ const noteJson = (n: Note, base: string): NoteJson => ({
   created_at: n.createdAt.toISOString(),
   url: `${base}/${n.id}`,
   ...(n.sender !== undefined && { sender: n.sender }),
+  tags: n.tags,
 });
 
 // One page of notes, newest first, and the cursor for the next one.
-async function page(notes: (limit: number, before?: string) => Promise<Note[]>, query: z.infer<typeof PageQuery>, base: string) {
-  const found = await notes(query.limit + 1, query.before); // one extra: is there a next page?
+async function page(notes: (limit: number, before?: string, tag?: string) => Promise<Note[]>, query: z.infer<typeof PageQuery>, base: string) {
+  const found = await notes(query.limit + 1, query.before, query.tag); // one extra: is there a next page?
   const shown = found.slice(0, query.limit);
   return {
     status: 200 as const,
@@ -101,11 +104,12 @@ const OPS: AnyOp[] = [
       `${PASSWORD_RULE}). ` +
       "Posting to a protected feed needs that password. Also served at `POST /{feed}`, the short form the client packages and curl one-liners use. " +
       `The body is at most ${MAX_BYTES} bytes and must be UTF-8. ` +
-      "`application/x-www-form-urlencoded` (what `curl -d` sends) is read as raw markdown, not as form fields.",
+      "`application/x-www-form-urlencoded` (what `curl -d` sends) is read as raw markdown, not as form fields. " +
+      `Tags (${TAG_RULE}) go in the JSON \`tags\` array, a repeated \`tags\` form field, or, for a raw body, the \`X-Note-Tags\` header.`,
     tags: ["Feeds"],
     password: true,
     params: { feed: FeedParam },
-    headers: { "X-Feed-Password": FeedPasswordHeader },
+    headers: { "X-Feed-Password": FeedPasswordHeader, "X-Note-Tags": NoteTagsHeader },
     body: {
       "text/markdown": z.string(),
       "text/plain": z.string(),
@@ -121,7 +125,7 @@ const OPS: AnyOp[] = [
           "Only when the request accepts `text/html` (a browser submitting a form): back to the feed page with `?posted=<id>` or `?error=<code>`, or to the login page",
         headers: { Location: { description: "Where to go", type: "string" } },
       },
-      400: err("Invalid or reserved feed name; empty note; bad JSON, form or UTF-8; a new password that is not printable ASCII"),
+      400: err("Invalid or reserved feed name; empty note; bad JSON, form or UTF-8; a new password that is not printable ASCII; invalid tags"),
       401: UNAUTHORIZED,
       409: err("A password was sent for a feed that already exists without one: it can't be claimed"),
       413: err(`Body over ${MAX_BYTES} bytes`),
@@ -150,7 +154,7 @@ const OPS: AnyOp[] = [
     },
     before: passwordFeedAndFeedPassword,
   }).handle(async ({ req, params, query }) => {
-    return page((l, b) => listNotes(params.feed, l, b), query, publicUrl(req.headers) + feedPath(params.feed));
+    return page((l, b, t) => listNotes(params.feed, l, b, t), query, publicUrl(req.headers) + feedPath(params.feed));
   }),
 
   op({
@@ -454,7 +458,7 @@ const OPS: AnyOp[] = [
     if (!isReadId(params.readId)) throw new NotFoundError("malformed read id");
     const feed = await feedForReadId(params.readId);
     const settings = feed ? await getSettings(feed) : null;
-    const notes = async (l: number, b?: string) => (feed && settings ? forReaders(await listNotes(feed, l, b), settings) : []);
+    const notes = async (l: number, b?: string, t?: string) => (feed && settings ? forReaders(await listNotes(feed, l, b, t), settings) : []);
     return page(notes, query, publicUrl(req.headers) + readPath(params.readId));
   }),
 

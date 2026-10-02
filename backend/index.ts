@@ -5,7 +5,7 @@ import { config } from "./config";
 import { identityOn, providers } from "./oidc/config";
 import { forReaders, getSettings } from "./feedsettings";
 import { isReadId, checkFeed, feedForReadId, hasFeed, readIdOf } from "./feeds";
-import { getNote, listNotes, type Note } from "./notes";
+import { countNotes, getNote, listNotes, type Note } from "./notes";
 import { imagePath } from "./urls";
 
 export type { Note };
@@ -42,11 +42,11 @@ const PAGE = 50;
  * legacy feed's id is derived from the name, so showing one would hand out the read link of whatever
  * feed is created there later. None either for a feed whose stored read id can't be read (backend/feeds.ts).
  */
-export async function getFeed(feed: string): Promise<{ notes: Note[]; readId: string | null; exists: boolean; title: string; description: string; image: string; showSender: boolean; imageUrl: string | null } | null> {
+export async function getFeed(feed: string, tag?: string): Promise<{ notes: Note[]; readId: string | null; exists: boolean; title: string; description: string; image: string; showSender: boolean; imageUrl: string | null } | null> {
   if (checkFeed(feed)) return null;
-  const notes = await listNotes(feed, PAGE);
+  const notes = await listNotes(feed, PAGE, undefined, tag);
   // `exists`: a feed that had notes and lost them still exists (it counts toward the feed cap and can't get a password).
-  const readId = notes.length ? await readIdOf(feed) : null;
+  const readId = (await countNotes(feed)) ? await readIdOf(feed) : null; // not notes.length: a tag filter can show none of a feed's notes
   const settings = await getSettings(feed);
   // The title image's path under the read id (it is served there, never under the feed's name).
   return { notes, readId, exists: await hasFeed(feed), ...settings, imageUrl: readId && settings.image ? imagePath(readId, settings.image) : null };
@@ -57,12 +57,12 @@ export async function getFeedNote(feed: string, id: string): Promise<Note | null
 }
 
 /** A feed by its read id: null for a malformed id; an unknown one is an empty feed, so ids can't be probed. */
-export async function getReadFeed(id: string): Promise<{ notes: Note[]; title: string; description: string; imageUrl: string | null } | null> {
+export async function getReadFeed(id: string, tag?: string): Promise<{ notes: Note[]; title: string; description: string; imageUrl: string | null } | null> {
   if (!isReadId(id)) return null;
   const feed = await feedForReadId(id);
   const settings = feed ? await getSettings(feed) : { title: "", description: "", image: "", showSender: true };
   const { title, description, image } = settings;
-  return { notes: feed ? forReaders(await listNotes(feed, PAGE), settings) : [], title, description, imageUrl: image ? imagePath(id, image) : null };
+  return { notes: feed ? forReaders(await listNotes(feed, PAGE, undefined, tag), settings) : [], title, description, imageUrl: image ? imagePath(id, image) : null };
 }
 
 export async function getReadNote(readId: string, id: string): Promise<Note | null> {
