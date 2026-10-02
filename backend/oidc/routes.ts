@@ -13,6 +13,7 @@ import { type Payloads, sign, TTL, verify } from "../oauth/tokens";
 import { publicUrl, safeNext } from "../urls";
 import { identityOn, type Provider, providerById, providers } from "./config";
 import { authorizeUrl, discover, exchange } from "./flow";
+import { errorCode, fail, logFailure } from "./log";
 
 const FLIGHT_COOKIE = "nf_oidc";
 const notFound = () => new Response("not found", { status: 404 });
@@ -72,7 +73,10 @@ export async function oidcStartRoute(req: Request): Promise<Response> {
   const { next, authorize } = start;
   const provider = chosen(start.provider);
   // A missing or unknown provider: back where the sign-in started, with no flight and nothing fetched.
-  if (!provider) return seeOther(failedPage({ next, authorize }, "sign_in_failed"));
+  if (!provider) {
+    logFailure("unknown provider", start.provider ? { provider: start.provider } : {});
+    return seeOther(failedPage({ next, authorize }, "sign_in_failed"));
+  }
   let meta;
   try {
     meta = await discover(provider);
@@ -87,13 +91,15 @@ export async function oidcStartRoute(req: Request): Promise<Response> {
   return seeOther(to, { "Set-Cookie": flightCookie(h, sign("oidc", flight), TTL.oidc) });
 }
 
-// Throws AuthError unless the provider's answer matches the flight and the person may sign in. The provider is
-// the flight's (signed), never the request's; one no longer configured fails like any invalid flight.
+// Throws AuthError (logging why) unless the provider's answer matches the flight and the person may sign in. The
+// provider is the flight's (signed), never the request's; one no longer configured fails like any invalid flight.
 async function signIn(params: URLSearchParams, flight: Payloads["oidc"] | null, h: Headers): Promise<string> {
   const [state, code] = [params.get("state"), params.get("code")];
-  if (!flight || params.has("error") || state === null || !code || !safeEqual(state, flight.state)) throw new AuthError();
+  if (params.has("error")) fail("provider denied the sign-in", errorCode(params.get("error")));
+  if (!flight || state === null || !safeEqual(state, flight.state)) fail("state mismatch or missing sign-in cookie");
+  if (!code) fail("no code in the callback");
   const provider = typeof flight.provider === "string" ? providerById(flight.provider) : undefined;
-  if (!provider) throw new AuthError();
+  if (!provider) fail("provider no longer configured", typeof flight.provider === "string" ? { provider: flight.provider } : {});
   const meta = await discover(provider);
   return (await exchange(provider, meta, { code, redirectUri: redirectUri(h), verifier: flight.verifier, nonce: flight.nonce })).sender;
 }

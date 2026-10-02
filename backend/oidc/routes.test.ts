@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, type MockInstance, test, vi } from "vitest";
 import { IDENTITY_COOKIE, sessionOk } from "../auth";
 import { resetFeedsForTests } from "../feeds";
 import { resetRateLimitsForTests } from "../limits";
@@ -50,11 +50,16 @@ beforeEach(async () => {
   resetRateLimitsForTests();
   resetTokensForTests();
   resetDiscoveryForTests();
+  warn = vi.spyOn(console, "warn").mockImplementation(() => {});
 });
 afterEach(() => {
   vi.unstubAllEnvs();
   vi.unstubAllGlobals();
+  warn.mockRestore();
 });
+// Failures log through console.warn; kept out of the test output, and read back by logged().
+let warn: MockInstance<typeof console.warn>;
+const logged = () => warn.mock.calls.map((c) => String(c[0]));
 
 const get = (path: string, cookie?: string) => new Request(BASE + path, { headers: { ...H, ...(cookie ? { cookie } : {}) } });
 const setCookie = (res: Response, name: string) => res.headers.getSetCookie().find((c) => c.startsWith(`${name}=`));
@@ -250,6 +255,34 @@ describe("callback", () => {
   });
 });
 
+describe("failure logs", () => {
+  test.each([
+    ["a wrong state", (s: { state: string; cookie: string }) => callback(`code=the-code&state=${s.state}x`, s.cookie), "oidc: state mismatch or missing sign-in cookie"],
+    ["no cookie", (s: { state: string; cookie: string }) => callback(`code=the-code&state=${s.state}`), "oidc: state mismatch or missing sign-in cookie"],
+    ["no code", (s: { state: string; cookie: string }) => callback(`state=${s.state}`, s.cookie), "oidc: no code in the callback"],
+    ["a denial", (s: { state: string; cookie: string }) => callback(`error=access_denied&error_description=ann%40x.com+said+no&state=${s.state}`, s.cookie), 'oidc: provider denied the sign-in error="access_denied"'],
+    ["a denial whose error isn't a short code", (s: { state: string; cookie: string }) => callback(`error=no%0Aoidc%3A+forged&state=${s.state}`, s.cookie), "oidc: provider denied the sign-in"],
+    ["someone off the allow-list", (s: { state: string; cookie: string }) => ((person = { name: "Bob", email: "bob@x.com", email_verified: true }), callback(`code=the-code&state=${s.state}`, s.cookie)), 'oidc: person not on the allow-list provider="default"'],
+  ])("%s logs one line saying why, and the browser sees only the plain failure", async (_, call, line) => {
+    const s = await start("");
+    failed(await call(s));
+    expect(logged()).toEqual([line]);
+    for (const secret of ["client-secret", "the-code", s.state, s.cookie, lastNonce, "ann@x.com", "bob@x.com", "Bob"]) expect(logged().join("\n")).not.toContain(secret);
+  });
+
+  test("an unreachable provider at the start is logged", async () => {
+    fetchStub.mockImplementationOnce(async () => Promise.reject(Object.assign(new TypeError("fetch failed"), { cause: { code: "ENOTFOUND" } })));
+    expect((await oidcStartRoute(get("/api/oidc/start"))).headers.get("location")).toBe("/login?error=sign_in_failed");
+    expect(logged()).toEqual(['oidc: discovery failed provider="default" error="ENOTFOUND"']);
+  });
+
+  test("a sign-in that works logs nothing", async () => {
+    const s = await start("");
+    expect(setCookie(await callback(`code=c&state=${s.state}`, s.cookie), IDENTITY_COOKIE)).toBeDefined();
+    expect(warn).not.toHaveBeenCalled();
+  });
+});
+
 describe("several providers", () => {
   beforeEach(() => {
     const set = (name: string, v: Record<string, string>) => Object.entries(v).forEach(([k, val]) => vi.stubEnv(`NOTEFEED_OIDC_${name}_${k}`, val));
@@ -273,6 +306,8 @@ describe("several providers", () => {
   test.each(["next=/feed", "provider=&next=/feed", "provider=gamma&next=/feed", "provider=ALPHA&next=/feed", "provider=Default&next=/feed"])("%j is refused before anything is fetched", async (q) => {
     const res = await oidcStartRoute(get(`/api/oidc/start?${q}`));
     expect(res.status).toBe(303);
+    const named = new URLSearchParams(q).get("provider");
+    expect(logged()).toEqual([named ? `oidc: unknown provider provider="${named}"` : "oidc: unknown provider"]);
     expect(res.headers.get("location")).toBe("/login?error=sign_in_failed&next=%2Ffeed");
     expect(res.headers.getSetCookie()).toEqual([]);
     expect(fetchStub).not.toHaveBeenCalled();
@@ -351,6 +386,7 @@ describe("several providers", () => {
     fetchStub.mockClear();
     failed(await callback(`code=c&state=${s.state}`, s.cookie));
     expect(fetchStub).not.toHaveBeenCalled();
+    expect(logged()).toEqual(['oidc: provider no longer configured provider="alpha"']);
     vi.stubEnv("NOTEFEED_OIDC_ALPHA_ALLOW", "ann@x.com");
     expect((await callback(`code=c&state=${s.state}`, s.cookie)).headers.get("location")).toMatch(/^\/login\?error=too_many_attempts/);
   });
