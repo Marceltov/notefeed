@@ -31,7 +31,7 @@ describe("isValidId", () => {
 describe("createNote", () => {
   test.each(["# Backup finished", "Café notes", "🎉🎉", "# "])("id and file name carry nothing of the title: %j", async (title) => {
     const { note } = await createNote("test", title + "\nok", at("2026-09-29T14:05:12Z"));
-    expect(note.id).toMatch(/^20260929T140512Z-[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+    expect(note.id).toMatch(/^20260929T140512Z-[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
     expect(await readFile(join(dir, `${note.id}.md`), "utf8")).toContain("ok");
   });
   test("writes the body byte-for-byte under a timestamped id", async () => {
@@ -124,6 +124,11 @@ describe("feeds", () => {
 });
 
 describe("sender", () => {
+  test("notes made in the same second list newest first", async () => {
+    for (const ms of [100, 200, 300, 400, 500]) await createNote("test", `# N${ms}`, at(`2026-09-29T14:05:12.${ms}Z`));
+    expect((await listNotes("test")).map((n) => n.title)).toEqual(["N500", "N400", "N300", "N200", "N100"]);
+  });
+
   test("createNote stores it as frontmatter; getNote returns it without the block", async () => {
     const { note } = await createNote("test", "# Hi", undefined, "Ann");
     expect(note.sender).toBe("Ann");

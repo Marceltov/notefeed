@@ -1,5 +1,5 @@
 // Notes: validation, ids and reading them back. Storage itself is in data/notes.ts.
-import { randomUUID } from "node:crypto";
+import { randomBytes } from "node:crypto";
 import { extractTitle, idStamp } from "../shared/notes";
 import type { Meta } from "./data/frontmatter";
 import { isErrno } from "./data/fs";
@@ -10,6 +10,17 @@ import { assertFeed, checkFeed, ensureFeed, forgetFeed } from "./feeds";
 export type Note = { id: string; title: string; markdown: string; createdAt: Date; sender?: string; tags: string[] };
 
 export const MAX_BYTES = 102400;
+
+// A UUID v7: the millisecond clock first, so ids made in the same second still sort in the order they were made
+// (ids sort as strings, newest last). ponytail: within one millisecond the order is random.
+function uuidV7(now: Date): string {
+  const b = randomBytes(16);
+  b.writeUIntBE(now.getTime(), 0, 6);
+  b[6] = (b[6] & 0x0f) | 0x70;
+  b[8] = (b[8] & 0x3f) | 0x80;
+  const h = b.toString("hex");
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
+}
 
 const ID_RE = /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z-[a-z0-9-]+$/;
 
@@ -42,7 +53,7 @@ export async function createNote(feed: string, markdown: string, now = new Date(
   checkMarkdown(markdown);
   // ponytail: checked, not locked. A post that is past ensureFeed when its feed is deleted and the name
   // re-created lands in the new feed (as do settings written after hasFeed); a per-feed lock would close it.
-  const base = `${idStamp(now)}-${randomUUID()}`;
+  const base = `${idStamp(now)}-${uuidV7(now)}`;
   for (let retried = false; ; retried = true) {
     const readId = await ensureFeed(feed);
     try {
