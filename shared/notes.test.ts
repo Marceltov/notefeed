@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { bodyAfterTitle, extractTitle, idStamp, slugify } from "./notes";
+import { bodyAfterTitle, extractTitle, idStamp } from "./notes";
 
 const at = (iso: string) => new Date(iso);
 
@@ -20,24 +20,6 @@ describe("extractTitle", () => {
   });
   test("ignores BOM and CRLF", () => {
     expect(extractTitle("﻿# Title\r\nbody")).toBe("Title");
-  });
-});
-
-describe("slugify", () => {
-  test("lowercases and dashes", () => {
-    expect(slugify("Backup finished!")).toBe("backup-finished");
-  });
-  test("drops diacritics", () => {
-    expect(slugify("Café notes")).toBe("cafe-notes");
-  });
-  test("falls back to note", () => {
-    expect(slugify("🎉🎉")).toBe("note");
-    expect(slugify("")).toBe("note");
-  });
-  test("caps at 50 chars with no trailing dash", () => {
-    const s = slugify("word ".repeat(16));
-    expect(s.length).toBeLessThanOrEqual(50);
-    expect(s.endsWith("-")).toBe(false);
   });
 });
 

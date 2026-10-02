@@ -45,18 +45,18 @@ describe("POST /feeds/{feed}/notes", () => {
 
 describe("GET /feeds/{feed}/notes", () => {
   test("newest first, as JSON notes with their web UI links", async () => {
-    await createNote("backups", "# One\nbody", new Date("2026-09-29T10:00:00Z"));
-    await createNote("backups", "# Two", new Date("2026-09-29T11:00:00Z"));
+    const { note: one } = await createNote("backups", "# One\nbody", new Date("2026-09-29T10:00:00Z"));
+    const { note: two } = await createNote("backups", "# Two", new Date("2026-09-29T11:00:00Z"));
     const body = await json(await call("GET", "/feeds/backups/notes"));
     expect(body.next).toBeNull();
     expect(body.notes).toEqual([
-      expect.objectContaining({ id: "20260929T110000Z-two", title: "Two", created_at: "2026-09-29T11:00:00.000Z" }),
+      expect.objectContaining({ id: two.id, title: "Two", created_at: "2026-09-29T11:00:00.000Z" }),
       {
-        id: "20260929T100000Z-one",
+        id: one.id,
         title: "One",
         markdown: "# One\nbody",
         created_at: "2026-09-29T10:00:00.000Z",
-        url: `${BASE}/backups/20260929T100000Z-one`,
+        url: `${BASE}/backups/${one.id}`,
         tags: [],
       },
     ]);
@@ -138,7 +138,7 @@ describe("GET /read/{readId}/notes", () => {
     const res = await call("GET", `/read/${rid}/notes`);
     const text = await res.clone().text();
     expect(text).not.toContain("secretname");
-    expect((await json(res)).notes[0].url).toMatch(new RegExp(`^${BASE}/r/${rid}/\\d{8}T\\d{6}Z-shared$`));
+    expect((await json(res)).notes[0].url).toMatch(new RegExp(`^${BASE}/r/${rid}/\\d{8}T\\d{6}Z-[0-9a-f-]{36}$`));
   });
   test("an unknown read id is an empty list; a malformed one 404", async () => {
     expect(await json(await call("GET", `/read/${"A".repeat(22)}/notes`))).toEqual({ notes: [], next: null });

@@ -1,5 +1,6 @@
 // Notes: validation, ids and reading them back. Storage itself is in data/notes.ts.
-import { extractTitle, idStamp, slugify } from "../shared/notes";
+import { randomUUID } from "node:crypto";
+import { extractTitle, idStamp } from "../shared/notes";
 import type { Meta } from "./data/frontmatter";
 import { isErrno } from "./data/fs";
 import { deleteNoteFile, replaceNote, writeNote, listNoteFiles, readNote } from "./data/notes";
@@ -41,7 +42,7 @@ export async function createNote(feed: string, markdown: string, now = new Date(
   checkMarkdown(markdown);
   // ponytail: checked, not locked. A post that is past ensureFeed when its feed is deleted and the name
   // re-created lands in the new feed (as do settings written after hasFeed); a per-feed lock would close it.
-  const base = `${idStamp(now)}-${slugify(extractTitle(markdown))}`;
+  const base = `${idStamp(now)}-${randomUUID()}`;
   for (let retried = false; ; retried = true) {
     const readId = await ensureFeed(feed);
     try {

@@ -228,7 +228,6 @@ describe("tools", () => {
 
   test("a failing note file is logged without the feed's name or the note's title", async () => {
     const { note } = await createNote("myfeed", "# Quarterly layoffs plan");
-    expect(note.id).toContain("quarterly-layoffs-plan");
     const file = join(dir, "myfeed", `${note.id}.md`);
     await rm(file);
     await symlink(file, file); // opening it is now ELOOP, with the path in the error
@@ -236,7 +235,7 @@ describe("tools", () => {
     expect(r.content[0].text).toBe("internal error");
     expect(logs).toHaveLength(1);
     expect(JSON.parse(logs[0])).toMatchObject({ level: "error", component: "mcp", msg: "tool failed", err: { code: "ELOOP", message: expect.stringContaining(`${dir}/<path>`) } });
-    expect(logs[0]).not.toMatch(/myfeed|quarterly-layoffs-plan/);
+    expect(logs[0]).not.toMatch(/myfeed|quarterly-layoffs-plan|Quarterly/);
   });
 
   test("empty note and rate limit", async () => {

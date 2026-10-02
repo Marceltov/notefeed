@@ -29,22 +29,26 @@ describe("isValidId", () => {
 });
 
 describe("createNote", () => {
+  test.each(["# Backup finished", "Café notes", "🎉🎉", "# "])("id and file name carry nothing of the title: %j", async (title) => {
+    const { note } = await createNote("test", title + "\nok", at("2026-09-29T14:05:12Z"));
+    expect(note.id).toMatch(/^20260929T140512Z-[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+    expect(await readFile(join(dir, `${note.id}.md`), "utf8")).toContain("ok");
+  });
   test("writes the body byte-for-byte under a timestamped id", async () => {
     const md = "# Backup finished\nok";
     const { note } = await createNote("test", md, at("2026-09-29T14:05:12Z"));
-    expect(note.id).toBe("20260929T140512Z-backup-finished");
+    expect(note.id).toMatch(/^20260929T140512Z-[0-9a-f-]{36}$/);
     expect(note.title).toBe("Backup finished");
     expect(note.createdAt).toEqual(at("2026-09-29T14:05:12Z"));
     expect(await readFile(join(dir, `${note.id}.md`), "utf8")).toBe("---\n---\n" + md);
   });
 
-  test("suffixes collisions and never overwrites", async () => {
+  test("same second, same title: distinct ids, nothing overwritten", async () => {
     const now = at("2026-09-29T14:05:12Z");
     const { note: a } = await createNote("test", "# Same\nfirst", now);
     const { note: b } = await createNote("test", "# Same\nsecond", now);
     const { note: c } = await createNote("test", "# Same\nthird", now);
-    expect(b.id).toBe(`${a.id}-2`);
-    expect(c.id).toBe(`${a.id}-3`);
+    expect(new Set([a.id, b.id, c.id]).size).toBe(3);
     expect(await readFile(join(dir, `${a.id}.md`), "utf8")).toBe("---\n---\n# Same\nfirst");
     expect((await files()).every((f) => f.endsWith(".md"))).toBe(true);
   });
