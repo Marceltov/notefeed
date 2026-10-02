@@ -41,10 +41,10 @@ export default function Privacy() {
           You can delete a feed and its notes yourself. For anything else, such
           as access to or removal of data, write to{" "}
           <a
-            href="mailto:hello@notefeed.me"
+            href="mailto:privacy@notefeed.me"
             className="text-carbon underline underline-offset-2"
           >
-            hello@notefeed.me
+            privacy@notefeed.me
           </a>
           .
         </p>
