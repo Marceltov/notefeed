@@ -39,19 +39,7 @@ export function Compose({ feed, action, error: initialError, isNew, exists = tru
         describedBy="compose-hint compose-error"
         images={exists}
         onBusy={setBusy}
-      />
-      <div className="mt-2 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-2">
-        <p id="compose-hint" className="min-w-0 break-all text-sm text-muted" />
-        <button
-          type="submit"
-          disabled={pending || busy}
-          className="inline-flex items-center gap-2 rounded-sm bg-carbon px-4 py-1.5 font-bold text-on-carbon disabled:opacity-60"
-        >
-          <Send aria-hidden className="h-4 w-4" />
-          {pending ? "Posting…" : "Post note"}
-        </button>
-      </div>
-      <div className="mt-2 text-sm">
+      >
         <label htmlFor="note-tags" className="sr-only">
           Tags (optional, separated by commas)
         </label>
@@ -65,8 +53,19 @@ export function Compose({ feed, action, error: initialError, isNew, exists = tru
           title={TAGS_HINT}
           value={tags}
           onChange={(e) => setTags(e.target.value)}
-          className="w-full max-w-sm rounded-sm border border-rule bg-transparent px-3 py-1.5 focus:border-carbon focus:outline-none"
+          className="min-w-0 flex-1 rounded-sm border border-rule bg-transparent px-3 py-1 focus:border-carbon focus:outline-none sm:max-w-xs"
         />
+      </MarkdownInput>
+      <div className="mt-2 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-2">
+        <p id="compose-hint" className="min-w-0 break-all text-sm text-muted" />
+        <button
+          type="submit"
+          disabled={pending || busy}
+          className="inline-flex items-center gap-2 rounded-sm bg-carbon px-4 py-1.5 font-bold text-on-carbon disabled:opacity-60"
+        >
+          <Send aria-hidden className="h-4 w-4" />
+          {pending ? "Posting…" : "Post note"}
+        </button>
       </div>
       {isNew && (
         <div className="mt-2 text-sm">
