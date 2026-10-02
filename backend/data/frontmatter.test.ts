@@ -26,10 +26,11 @@ describe("frontmatter", () => {
     const raw = "---\ntitle: x\n---\ntext";
     expect(decode(raw)).toEqual({ markdown: raw });
   });
-  test("unknown keys in a valid block are ignored and dropped on edit", () => {
-    const raw = '---\nsender: "Ann"\nextra: 1\n---\nhi';
-    const d = decode(raw);
-    expect(d).toEqual({ markdown: "hi", sender: "Ann" });
-    expect(encode(d.markdown, d.sender)).toBe('---\nsender: "Ann"\n---\nhi');
+  test("any other key or value, even valid JSON, is all body and survives an edit unchanged", () => {
+    for (const raw of ['---\ntitle: "x"\n---\ntext', '---\nsender: "Ann"\ntitle: "x"\n---\ntext', "---\nsender: 5\n---\ntext"]) {
+      const d = decode(raw);
+      expect(d).toEqual({ markdown: raw });
+      expect(decode(encode(d.markdown, d.sender))).toEqual({ markdown: raw });
+    }
   });
 });
