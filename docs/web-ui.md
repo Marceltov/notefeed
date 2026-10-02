@@ -70,7 +70,7 @@ The [read-only view](#the-read-only-view) and the RSS link stay open. See [A fee
 
 ## The read-only view
 
-`/r/<read id>` shows the same notes without the compose box, under the feed's title and description when it has them, and never shows the feed's name. A trailing slash is fine: `/r/<read id>/` answers `200` with the same page, without a redirect. Each note opens at `/r/<read id>/<id>`, which is also the note's link in the RSS feed. It needs no login, even on a locked instance.
+`/r/<read id>` shows the same notes without the compose box, under the feed's title and description when it has them, and never shows the feed's name (a reserved feed's read id is its name, by design). A trailing slash is fine: `/r/<read id>/` answers `200` with the same page, without a redirect. Each note opens at `/r/<read id>/<id>`, which is also the note's link in the RSS feed. It needs no login, even on a locked instance.
 
 ## With a password
 
