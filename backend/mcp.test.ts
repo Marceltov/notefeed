@@ -105,6 +105,52 @@ describe("tools", () => {
     expect(miss.content[0].text).toBe("no such note");
   });
 
+  test("a protected feed: created with password, read only with it", async () => {
+    const made = await call("post_note", { feed: "p", markdown: "# Hi", password: "pw" });
+    const { id } = made.structuredContent;
+    for (const [tool, args] of [["list_notes", { feed: "p" }], ["get_note", { feed: "p", id }], ["post_note", { feed: "p", markdown: "x" }]] as const) {
+      const r = await call(tool, args);
+      expect(r.isError).toBe(true);
+      expect(r.content[0].text).toBe("missing or wrong password");
+      expect((await call(tool, { ...args, password: "bad" })).isError).toBe(true);
+    }
+    expect((await call("list_notes", { feed: "p", password: "pw" })).structuredContent.notes).toHaveLength(1);
+    expect((await call("get_note", { feed: "p", id, password: "pw" })).structuredContent.id).toBe(id);
+    expect((await call("post_note", { feed: "p", markdown: "y", password: "pw" })).isError).toBeUndefined();
+  });
+
+  test("calls without a password are refused but never counted as failed attempts", async () => {
+    process.env.NOTEFEED_RATE_LIMIT = "2";
+    await call("post_note", { feed: "p", markdown: "# Hi", password: "pw" });
+    for (const password of [undefined, ""]) {
+      for (let i = 0; i < 3; i++) expect((await call("list_notes", { feed: "p", password })).content[0].text).toBe("missing or wrong password");
+    }
+    expect((await call("list_notes", { feed: "p", password: "pw" })).structuredContent.notes).toHaveLength(1);
+    for (let i = 0; i < 2; i++) expect((await call("list_notes", { feed: "p", password: "bad" })).isError).toBe(true);
+    expect((await call("list_notes", { feed: "p", password: "pw" })).content[0].text).toMatch(/too many/i);
+  });
+
+  test("an empty password is no password", async () => {
+    await call("post_note", { feed: "o", markdown: "x" });
+    expect((await call("post_note", { feed: "o", markdown: "y", password: "" })).isError).toBeUndefined();
+    expect((await call("post_note", { feed: "fresh", markdown: "x", password: "" })).isError).toBeUndefined();
+    expect((await call("list_notes", { feed: "fresh" })).structuredContent.notes).toHaveLength(1);
+  });
+
+  test("a password never claims an existing open feed", async () => {
+    await call("post_note", { feed: "o", markdown: "x" });
+    const r = await call("post_note", { feed: "o", markdown: "y", password: "pw" });
+    expect(r.isError).toBe(true);
+    expect(r.content[0].text).toBe("feed already exists and has no password");
+    expect((await call("list_notes", { feed: "o" })).structuredContent.notes).toHaveLength(1);
+  });
+
+  test("a reserved name on a read tool is refused before any lookup", async () => {
+    const r = await call("list_notes", { feed: "login", password: "x" });
+    expect(r.isError).toBe(true);
+    expect(r.content[0].text).toBe("feed name is reserved");
+  });
+
   test("feeds are isolated", async () => {
     const { id } = (await call("post_note", { feed: "a", markdown: "x" })).structuredContent;
     expect((await call("list_notes", { feed: "b" })).structuredContent.notes).toEqual([]);

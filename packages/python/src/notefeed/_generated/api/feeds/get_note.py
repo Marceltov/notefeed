@@ -8,13 +8,18 @@ from ... import errors
 from ...client import AuthenticatedClient, Client
 from ...models.error import Error
 from ...models.note import Note
-from ...types import Response
+from ...types import UNSET, Response, Unset
 
 
 def _get_kwargs(
     feed: str,
     id: str,
+    *,
+    x_feed_password: str | Unset = UNSET,
 ) -> dict[str, Any]:
+    headers: dict[str, Any] = {}
+    if not isinstance(x_feed_password, Unset):
+        headers["X-Feed-Password"] = x_feed_password
 
     _kwargs: dict[str, Any] = {
         "method": "get",
@@ -24,6 +29,7 @@ def _get_kwargs(
         ),
     }
 
+    _kwargs["headers"] = headers
     return _kwargs
 
 
@@ -77,12 +83,14 @@ def sync_detailed(
     id: str,
     *,
     client: AuthenticatedClient,
+    x_feed_password: str | Unset = UNSET,
 ) -> Response[Error | Note]:
     """Get one note
 
     Args:
         feed (str):
         id (str):
+        x_feed_password (str | Unset):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -95,6 +103,7 @@ def sync_detailed(
     kwargs = _get_kwargs(
         feed=feed,
         id=id,
+        x_feed_password=x_feed_password,
     )
 
     response = client.get_httpx_client().request(
@@ -109,12 +118,14 @@ def sync(
     id: str,
     *,
     client: AuthenticatedClient,
+    x_feed_password: str | Unset = UNSET,
 ) -> Error | Note | None:
     """Get one note
 
     Args:
         feed (str):
         id (str):
+        x_feed_password (str | Unset):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -128,6 +139,7 @@ def sync(
         feed=feed,
         id=id,
         client=client,
+        x_feed_password=x_feed_password,
     ).parsed
 
 
@@ -136,12 +148,14 @@ async def asyncio_detailed(
     id: str,
     *,
     client: AuthenticatedClient,
+    x_feed_password: str | Unset = UNSET,
 ) -> Response[Error | Note]:
     """Get one note
 
     Args:
         feed (str):
         id (str):
+        x_feed_password (str | Unset):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -154,6 +168,7 @@ async def asyncio_detailed(
     kwargs = _get_kwargs(
         feed=feed,
         id=id,
+        x_feed_password=x_feed_password,
     )
 
     response = await client.get_async_httpx_client().request(**kwargs)
@@ -166,12 +181,14 @@ async def asyncio(
     id: str,
     *,
     client: AuthenticatedClient,
+    x_feed_password: str | Unset = UNSET,
 ) -> Error | Note | None:
     """Get one note
 
     Args:
         feed (str):
         id (str):
+        x_feed_password (str | Unset):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -186,5 +203,6 @@ async def asyncio(
             feed=feed,
             id=id,
             client=client,
+            x_feed_password=x_feed_password,
         )
     ).parsed

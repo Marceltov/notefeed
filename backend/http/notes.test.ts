@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, test } from "vitest";
 import { SESSION_COOKIE, login } from "../auth";
 import { hasFeed, readId, resetFeedsForTests } from "../feeds";
 import { resetRateLimitsForTests } from "../limits";
+import { cookieValue, feedCookieName, protectedFeed } from "../feedlock";
 import { dispatch } from "./api";
 
 // POST /<feed> as proxy.ts hands it on: through the dispatcher.
@@ -140,6 +141,12 @@ test("multipart (curl -F markdown=..., the compose box): the markdown field is t
   const res = await post(form({ markdown: "# From a form\r\nbody" }));
   expect(res.status).toBe(201);
   expect(await file((await res.json()).id)).toBe("# From a form\r\nbody");
+});
+
+test("an empty password field (the compose box's optional input) means no password", async () => {
+  const res = await post(form({ markdown: "# Open", password: "" }));
+  expect(res.status).toBe(201);
+  expect(await protectedFeed("test")).toBe(false);
 });
 
 test("400 for multipart without a markdown field; nothing written", async () => {
@@ -313,4 +320,180 @@ test("NOTEFEED_MAX_NOTES_PER_FEED=2: third note 507, other feeds unaffected", as
   expect(res.status).toBe(507);
   expect(await res.json()).toEqual({ error: "note limit reached", code: "note_limit" });
   expect((await post("d", {}, "two")).status).toBe(201);
+});
+
+describe("feed passwords", () => {
+  const text = { "content-type": "text/plain" };
+  const pw = { ...text, "x-feed-password": "pw" };
+  const notes = async (feed = "test") => (await readdir(join(dir, feed))).filter((f) => f.endsWith(".md"));
+
+  test("X-Feed-Password on a new feed protects it before the first note", async () => {
+    expect((await post("# One", pw)).status).toBe(201);
+    expect(await readdir(join(dir, "test"))).toContain(".password");
+    expect(await notes()).toHaveLength(1);
+    for (const h of [text, { ...text, "x-feed-password": "nope" }]) {
+      const res = await post("# Two", h);
+      expect(res.status).toBe(401);
+      expect((await res.json()).code).toBe("auth");
+    }
+    expect(await notes()).toHaveLength(1);
+    expect((await post("# Three", pw)).status).toBe(201);
+    expect(await notes()).toHaveLength(2);
+  });
+
+  test("JSON {markdown, password} on a new feed protects it", async () => {
+    const res = await post(JSON.stringify({ markdown: "x", password: "pw" }), { "content-type": "application/json" });
+    expect(res.status).toBe(201);
+    expect((await post("y", text)).status).toBe(401);
+    expect((await post("y", pw)).status).toBe(201);
+  });
+
+  test("a password for an existing open feed: 409, and the feed stays open", async () => {
+    expect((await post("# Open", text)).status).toBe(201);
+    const viaHeader = await post("# Claim", pw);
+    expect(viaHeader.status).toBe(409);
+    expect((await viaHeader.json()).code).toBe("feed_exists");
+    const viaBody = await post(JSON.stringify({ markdown: "x", password: "pw" }), { "content-type": "application/json" });
+    expect(viaBody.status).toBe(409);
+    expect(await readdir(join(dir, "test"))).not.toContain(".password");
+    expect((await post("# Still open", text)).status).toBe(201);
+  });
+
+  test("a 257-character password on creation: 400, no feed directory", async () => {
+    const res = await post("# Hi", { ...text, "x-feed-password": "x".repeat(257) });
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe("invalid_body");
+    expect(await written()).toEqual([]);
+  });
+
+  test("a reserved name or an over-cap creation with a password creates no directory", async () => {
+    expect((await post("# Hi", pw, "login")).status).toBe(400);
+    expect(await written()).toEqual([]);
+    process.env.NOTEFEED_MAX_FEEDS = "1";
+    expect((await post("a", text, "one")).status).toBe(201);
+    expect((await post("b", pw, "two")).status).toBe(507);
+    expect(await written()).toEqual(["one"]);
+  });
+
+  test("a blank or oversize first note with a password creates no feed", async () => {
+    const json = { "content-type": "application/json" };
+    const blank = await post(JSON.stringify({ markdown: "  ", password: "pw" }), json);
+    expect(blank.status).toBe(400);
+    expect((await blank.json()).code).toBe("empty_note");
+    const big = await post(JSON.stringify({ markdown: "x".repeat(102401), password: "pw" }), json);
+    expect(big.status).toBe(413);
+    expect(await written()).toEqual([]);
+  });
+
+  test("a browser form post without the password: back to the feed's unlock screen", async () => {
+    await post("# One", pw);
+    const res = await post(form({ markdown: "# Hi" }), { accept: "text/html" });
+    expect(res.status).toBe(303);
+    expect(res.headers.get("location")).toBe("/test?error=auth");
+  });
+
+  test("the feed cookie works from this instance's own pages only", async () => {
+    await post("# One", pw);
+    const c = `${feedCookieName("test")}=${await cookieValue("test")}`;
+    expect((await post(form({ markdown: "# Hi" }), { cookie: c, origin: BASE })).status).toBe(201);
+    expect((await post(form({ markdown: "# Hi" }), { cookie: c })).status).toBe(401);
+    // An empty header is no header, so the cookie still applies.
+    expect((await post(form({ markdown: "# Hi" }), { cookie: c, origin: BASE, "x-feed-password": "" })).status).toBe(201);
+  });
+
+  test("an empty X-Feed-Password or body password is no password", async () => {
+    const json = { "content-type": "application/json" };
+    expect((await post("# One", { ...text, "x-feed-password": "" })).status).toBe(201);
+    expect(await protectedFeed("test")).toBe(false);
+    expect((await post("# Two", { ...text, "x-feed-password": "" })).status).toBe(201);
+    expect((await post(JSON.stringify({ markdown: "# Three", password: "" }), json)).status).toBe(201);
+    expect(await notes()).toHaveLength(3);
+  });
+
+  test.each(["pässwort", " lead", "trail ", "tab\tbed", "x".repeat(257)])("a new password that can't travel in a header (%j): 400, no feed", async (password) => {
+    const res = await post(JSON.stringify({ markdown: "# Hi", password }), { "content-type": "application/json" });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({
+      error: "password must be 1 to 256 printable ASCII characters, with no space at the start or end",
+      code: "invalid_body",
+    });
+    expect(await written()).toEqual([]);
+  });
+
+  test("a space inside a password is fine", async () => {
+    expect((await post("# One", { ...text, "x-feed-password": "correct horse" })).status).toBe(201);
+    expect((await post("# Two", { ...text, "x-feed-password": "correct horse" })).status).toBe(201);
+  });
+
+  // The sender decides how long its body takes, so a post admitted before the feed existed can finish after
+  // someone created it protected. `reading` resolves once the handler is waiting for the rest of the body.
+  const slowPost = (headers: Record<string, string>, first = "# injected ", rest = "by a stranger") => {
+    let finish!: () => void;
+    let started!: () => void;
+    const gate = new Promise<void>((r) => (finish = r));
+    const reading = new Promise<void>((r) => (started = r));
+    const enc = new TextEncoder();
+    let pulls = 0;
+    const body = new ReadableStream<Uint8Array>({
+      async pull(c) {
+        if (pulls++ === 0) return c.enqueue(enc.encode(first));
+        started();
+        await gate;
+        c.enqueue(enc.encode(rest));
+        c.close();
+      },
+    });
+    const init = { method: "POST", body, duplex: "half", headers: { host: "localhost:3000", ...headers } } as RequestInit;
+    return { response: postNoteRoute(new Request(`${BASE}/test`, init), "test"), reading, finish };
+  };
+
+  test("a slow body started before the feed was created protected is refused: no note, no cookie", async () => {
+    const stranger = slowPost({ ...text, origin: BASE });
+    await stranger.reading;
+    expect((await post("# Secret", pw)).status).toBe(201);
+    stranger.finish();
+    const res = await stranger.response;
+    expect(res.status).toBe(401);
+    expect((await res.json()).code).toBe("auth");
+    expect(res.headers.getSetCookie()).toEqual([]);
+    expect(await notes()).toHaveLength(1);
+  });
+
+  test("a slow body with its own password loses to the feed created meanwhile", async () => {
+    const stranger = slowPost({ "content-type": "application/json", origin: BASE }, '{"markdown": "# injected", ', '"password": "theirs"}');
+    await stranger.reading;
+    expect((await post("# Secret", pw)).status).toBe(201);
+    stranger.finish();
+    const res = await stranger.response;
+    expect(res.status).toBe(401);
+    expect(res.headers.getSetCookie()).toEqual([]);
+    expect(await notes()).toHaveLength(1);
+    expect((await post("# Still mine", pw)).status).toBe(201);
+  });
+
+  test("only the post that creates a protected feed gets the unlock cookie", async () => {
+    await post("# One", pw);
+    const again = await post("# Two", { ...pw, origin: BASE });
+    expect(again.status).toBe(201);
+    expect(again.headers.getSetCookie()).toEqual([]);
+  });
+
+  test("posts without a password never use up the failed-attempt budget", async () => {
+    process.env.NOTEFEED_RATE_LIMIT = "3";
+    await post("# One", pw);
+    for (let i = 0; i < 5; i++) expect((await post("# Hi", text)).status).toBe(401);
+    expect((await post("# Two", pw)).status).toBe(201);
+  });
+});
+
+test("a same-origin post that creates a protected feed leaves this browser unlocked", async () => {
+  const res = await post(JSON.stringify({ markdown: "# Mine", password: "pw" }), { "content-type": "application/json", origin: BASE }, "mine");
+  expect(res.status).toBe(201);
+  const v = await cookieValue("mine");
+  expect(res.headers.getSetCookie().map((c) => c.split("; ").slice(0, 2).join("; "))).toEqual([
+    `${feedCookieName("mine")}=${v}; Path=/mine`,
+    `${feedCookieName("mine")}=${v}; Path=/api/v1/feeds/mine`,
+  ]);
+  const script = await post(JSON.stringify({ markdown: "# Mine", password: "pw2" }), { "content-type": "application/json" }, "mine2");
+  expect(script.headers.get("set-cookie")).toBeNull();
 });

@@ -14,13 +14,13 @@ export type ResponseSpec = {
 
 type BodyOf<R> = R extends { schema: infer S extends z.ZodType } ? z.infer<S> : undefined;
 export type Reply<R> = {
-  [S in keyof R & number]: { status: S; body: BodyOf<R[S]>; headers?: Record<string, string> };
+  [S in keyof R & number]: { status: S; body: BodyOf<R[S]>; headers?: HeadersInit };
 }[keyof R & number];
 
 type QueryOf<Q> = Q extends z.ZodObject ? z.infer<Q> : Record<string, never>;
 
 type Meta<R, Q> = {
-  method: "GET" | "POST";
+  method: "GET" | "POST" | "PUT" | "DELETE";
   path: string; // OpenAPI template including /api/v1, e.g. "/api/v1/feeds/{feed}/notes"
   operationId: string;
   summary: string;
@@ -28,12 +28,13 @@ type Meta<R, Q> = {
   tags: string[];
   password?: true; // needs the instance password when one is set
   params: Record<string, z.ZodType>;
+  headers?: Record<string, z.ZodType>; // optional request headers, documented only
   query?: Q;
   body?: Record<string, z.ZodType>;
   responses: R;
   // Runs before the query is validated, so a refusal for who is asking or what they named (401,
   // invalid feed) wins over a complaint about their parameters. Throws to refuse.
-  before?: (input: { req: Request; params: Record<string, string> }) => void;
+  before?: (input: { req: Request; params: Record<string, string> }) => void | Promise<void>;
 };
 export type Handler<R, Q> = (input: { req: Request; params: Record<string, string>; query: QueryOf<Q> }) => Promise<Reply<R>>;
 export type Op<
@@ -41,7 +42,7 @@ export type Op<
   Q extends z.ZodObject | undefined = z.ZodObject | undefined,
 > = Meta<R, Q> & { handle: Handler<R, Q> };
 
-type AnyReply = { status: number; body?: unknown; headers?: Record<string, string> };
+type AnyReply = { status: number; body?: unknown; headers?: HeadersInit };
 // Any entry, as the dispatcher sees it: the per-entry typing is checked where the entry is declared.
 export type AnyOp = Meta<Record<number, ResponseSpec>, z.ZodObject | undefined> & { handle: (input: never) => Promise<AnyReply> };
 
@@ -112,7 +113,7 @@ export function createDispatcher(ops: AnyOp[], prefix: string): (req: Request, s
     }
     let reply: AnyReply;
     try {
-      entry.before?.({ req, params: m.params });
+      await entry.before?.({ req, params: m.params });
       let query: Record<string, unknown> = {};
       if (entry.query) {
         const parsed = entry.query.safeParse(queryOf(req));

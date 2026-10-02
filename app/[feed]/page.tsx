@@ -1,13 +1,15 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { headers } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { notFound } from "next/navigation";
 import { Compose } from "@/components/Compose";
 import { CopyButton } from "@/components/CopyButton";
+import { FeedSettings } from "@/components/FeedSettings";
 import { Header } from "@/components/Header";
 import { NoteList } from "@/components/NoteList";
-import { errorMessage } from "@/app/_lib/messages";
-import { checkFeed, feedPath, getFeed, locked, publicUrl, readPath, rssPath } from "@/backend";
+import { UnlockForm } from "@/components/UnlockForm";
+import { errorMessage, feedErrorMessage } from "@/app/_lib/messages";
+import { checkFeed, feedCookieName, feedPath, feedUnlocked, getFeed, locked, publicUrl, readPath, rssPath } from "@/backend";
 
 export const dynamic = "force-dynamic";
 
@@ -18,34 +20,52 @@ export async function generateMetadata({ params }: PageProps<"/[feed]">): Promis
 
 export default async function FeedPage({ params, searchParams }: PageProps<"/[feed]">) {
   const { feed } = await params;
+  const { posted, error, retry } = await searchParams;
+  const access = await feedUnlocked(feed, (await cookies()).get(feedCookieName(feed))?.value);
+  // A locked feed shows nothing of itself: no notes, no read link.
+  if (access === "locked") {
+    return (
+      <>
+        <Header feed={feed} />
+        <UnlockForm feed={feed} error={feedErrorMessage(error, retry)} />
+      </>
+    );
+  }
   const data = await getFeed(feed);
   if (!data) notFound();
   const { notes, readId } = data;
-  const { posted, error, retry } = await searchParams;
+  const settingsError = access === "unlocked" && ["auth", "invalid_body", "too_many_attempts"].includes(String(error));
   const base = publicUrl(await headers());
-  const readUrl = base + rssPath(readId);
-  const auth = locked() ? ` -H "Authorization: Bearer $NOTEFEED_PASSWORD"` : "";
+  const readUrl = readId ? base + rssPath(readId) : undefined; // none until the feed has a note
+  const auth =
+    (locked() ? ` -H "Authorization: Bearer $NOTEFEED_PASSWORD"` : "") +
+    (access === "unlocked" ? ` -H "X-Feed-Password: $NOTEFEED_FEED_PASSWORD"` : "");
   const curlExample = `curl${auth} -d "# Hello" ${base}${feedPath(feed)}`;
 
   return (
     <>
       <Header feed={feed} rss={readUrl} />
-      <Compose key={String(posted)} feed={feed} action={feedPath(feed)} error={errorMessage(error, retry)} />
-      <section aria-labelledby="read-link" className="-mt-6 mb-10 text-sm">
-        <h2 id="read-link" className="font-bold">
-          Read link
-        </h2>
-        <p className="text-muted">
-          For RSS readers and sharing: it shows the notes but not this feed&apos;s name, and can&apos;t post.{" "}
-          <Link href={readPath(readId)} className="text-carbon hover:underline">
-            Open read-only view
-          </Link>
-        </p>
-        <div className="mt-1 flex items-baseline gap-3">
-          <code className="min-w-0 break-all font-mono text-carbon">{readUrl}</code>
-          <CopyButton text={readUrl} />
-        </div>
-      </section>
+      <Compose key={String(posted)} feed={feed} action={feedPath(feed)} error={settingsError ? undefined : errorMessage(error, retry)}
+        isNew={access === "open" && notes.length === 0}
+      />
+      {readId && readUrl && (
+        <section aria-labelledby="read-link" className="-mt-6 mb-10 text-sm">
+          <h2 id="read-link" className="font-bold">
+            Read link
+          </h2>
+          <p className="text-muted">
+            For RSS readers and sharing: it shows the notes but not this feed&apos;s name, and can&apos;t post.{" "}
+            <Link href={readPath(readId)} className="text-carbon hover:underline">
+              Open read-only view
+            </Link>
+          </p>
+          <div className="mt-1 flex items-baseline gap-3">
+            <code className="min-w-0 break-all font-mono text-carbon">{readUrl}</code>
+            <CopyButton text={readUrl} />
+          </div>
+        </section>
+      )}
+      {access === "unlocked" && <FeedSettings feed={feed} error={settingsError ? feedErrorMessage(error, retry) : undefined} />}
       {notes.length === 0 ? (
         <section className="text-muted">
           <p>No notes yet. Write one above, or post from a script:</p>

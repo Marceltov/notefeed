@@ -63,3 +63,4 @@ def clean_env(monkeypatch):
     monkeypatch.delenv("NOTEFEED_URL", raising=False)
     monkeypatch.delenv("NOTEFEED_FEED", raising=False)
     monkeypatch.delenv("NOTEFEED_PASSWORD", raising=False)
+    monkeypatch.delenv("NOTEFEED_FEED_PASSWORD", raising=False)

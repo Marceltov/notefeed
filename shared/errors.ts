@@ -14,5 +14,6 @@ export const ERROR_CODES = [
   "invalid_body",
   "invalid_request",
   "not_found",
+  "feed_exists",
 ] as const;
 export type ErrorCode = (typeof ERROR_CODES)[number];

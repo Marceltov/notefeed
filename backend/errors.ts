@@ -60,6 +60,13 @@ export class NoteLimitError extends LimitReachedError {
   }
 }
 
+/** A feed password was asked for (set, change, remove) on a feed that exists and has none. */
+export class FeedExistsError extends NotefeedError {
+  constructor() {
+    super("feed_exists", "feed already exists and has no password");
+  }
+}
+
 export class EmptyNoteError extends NotefeedError {
   constructor() {
     super("empty_note", "note is empty");

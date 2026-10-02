@@ -11,6 +11,8 @@ export { checkFeed } from "./feeds";
 export { feedPath, publicUrl, readPath, rssPath, safeNext } from "./urls";
 // Every write is one of these HTTP handlers; the frontend only mounts them and renders.
 export { dispatch } from "./http/api";
+export { feedCookieName, feedUnlocked } from "./feedlock";
+export { feedAccessRoute } from "./http/feedsession";
 export { loginRoute, logoutRoute } from "./http/session";
 export { rssRoute } from "./http/rss";
 export { mcpRoute } from "./mcp";
@@ -20,10 +22,15 @@ export const instanceTitle = config.title;
 
 const PAGE = 50;
 
-/** A feed by its (writable) name: newest notes and its read id; null for an invalid or reserved name. */
-export async function getFeed(feed: string): Promise<{ notes: Note[]; readId: string } | null> {
+/**
+ * A feed by its (writable) name: newest notes and its read id; null for an invalid or reserved name.
+ * No read id while the feed has no notes: it is derived from the name, so showing it for a name nobody
+ * has posted to yet would hand out the read link of whatever feed is created there later.
+ */
+export async function getFeed(feed: string): Promise<{ notes: Note[]; readId: string | null } | null> {
   if (checkFeed(feed)) return null;
-  return { notes: await listNotes(feed, PAGE), readId: readId(feed) };
+  const notes = await listNotes(feed, PAGE);
+  return { notes, readId: notes.length ? readId(feed) : null };
 }
 
 export async function getFeedNote(feed: string, id: string): Promise<Note | null> {

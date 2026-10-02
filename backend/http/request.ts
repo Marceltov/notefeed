@@ -1,5 +1,6 @@
 // Reading requests, for the handlers in backend/http.
 import { SESSION_COOKIE, checkBearer, locked, sessionOk } from "../auth";
+import { type FeedAccess, feedCookieName } from "../feedlock";
 import { publicUrl } from "../urls";
 
 // Reads at most `max` bytes; null (and the stream cancelled) as soon as the body is larger.
@@ -47,8 +48,12 @@ export function sameOrigin(h: Headers): boolean {
 // A browser navigating (a plain form post) rather than a script or fetch() asking for JSON.
 export const wantsHtml = (h: Headers) => (h.get("accept") ?? "").includes("text/html");
 
-export const seeOther = (location: string, headers: HeadersInit = {}) =>
-  new Response(null, { status: 303, headers: { ...Object.fromEntries(new Headers(headers)), Location: location } });
+// `headers` may repeat a name (two Set-Cookie).
+export function seeOther(location: string, headers: HeadersInit = {}): Response {
+  const h = new Headers(headers);
+  h.set("Location", location);
+  return new Response(null, { status: 303, headers: h });
+}
 
 // Scripts send the bearer password. The web UI sends the session cookie instead, accepted only from
 // this instance's own pages: a cross-site form would carry no cookie (SameSite=Lax), and the Origin
@@ -57,4 +62,12 @@ export function authorize(h: Headers, ip: string): void {
   if (!locked()) return;
   if (!h.has("authorization") && sameOrigin(h) && sessionOk(cookie(h, SESSION_COOKIE))) return;
   checkBearer(h.get("authorization"), ip);
+}
+
+// The feed password header, or (like the instance cookie) the feed's unlock cookie from this instance's own pages.
+// An empty header is no header: that is what curl sends for -H "X-Feed-Password: $UNSET" (nothing at all).
+export function feedAccess(h: Headers, feed: string): FeedAccess {
+  const password = h.get("x-feed-password") || undefined;
+  const cookieOk = password === undefined && sameOrigin(h);
+  return { password, cookie: cookieOk ? cookie(h, feedCookieName(feed)) : undefined };
 }

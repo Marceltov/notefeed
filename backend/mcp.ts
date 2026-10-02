@@ -3,7 +3,8 @@ import { McpServer, createMcpHandler, type AuthInfo } from "@modelcontextprotoco
 import * as z from "zod";
 import { bearerOf, checkBearer, locked } from "./auth";
 import { AuthError, NotefeedError, NotFoundError, TooManyAttemptsError } from "./errors";
-import { FEED_RE, readId } from "./feeds";
+import { checkFeedAccess } from "./feedlock";
+import { assertFeed, FEED_RE, readId } from "./feeds";
 import { clientIp } from "./limits";
 import { getNote, listNotes, type Note } from "./notes";
 import { verify } from "./oauth/tokens";
@@ -13,6 +14,8 @@ import { feedPath, mcpResource, publicUrl, rssPath } from "./urls";
 const SECRET_NOTE = "The feed name works like a password: anyone who knows it can read and post. Don't repeat it in replies.";
 
 const feed = z.string().regex(FEED_RE);
+const password = z.string().optional();
+const PROTECTED = "A protected feed needs its password as password.";
 const NoteSummary = z.object({ id: z.string(), title: z.string(), created_at: z.string(), url: z.string() });
 const NoteFull = NoteSummary.extend({ markdown: z.string() });
 
@@ -36,17 +39,22 @@ function guard<A, R>(f: (args: A) => Promise<R>) {
 function server(h: Headers): McpServer {
   const base = publicUrl(h);
   const summary = (feed: string, n: Note) => ({ id: n.id, title: n.title, created_at: n.createdAt.toISOString(), url: `${base}${feedPath(feed)}/${n.id}` });
+  // A reserved name must not reach the filesystem lookup, so it is checked first.
+  const checkAccess = async (feed: string, password?: string) => {
+    assertFeed(feed);
+    await checkFeedAccess(feed, { password }, clientIp(h));
+  };
   const s = new McpServer({ name: "notefeed", version: "1.0.0" });
 
   s.registerTool(
     "post_note",
     {
-      description: `Post a markdown note to a feed; the feed is created by its first note. ${SECRET_NOTE}`,
-      inputSchema: z.object({ feed, markdown: z.string() }),
+      description: `Post a markdown note to a feed; the feed is created by its first note; a password given then protects the feed for good, and is refused on a feed that already exists. ${PROTECTED} ${SECRET_NOTE}`,
+      inputSchema: z.object({ feed, markdown: z.string(), password }),
       outputSchema: z.object({ id: z.string(), url: z.string(), feed_url: z.string(), read_url: z.string() }),
     },
-    guard(async ({ feed, markdown }) => {
-      const note = await postNote(feed, clientIp(h), async () => markdown);
+    guard(async ({ feed, markdown, password }) => {
+      const { note } = await postNote(feed, clientIp(h), async () => ({ markdown }), { password });
       const feedUrl = base + feedPath(feed);
       return ok({ id: note.id, url: `${feedUrl}/${note.id}`, feed_url: feedUrl, read_url: base + rssPath(readId(feed)) });
     }),
@@ -55,12 +63,13 @@ function server(h: Headers): McpServer {
   s.registerTool(
     "list_notes",
     {
-      description: `List a feed's notes, newest first, without their markdown. Pass the returned next as before for the next page. ${SECRET_NOTE}`,
-      inputSchema: z.object({ feed, limit: z.number().int().min(1).max(100).default(20), before: z.string().optional() }),
+      description: `List a feed's notes, newest first, without their markdown. Pass the returned next as before for the next page. ${PROTECTED} ${SECRET_NOTE}`,
+      inputSchema: z.object({ feed, limit: z.number().int().min(1).max(100).default(20), before: z.string().optional(), password }),
       outputSchema: z.object({ notes: z.array(NoteSummary), next: z.string().nullable() }),
       annotations: { readOnlyHint: true },
     },
-    guard(async ({ feed, limit, before }) => {
+    guard(async ({ feed, limit, before, password }) => {
+      await checkAccess(feed, password);
       const found = await listNotes(feed, limit + 1, before); // one extra: is there a next page?
       const shown = found.slice(0, limit);
       return ok({ notes: shown.map((n) => summary(feed, n)), next: found.length > limit ? shown[shown.length - 1].id : null });
@@ -70,12 +79,13 @@ function server(h: Headers): McpServer {
   s.registerTool(
     "get_note",
     {
-      description: `Get one note with its markdown. ${SECRET_NOTE}`,
-      inputSchema: z.object({ feed, id: z.string() }),
+      description: `Get one note with its markdown. ${PROTECTED} ${SECRET_NOTE}`,
+      inputSchema: z.object({ feed, id: z.string(), password }),
       outputSchema: NoteFull,
       annotations: { readOnlyHint: true },
     },
-    guard(async ({ feed, id }) => {
+    guard(async ({ feed, id, password }) => {
+      await checkAccess(feed, password);
       const note = await getNote(feed, id);
       if (!note) throw new NotFoundError("no such note");
       return ok({ ...summary(feed, note), markdown: note.markdown });

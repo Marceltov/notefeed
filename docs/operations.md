@@ -49,6 +49,16 @@ rm data/homelab-7f3k2q9x4m8wz/20260929T140512Z-backup-finished.md
 rm -r data/homelab-7f3k2q9x4m8wz
 ```
 
+### A lost feed password
+
+A feed with its own password keeps a salted scrypt hash in `DATA_DIR/<feed>/.password`. The file is read on every request, so deleting it opens the feed at once, with its notes intact, and no restart is needed. The feed's owner can then post to it again, but the password can't be set again: a password is only set when a feed is created.
+
+```sh
+rm data/homelab-7f3k2q9x4m8wz/.password
+```
+
+To keep a feed protected, copy its notes to a new feed created with a new password. Back up `.password` with the notes: it is part of the feed's folder.
+
 ## Upgrading
 
 With the published image:

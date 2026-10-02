@@ -38,6 +38,12 @@ There is one password for the whole instance. Changing it logs out every browser
 !!! note "Logins don't expire"
     The login cookie is derived from the password alone and stays valid for a year. Logging out only removes it from that browser: a copied cookie keeps working until the password changes. If you think a cookie leaked, change `NOTEFEED_PASSWORD`.
 
+## Feed passwords
+
+Besides the instance password, a single feed can have its own, set by whoever creates the feed: see [A feed with its own password](posting.md#a-feed-with-its-own-password). It needs no setting. The two work together: on a locked instance a protected feed needs `Authorization: Bearer <instance password>` and `X-Feed-Password`. The instance password does not open a protected feed. Read links stay open either way.
+
+Each feed's password is stored as a salted scrypt hash in `DATA_DIR/<feed>/.password`. If a password is lost, delete that file: the feed is open from the next request. See [Operations](operations.md#a-lost-feed-password). Wrong feed passwords count toward the same [failed-attempt limit](#rate-limits-and-caps) as the instance password. A request that sends no feed password at all is refused without being counted, so strangers who merely open a protected feed can't lock its owner out.
+
 ## OAuth
 
 Clients that can't send a header, such as the Claude.ai and Claude Desktop connectors for [MCP](mcp.md), log in through notefeed's own OAuth 2.1 login page with the instance password. It only exists on an instance with a password; on an open one these endpoints answer `404`.
@@ -50,7 +56,7 @@ Clients that can't send a header, such as the Claude.ai and Claude Desktop conne
 
 ## Rate limits and caps
 
-Each client may post `NOTEFEED_RATE_LIMIT` notes per minute (60 by default), from the API and the web UI together. Wrong passwords have their own budget of the same size. Over it, notefeed answers `429` with a `Retry-After` header, for the rest of the minute; the web UI says how many seconds to wait. The counters live in memory and reset on restart.
+Each client may post `NOTEFEED_RATE_LIMIT` notes per minute (60 by default), from the API and the web UI together. Wrong passwords have their own budget of the same size. A feed password check that is still running counts toward it until it turns out right, so a script that sends more than that many requests to protected feeds at the same instant can see a `429` for some of them. Over it, notefeed answers `429` with a `Retry-After` header, for the rest of the minute; the web UI says how many seconds to wait. The counters live in memory and reset on restart.
 
 !!! warning "Behind a reverse proxy, set `NOTEFEED_TRUST_PROXY=1`"
     notefeed can't see a client's IP on its own, so without `NOTEFEED_TRUST_PROXY` **all clients share one rate-limit bucket**. On an exposed instance, one busy script can then slow everyone down, and an attacker's wrong password guesses can lock the owner out of posting and logging in for up to a minute.

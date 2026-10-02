@@ -75,6 +75,17 @@ test("a note opens on its own page, with raw HTML shown as text", async ({ page 
   await expect(page).toHaveURL(`/${name}`);
 });
 
+test("a feed without notes shows no read link, so its read id can't be collected before it exists", async ({ page }) => {
+  await page.goto(`/${feedName()}`);
+  await expect(page.getByLabel("Note in markdown")).toBeVisible();
+  await expect(page.getByText("Read link")).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "RSS" })).toHaveCount(0);
+  expect(await page.content()).not.toMatch(/\/r\/[A-Za-z0-9_-]{22}/);
+  await post(page, "# First");
+  await expect(page.getByRole("link", { name: "Open read-only view" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "RSS" })).toBeVisible();
+});
+
 test("the read link shows the notes but not the feed name, and serves RSS", async ({ page, request }) => {
   const name = feedName();
   await page.goto(`/${name}`);

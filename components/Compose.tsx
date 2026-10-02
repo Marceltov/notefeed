@@ -3,16 +3,19 @@
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { postNote } from "@/app/_lib/api";
-import { errorMessage } from "@/app/_lib/messages";
+import { PASSWORD_HINT, errorMessage } from "@/app/_lib/messages";
 import { extractTitle, idStamp, slugify } from "@/shared/notes";
+import { PASSWORD_PATTERN } from "@/shared/password";
 
 // A plain multipart form to POST /<feed>, the same endpoint scripts use: without JavaScript the browser
 // follows the 303 back to the feed page. With JavaScript the box posts through the API client generated
 // from openapi.json (JSON, the session cookie rides along same-origin) and shows refusals inline.
-export function Compose({ feed, action, error: initialError }: { feed: string; action: string; error?: string }) {
+// `isNew`: a feed that doesn't exist yet, so the box offers to protect it with a password.
+export function Compose({ feed, action, error: initialError, isNew }: { feed: string; action: string; error?: string; isNew?: boolean }) {
   const router = useRouter();
   const [text, setText] = useState("");
   const [error, setError] = useState(initialError);
+  const [password, setPassword] = useState("");
   const [pending, setPending] = useState(false);
   const filename = `${idStamp(new Date())}-${slugify(extractTitle(text))}.md`;
 
@@ -21,11 +24,12 @@ export function Compose({ feed, action, error: initialError }: { feed: string; a
     setPending(true);
     try {
       // baseUrl: this page's origin, not the spec's default server.
-      const { data, error, response } = await postNote({ baseUrl: window.location.origin, path: { feed }, body: { markdown: text } });
+      const { data, error, response } = await postNote({ baseUrl: window.location.origin, path: { feed }, body: { markdown: text, ...(password && { password }) } });
       // The generated client returns a network failure instead of throwing it: no response at all.
       if (!response) throw new Error("no response");
       if (data) return router.push(`${action}?posted=${data.id}`); // the page remounts this box empty
-      if (response?.status === 401) return router.push(`/login?next=${encodeURIComponent(action)}`);
+      // The feed page shows its unlock form, or proxy.ts sends a missing instance login on to /login.
+      if (response?.status === 401) return router.push(action);
       setError(errorMessage(error?.code ?? "unknown", response?.headers.get("retry-after")));
     } catch {
       setError("Could not reach notefeed. Check your connection and try again.");
@@ -67,6 +71,29 @@ export function Compose({ feed, action, error: initialError }: { feed: string; a
           {pending ? "Posting…" : "Post note"}
         </button>
       </div>
+      {isNew && (
+        <div className="mt-2 text-sm">
+          <label htmlFor="new-feed-password" className="mb-1 block text-muted">
+            Password (optional, protects this feed)
+          </label>
+          <input
+            id="new-feed-password"
+            name="password"
+            type="password"
+            autoComplete="new-password"
+            maxLength={256}
+            pattern={PASSWORD_PATTERN}
+            title={PASSWORD_HINT}
+            aria-describedby="new-feed-password-hint"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            className="w-full max-w-sm rounded-sm border border-rule bg-transparent px-3 py-1.5 focus:border-carbon focus:outline-none"
+          />
+          <p id="new-feed-password-hint" className="mt-1 text-muted">
+            {PASSWORD_HINT}
+          </p>
+        </div>
+      )}
       <p id="compose-error" role="alert" className="mt-2 text-sm text-error">
         {error}
       </p>

@@ -7,6 +7,7 @@ import { resetFeedsForTests, readId } from "../feeds";
 import { resetRateLimitsForTests } from "../limits";
 import { createNote } from "../notes";
 import { API_PREFIX, dispatch } from "./api";
+import { rssRoute } from "./rss";
 
 const BASE = "http://localhost:3000";
 beforeEach(async () => {
@@ -212,5 +213,90 @@ describe("each entry's errors arrive with their declared status", () => {
     } finally {
       delete process.env.NOTEFEED_MAX_FEEDS;
     }
+  });
+});
+
+describe("feed passwords", () => {
+  const fp = { "x-feed-password": "pw" };
+  let id: string;
+  beforeEach(async () => {
+    const res = await post("locked", "# Hi", fp);
+    expect(res.status).toBe(201);
+    id = (await json(res)).id;
+  });
+
+  test("list and get need the feed password", async () => {
+    for (const path of ["/feeds/locked/notes", `/feeds/locked/notes/${id}`]) {
+      const res = await call("GET", path);
+      expect(res.status).toBe(401);
+      expect((await json(res)).code).toBe("auth");
+      expect((await call("GET", path, { headers: fp })).status).toBe(200);
+    }
+  });
+
+  test("requests without a password are refused but not counted; wrong passwords are", async () => {
+    process.env.NOTEFEED_RATE_LIMIT = "3";
+    for (let i = 0; i < 5; i++) expect((await call("GET", "/feeds/locked/notes")).status).toBe(401);
+    for (let i = 0; i < 5; i++) expect((await call("GET", "/feeds/locked/notes", { headers: { "x-feed-password": "" } })).status).toBe(401);
+    expect((await call("DELETE", "/feeds/locked/password")).status).toBe(401);
+    expect((await call("GET", "/feeds/locked/notes", { headers: fp })).status).toBe(200);
+    for (let i = 0; i < 3; i++) expect((await call("GET", "/feeds/locked/notes", { headers: { "x-feed-password": "nope" } })).status).toBe(401);
+    const res = await call("GET", "/feeds/locked/notes", { headers: fp });
+    expect(res.status).toBe(429);
+    expect((await json(res)).code).toBe("too_many_attempts");
+  });
+
+  test("read links never need it", async () => {
+    const rid = readId("locked");
+    expect((await call("GET", `/read/${rid}/notes`)).status).toBe(200);
+    expect((await call("GET", `/read/${rid}/notes/${id}`)).status).toBe(200);
+    for (const method of ["GET", "HEAD"])
+      expect((await rssRoute(new Request(`${BASE}/r/${rid}/feed.xml`, { method, headers: { host: "localhost:3000" } }), rid)).status).toBe(200);
+  });
+
+  test("with the instance lock too, both are needed", async () => {
+    process.env.NOTEFEED_PASSWORD = "inst";
+    const bearer = { authorization: "Bearer inst" };
+    expect((await call("GET", "/feeds/locked/notes", { headers: bearer })).status).toBe(401);
+    expect((await call("GET", "/feeds/locked/notes", { headers: fp })).status).toBe(401);
+    expect((await call("GET", "/feeds/locked/notes", { headers: { ...bearer, ...fp } })).status).toBe(200);
+  });
+
+  test("an open feed: the header is ignored on GET, 409 on POST", async () => {
+    await createNote("open", "# Hi");
+    expect((await call("GET", "/feeds/open/notes", { headers: fp })).status).toBe(200);
+    const res = await post("open", "# Claim", fp);
+    expect(res.status).toBe(409);
+    expect((await json(res)).code).toBe("feed_exists");
+  });
+
+  const put = (feed: string, password: string, headers: Record<string, string> = fp) =>
+    call("PUT", `/feeds/${feed}/password`, { body: JSON.stringify({ password }), headers: { "content-type": "application/json", ...headers } });
+
+  test("PUT changes it with the current password", async () => {
+    expect((await put("locked", "new", { "x-feed-password": "nope" })).status).toBe(401);
+    for (const bad of ["", "x".repeat(257), "pässwort", " lead", "trail "]) {
+      const res = await put("locked", bad);
+      expect(res.status).toBe(400);
+      expect((await json(res)).code).toBe("invalid_body");
+      expect((await call("GET", "/feeds/locked/notes", { headers: fp })).status).toBe(200);
+    }
+    const ok = await put("locked", "new");
+    expect(ok.status).toBe(204);
+    expect((await call("GET", "/feeds/locked/notes", { headers: fp })).status).toBe(401);
+    expect((await call("GET", "/feeds/locked/notes", { headers: { "x-feed-password": "new" } })).status).toBe(200);
+  });
+
+  test("PUT and DELETE on an open feed: 409", async () => {
+    await createNote("open", "# Hi");
+    expect((await put("open", "new")).status).toBe(409);
+    expect((await call("DELETE", "/feeds/open/password", { headers: fp })).status).toBe(409);
+  });
+
+  test("DELETE removes it with the current password; the feed is open again", async () => {
+    expect((await call("DELETE", "/feeds/locked/password", { headers: { "x-feed-password": "nope" } })).status).toBe(401);
+    expect((await call("DELETE", "/feeds/locked/password", { headers: fp })).status).toBe(204);
+    expect((await call("GET", "/feeds/locked/notes")).status).toBe(200);
+    expect((await post("locked", "# Open")).status).toBe(201);
   });
 });

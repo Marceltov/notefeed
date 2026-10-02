@@ -13,6 +13,7 @@ export function publicUrl(headers: Headers): string {
   return `${proto}://${host}`;
 }
 
+export const API_PREFIX = "/api/v1";
 export const feedPath = (feed: string) => `/${feed}`;
 export const readPath = (readId: string) => `/r/${readId}`;
 export const rssPath = (readId: string) => `${readPath(readId)}/feed.xml`;

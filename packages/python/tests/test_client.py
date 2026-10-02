@@ -69,6 +69,24 @@ def test_password_is_a_bearer_and_a_per_call_feed_wins(server):
     assert server.requests[0]["headers"]["Authorization"] == "Bearer pw"
 
 
+def test_feed_password_goes_as_x_feed_password_and_a_per_call_one_wins(server):
+    server.route = lambda method, path: (200, {"notes": [], "next": None}) if method == "GET" and "/notes/" not in path else (200, note(10)) if method == "GET" else (201, CREATED)
+    c = Client(server.url, "inbox", feed_password="fp")
+    c.post("x")
+    list(c.notes())
+    c.note("20260930T100000Z-n10")
+    c.post("x", feed_password="other")
+    Client(server.url, "inbox").post("x")
+    got = [r["headers"].get("X-Feed-Password") for r in server.requests]
+    assert got == ["fp", "fp", "fp", "other", None]
+    assert "Authorization" not in server.requests[0]["headers"]
+
+
+def test_a_control_character_in_the_feed_password_is_a_config_error(server):
+    with pytest.raises(ConfigError):
+        Client(server.url, feed_password="p\nw")
+
+
 def test_a_base_url_with_a_prefix_and_trailing_slash_keeps_the_prefix(server):
     Client(f"{server.url}/prefix/", "inbox").post("x")
     assert server.requests[0]["path"] == "/prefix/api/v1/feeds/inbox/notes"
@@ -93,6 +111,7 @@ def test_a_base_url_with_a_prefix_and_trailing_slash_keeps_the_prefix(server):
         ("invalid_body", 400, InvalidRequestError),
         ("invalid_request", 400, InvalidRequestError),
         ("unsupported_type", 415, InvalidRequestError),
+        ("feed_exists", 409, InvalidRequestError),
     ],
 )
 def test_errors_map_from_the_code(server, code, status, cls):
@@ -193,8 +212,9 @@ def test_a_control_character_inside_the_password_is_a_config_error(server):
 
 
 def test_from_env(server):
-    c = Client.from_env({"NOTEFEED_URL": server.url, "NOTEFEED_FEED": "inbox", "NOTEFEED_PASSWORD": "pw"})
+    c = Client.from_env({"NOTEFEED_URL": server.url, "NOTEFEED_FEED": "inbox", "NOTEFEED_PASSWORD": "pw", "NOTEFEED_FEED_PASSWORD": "fp"})
     c.post("x")
+    assert server.requests[0]["headers"]["X-Feed-Password"] == "fp"
     assert server.requests[0]["path"] == "/api/v1/feeds/inbox/notes"
     assert server.requests[0]["headers"]["Authorization"] == "Bearer pw"
 

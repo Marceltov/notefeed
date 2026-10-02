@@ -13,12 +13,12 @@ A read link:
 - serves the feed as RSS 2.0 (`/r/<read id>/feed.xml`) and as a read-only web page (`/r/<read id>`),
 - never shows the feed's name, so it can't be turned into write access,
 - can't post,
-- needs no login, even when the instance has a password.
+- needs no login, even when the instance has a password, and no password when the feed has its own: protecting a feed with a [password](posting.md#a-feed-with-its-own-password) doesn't close its read link.
 
 That makes it the link to give to feed readers, dashboards and other people. Keep the feed name itself to the scripts that post.
 
 !!! note "An unknown read link shows an empty feed"
-    A read link that doesn't belong to any feed answers with an empty feed, not an error. That's on purpose: nobody can probe which read links exist, and you can subscribe to a feed's read link before its first note. A read link that isn't 22 characters of `A`–`Z`, `a`–`z`, `0`–`9`, `-`, `_` is a `404`.
+    A read link that doesn't belong to any feed answers with an empty feed, not an error. That's on purpose: nobody can probe which read links exist. The web UI shows a feed's read link once the feed has its first note. A read link that isn't 22 characters of `A`–`Z`, `a`–`z`, `0`–`9`, `-`, `_` is a `404`.
 
 !!! warning "The secret behind read links"
     Read ids are computed from the feed name and a server secret: `NOTEFEED_SECRET` if set, otherwise a random one that notefeed creates once in `DATA_DIR/.secret`. Changing `NOTEFEED_SECRET`, or deleting `.secret` without setting it, **changes every read link**, and readers must resubscribe. Back up `.secret` with your notes. See [Configuration](configuration.md).

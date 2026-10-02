@@ -16,7 +16,11 @@ def _get_kwargs(
     *,
     limit: int | Unset = 50,
     before: str | Unset = UNSET,
+    x_feed_password: str | Unset = UNSET,
 ) -> dict[str, Any]:
+    headers: dict[str, Any] = {}
+    if not isinstance(x_feed_password, Unset):
+        headers["X-Feed-Password"] = x_feed_password
 
     params: dict[str, Any] = {}
 
@@ -34,6 +38,7 @@ def _get_kwargs(
         "params": params,
     }
 
+    _kwargs["headers"] = headers
     return _kwargs
 
 
@@ -83,6 +88,7 @@ def sync_detailed(
     client: AuthenticatedClient,
     limit: int | Unset = 50,
     before: str | Unset = UNSET,
+    x_feed_password: str | Unset = UNSET,
 ) -> Response[Error | NoteList]:
     """List a feed's notes
 
@@ -92,6 +98,7 @@ def sync_detailed(
         feed (str):
         limit (int | Unset):  Default: 50.
         before (str | Unset):
+        x_feed_password (str | Unset):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -105,6 +112,7 @@ def sync_detailed(
         feed=feed,
         limit=limit,
         before=before,
+        x_feed_password=x_feed_password,
     )
 
     response = client.get_httpx_client().request(
@@ -120,6 +128,7 @@ def sync(
     client: AuthenticatedClient,
     limit: int | Unset = 50,
     before: str | Unset = UNSET,
+    x_feed_password: str | Unset = UNSET,
 ) -> Error | NoteList | None:
     """List a feed's notes
 
@@ -129,6 +138,7 @@ def sync(
         feed (str):
         limit (int | Unset):  Default: 50.
         before (str | Unset):
+        x_feed_password (str | Unset):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -143,6 +153,7 @@ def sync(
         client=client,
         limit=limit,
         before=before,
+        x_feed_password=x_feed_password,
     ).parsed
 
 
@@ -152,6 +163,7 @@ async def asyncio_detailed(
     client: AuthenticatedClient,
     limit: int | Unset = 50,
     before: str | Unset = UNSET,
+    x_feed_password: str | Unset = UNSET,
 ) -> Response[Error | NoteList]:
     """List a feed's notes
 
@@ -161,6 +173,7 @@ async def asyncio_detailed(
         feed (str):
         limit (int | Unset):  Default: 50.
         before (str | Unset):
+        x_feed_password (str | Unset):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -174,6 +187,7 @@ async def asyncio_detailed(
         feed=feed,
         limit=limit,
         before=before,
+        x_feed_password=x_feed_password,
     )
 
     response = await client.get_async_httpx_client().request(**kwargs)
@@ -187,6 +201,7 @@ async def asyncio(
     client: AuthenticatedClient,
     limit: int | Unset = 50,
     before: str | Unset = UNSET,
+    x_feed_password: str | Unset = UNSET,
 ) -> Error | NoteList | None:
     """List a feed's notes
 
@@ -196,6 +211,7 @@ async def asyncio(
         feed (str):
         limit (int | Unset):  Default: 50.
         before (str | Unset):
+        x_feed_password (str | Unset):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -211,5 +227,6 @@ async def asyncio(
             client=client,
             limit=limit,
             before=before,
+            x_feed_password=x_feed_password,
         )
     ).parsed
