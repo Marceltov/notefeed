@@ -1,6 +1,7 @@
 # Sign-in and sender
 
-!!! info "notefeed is private by default" notefeed stores nothing about a person: no accounts, no profiles, no names. Sign-in on this page is **opt-in**, and only the four `NOTEFEED_OIDC_*` environment variables below switch it on. With them unset, nothing described on this page applies to your instance.
+!!! info "notefeed is private by default"
+    notefeed stores nothing about a person: no accounts, no profiles, no names. Sign-in on this page is **opt-in**, and only the four `NOTEFEED_OIDC_*` environment variables below switch it on. With them unset, nothing described on this page applies to your instance.
 
 With sign-in on, people log in through your own OpenID Connect provider (Authentik, Keycloak and the like) instead of sharing the instance password, and the notes they post carry their name as a **sender**. It only adds to what notefeed does: read links, RSS, feed passwords and licences work as before.
 
@@ -73,7 +74,8 @@ The sender shows on the feed page, in the note's read view, in the RSS item (as 
 
 A feed's **Show who posted** setting (`show_sender` in the [settings API](posting.md#feed-settings-and-deleting-a-feed)) is on by default. Turn it off and the sender is left out of the public read view, the RSS feed and the public read API. The feed page and the API behind your password still show it. The setting applies when a note is shown, not when it is written, so it also covers existing notes, and turning it back on shows them again.
 
-!!! warning "A copy can't be recalled" A note already fetched by an RSS reader, cached or archived keeps the sender it had. Turning the setting off hides it from now on, nothing more.
+!!! warning "A copy can't be recalled"
+    A note already fetched by an RSS reader, cached or archived keeps the sender it had. Turning the setting off hides it from now on, nothing more.
 
 ## Scripts and passwords
 
