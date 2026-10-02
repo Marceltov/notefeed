@@ -1,14 +1,25 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
+import { headers } from "next/headers";
 import Link from "next/link";
 import { Atkinson_Hyperlegible_Mono, Atkinson_Hyperlegible_Next } from "next/font/google";
+import { publicUrl } from "@/backend";
 import "./globals.css";
 
 const sans = Atkinson_Hyperlegible_Next({ variable: "--font-atkinson", subsets: ["latin"] });
 const mono = Atkinson_Hyperlegible_Mono({ variable: "--font-atkinson-mono", subsets: ["latin"] });
 
-export const metadata: Metadata = {
-  title: { default: "notefeed", template: "%s · notefeed" },
-};
+const description = "Markdown notes and RSS. Post from where you need it, follow where you want.";
+
+// metadataBase makes the share image's URL absolute, on whatever host this instance is reached.
+export async function generateMetadata(): Promise<Metadata> {
+  return {
+    metadataBase: new URL(publicUrl(await headers())),
+    title: { default: "notefeed", template: "%s · notefeed" },
+    description,
+  };
+}
+
+export const viewport: Viewport = { themeColor: [{ color: "#f2f3f0", media: "(prefers-color-scheme: light)" }, { color: "#15161b", media: "(prefers-color-scheme: dark)" }] };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (

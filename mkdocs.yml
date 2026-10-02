@@ -30,6 +30,7 @@ theme:
       toggle:
         icon: material/weather-sunny
         name: Switch to light mode
+  favicon: assets/icon.svg
   features:
     - content.code.copy
     - navigation.footer

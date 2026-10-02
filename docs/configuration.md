@@ -29,7 +29,7 @@ Without a password, notefeed works like [ntfy](https://ntfy.sh): anyone who can 
 
 ## The password
 
-Set `NOTEFEED_PASSWORD` to lock the instance: posting then needs `Authorization: Bearer <password>`, and every page except the login page, the read-only views and the favicon needs a login. Read links keep working without it, so feed readers need no change. Generate a long random password:
+Set `NOTEFEED_PASSWORD` to lock the instance: posting then needs `Authorization: Bearer <password>`, and every page except the login page, the read-only views and the app icons, web manifest and share image needs a login. Read links keep working without it, so feed readers need no change. Generate a long random password:
 
 ```sh
 openssl rand -hex 32

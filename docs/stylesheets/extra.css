@@ -1,17 +1,17 @@
-/* notefeed's own palette (carbon violet), so the docs and the app look related. */
+/* notefeed's own palette (carbon-copy beige, dark enough to read as text), so the docs and the app look related. */
 [data-md-color-scheme="default"] {
-  --md-primary-fg-color: #4b3fa8;
-  --md-primary-fg-color--light: #6a60bd;
-  --md-primary-fg-color--dark: #3a3086;
-  --md-accent-fg-color: #4b3fa8;
+  --md-primary-fg-color: #7a5a1a;
+  --md-primary-fg-color--light: #957431;
+  --md-primary-fg-color--dark: #5c4210;
+  --md-accent-fg-color: #7a5a1a;
 }
 
 [data-md-color-scheme="slate"] {
-  --md-primary-fg-color: #a99dff;
-  --md-primary-fg-color--light: #c3baff;
-  --md-primary-fg-color--dark: #8b7ef0;
+  --md-primary-fg-color: #e3cb94;
+  --md-primary-fg-color--light: #ecdcb2;
+  --md-primary-fg-color--dark: #d9c08a;
   --md-primary-bg-color: #15161b;
-  --md-accent-fg-color: #a99dff;
+  --md-accent-fg-color: #e3cb94;
 }
 
 /* Web UI screenshots: framed like an app window instead of a flat grey box. */

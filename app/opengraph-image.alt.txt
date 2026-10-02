@@ -1,0 +1,1 @@
+notefeed: markdown notes and RSS. Post from where you need it, follow where you want.
