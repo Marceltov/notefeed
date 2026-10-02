@@ -67,7 +67,7 @@ test("a note opens on its own page, with raw HTML shown as text", async ({ page 
   await page.goto(`/${name}`);
   await post(page, "# Hello\n\n<b id=injected>bold?</b>");
   await page.getByRole("link", { name: "Hello" }).click();
-  await expect(page).toHaveURL(new RegExp(`/${name}/\\d{8}T\\d{6}Z-hello$`));
+  await expect(page).toHaveURL(new RegExp(`/${name}/\\d{8}T\\d{6}Z-[0-9a-f-]{36}$`));
   await expect(page.locator("article").getByText("<b id=injected>bold?</b>")).toBeVisible();
   await expect(page.locator("#injected")).toHaveCount(0);
   await page.getByRole("link", { name: "Back to all notes" }).click();
@@ -106,7 +106,7 @@ test("the read link shows the notes but not the feed name, and serves RSS", asyn
 
   // A feed reader follows the item's link: the note's read-only page, not the feed's.
   const link = /<item>.*?<link>(.*?)<\/link>/s.exec(xml)![1];
-  expect(link).toMatch(/^http:\/\/localhost:3100\/r\/[A-Za-z0-9_-]{22}\/\d{8}T\d{6}Z-shared-note$/);
+  expect(link).toMatch(/^http:\/\/localhost:3100\/r\/[A-Za-z0-9_-]{22}\/\d{8}T\d{6}Z-[0-9a-f-]{36}$/);
   await page.goto(link);
   await expect(page.getByText("Shared note")).toBeVisible();
   await expect(page.getByRole("link", { name: "Back to all notes" })).toBeVisible();
@@ -121,7 +121,7 @@ test.describe("without JavaScript", () => {
     await page.goto(`/${name}`);
     await page.getByLabel("Note in markdown").fill("# Posted without JS");
     await page.getByRole("button", { name: "Post note" }).click();
-    await expect(page).toHaveURL(new RegExp(`/${name}\\?posted=\\d{8}T\\d{6}Z-posted-without-js$`));
+    await expect(page).toHaveURL(new RegExp(`/${name}\\?posted=\\d{8}T\\d{6}Z-[0-9a-f-]{36}$`));
     await expect(page.getByRole("listitem").first()).toContainText("Posted without JS");
 
     await page.getByLabel("Note in markdown").fill("   ");

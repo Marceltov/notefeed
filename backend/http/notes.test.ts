@@ -165,7 +165,7 @@ describe("a browser form post (Accept: text/html) gets a 303 back to the feed pa
   test("posted", async () => {
     const res = await post(form({ markdown: "# Hi" }), html);
     expect(res.status).toBe(303);
-    expect(res.headers.get("location")).toMatch(/^\/test\?posted=\d{8}T\d{6}Z-hi$/);
+    expect(res.headers.get("location")).toMatch(/^\/test\?posted=\d{8}T\d{6}Z-[0-9a-f-]{36}$/);
   });
   test("refused: the error code, and the wait when rate-limited", async () => {
     expect((await post(form({ markdown: " " }), html)).headers.get("location")).toBe("/test?error=empty_note");
