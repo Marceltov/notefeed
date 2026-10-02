@@ -322,7 +322,7 @@ def test_edit_and_delete_404_is_not_found_and_no_feed_is_config_error(server):
 
 # --- feed settings and deletion ---
 
-FEED = {"name": "inbox", "title": "My inbox", "description": "Things", "protected": False, "read_url": None, "image_url": None}
+FEED = {"name": "inbox", "title": "My inbox", "description": "Things", "protected": False, "read_url": None, "image_url": None, "show_sender": True}
 
 
 def test_feed_info_gets_the_feed(server):
@@ -405,7 +405,7 @@ def test_upload_image_per_call_feed_and_password_win_and_errors_map(server):
 def test_update_feed_sends_image_only_when_given(server):
     c = Client(server.url, "inbox")
     for kw in ({"image": "a.png"}, {"image": ""}, {}):
-        server.reply(200, {"name": "inbox", "title": "t", "description": "d", "protected": False, "read_url": None, "image_url": None})
+        server.reply(200, {"name": "inbox", "title": "t", "description": "d", "protected": False, "read_url": None, "image_url": None, "show_sender": True})
         c.update_feed("t", "d", **kw)
     assert [json.loads(r["body"]) for r in server.requests] == [
         {"title": "t", "description": "d", "image": "a.png"}, {"title": "t", "description": "d", "image": ""}, {"title": "t", "description": "d"}]
