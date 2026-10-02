@@ -73,7 +73,7 @@ async function page(notes: (limit: number, before?: string) => Promise<Note[]>, 
 }
 
 // The feed as the Feeds API shows it; the feed must exist. No read link while it has no notes (ADR 0008).
-async function feedJson(feed: string, headers: Headers): Promise<z.infer<typeof FeedJson>> {
+export async function feedJson(feed: string, headers: Headers): Promise<z.infer<typeof FeedJson>> {
   const readId = (await countNotes(feed)) ? await readIdOf(feed) : null;
   return {
     name: feed,

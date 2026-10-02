@@ -36,11 +36,11 @@ const call = async (tool: string, args: Record<string, unknown>) => (await (awai
 describe("protocol", () => {
   test("tools/list", async () => {
     const tools = (await (await rpc("tools/list")).json()).result.tools;
-    expect(tools.map((t: { name: string }) => t.name).sort()).toEqual(["delete_note", "edit_note", "get_note", "list_notes", "post_note"]);
+    expect(tools.map((t: { name: string }) => t.name).sort()).toEqual(["delete_feed", "delete_note", "edit_note", "get_feed", "get_note", "list_notes", "post_note", "update_feed"]);
     for (const t of tools) {
-      expect(t.annotations?.readOnlyHint === true).toBe(["get_note", "list_notes"].includes(t.name));
-      expect(t.annotations?.destructiveHint === true).toBe(["edit_note", "delete_note"].includes(t.name));
-      expect(t.annotations?.idempotentHint === true).toBe(t.name === "edit_note");
+      expect(t.annotations?.readOnlyHint === true).toBe(["get_feed", "get_note", "list_notes"].includes(t.name));
+      expect(t.annotations?.destructiveHint === true).toBe(["edit_note", "delete_note", "update_feed", "delete_feed"].includes(t.name));
+      expect(t.annotations?.idempotentHint === true).toBe(["edit_note", "update_feed"].includes(t.name));
     }
   });
   test("server/discover lists the version", async () => {
@@ -279,5 +279,24 @@ describe("edit_note and delete_note", () => {
       expect(r.isError).toBe(true);
       expect(r.content[0].text).toBe("no such note");
     }
+  });
+});
+
+describe("feed tools", () => {
+  test("get, update and delete a feed", async () => {
+    await call("post_note", { feed: "f", markdown: "# Hi" });
+    const u = await call("update_feed", { feed: "f", title: "T", description: "D" });
+    expect(u.structuredContent).toMatchObject({ name: "f", title: "T", description: "D", protected: false });
+    expect((await call("get_feed", { feed: "f" })).structuredContent).toEqual(u.structuredContent);
+    expect((await call("update_feed", { feed: "f", title: "x".repeat(101), description: "" })).isError).toBe(true);
+    expect((await call("delete_feed", { feed: "f" })).structuredContent).toEqual({ deleted: true });
+    expect((await call("get_feed", { feed: "f" })).content[0].text).toBe("no such feed");
+  });
+  test("a protected feed needs the password", async () => {
+    await call("post_note", { feed: "p", markdown: "# Hi", password: "pw" });
+    for (const [tool, args] of [["get_feed", {}], ["update_feed", { title: "T", description: "" }], ["delete_feed", {}]] as const) {
+      expect((await call(tool, { feed: "p", ...args })).content[0].text).toBe("missing or wrong password");
+    }
+    expect((await call("delete_feed", { feed: "p", password: "pw" })).structuredContent).toEqual({ deleted: true });
   });
 });
