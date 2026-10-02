@@ -2,7 +2,7 @@
 
 ## Tests
 
-Unit tests (vitest) are fine to run locally, along with typecheck and lint. Don't run the client packages' tests or e2e locally: CI is fast, so push and let it run them.
+Unit tests (vitest) are fine to run locally, along with typecheck and lint. Don't run the client packages' tests locally: CI is fast, so push and let it run them. Don't run e2e while developing either; run it locally when CI's e2e fails (to reproduce and debug) and once at the end of a branch, before it is merged.
 
 ## Releases
 
