@@ -1,4 +1,4 @@
-"""`notefeed post`, `edit`, `delete` and `notes`: post, change, remove and read notes from the command line."""
+"""`notefeed post`, `edit`, `delete`, `notes` and `image`: post, change, remove and read notes, and upload images, from the command line."""
 
 from __future__ import annotations
 
@@ -27,10 +27,12 @@ def main(argv: list[str] | None = None) -> int:
     e.add_argument("--file", help="read the markdown from this file")
     d = sub.add_parser("delete", help="delete a note; prints nothing")
     d.add_argument("id", help="the note's id")
+    i = sub.add_parser("image", help="upload an image; prints the markdown to put in a note")
+    i.add_argument("path", help="the image file (PNG, JPEG, GIF or WebP)")
     n = sub.add_parser("notes", help="print the newest notes: time, title, URL")
     n.add_argument("--limit", type=int, default=20, help="how many notes (default: 20)")
     n.add_argument("--json", action="store_true", help="one JSON object per line")
-    for s_ in (p, e, d, n):
+    for s_ in (p, e, d, i, n):
         s_.add_argument("--url", help="notefeed base URL (default: $NOTEFEED_URL)")
         s_.add_argument("--feed", help="feed name (default: $NOTEFEED_FEED)")
         s_.add_argument("--password", help="instance password, if it has one (default: $NOTEFEED_PASSWORD)")
@@ -45,6 +47,13 @@ def main(argv: list[str] | None = None) -> int:
             print(_client(args).edit(args.id, markdown).url)
         elif args.command == "delete":
             _client(args).delete(args.id)
+        elif args.command == "image":
+            try:
+                with open(args.path, "rb") as f:
+                    data = f.read()
+            except OSError as ex:
+                raise _UsageError(f"cannot read {args.path}: {ex.strerror}") from None
+            print(_client(args).upload_image(data).markdown)
         else:
             if args.limit < 1:
                 raise _UsageError("--limit must be a whole number, 1 or more")

@@ -12,13 +12,13 @@ import httpx
 
 from ._generated import AuthenticatedClient
 from ._generated import Client as _GeneratedClient
-from ._generated.api.feeds import delete_feed, delete_note, edit_note, get_feed, get_note, list_notes, post_note, update_feed
+from ._generated.api.feeds import delete_feed, delete_note, edit_note, get_feed, get_note, list_notes, post_note, update_feed, upload_image
 from ._generated.api.read import get_read_note, list_read_notes
-from ._generated.models import Created, Feed, FeedSettings, Note, NoteList, PostJson
-from ._generated.types import UNSET
+from ._generated.models import Created, Feed, FeedSettings, ImageUploaded, Note, NoteList, PostJson
+from ._generated.types import UNSET, File
 
 
-_M = TypeVar("_M", Created, Feed, Note, NoteList)
+_M = TypeVar("_M", Created, Feed, ImageUploaded, Note, NoteList)
 
 
 class NotefeedError(Exception):
@@ -51,11 +51,11 @@ class NotFoundError(NotefeedError):
 
 
 class LimitReachedError(NotefeedError):
-    """The instance's feed or note limit is reached."""
+    """The instance's feed or note limit, or the feed's image limit, is reached."""
 
 
 class NoteTooLargeError(NotefeedError):
-    """The note is over the server's size limit."""
+    """The note or image is over the server's size limit."""
 
 
 class InvalidRequestError(NotefeedError):
@@ -69,6 +69,7 @@ _BY_CODE: dict[str, type[NotefeedError]] = {
     "not_found": NotFoundError,
     "feed_limit": LimitReachedError,
     "note_limit": LimitReachedError,
+    "image_limit": LimitReachedError,
     "too_large": NoteTooLargeError,
     "invalid_feed": InvalidRequestError,
     "reserved_feed": InvalidRequestError,
@@ -158,6 +159,13 @@ class Client:
         )
         return self._parse(Created, self._call(kwargs))
 
+    def upload_image(self, data: bytes, feed: str | None = None, feed_password: str | None = None) -> ImageUploaded:
+        """Upload a PNG, JPEG, GIF or WebP image to an existing feed. The server decides the format by the bytes. `.markdown` is `![](url)`, to put in a note. Same options as post()."""
+        kwargs = upload_image._get_kwargs(
+            feed=self._feed_for(feed), body=File(payload=data), x_feed_password=self._fp(feed_password)
+        )
+        return self._parse(ImageUploaded, self._call(kwargs))
+
     def edit(self, id: str, markdown: str, feed: str | None = None, feed_password: str | None = None) -> Note:
         """Replace a note's markdown; its id and URLs stay. Same options as post()."""
         kwargs = edit_note._get_kwargs(
@@ -174,11 +182,12 @@ class Client:
         kwargs = get_feed._get_kwargs(feed=self._feed_for(feed), x_feed_password=self._fp(feed_password))
         return self._parse(Feed, self._call(kwargs))
 
-    def update_feed(self, title: str, description: str, feed: str | None = None, feed_password: str | None = None) -> Feed:
-        """Replace the feed's title and description (both; an empty string clears one). The feed must already exist. Same options as post()."""
-        kwargs = update_feed._get_kwargs(
-            feed=self._feed_for(feed), body=FeedSettings(title=title, description=description), x_feed_password=self._fp(feed_password)
-        )
+    def update_feed(
+        self, title: str, description: str, feed: str | None = None, feed_password: str | None = None, image: str | None = None
+    ) -> Feed:
+        """Replace the feed's title and description (both; an empty string clears one). `image` sets the title image (a file name from upload_image), "" clears it, None keeps it. The feed must already exist. Same options as post()."""
+        settings = FeedSettings(title=title, description=description, image=UNSET if image is None else image)
+        kwargs = update_feed._get_kwargs(feed=self._feed_for(feed), body=settings, x_feed_password=self._fp(feed_password))
         return self._parse(Feed, self._call(kwargs))
 
     def delete_feed(self, feed: str | None = None, feed_password: str | None = None) -> None:

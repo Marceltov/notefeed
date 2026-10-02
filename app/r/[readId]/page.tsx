@@ -27,7 +27,7 @@ export default async function ReadPage({ params }: PageProps<"/r/[readId]">) {
 
   return (
     <>
-      <Header rss={rssPath(readId)} />
+      <Header rss={rssPath(readId)} image={data.imageUrl} />
       {(title || description) && (
         <div className="mb-8">
           {title && <h1 className="text-2xl font-bold tracking-tight">{title}</h1>}

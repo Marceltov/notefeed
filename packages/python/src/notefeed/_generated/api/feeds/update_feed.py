@@ -92,9 +92,10 @@ def sync_detailed(
     """Change a feed's settings
 
      Replaces both the title (at most 100 characters) and the description (at most 500); surrounding
-    whitespace is trimmed and control characters are refused. Needs the feed's password if it has one,
-    and counts against the post rate limit. Only on a feed that exists: it is created by its first note.
-    Read links can't change settings.
+    whitespace is trimmed and control characters are refused. `image` is the file name `uploadImage`
+    returned for this feed (title image), empty to remove it, or omitted to leave it as it is; any other
+    value is a 400. Needs the feed's password if it has one, and counts against the post rate limit.
+    Only on a feed that exists: it is created by its first note. Read links can't change settings.
 
     Args:
         feed (str):
@@ -132,9 +133,10 @@ def sync(
     """Change a feed's settings
 
      Replaces both the title (at most 100 characters) and the description (at most 500); surrounding
-    whitespace is trimmed and control characters are refused. Needs the feed's password if it has one,
-    and counts against the post rate limit. Only on a feed that exists: it is created by its first note.
-    Read links can't change settings.
+    whitespace is trimmed and control characters are refused. `image` is the file name `uploadImage`
+    returned for this feed (title image), empty to remove it, or omitted to leave it as it is; any other
+    value is a 400. Needs the feed's password if it has one, and counts against the post rate limit.
+    Only on a feed that exists: it is created by its first note. Read links can't change settings.
 
     Args:
         feed (str):
@@ -167,9 +169,10 @@ async def asyncio_detailed(
     """Change a feed's settings
 
      Replaces both the title (at most 100 characters) and the description (at most 500); surrounding
-    whitespace is trimmed and control characters are refused. Needs the feed's password if it has one,
-    and counts against the post rate limit. Only on a feed that exists: it is created by its first note.
-    Read links can't change settings.
+    whitespace is trimmed and control characters are refused. `image` is the file name `uploadImage`
+    returned for this feed (title image), empty to remove it, or omitted to leave it as it is; any other
+    value is a 400. Needs the feed's password if it has one, and counts against the post rate limit.
+    Only on a feed that exists: it is created by its first note. Read links can't change settings.
 
     Args:
         feed (str):
@@ -205,9 +208,10 @@ async def asyncio(
     """Change a feed's settings
 
      Replaces both the title (at most 100 characters) and the description (at most 500); surrounding
-    whitespace is trimmed and control characters are refused. Needs the feed's password if it has one,
-    and counts against the post rate limit. Only on a feed that exists: it is created by its first note.
-    Read links can't change settings.
+    whitespace is trimmed and control characters are refused. `image` is the file name `uploadImage`
+    returned for this feed (title image), empty to remove it, or omitted to leave it as it is; any other
+    value is a 400. Needs the feed's password if it has one, and counts against the post rate limit.
+    Only on a feed that exists: it is created by its first note. Read links can't change settings.
 
     Args:
         feed (str):

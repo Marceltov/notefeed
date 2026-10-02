@@ -22,6 +22,14 @@ Post with **Post note**, or press ++ctrl+enter++ (++cmd+enter++ on a Mac). The n
 
 Once the feed has notes, **Post from a script** expands to a ready-to-copy `curl` command for this feed.
 
+### Adding an image
+
+The compose box has an **Add image** button. Choose a PNG, JPEG, GIF or WebP file, or paste an image into the box, or drop one on it. notefeed uploads it to the feed and inserts `![](url)` at the cursor. Post the note and the image shows in it. The note editor has the same button, with paste and drop.
+
+This needs JavaScript. Without it the box is still a plain text box, and you can use an image by its URL: upload it with the [API](posting.md#images) or `notefeed image`, then write `![](url)` yourself. A feed has no **Add image** button until its first note exists, because an image is uploaded to an existing feed. If the upload is refused (not an image, too large, too many requests), the page says why and nothing is inserted. Images are uploaded as they are, so a photo keeps its EXIF data, including where it was taken, and anyone with the read link can download it: remove it with a tool such as `exiftool` first (see [operations](operations.md)).
+
+Images in notes load lazily and are never wider than the note. They are as public as the [read link](#the-read-link): see [Images](posting.md#images).
+
 ### The read link
 
 Once the feed has a note, its read link is under the box, with a copy button and **Open read-only view**. The **RSS** link at the top is the same read link. Give it to feed readers and to people who should see the notes but not post. See [Read links and RSS](feed.md).
@@ -44,11 +52,13 @@ Anyone who can open the feed can edit and delete its notes. On a feed with [its 
 
 On the feed page, a **Feed settings** section has a **Title** and a **Description** and a **Save** button. The title is shown as a heading at the top of the feed page and in the browser tab, with the description below it; the feed's name stays in the page header. Both also show in the [read-only view](#the-read-only-view) and are the RSS feed's title and description, so anyone with the read link sees them. Leave a field empty to clear it. The feed's name never changes.
 
+The **Title image** control has a **Choose image** button, which uploads an image and saves it as the feed's title image at once, and a **Remove image** button. Either one saves what is typed in the title and description too. The title image shows in the page header and in the read-only view, and is the RSS feed's channel image. Like the title, it is public to anyone with the read link. Choosing and removing an image need JavaScript.
+
 Below it, **Delete feed** removes the feed with all its notes, its settings, its password and its read link, for good. You confirm by typing the feed's name, exactly. Afterwards you land on the start page, and the name can be used again. A new feed with that name gets a different read link, and the old link stays empty.
 
 Both work without JavaScript: they are plain forms that post to `/<feed>/settings` and `/<feed>/delete`, and they only accept requests from the instance's own pages. A script uses the [API](posting.md#feed-settings-and-deleting-a-feed) instead. If something is refused (a title that is too long, too many requests), the page says why next to these sections and nothing changes. They count toward the same [rate limit](configuration.md#rate-limits-and-caps) as posting.
 
-Anyone who can open the feed can change its settings and delete it: on an open feed that is anyone who knows its name, and on a feed with [its own password](#a-password-for-a-feed) it is anyone who has unlocked it. A locked feed shows only its unlock form, without its title or description. The read-only view has neither section.
+Anyone who can open the feed can change its settings and delete it: on an open feed that is anyone who knows its name, and on a feed with [its own password](#a-password-for-a-feed) it is anyone who has unlocked it. A locked feed shows only its unlock form, without its title, description or title image. The read-only view has neither section.
 
 ## A password for a feed
 

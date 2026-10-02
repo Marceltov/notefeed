@@ -8,6 +8,8 @@ function int(name: string, fallback: number): number {
   return raw === "" || !Number.isFinite(Number(raw)) ? fallback : Number(raw);
 }
 
+const positive = (name: string, fallback: number) => (int(name, fallback) > 0 ? int(name, fallback) : fallback);
+
 export const config = {
   dataDir: () => env("DATA_DIR") || "/data",
   // Empty means unset: compose passes ${NOTEFEED_PASSWORD:-} and ${NOTEFEED_SECRET:-}.
@@ -21,4 +23,8 @@ export const config = {
   // 0 or below: no cap.
   maxFeeds: () => Math.max(0, int("NOTEFEED_MAX_FEEDS", 0)),
   maxNotesPerFeed: () => Math.max(0, int("NOTEFEED_MAX_NOTES_PER_FEED", 0)),
+  // Bytes per uploaded image; 0 or below means the default, and nothing above 10 MiB: Next's proxy buffers a request
+  // body only up to that, so a larger image would arrive cut. Images per feed: 0 or below, no cap.
+  maxImageBytes: () => Math.min(positive("NOTEFEED_MAX_IMAGE_BYTES", 5242880), 10485760),
+  maxImagesPerFeed: () => Math.max(0, int("NOTEFEED_MAX_IMAGES_PER_FEED", 0)),
 };

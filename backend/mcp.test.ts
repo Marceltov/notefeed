@@ -36,7 +36,7 @@ const call = async (tool: string, args: Record<string, unknown>) => (await (awai
 describe("protocol", () => {
   test("tools/list", async () => {
     const tools = (await (await rpc("tools/list")).json()).result.tools;
-    expect(tools.map((t: { name: string }) => t.name).sort()).toEqual(["delete_feed", "delete_note", "edit_note", "get_feed", "get_note", "list_notes", "post_note", "update_feed"]);
+    expect(tools.map((t: { name: string }) => t.name).sort()).toEqual(["delete_feed", "delete_note", "edit_note", "get_feed", "get_note", "list_notes", "post_note", "update_feed", "upload_image"]);
     for (const t of tools) {
       expect(t.annotations?.readOnlyHint === true).toBe(["get_feed", "get_note", "list_notes"].includes(t.name));
       expect(t.annotations?.destructiveHint === true).toBe(["edit_note", "delete_note", "update_feed", "delete_feed"].includes(t.name));
@@ -298,5 +298,26 @@ describe("feed tools", () => {
       expect((await call(tool, { feed: "p", ...args })).content[0].text).toBe("missing or wrong password");
     }
     expect((await call("delete_feed", { feed: "p", password: "pw" })).structuredContent).toEqual({ deleted: true });
+  });
+});
+
+describe("upload_image", () => {
+  const png = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.from("rest")]).toString("base64");
+  test("stores an image, and update_feed can make it the title image", async () => {
+    await call("post_note", { feed: "i", markdown: "# Hi" });
+    const r = (await call("upload_image", { feed: "i", data: png })).structuredContent;
+    expect(r.url).toBe(`http://localhost:3000/r/${(await readIdOf("i"))!}/images/${r.file}`);
+    expect(r.markdown).toBe(`![](${r.url})`);
+    const f = await call("update_feed", { feed: "i", title: "", description: "", image: r.file });
+    expect(f.structuredContent.image_url).toBe(r.url);
+  });
+  test("refuses what is not an image, too much, and a protected feed without the password", async () => {
+    await call("post_note", { feed: "i", markdown: "# Hi" });
+    expect((await call("upload_image", { feed: "i", data: Buffer.from("nope").toString("base64") })).content[0].text).toMatch(/PNG, JPEG, GIF or WebP/);
+    process.env.NOTEFEED_MAX_IMAGE_BYTES = "10";
+    expect((await call("upload_image", { feed: "i", data: png })).isError).toBe(true);
+    delete process.env.NOTEFEED_MAX_IMAGE_BYTES;
+    await call("post_note", { feed: "p", markdown: "# Hi", password: "pw" });
+    expect((await call("upload_image", { feed: "p", data: png })).content[0].text).toBe("missing or wrong password");
   });
 });

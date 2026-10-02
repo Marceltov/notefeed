@@ -41,7 +41,9 @@ The answer includes the feed's `read_url`: a read-only RSS link to give to feed 
 
 To require a password for posting and the web UI, set `NOTEFEED_PASSWORD`. Read links stay open. See [Configuration](https://docs.notefeed.me/configuration/). To protect a single feed, create it with `curl -H "X-Feed-Password: ..."`; see [Posting notes](https://docs.notefeed.me/posting/#a-feed-with-its-own-password).
 
-A feed can get a title and a description and can be deleted with everything in it, from the web UI, the API and the client packages; see [Feed settings and deleting a feed](https://docs.notefeed.me/posting/#feed-settings-and-deleting-a-feed). Posted notes can be edited and deleted from the web UI, the API, the clients and MCP; see [Editing and deleting notes](https://docs.notefeed.me/posting/#editing-and-deleting-notes). AI assistants can post, read, edit and delete notes over MCP at `/mcp`; see [MCP](https://docs.notefeed.me/mcp/).
+A feed can get a title, a description and a title image and can be deleted with everything in it, from the web UI, the API and the client packages; see [Feed settings and deleting a feed](https://docs.notefeed.me/posting/#feed-settings-and-deleting-a-feed). Posted notes can be edited and deleted from the web UI, the API, the clients and MCP; see [Editing and deleting notes](https://docs.notefeed.me/posting/#editing-and-deleting-notes). AI assistants can post, read, edit and delete notes over MCP at `/mcp`; see [MCP](https://docs.notefeed.me/mcp/).
+
+Notes can show images: upload one to a feed with the web UI's **Add image** button, the API or `notefeed image`, and put the returned `![](url)` in a note; see [Images](https://docs.notefeed.me/posting/#images). Images are public to anyone with the feed's read link, and are stored as uploaded, with metadata such as GPS position left in.
 
 ## Development
 

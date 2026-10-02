@@ -8,6 +8,7 @@ export const ERROR_CODES = [
   "too_many_attempts",
   "feed_limit",
   "note_limit",
+  "image_limit",
   "empty_note",
   "too_large",
   "unsupported_type",

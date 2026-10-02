@@ -10,9 +10,9 @@ import { getSettings } from "../feedsettings";
 import { clientIp } from "../limits";
 import { MAX_BYTES, countNotes, getNote, listNotes, type Note } from "../notes";
 import { PASSWORD_RULE } from "../../shared/password";
-import { API_PREFIX, feedPath, publicUrl, readPath, rssPath } from "../urls";
+import { API_PREFIX, feedPath, imagePath, publicUrl, readPath, rssPath } from "../urls";
 import { createDispatcher, op, type AnyOp, type ResponseSpec } from "./dispatch";
-import { deleteFeed, deleteNote, editNote, updateFeed } from "../posting";
+import { deleteFeed, deleteNote, editNote, updateFeed, uploadImage } from "../posting";
 import { handlePostNote, readMarkdown } from "./notes";
 import { authorize, feedAccess, readCapped } from "./request";
 import {
@@ -24,6 +24,8 @@ import {
   FeedParam,
   FeedPasswordHeader,
   FeedSettingsJson,
+  ImageBody,
+  ImageUploaded,
   NoteIdParam,
   NoteJson,
   NoteList,
@@ -75,11 +77,14 @@ async function page(notes: (limit: number, before?: string) => Promise<Note[]>, 
 // The feed as the Feeds API shows it; the feed must exist. No read link while it has no notes (ADR 0008).
 export async function feedJson(feed: string, headers: Headers): Promise<z.infer<typeof FeedJson>> {
   const readId = (await countNotes(feed)) ? await readIdOf(feed) : null;
+  const { title, description, image } = await getSettings(feed);
   return {
     name: feed,
-    ...(await getSettings(feed)),
+    title,
+    description,
     protected: await protectedFeed(feed),
     read_url: readId && publicUrl(headers) + rssPath(readId),
+    image_url: readId && image ? publicUrl(headers) + imagePath(readId, image) : null,
   };
 }
 
@@ -229,11 +234,50 @@ const OPS: AnyOp[] = [
   }),
 
   op({
+    method: "POST",
+    path: `${API_PREFIX}/feeds/{feed}/images`,
+    operationId: "uploadImage",
+    summary: "Upload an image",
+    description:
+      "The body is the image itself: PNG, JPEG, GIF or WebP, recognized by its first bytes, whatever `Content-Type` is sent (SVG is refused). " +
+      "Stored byte-for-byte, with no resizing and no metadata stripped (EXIF such as GPS position stays in the file), as the first 32 hex characters of its SHA-256 plus an extension: " +
+      "the same bytes always give the same URL. The URL is under the feed's read id, so it works in the feed page, the read-only view and RSS readers without any password. " +
+      "Needs the same credentials as posting and counts against the post rate limit. The feed must exist: it is created by its first note. " +
+      "The size limit is NOTEFEED_MAX_IMAGE_BYTES (default 5 MiB); images deleted only with the feed.",
+    tags: ["Feeds"],
+    password: true,
+    params: { feed: FeedParam },
+    headers: { "X-Feed-Password": FeedPasswordHeader },
+    body: {
+      "image/png": ImageBody,
+      "image/jpeg": ImageBody,
+      "image/gif": ImageBody,
+      "image/webp": ImageBody,
+      "application/octet-stream": ImageBody,
+    },
+    responses: {
+      201: { description: "Stored (or already there)", schema: ImageUploaded },
+      400: err("Invalid or reserved feed name"),
+      401: UNAUTHORIZED,
+      404: err("No such feed"),
+      413: err("Body over NOTEFEED_MAX_IMAGE_BYTES"),
+      415: err("Not a PNG, JPEG, GIF or WebP image"),
+      429: { ...err("Too many posts, uploads, edits and deletes, or wrong passwords, from this client"), headers: RETRY },
+      507: err("NOTEFEED_MAX_IMAGES_PER_FEED reached"),
+    },
+    before: passwordAndFeed,
+  }).handle(async ({ req, params }) => {
+    const { file, readId } = await uploadImage(params.feed, clientIp(req.headers), () => readCapped(req, config.maxImageBytes()), feedAccess(req.headers, params.feed));
+    const url = publicUrl(req.headers) + imagePath(readId, file);
+    return { status: 201, body: { file, url, markdown: `![](${url})` } };
+  }),
+
+  op({
     method: "GET",
     path: `${API_PREFIX}/feeds/{feed}`,
     operationId: "getFeed",
     summary: "Get a feed's settings",
-    description: "The title and description, whether the feed is protected, and its read link (null while it has no notes). A feed exists once its first note is posted.",
+    description: "The title and description, the title image, whether the feed is protected, and its read link (null while it has no notes). A feed exists once its first note is posted.",
     tags: ["Feeds"],
     password: true,
     params: { feed: FeedParam },
@@ -258,6 +302,7 @@ const OPS: AnyOp[] = [
     summary: "Change a feed's settings",
     description:
       "Replaces both the title (at most 100 characters) and the description (at most 500); surrounding whitespace is trimmed and control characters are refused. " +
+      "`image` is the file name `uploadImage` returned for this feed (title image), empty to remove it, or omitted to leave it as it is; any other value is a 400. " +
       "Needs the feed's password if it has one, and counts against the post rate limit. Only on a feed that exists: it is created by its first note. Read links can't change settings.",
     tags: ["Feeds"],
     password: true,
@@ -378,10 +423,11 @@ const OPS: AnyOp[] = [
       200: { description: "The feed's public settings", schema: ReadFeedJson },
       404: err("Malformed read id"),
     },
-  }).handle(async ({ params }) => {
+  }).handle(async ({ req, params }) => {
     if (!READ_ID_RE.test(params.readId)) throw new NotFoundError("malformed read id");
     const feed = await feedForReadId(params.readId);
-    return { status: 200, body: feed ? await getSettings(feed) : { title: "", description: "" } };
+    const { title, description, image } = feed ? await getSettings(feed) : { title: "", description: "", image: "" };
+    return { status: 200, body: { title, description, image_url: image ? publicUrl(req.headers) + imagePath(params.readId, image) : null } };
   }),
 
   op({

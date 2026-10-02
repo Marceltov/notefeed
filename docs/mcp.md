@@ -9,9 +9,10 @@ notefeed has an [MCP](https://modelcontextprotocol.io) endpoint, so AI assistant
 | `get_note` | Reads one note with its markdown. Takes `feed` and `id`. |
 | `edit_note` | Replaces a note's markdown; its id stays. Takes `feed`, `id` and `markdown`, and returns the note. |
 | `delete_note` | Permanently deletes a note. Takes `feed` and `id`, and returns `{ "deleted": true }`. It is marked as destructive, so clients can ask you before running it. |
-| `get_feed` | Takes `feed`, and returns its title, description, whether it is protected, and its read link. |
-| `update_feed` | Replaces a feed's title and description. Takes `feed`, `title` and `description`, and returns the feed. |
+| `get_feed` | Takes `feed`, and returns its title, description, title image URL, whether it is protected, and its read link. |
+| `update_feed` | Replaces a feed's title, description and title image. Takes `feed`, `title`, `description` and optionally `image`, and returns the feed. |
 | `delete_feed` | Permanently deletes a feed with all its notes, settings, password and read link. Takes `feed`, and returns `{ "deleted": true }`. It is marked as destructive. |
+| `upload_image` | Uploads a PNG, JPEG, GIF or WebP image to an existing feed. Takes `feed` and `data` (the image's bytes, base64), and returns `file`, `url` and `markdown` (`![](url)`, to put in a note). The same [rules as the API](posting.md#images): size limit, rate limit, public URL. `update_feed` takes the returned `file` as `image` to make it the feed's title image. |
 
 Posting follows the same rules as the [HTTP API](posting.md): size limit, rate limit, caps, and the first post creates the feed. Editing and deleting follow [Editing and deleting notes](posting.md#editing-and-deleting-notes): the same access as posting, the same rate limit, and a note that does not exist is the error "no such note". Anyone who can post to a feed can use these tools on it, and a deleted note cannot be brought back, so think before giving an assistant a feed it should only add to. Results use the API's field names.
 
@@ -42,7 +43,7 @@ A client may register only `https://` redirect URIs, or plain `http://` on `loca
 
 ## Feeds with a password
 
-A feed can have its own password (see [Posting notes](posting.md#a-feed-with-its-own-password)). All eight tools take an optional `password`; an empty one is the same as none. `post_note` with a password to a feed that doesn't exist yet creates it protected; to an existing feed that has none, it answers with the error "feed already exists and has no password". On a protected feed, every tool needs the right `password`, or answers with the error "missing or wrong password". Wrong passwords count toward the [failed-attempt limit](configuration.md#rate-limits-and-caps); a call without a password does not. The password is not remembered between calls, and it is part of the conversation, so tell the assistant only passwords you would give that service. It is in addition to the instance login, which still decides who may use `/mcp` at all.
+A feed can have its own password (see [Posting notes](posting.md#a-feed-with-its-own-password)). All nine tools take an optional `password`; an empty one is the same as none. `post_note` with a password to a feed that doesn't exist yet creates it protected; to an existing feed that has none, it answers with the error "feed already exists and has no password". On a protected feed, every tool needs the right `password`, or answers with the error "missing or wrong password". Wrong passwords count toward the [failed-attempt limit](configuration.md#rate-limits-and-caps); a call without a password does not. The password is not remembered between calls, and it is part of the conversation, so tell the assistant only passwords you would give that service. It is in addition to the instance login, which still decides who may use `/mcp` at all.
 
 ## Telling the assistant which feed
 

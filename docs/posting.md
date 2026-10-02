@@ -53,11 +53,52 @@ What to know:
 - **Limits:** edits and deletes count toward the same per-client [rate limit](configuration.md#rate-limits-and-caps) as posts. An edit must pass the same checks as a post: not empty, UTF-8, at most 100 KB. A refused edit leaves the note unchanged. A `password` field in the body of an edit is ignored.
 - **Errors:** `404` (`not_found`) means no note has that id in that feed. That includes a feed that does not exist and an id that could not belong to a note. A protected feed answers `401` before it says anything about its notes. The other statuses are those of posting: `400`, `401`, `413`, `415` and `429`. Neither request creates a feed.
 
+## Images
+
+A note can show images. They are not part of the note's file: you upload an image to the feed, get a URL back, and put that URL in the note as ordinary markdown, `![](url)`. The note stays a plain markdown file.
+
+`POST /api/v1/feeds/<feed>/images` takes the image itself as the body:
+
+```sh
+curl --data-binary @photo.png -H "Content-Type: image/png" \
+  https://notes.example.com/api/v1/feeds/homelab-7f3k2q9x4m8wz/images
+```
+
+It answers `201 Created`:
+
+```json
+{
+  "file": "3b1f0c9d5a7e42c8b6d1e0f4a9c27d58.png",
+  "url": "https://notes.example.com/r/q2Zc9kD0bTnVx4LmAe7sWp/images/3b1f0c9d5a7e42c8b6d1e0f4a9c27d58.png",
+  "markdown": "![](https://notes.example.com/r/q2Zc9kD0bTnVx4LmAe7sWp/images/3b1f0c9d5a7e42c8b6d1e0f4a9c27d58.png)"
+}
+```
+
+- `file`: the stored file's name. It is what a feed's [title image](#feed-settings-and-deleting-a-feed) is set with.
+- `url`: where the image is served. It is absolute, built from `PUBLIC_URL` like the other links.
+- `markdown`: `![](url)`, ready to put in a note.
+
+Post a note that contains it and the image shows in the feed page, the read-only view and RSS readers that render images.
+
+What to know:
+
+- **Formats:** PNG, JPEG, GIF and WebP. notefeed looks at the first bytes of the file, not at the `Content-Type` you send, so `Content-Type` can be anything (`application/octet-stream` is fine) and a file that is not one of those four formats is refused even if it says `image/png`. SVG is not accepted, because it can carry script.
+- **Size:** at most 5 MiB (5242880 bytes) by default, set with `NOTEFEED_MAX_IMAGE_BYTES`. An optional cap on the number of images per feed is `NOTEFEED_MAX_IMAGES_PER_FEED`, off by default. See [Configuration](configuration.md#rate-limits-and-caps).
+- **Stored as sent.** The image is kept byte for byte: no resizing, no re-encoding, and no metadata removed. A photo's EXIF data, which can include where it was taken, stays in the file, and the file is public (see below). Remove it before you upload if that matters.
+- **Same bytes, same URL.** The file is named after a hash of its contents, so uploading the same image twice gives the same URL and stores one file. A URL's content never changes, so browsers may keep it for a year.
+- **Who may upload:** whoever may post to the feed: the instance password, then the [feed's password](#a-feed-with-its-own-password), in the same order as for a note. Uploads count toward the same per-client [rate limit](configuration.md#rate-limits-and-caps) as posts.
+- **The feed must exist.** A feed is created by its first note, so upload after the first note. Uploading to a feed that does not exist answers `404` and creates nothing, and so does uploading to [a feed without a read link](operations.md#a-feed-without-a-read-link): an image's URL is built from the read id, so nothing is stored.
+- **Images are as public as the read link.** An image is served under the feed's read id, `/r/<read id>/images/<file>`, with no password, even on a locked instance or a protected feed, so that it shows in the read-only view and in feed readers, which have no password to send. Anyone who has the read link, or an image's URL, can fetch it, and the feed's name never appears in the URL. Don't upload anything you would not give to everyone who has the read link.
+- **No list or delete yet.** There is no endpoint to list or delete images. They stay until the feed is [deleted](#feed-settings-and-deleting-a-feed), and deleting a note does not delete the images it used. To remove one by hand, see [Operations](operations.md#images).
+- **Errors:** `400` for an invalid or reserved feed name; `401` when a password is missing or wrong; `404` when the feed does not exist; `413` (`too_large`) when the image is over the size limit; `415` (`unsupported_type`) when it is not a PNG, JPEG, GIF or WebP image, which includes an empty body; `429` over the rate limit; `507` (`image_limit`) when the feed already has `NOTEFEED_MAX_IMAGES_PER_FEED` images. Uploading an image the feed already has is never refused for the cap.
+
+In the browser, the compose box and the note editor have an [Add image](web-ui.md#adding-an-image) button.
+
 ## Feed settings and deleting a feed
 
 A feed can have a **title** (at most 100 characters) and a **description** (at most 500), both on one line. The title is shown as a heading on the feed page, where the feed's name stays in the page header, and both show in the read-only view and in the RSS feed (see [Read links and RSS](feed.md#title-and-description)). The feed's name stays as it is: you can't rename a feed. A feed has neither until you set them.
 
-`GET /api/v1/feeds/<feed>` answers with the feed's `name`, `title`, `description`, `protected` and `read_url`. `read_url` is `null` while the feed has no notes, and for [a feed without a read link](operations.md#a-feed-without-a-read-link). `PUT` on the same URL replaces the title and the description, both at once, and answers with the feed; an empty string clears one. Surrounding spaces are trimmed, and control characters, including a line break, are refused.
+`GET /api/v1/feeds/<feed>` answers with the feed's `name`, `title`, `description`, `image_url`, `protected` and `read_url`. `read_url` is `null` while the feed has no notes, and for [a feed without a read link](operations.md#a-feed-without-a-read-link), and `image_url` is `null` while the feed has no title image (or its file was removed by hand), while the feed has no notes, and for a feed without a read link. `PUT` on the same URL replaces the title and the description, both at once, and answers with the feed; an empty string clears one. Surrounding spaces are trimmed, and control characters, including a line break, are refused.
 
 ```sh
 curl -X PUT -H "Content-Type: application/json" \
@@ -65,7 +106,9 @@ curl -X PUT -H "Content-Type: application/json" \
   https://notes.example.com/api/v1/feeds/homelab-7f3k2q9x4m8wz
 ```
 
-`DELETE` removes the feed for good and answers `204` with no body: every note, the title and description, the password and the read link. There is no undo and no trash:
+The feed's **title image** is an image [uploaded to this feed](#images). Add `"image": "<file>"` to the body, with the `file` the upload returned, to show it in the page header, the read-only view and as the RSS channel image. `"image": ""` removes it, and leaving `image` out keeps the one the feed has. A name that is not an existing image of this feed is a `400`. The title image is public, like the title.
+
+`DELETE` removes the feed for good and answers `204` with no body: every note, every uploaded image, the title and description, the password and the read link. There is no undo and no trash:
 
 ```sh
 curl -X DELETE https://notes.example.com/api/v1/feeds/homelab-7f3k2q9x4m8wz
@@ -78,7 +121,7 @@ What to know:
 - **The name is free again,** at once. A feed created under it later is a new feed with a new read link; the old read link stays empty for good, and the old feed's password and settings are gone. A post that was already on its way when the feed was deleted creates such a new feed.
 - **Settings are public to readers.** Anyone with the read link sees the title and description, through `GET /api/v1/read/<read id>` too, which needs no password. Anyone who has the feed's name and its password reads them with `GET /api/v1/feeds/<feed>`.
 - **Limits:** `PUT` and `DELETE` count toward the same per-client [rate limit](configuration.md#rate-limits-and-caps) as posts. The `PUT` body is limited to 8 KB. A refused `PUT` leaves the settings as they were.
-- **Errors:** `400` for an invalid or reserved name, or a body that isn't JSON with string `title` and `description`, or a title or description that is too long or has control characters; `401` when a password is missing or wrong (before it says anything about the feed); `404` when the feed doesn't exist; `429` over the limit.
+- **Errors:** `400` for an invalid or reserved name, or a body that isn't JSON with string `title` and `description` (and `image`, if present), or a title or description that is too long or has control characters; `401` when a password is missing or wrong (before it says anything about the feed); `404` when the feed doesn't exist; `429` over the limit.
 
 In the browser the same two things are in the feed page's [Feed settings and Delete feed sections](web-ui.md#feed-settings-and-deleting-a-feed).
 
@@ -176,14 +219,14 @@ EOF
 | `401` | The instance has a password and the `Authorization` header is missing or wrong, or the feed has its own password and `X-Feed-Password` is missing or wrong |
 | `409` | A password was sent for a feed that already exists without one (`feed_exists`) |
 | `404` | No feed in the URL: `POST /`, for example from an empty variable in `$NOTEFEED_URL/$FEED`. For [editing and deleting](#editing-and-deleting-notes): no such note |
-| `413` | The body is larger than 100 KB (102400 bytes) |
-| `415` | The content type is not one of those above |
+| `413` | The body is larger than 100 KB (102400 bytes); for an [image upload](#images), larger than `NOTEFEED_MAX_IMAGE_BYTES` |
+| `415` | The content type is not one of those above; for an [image upload](#images), the bytes are not a PNG, JPEG, GIF or WebP image |
 | `429` | Too many posts, edits or deletes, or too many wrong passwords, from this client in the last minute. `Retry-After` says how many seconds to wait. See [Rate limits and caps](configuration.md#rate-limits-and-caps). |
 | `303` | The request asked for HTML (`Accept: text/html`, as a browser submitting a form does): back to the feed page with `?posted=<id>` or `?error=<code>`. Also for `POST /login` and `POST /logout`: those are the web UI's log-in and log-out routes, not feeds, so a script gets a redirect, and nothing is stored |
 | `500` | The note could not be written. No partial file is left behind. |
-| `507` | A cap is reached: a new feed when there are already `NOTEFEED_MAX_FEEDS` feeds, or a note to a feed that already has `NOTEFEED_MAX_NOTES_PER_FEED` notes |
+| `507` | A cap is reached: a new feed when there are already `NOTEFEED_MAX_FEEDS` feeds, or a note to a feed that already has `NOTEFEED_MAX_NOTES_PER_FEED` notes, or an image to a feed that already has `NOTEFEED_MAX_IMAGES_PER_FEED` images |
 
-Error responses are JSON: `{"error": "<short reason>", "code": "<code>"}`. The reason is for people; match on the status or the `code` (`invalid_feed`, `reserved_feed`, `auth`, `rate_limited`, `too_many_attempts`, `feed_limit`, `note_limit`, `empty_note`, `too_large`, `unsupported_type`, `invalid_body`, `feed_exists`).
+Error responses are JSON: `{"error": "<short reason>", "code": "<code>"}`. The reason is for people; match on the status or the `code` (`invalid_feed`, `reserved_feed`, `auth`, `rate_limited`, `too_many_attempts`, `feed_limit`, `note_limit`, `image_limit`, `empty_note`, `too_large`, `unsupported_type`, `invalid_body`, `feed_exists`).
 
 ## From a script
 

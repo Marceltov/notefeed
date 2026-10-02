@@ -4,6 +4,7 @@ import {
   AuthError,
   EmptyNoteError,
   FeedExistsError,
+  ImageTooLargeError,
   InvalidBodyError,
   InvalidFeedError,
   InvalidRequestError,
@@ -26,6 +27,7 @@ const STATUS: [new (...args: never[]) => NotefeedError, number][] = [
   [NotFoundError, 404],
   [FeedExistsError, 409],
   [NoteTooLargeError, 413],
+  [ImageTooLargeError, 413],
   [UnsupportedTypeError, 415],
   [RateLimitedError, 429], // and TooManyAttemptsError
   [LimitReachedError, 507],

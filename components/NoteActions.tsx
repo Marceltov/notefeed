@@ -2,6 +2,7 @@
 
 import { useState, type FormEvent } from "react";
 import { deleteNote, editNote } from "@/app/_lib/api";
+import { MarkdownInput } from "@/components/MarkdownInput";
 import { useApiForm } from "@/app/_lib/useApiForm";
 
 const summary = "cursor-pointer select-none text-muted hover:text-ink";
@@ -13,6 +14,7 @@ export function NoteActions({ feed, id, markdown, error: initialError }: { feed:
   const page = `/${feed}`;
   const { run, error, setError, pending, setPending, router } = useApiForm(page, initialError);
   const [text, setText] = useState(markdown);
+  const [busy, setBusy] = useState(false); // an image is uploading
   const [editing, setEditing] = useState(!!initialError);
   const base = `${page}/${id}`;
 
@@ -32,22 +34,19 @@ export function NoteActions({ feed, id, markdown, error: initialError }: { feed:
       <details open={editing} onToggle={(e) => setEditing(e.currentTarget.open)}>
         <summary className={summary}>Edit</summary>
         <form method="post" action={`${base}/edit`} encType="multipart/form-data" onSubmit={save} className="mt-3">
-          <label htmlFor="edit-markdown" className="sr-only">
-            Note in markdown
-          </label>
-          <textarea
+          <MarkdownInput
             id="edit-markdown"
             name="markdown"
+            label="Note in markdown"
             value={text}
-            onChange={(e) => setText(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) e.currentTarget.form?.requestSubmit();
-            }}
+            onChange={setText}
+            feed={feed}
             rows={10}
-            aria-describedby="note-actions-error"
-            className="block w-full resize-y rounded-sm border border-rule bg-transparent p-3 font-mono text-ink focus:border-carbon focus:outline-none"
+            describedBy="note-actions-error"
+            className="font-mono"
+            onBusy={setBusy}
           />
-          <button type="submit" disabled={pending} className="mt-2 rounded-sm bg-carbon px-4 py-1.5 font-bold text-on-carbon disabled:opacity-60">
+          <button type="submit" disabled={pending || busy} className="mt-2 rounded-sm bg-carbon px-4 py-1.5 font-bold text-on-carbon disabled:opacity-60">
             {pending ? "Saving…" : "Save"}
           </button>
         </form>

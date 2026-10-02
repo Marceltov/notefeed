@@ -4,6 +4,7 @@ import * as z from "zod";
 import { ERROR_CODES } from "../../shared/errors";
 import { PASSWORD_RULE } from "../../shared/password";
 import { FEED_RE, READ_ID_RE } from "../feeds";
+import { IMAGE_FILE_RE } from "../images";
 
 export const NOTE_ID = /^\d{8}T\d{6}Z-[a-z0-9-]+$/;
 export const MAX_LIMIT = 100;
@@ -61,7 +62,17 @@ export const CurrentPasswordHeader = z.string().describe("The feed's current pas
 
 const TITLE = z.string().describe("Display title, at most 100 characters, one line; empty means none (the feed's name is shown)");
 const DESCRIPTION = z.string().describe("Description, at most 500 characters, one line; may be empty");
-export const FeedSettingsJson = z.object({ title: TITLE, description: DESCRIPTION }).meta({ id: "FeedSettings" });
+const IMAGE_URL = z.url().nullable().describe("The feed's title image (absolute URL, served under the read id), or null");
+export const FeedSettingsJson = z
+  .object({
+    title: TITLE,
+    description: DESCRIPTION,
+    image: z
+      .string()
+      .optional()
+      .describe("The file name of an image uploaded to this feed (see uploadImage), shown as the feed's title image; empty removes it, omitted leaves it as it is"),
+  })
+  .meta({ id: "FeedSettings" });
 export const FeedJson = z
   .object({
     name: z.string().describe("The feed's name"),
@@ -69,11 +80,22 @@ export const FeedJson = z
     description: DESCRIPTION,
     protected: z.boolean().describe("Whether the feed has its own password"),
     read_url: z.url().nullable().describe("The feed's read-only RSS link; null while the feed has no notes, or if the server can't read the feed's stored read id"),
+    image_url: IMAGE_URL,
   })
   .meta({ id: "Feed" });
-export const ReadFeedJson = z.object({ title: TITLE, description: DESCRIPTION }).meta({ id: "ReadFeed" });
+export const ReadFeedJson = z.object({ title: TITLE, description: DESCRIPTION, image_url: IMAGE_URL }).meta({ id: "ReadFeed" });
 
-export const COMPONENTS = [NoteJson, NoteList, Created, ErrorJson, PostJson, PostForm, PasswordJson, FeedSettingsJson, FeedJson, ReadFeedJson];
+export const ImageUploaded = z
+  .object({
+    file: z.string().regex(IMAGE_FILE_RE).describe("The stored file's name: 32 hex characters of the SHA-256 plus the extension. Pass it as a feed's `image` setting"),
+    url: z.url().describe("Where the image is served, absolute, under the feed's read id; public like the read link"),
+    markdown: z.string().describe("`![](url)`, to paste into a note"),
+  })
+  .meta({ id: "ImageUploaded" });
+// A raw request body, not JSON.
+export const ImageBody = z.string().meta({ format: "binary" }).describe("The image's bytes: PNG, JPEG, GIF or WebP, recognized by their first bytes, not by the Content-Type");
+
+export const COMPONENTS = [NoteJson, NoteList, Created, ImageUploaded, ErrorJson, PostJson, PostForm, PasswordJson, FeedSettingsJson, FeedJson, ReadFeedJson];
 
 export const FeedParam = z.string().regex(FEED_RE).describe("The feed's name. It is the write key: anyone who knows it can post.");
 export const ReadIdParam = z.string().regex(READ_ID_RE).describe("The feed's read id, from its read link. Read-only; never reveals the name.");

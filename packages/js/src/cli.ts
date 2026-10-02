@@ -1,4 +1,4 @@
-/** `notefeed post`, `edit`, `delete` and `notes`: post, change, remove and read notes from the command line. */
+/** `notefeed post`, `edit`, `delete`, `notes` and `image`: post, change, remove and read notes, and upload images, from the command line. */
 import { readFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { parseArgs } from "node:util";
@@ -16,6 +16,7 @@ const USAGE = [
   "usage: notefeed post <text | - | --file PATH> [--url URL] [--feed FEED] [--password PASSWORD]",
   "       notefeed edit <id> <text | - | --file PATH> [--url URL] [--feed FEED] [--password PASSWORD]",
   "       notefeed delete <id> [--url URL] [--feed FEED] [--password PASSWORD]",
+  "       notefeed image <PATH> [--url URL] [--feed FEED] [--password PASSWORD]",
   "       notefeed notes [--limit N] [--json] [--url URL] [--feed FEED] [--password PASSWORD]",
 ].join("\n");
 
@@ -59,6 +60,16 @@ export async function main(argv: string[], io: Io = process): Promise<number> {
     }
     if (command === "delete" && text !== undefined && !rest.length) {
       await client(values).delete(text);
+      return 0;
+    }
+    if (command === "image" && text !== undefined && !rest.length) {
+      let bytes: Buffer;
+      try {
+        bytes = await readFile(text);
+      } catch (e) {
+        throw new UsageError(`cannot read ${text}: ${(e as NodeJS.ErrnoException).code ?? (e as Error).message}`);
+      }
+      io.stdout.write(`${(await client(values).uploadImage(bytes)).markdown}\n`);
       return 0;
     }
     if (command === "notes" && text === undefined) {

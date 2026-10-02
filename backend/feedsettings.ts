@@ -2,8 +2,9 @@
 import { readSettings, writeSettings } from "./data/settings";
 import { isErrno } from "./data/fs";
 import { InvalidBodyError, NotFoundError } from "./errors";
+import { knownImage } from "./images";
 
-export type FeedSettings = { title: string; description: string };
+export type FeedSettings = { title: string; description: string; image: string };
 
 export const MAX_TITLE = 100;
 export const MAX_DESCRIPTION = 500;
@@ -18,13 +19,23 @@ function field(input: Record<string, unknown>, name: "title" | "description", ma
   return s;
 }
 
-export function checkSettings(input: unknown): FeedSettings {
+// `image` absent (undefined, or null from a form without the field) means "unchanged": the caller fills it in.
+export function checkSettings(input: unknown): Omit<FeedSettings, "image"> & { image?: string } {
   if (typeof input !== "object" || input === null || Array.isArray(input)) throw new InvalidBodyError('JSON needs "title" and "description" strings');
   const o = input as Record<string, unknown>;
-  return { title: field(o, "title", MAX_TITLE), description: field(o, "description", MAX_DESCRIPTION) };
+  const image = o.image ?? undefined;
+  if (image !== undefined && typeof image !== "string") throw new InvalidBodyError("image must be a string");
+  return { title: field(o, "title", MAX_TITLE), description: field(o, "description", MAX_DESCRIPTION), image };
 }
 
-export const getSettings = (feed: string): Promise<FeedSettings> => readSettings(feed);
+// What is stored, whatever has become of the image file (the save path in posting.ts keeps it as it is).
+export const getStoredSettings = (feed: string): Promise<FeedSettings> => readSettings(feed);
+
+// What is shown: a title image whose file is gone (removed by hand) counts as none, so nothing points at a 404.
+export async function getSettings(feed: string): Promise<FeedSettings> {
+  const s = await readSettings(feed);
+  return s.image && !(await knownImage(feed, s.image)) ? { ...s, image: "" } : s;
+}
 
 export async function saveSettings(feed: string, s: FeedSettings): Promise<void> {
   try {

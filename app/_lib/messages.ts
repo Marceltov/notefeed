@@ -14,6 +14,7 @@ const MESSAGES: Record<ErrorCode, string> = {
   too_many_attempts: "Too many attempts, try again in {retry} seconds.",
   feed_limit: "This instance has reached its feed limit.",
   note_limit: "This feed has reached its note limit.",
+  image_limit: "This feed has reached its image limit.",
   empty_note: "The note is empty.",
   too_large: "The note is over 100 KB.",
   unsupported_type: "The note could not be read.",
@@ -47,4 +48,16 @@ export function feedDetailsErrorMessage(code: unknown, retry?: unknown): string 
 // The same, on a note page, where "auth" is a form refused for coming from outside (no feed or instance password involved).
 export function noteErrorMessage(code: unknown, retry?: unknown): string | undefined {
   return code === "auth" ? "That didn't work. Reload the page and try again." : errorMessage(code, retry);
+}
+
+// The same, for an image upload, where "too_large" and "unsupported_type" are about the image, "auth" about a login that has
+// lapsed, and "not_found" about a feed that cannot take images (no note yet, or no read link).
+export function imageErrorMessage(code: unknown, retry?: unknown): string | undefined {
+  const own: Record<string, string> = {
+    too_large: "That image is too large.",
+    unsupported_type: "Only PNG, JPEG, GIF and WebP images can be added.",
+    auth: "You are not signed in for this feed. Reload the page and try again.",
+    not_found: "Images can't be added to this feed yet.",
+  };
+  return own[String(code)] ?? errorMessage(code, retry);
 }

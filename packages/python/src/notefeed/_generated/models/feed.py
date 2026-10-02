@@ -18,6 +18,7 @@ class Feed:
         protected (bool): Whether the feed has its own password
         read_url (None | str): The feed's read-only RSS link; null while the feed has no notes, or if the server can't
             read the feed's stored read id
+        image_url (None | str): The feed's title image (absolute URL, served under the read id), or null
     """
 
     name: str
@@ -25,6 +26,7 @@ class Feed:
     description: str
     protected: bool
     read_url: None | str
+    image_url: None | str
 
     def to_dict(self) -> dict[str, Any]:
         name = self.name
@@ -38,6 +40,9 @@ class Feed:
         read_url: None | str
         read_url = self.read_url
 
+        image_url: None | str
+        image_url = self.image_url
+
         field_dict: dict[str, Any] = {}
 
         field_dict.update(
@@ -47,6 +52,7 @@ class Feed:
                 "description": description,
                 "protected": protected,
                 "read_url": read_url,
+                "image_url": image_url,
             }
         )
 
@@ -70,12 +76,20 @@ class Feed:
 
         read_url = _parse_read_url(d.pop("read_url"))
 
+        def _parse_image_url(data: object) -> None | str:
+            if data is None:
+                return data
+            return cast(None | str, data)
+
+        image_url = _parse_image_url(d.pop("image_url"))
+
         feed = cls(
             name=name,
             title=title,
             description=description,
             protected=protected,
             read_url=read_url,
+            image_url=image_url,
         )
 
         return feed

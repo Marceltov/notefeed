@@ -663,11 +663,178 @@
         }
       }
     },
+    "/api/v1/feeds/{feed}/images": {
+      "post": {
+        "operationId": "uploadImage",
+        "summary": "Upload an image",
+        "description": "The body is the image itself: PNG, JPEG, GIF or WebP, recognized by its first bytes, whatever `Content-Type` is sent (SVG is refused). Stored byte-for-byte, with no resizing and no metadata stripped (EXIF such as GPS position stays in the file), as the first 32 hex characters of its SHA-256 plus an extension: the same bytes always give the same URL. The URL is under the feed's read id, so it works in the feed page, the read-only view and RSS readers without any password. Needs the same credentials as posting and counts against the post rate limit. The feed must exist: it is created by its first note. The size limit is NOTEFEED_MAX_IMAGE_BYTES (default 5 MiB); images deleted only with the feed.",
+        "tags": [
+          "Feeds"
+        ],
+        "security": [
+          {},
+          {
+            "password": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "feed",
+            "in": "path",
+            "required": true,
+            "description": "The feed's name. It is the write key: anyone who knows it can post.",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9_-]{1,64}$"
+            }
+          },
+          {
+            "name": "X-Feed-Password",
+            "in": "header",
+            "required": false,
+            "description": "The feed's own password, when it has one: to post, list or get, and (as the current password) to change or remove it. On the `POST` that creates a feed it sets the feed's password; on a `POST` to an existing feed that has none it answers 409. An empty value is the same as no header, so a `POST` with an empty one creates an open feed.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "image/png": {
+              "schema": {
+                "type": "string",
+                "format": "binary",
+                "description": "The image's bytes: PNG, JPEG, GIF or WebP, recognized by their first bytes, not by the Content-Type"
+              }
+            },
+            "image/jpeg": {
+              "schema": {
+                "type": "string",
+                "format": "binary",
+                "description": "The image's bytes: PNG, JPEG, GIF or WebP, recognized by their first bytes, not by the Content-Type"
+              }
+            },
+            "image/gif": {
+              "schema": {
+                "type": "string",
+                "format": "binary",
+                "description": "The image's bytes: PNG, JPEG, GIF or WebP, recognized by their first bytes, not by the Content-Type"
+              }
+            },
+            "image/webp": {
+              "schema": {
+                "type": "string",
+                "format": "binary",
+                "description": "The image's bytes: PNG, JPEG, GIF or WebP, recognized by their first bytes, not by the Content-Type"
+              }
+            },
+            "application/octet-stream": {
+              "schema": {
+                "type": "string",
+                "format": "binary",
+                "description": "The image's bytes: PNG, JPEG, GIF or WebP, recognized by their first bytes, not by the Content-Type"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Stored (or already there)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImageUploaded"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid or reserved feed name",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The instance has a password, or the feed has its own, and it is missing or wrong",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such feed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Body over NOTEFEED_MAX_IMAGE_BYTES",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Not a PNG, JPEG, GIF or WebP image",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many posts, uploads, edits and deletes, or wrong passwords, from this client",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before trying again",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "507": {
+            "description": "NOTEFEED_MAX_IMAGES_PER_FEED reached",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/feeds/{feed}": {
       "get": {
         "operationId": "getFeed",
         "summary": "Get a feed's settings",
-        "description": "The title and description, whether the feed is protected, and its read link (null while it has no notes). A feed exists once its first note is posted.",
+        "description": "The title and description, the title image, whether the feed is protected, and its read link (null while it has no notes). A feed exists once its first note is posted.",
         "tags": [
           "Feeds"
         ],
@@ -762,7 +929,7 @@
       "put": {
         "operationId": "updateFeed",
         "summary": "Change a feed's settings",
-        "description": "Replaces both the title (at most 100 characters) and the description (at most 500); surrounding whitespace is trimmed and control characters are refused. Needs the feed's password if it has one, and counts against the post rate limit. Only on a feed that exists: it is created by its first note. Read links can't change settings.",
+        "description": "Replaces both the title (at most 100 characters) and the description (at most 500); surrounding whitespace is trimmed and control characters are refused. `image` is the file name `uploadImage` returned for this feed (title image), empty to remove it, or omitted to leave it as it is; any other value is a 400. Needs the feed's password if it has one, and counts against the post rate limit. Only on a feed that exists: it is created by its first note. Read links can't change settings.",
         "tags": [
           "Feeds"
         ],
@@ -1447,6 +1614,31 @@
         ],
         "additionalProperties": false
       },
+      "ImageUploaded": {
+        "type": "object",
+        "properties": {
+          "file": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{32}\\.(png|jpg|gif|webp)$",
+            "description": "The stored file's name: 32 hex characters of the SHA-256 plus the extension. Pass it as a feed's `image` setting"
+          },
+          "url": {
+            "type": "string",
+            "format": "uri",
+            "description": "Where the image is served, absolute, under the feed's read id; public like the read link"
+          },
+          "markdown": {
+            "type": "string",
+            "description": "`![](url)`, to paste into a note"
+          }
+        },
+        "required": [
+          "file",
+          "url",
+          "markdown"
+        ],
+        "additionalProperties": false
+      },
       "Error": {
         "type": "object",
         "properties": {
@@ -1465,6 +1657,7 @@
               "too_many_attempts",
               "feed_limit",
               "note_limit",
+              "image_limit",
               "empty_note",
               "too_large",
               "unsupported_type",
@@ -1535,6 +1728,10 @@
           "description": {
             "type": "string",
             "description": "Description, at most 500 characters, one line; may be empty"
+          },
+          "image": {
+            "description": "The file name of an image uploaded to this feed (see uploadImage), shown as the feed's title image; empty removes it, omitted leaves it as it is",
+            "type": "string"
           }
         },
         "required": [
@@ -1573,6 +1770,18 @@
               }
             ],
             "description": "The feed's read-only RSS link; null while the feed has no notes, or if the server can't read the feed's stored read id"
+          },
+          "image_url": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uri"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The feed's title image (absolute URL, served under the read id), or null"
           }
         },
         "required": [
@@ -1580,7 +1789,8 @@
           "title",
           "description",
           "protected",
-          "read_url"
+          "read_url",
+          "image_url"
         ],
         "additionalProperties": false
       },
@@ -1594,11 +1804,24 @@
           "description": {
             "type": "string",
             "description": "Description, at most 500 characters, one line; may be empty"
+          },
+          "image_url": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uri"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The feed's title image (absolute URL, served under the read id), or null"
           }
         },
         "required": [
           "title",
-          "description"
+          "description",
+          "image_url"
         ],
         "additionalProperties": false
       }

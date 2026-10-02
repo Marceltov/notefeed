@@ -16,6 +16,7 @@ export function publicUrl(headers: Headers): string {
 export const API_PREFIX = "/api/v1";
 export const feedPath = (feed: string) => `/${feed}`;
 export const readPath = (readId: string) => `/r/${readId}`;
+export const imagePath = (readId: string, file: string) => `${readPath(readId)}/images/${file}`;
 export const rssPath = (readId: string) => `${readPath(readId)}/feed.xml`;
 
 // Where to go after login: a same-origin path, else "/". A second "/" or any "\" would make it

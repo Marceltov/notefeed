@@ -60,6 +60,7 @@ body {
 .md pre { font-family: var(--font-mono); font-size: 0.875rem; overflow-x: auto; padding: 0.75em 0; border-block: 1px solid var(--rule); }
 .md table { border-collapse: collapse; }
 .md th, .md td { border: 1px solid var(--rule); padding: 0.25em 0.5em; text-align: left; }
+.md img { max-width: 100%; height: auto; }
 .md hr { border: 0; border-top: 1px solid var(--rule); }
 
 /* The one motion: a just-posted note arrives with a carbon tint that fades. */

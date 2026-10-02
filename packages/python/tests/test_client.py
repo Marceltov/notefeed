@@ -109,6 +109,7 @@ def test_a_base_url_with_a_prefix_and_trailing_slash_keeps_the_prefix(server):
         ("not_found", 404, NotFoundError),
         ("feed_limit", 507, LimitReachedError),
         ("note_limit", 507, LimitReachedError),
+        ("image_limit", 507, LimitReachedError),
         ("too_large", 413, NoteTooLargeError),
         ("invalid_feed", 400, InvalidRequestError),
         ("reserved_feed", 400, InvalidRequestError),
@@ -321,7 +322,7 @@ def test_edit_and_delete_404_is_not_found_and_no_feed_is_config_error(server):
 
 # --- feed settings and deletion ---
 
-FEED = {"name": "inbox", "title": "My inbox", "description": "Things", "protected": False, "read_url": None}
+FEED = {"name": "inbox", "title": "My inbox", "description": "Things", "protected": False, "read_url": None, "image_url": None}
 
 
 def test_feed_info_gets_the_feed(server):
@@ -371,3 +372,40 @@ def test_feed_calls_404_is_not_found_and_no_feed_is_config_error(server):
             call()
     with pytest.raises(ConfigError):
         Client(server.url).delete_feed()
+
+
+UPLOADED = {"file": "a" * 32 + ".png", "url": "https://n.example/r/X/images/a.png", "markdown": "![](https://n.example/r/X/images/a.png)"}
+
+
+def test_upload_image_posts_the_raw_bytes_and_returns_the_model(server):
+    server.reply(201, UPLOADED)
+    data = bytes([0x89, 0x50, 0x4E, 0x47, 0, 255])
+    r = Client(server.url, "inbox", "pw", feed_password="fp").upload_image(data)
+    assert (r.file, r.url, r.markdown) == (UPLOADED["file"], UPLOADED["url"], UPLOADED["markdown"])
+    q = server.requests[0]
+    assert (q["method"], q["path"], q["body"]) == ("POST", "/api/v1/feeds/inbox/images", data)
+    assert q["headers"]["Content-Type"] == "application/octet-stream"
+    assert (q["headers"]["Authorization"], q["headers"]["X-Feed-Password"]) == ("Bearer pw", "fp")
+
+
+def test_upload_image_per_call_feed_and_password_win_and_errors_map(server):
+    server.reply(201, UPLOADED)
+    Client(server.url, "inbox", feed_password="fp").upload_image(b"x", feed="other", feed_password="o")
+    assert server.requests[0]["path"] == "/api/v1/feeds/other/images"
+    assert server.requests[0]["headers"]["X-Feed-Password"] == "o"
+    with pytest.raises(ConfigError):
+        Client(server.url).upload_image(b"x")
+    for status, code, cls in [(415, "unsupported_type", InvalidRequestError), (413, "too_large", NoteTooLargeError),
+                              (507, "image_limit", LimitReachedError), (404, "not_found", NotFoundError)]:
+        server.reply(status, {"error": code, "code": code})
+        with pytest.raises(cls):
+            Client(server.url, "inbox").upload_image(b"x")
+
+
+def test_update_feed_sends_image_only_when_given(server):
+    c = Client(server.url, "inbox")
+    for kw in ({"image": "a.png"}, {"image": ""}, {}):
+        server.reply(200, {"name": "inbox", "title": "t", "description": "d", "protected": False, "read_url": None, "image_url": None})
+        c.update_feed("t", "d", **kw)
+    assert [json.loads(r["body"]) for r in server.requests] == [
+        {"title": "t", "description": "d", "image": "a.png"}, {"title": "t", "description": "d", "image": ""}, {"title": "t", "description": "d"}]

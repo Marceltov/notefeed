@@ -84,8 +84,8 @@ def sync_detailed(
 ) -> Response[Error | Feed]:
     """Get a feed's settings
 
-     The title and description, whether the feed is protected, and its read link (null while it has no
-    notes). A feed exists once its first note is posted.
+     The title and description, the title image, whether the feed is protected, and its read link (null
+    while it has no notes). A feed exists once its first note is posted.
 
     Args:
         feed (str):
@@ -119,8 +119,8 @@ def sync(
 ) -> Error | Feed | None:
     """Get a feed's settings
 
-     The title and description, whether the feed is protected, and its read link (null while it has no
-    notes). A feed exists once its first note is posted.
+     The title and description, the title image, whether the feed is protected, and its read link (null
+    while it has no notes). A feed exists once its first note is posted.
 
     Args:
         feed (str):
@@ -149,8 +149,8 @@ async def asyncio_detailed(
 ) -> Response[Error | Feed]:
     """Get a feed's settings
 
-     The title and description, whether the feed is protected, and its read link (null while it has no
-    notes). A feed exists once its first note is posted.
+     The title and description, the title image, whether the feed is protected, and its read link (null
+    while it has no notes). A feed exists once its first note is posted.
 
     Args:
         feed (str):
@@ -182,8 +182,8 @@ async def asyncio(
 ) -> Error | Feed | None:
     """Get a feed's settings
 
-     The title and description, whether the feed is protected, and its read link (null while it has no
-    notes). A feed exists once its first note is posted.
+     The title and description, the title image, whether the feed is protected, and its read link (null
+    while it has no notes). A feed exists once its first note is posted.
 
     Args:
         feed (str):

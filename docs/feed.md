@@ -28,7 +28,7 @@ That makes it the link to give to feed readers, dashboards and other people. Kee
 
 ## Title and description
 
-A feed can have a title and a description, which anyone with the read link can see: they are the RSS channel's title and description, and they show above the notes in the read-only view. They are [set with the feed's settings](posting.md#feed-settings-and-deleting-a-feed). Don't put anything private in them. The feed's name is never shown.
+A feed can have a title, a description and a title image, which anyone with the read link can see: they are the RSS channel's title and description, and they show above the notes in the read-only view. They are [set with the feed's settings](posting.md#feed-settings-and-deleting-a-feed). Don't put anything private in them. The feed's name is never shown. The title image is the RSS channel's `<image>`, with the feed's read-only page as its link; readers that show a channel image use it. It is served under the read link like the notes' images, so it needs no password.
 
 ## What's in the feed
 
@@ -38,6 +38,8 @@ The RSS feed holds the newest 50 notes. Its title is the feed's title, or `NOTEF
 - a link to the note's read-only page, `<PUBLIC_URL>/r/<read id>/<id>`
 - the time it was posted
 - the note's raw markdown as its description
+
+Images in notes are plain markdown image links, `![](https://...)`, in that raw markdown, pointing at absolute URLs under the same read id (see [Images](posting.md#images)). A reader that shows the description as text shows the link, not the picture; notefeed does not turn the markdown into HTML for the feed.
 
 Control characters that XML doesn't allow (such as terminal colour codes from script output) are removed from the feed so one note can't break it. The file on disk keeps them.
 

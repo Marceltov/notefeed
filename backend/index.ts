@@ -5,6 +5,7 @@ import { config } from "./config";
 import { getSettings } from "./feedsettings";
 import { READ_ID_RE, checkFeed, feedForReadId, hasFeed, readIdOf } from "./feeds";
 import { getNote, listNotes, type Note } from "./notes";
+import { imagePath } from "./urls";
 
 export type { Note };
 export { SESSION_COOKIE, locked, sessionOk } from "./auth";
@@ -17,6 +18,7 @@ export { feedDeleteRoute, feedSettingsRoute } from "./http/feedforms";
 export { feedAccessRoute } from "./http/feedsession";
 export { noteFormRoute } from "./http/noteforms";
 export { loginRoute, logoutRoute } from "./http/session";
+export { imageRoute } from "./http/images";
 export { rssRoute } from "./http/rss";
 export { mcpRoute } from "./mcp";
 export { authServerRoute, authorizeRoute, checkAuthorize, metadataPreflight, protectedResourceRoute, registerPreflight, registerRoute, tokenRoute } from "./oauth/routes";
@@ -31,11 +33,14 @@ const PAGE = 50;
  * legacy feed's id is derived from the name, so showing one would hand out the read link of whatever
  * feed is created there later. None either for a feed whose stored read id can't be read (backend/feeds.ts).
  */
-export async function getFeed(feed: string): Promise<{ notes: Note[]; readId: string | null; exists: boolean; title: string; description: string } | null> {
+export async function getFeed(feed: string): Promise<{ notes: Note[]; readId: string | null; exists: boolean; title: string; description: string; image: string; imageUrl: string | null } | null> {
   if (checkFeed(feed)) return null;
   const notes = await listNotes(feed, PAGE);
   // `exists`: a feed that had notes and lost them still exists (it counts toward the feed cap and can't get a password).
-  return { notes, readId: notes.length ? await readIdOf(feed) : null, exists: await hasFeed(feed), ...(await getSettings(feed)) };
+  const readId = notes.length ? await readIdOf(feed) : null;
+  const settings = await getSettings(feed);
+  // The title image's path under the read id (it is served there, never under the feed's name).
+  return { notes, readId, exists: await hasFeed(feed), ...settings, imageUrl: readId && settings.image ? imagePath(readId, settings.image) : null };
 }
 
 export async function getFeedNote(feed: string, id: string): Promise<Note | null> {
@@ -43,10 +48,11 @@ export async function getFeedNote(feed: string, id: string): Promise<Note | null
 }
 
 /** A feed by its read id: null for a malformed id; an unknown one is an empty feed, so ids can't be probed. */
-export async function getReadFeed(id: string): Promise<{ notes: Note[]; title: string; description: string } | null> {
+export async function getReadFeed(id: string): Promise<{ notes: Note[]; title: string; description: string; imageUrl: string | null } | null> {
   if (!READ_ID_RE.test(id)) return null;
   const feed = await feedForReadId(id);
-  return { notes: feed ? await listNotes(feed, PAGE) : [], ...(feed ? await getSettings(feed) : { title: "", description: "" }) };
+  const { title, description, image } = feed ? await getSettings(feed) : { title: "", description: "", image: "" };
+  return { notes: feed ? await listNotes(feed, PAGE) : [], title, description, imageUrl: image ? imagePath(id, image) : null };
 }
 
 export async function getReadNote(readId: string, id: string): Promise<Note | null> {

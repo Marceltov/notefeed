@@ -2,7 +2,7 @@
 
 import { client } from './client.gen.js';
 import type { Client, ClientMeta, Options as Options2, RequestResult, TDataShape } from './client/index.js';
-import type { ChangeFeedPasswordData, ChangeFeedPasswordErrors, ChangeFeedPasswordResponses, DeleteFeedData, DeleteFeedErrors, DeleteFeedResponses, DeleteNoteData, DeleteNoteErrors, DeleteNoteResponses, EditNoteData, EditNoteErrors, EditNoteResponses, GetFeedData, GetFeedErrors, GetFeedResponses, GetNoteData, GetNoteErrors, GetNoteResponses, GetOpenApiData, GetOpenApiResponses, GetReadFeedData, GetReadFeedErrors, GetReadFeedResponses, GetReadNoteData, GetReadNoteErrors, GetReadNoteResponses, ListNotesData, ListNotesErrors, ListNotesResponses, ListReadNotesData, ListReadNotesErrors, ListReadNotesResponses, PostNoteData, PostNoteErrors, PostNoteResponses, RemoveFeedPasswordData, RemoveFeedPasswordErrors, RemoveFeedPasswordResponses, UpdateFeedData, UpdateFeedErrors, UpdateFeedResponses } from './types.gen.js';
+import type { ChangeFeedPasswordData, ChangeFeedPasswordErrors, ChangeFeedPasswordResponses, DeleteFeedData, DeleteFeedErrors, DeleteFeedResponses, DeleteNoteData, DeleteNoteErrors, DeleteNoteResponses, EditNoteData, EditNoteErrors, EditNoteResponses, GetFeedData, GetFeedErrors, GetFeedResponses, GetNoteData, GetNoteErrors, GetNoteResponses, GetOpenApiData, GetOpenApiResponses, GetReadFeedData, GetReadFeedErrors, GetReadFeedResponses, GetReadNoteData, GetReadNoteErrors, GetReadNoteResponses, ListNotesData, ListNotesErrors, ListNotesResponses, ListReadNotesData, ListReadNotesErrors, ListReadNotesResponses, PostNoteData, PostNoteErrors, PostNoteResponses, RemoveFeedPasswordData, RemoveFeedPasswordErrors, RemoveFeedPasswordResponses, UpdateFeedData, UpdateFeedErrors, UpdateFeedResponses, UploadImageData, UploadImageErrors, UploadImageResponses } from './types.gen.js';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -80,6 +80,22 @@ export const editNote = <ThrowOnError extends boolean = false>(options: Options<
 });
 
 /**
+ * Upload an image
+ *
+ * The body is the image itself: PNG, JPEG, GIF or WebP, recognized by its first bytes, whatever `Content-Type` is sent (SVG is refused). Stored byte-for-byte, with no resizing and no metadata stripped (EXIF such as GPS position stays in the file), as the first 32 hex characters of its SHA-256 plus an extension: the same bytes always give the same URL. The URL is under the feed's read id, so it works in the feed page, the read-only view and RSS readers without any password. Needs the same credentials as posting and counts against the post rate limit. The feed must exist: it is created by its first note. The size limit is NOTEFEED_MAX_IMAGE_BYTES (default 5 MiB); images deleted only with the feed.
+ */
+export const uploadImage = <ThrowOnError extends boolean = false>(options: Options<UploadImageData, ThrowOnError>): RequestResult<UploadImageResponses, UploadImageErrors, ThrowOnError> => (options.client ?? client).post<UploadImageResponses, UploadImageErrors, ThrowOnError>({
+    bodySerializer: null,
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/api/v1/feeds/{feed}/images',
+    ...options,
+    headers: {
+        'Content-Type': 'image/png',
+        ...options.headers
+    }
+});
+
+/**
  * Delete a feed
  *
  * Deletes the feed with all its notes, its settings, its password and its read link, for good: there is no undo. The name is free again; a feed created there later gets a new read link, and the old one answers like an unknown one. Needs the feed's password if it has one, and counts against the post rate limit.
@@ -93,7 +109,7 @@ export const deleteFeed = <ThrowOnError extends boolean = false>(options: Option
 /**
  * Get a feed's settings
  *
- * The title and description, whether the feed is protected, and its read link (null while it has no notes). A feed exists once its first note is posted.
+ * The title and description, the title image, whether the feed is protected, and its read link (null while it has no notes). A feed exists once its first note is posted.
  */
 export const getFeed = <ThrowOnError extends boolean = false>(options: Options<GetFeedData, ThrowOnError>): RequestResult<GetFeedResponses, GetFeedErrors, ThrowOnError> => (options.client ?? client).get<GetFeedResponses, GetFeedErrors, ThrowOnError>({
     security: [{ scheme: 'bearer', type: 'http' }],
@@ -104,7 +120,7 @@ export const getFeed = <ThrowOnError extends boolean = false>(options: Options<G
 /**
  * Change a feed's settings
  *
- * Replaces both the title (at most 100 characters) and the description (at most 500); surrounding whitespace is trimmed and control characters are refused. Needs the feed's password if it has one, and counts against the post rate limit. Only on a feed that exists: it is created by its first note. Read links can't change settings.
+ * Replaces both the title (at most 100 characters) and the description (at most 500); surrounding whitespace is trimmed and control characters are refused. `image` is the file name `uploadImage` returned for this feed (title image), empty to remove it, or omitted to leave it as it is; any other value is a 400. Needs the feed's password if it has one, and counts against the post rate limit. Only on a feed that exists: it is created by its first note. Read links can't change settings.
  */
 export const updateFeed = <ThrowOnError extends boolean = false>(options: Options<UpdateFeedData, ThrowOnError>): RequestResult<UpdateFeedResponses, UpdateFeedErrors, ThrowOnError> => (options.client ?? client).put<UpdateFeedResponses, UpdateFeedErrors, ThrowOnError>({
     security: [{ scheme: 'bearer', type: 'http' }],
