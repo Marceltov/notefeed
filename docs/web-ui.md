@@ -20,7 +20,7 @@ Type markdown into the box at the top. While you type, the line under the box sh
 
 Post with **Post note**, or press ++ctrl+enter++ (++cmd+enter++ on a Mac). The note appears at the top of the list, briefly highlighted. The box posts to the same `POST /<feed>` as scripts, so it counts toward the same [rate limit and caps](configuration.md#rate-limits-and-caps) and works without JavaScript too.
 
-Once the feed has notes, **Post from a script** expands to a ready-to-copy `curl` command for this feed.
+The **Settings** button at the top right opens the feed's [settings page](#feed-settings-and-deleting-a-feed), which also has a ready-to-copy `curl` command for this feed. A feed without notes shows the command right under the box.
 
 ### Adding an image
 
@@ -32,7 +32,7 @@ Images in notes load lazily and are never wider than the note. They are as publi
 
 ### The read link
 
-Once the feed has a note, its read link is under the box, with a copy button and **Open read-only view**. The **RSS** link at the top is the same read link. Give it to feed readers and to people who should see the notes but not post. See [Read links and RSS](feed.md).
+Once the feed has a note, the buttons at the top right link to the read-only view (**Read-only**) and to the feed (**RSS**). The read link itself, with a copy button, is on the settings page under **Read link**. Give it to feed readers and to people who should see the notes but not post. See [Read links and RSS](feed.md).
 
 ### Reading notes
 
@@ -50,13 +50,13 @@ Anyone who can open the feed can edit and delete its notes. On a feed with [its 
 
 ## Feed settings and deleting a feed
 
-On the feed page, a **Feed settings** section has a **Title** and a **Description** and a **Save** button. The title is shown as a heading at the top of the feed page and in the browser tab, with the description below it; the feed's name stays in the page header. Both also show in the [read-only view](#the-read-only-view) and are the RSS feed's title and description, so anyone with the read link sees them. Leave a field empty to clear it. The feed's name never changes.
+The **Settings** button at the top right of the feed page opens `/<feed>/settings`, a page with four sections: **General**, **Read link** (with the `curl` command), **Feed password** and **Delete feed**. It exists once the feed has a note. **General** has a **Title** and a **Description** and a **Save changes** button. The title is shown as a heading at the top of the feed page and in the browser tab, with the description below it; the feed's name stays in the page header. Both also show in the [read-only view](#the-read-only-view) and are the RSS feed's title and description, so anyone with the read link sees them. Leave a field empty to clear it. The feed's name never changes.
 
 The **Title image** control has a **Choose image** button, which uploads an image and saves it as the feed's title image at once, and a **Remove image** button. Either one saves what is typed in the title and description too. The title image shows in the page header and in the read-only view, and is the RSS feed's channel image. Like the title, it is public to anyone with the read link. Choosing and removing an image need JavaScript.
 
-Below it, **Delete feed** removes the feed with all its notes, its settings, its password and its read link, for good. You confirm by typing the feed's name, exactly. Afterwards you land on the start page, and the name can be used again. A new feed with that name gets a different read link, and the old link stays empty.
+**Delete feed**, the last section, removes the feed with all its notes, its settings, its password and its read link, for good. You confirm by typing the feed's name, exactly. Afterwards you land on the start page, and the name can be used again. A new feed with that name gets a different read link, and the old link stays empty.
 
-Both work without JavaScript: they are plain forms that post to `/<feed>/settings` and `/<feed>/delete`, and they only accept requests from the instance's own pages. A script uses the [API](posting.md#feed-settings-and-deleting-a-feed) instead. If something is refused (a title that is too long, too many requests), the page says why next to these sections and nothing changes. They count toward the same [rate limit](configuration.md#rate-limits-and-caps) as posting.
+Both work without JavaScript: they are plain forms that post to `/<feed>/details` and `/<feed>/delete`, and they only accept requests from the instance's own pages. A script uses the [API](posting.md#feed-settings-and-deleting-a-feed) instead. If something is refused (a title that is too long, too many requests), the settings page says why next to these sections and nothing changes. They count toward the same [rate limit](configuration.md#rate-limits-and-caps) as posting.
 
 Anyone who can open the feed can change its settings and delete it: on an open feed that is anyone who knows its name, and on a feed with [its own password](#a-password-for-a-feed) it is anyone who has unlocked it. A locked feed shows only its unlock form, without its title, description or title image. The read-only view has neither section.
 
@@ -64,7 +64,7 @@ Anyone who can open the feed can change its settings and delete it: on an open f
 
 On a feed that doesn't exist yet, the box has an optional **Password** field. Fill it in and the first note creates a protected feed. A password is 1 to 256 printable ASCII characters (unaccented letters, digits, symbols and spaces) with no space at the start or end, so that it also works from a script; the browser refuses anything else. The field is only there for a new feed: an existing feed can't get a password afterwards.
 
-A protected feed asks for its password before it shows anything, at `/<feed>`: an **Unlock** form. The browser then stays unlocked (a cookie for that feed, with no end date) until the password changes or you press **Lock**. Wrong passwords count toward the [rate limit](configuration.md#rate-limits-and-caps); opening the page without entering one does not. Once unlocked, a **Feed password** section above the notes lets you change the password, remove it (the feed stays, open to anyone who knows its name; both need the current password) or lock this browser again. Changing the password signs every other browser out. The ready-to-copy `curl` command on an unlocked feed includes the `X-Feed-Password` header.
+A protected feed asks for its password before it shows anything, at `/<feed>`: an **Unlock** form. The browser then stays unlocked (a cookie for that feed, with no end date) until the password changes or you press **Lock**. Wrong passwords count toward the [rate limit](configuration.md#rate-limits-and-caps); opening the page without entering one does not. Once unlocked, a **Feed password** section on the settings page lets you change the password, remove it (the feed stays, open to anyone who knows its name; both need the current password) or **Lock this browser** again. Changing the password signs every other browser out. The ready-to-copy `curl` command on an unlocked feed includes the `X-Feed-Password` header.
 
 The [read-only view](#the-read-only-view) and the RSS link stay open. See [A feed with its own password](posting.md#a-feed-with-its-own-password) for scripts, and [Operations](operations.md#a-lost-feed-password) if the password is lost.
 

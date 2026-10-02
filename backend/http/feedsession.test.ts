@@ -92,22 +92,22 @@ test.each([["another site", "https://evil.example"], ["no Origin", null]])("unlo
 test("change from another site is refused and changes nothing", async () => {
   const res = await post("lockd", { action: "change", current: "pw", next: "new" }, "https://evil.example");
   expect(res.status).toBe(303);
-  expect(res.headers.get("location")).toBe("/lockd?error=auth");
+  expect(res.headers.get("location")).toBe("/lockd/settings?error=auth");
   expect(res.headers.get("set-cookie")).toBeNull();
   expect(cookies(await post("lockd", { action: "unlock", password: "pw" }))).toHaveLength(2);
 });
 
 test("change with the right current password sets a cookie for the new one", async () => {
   const res = await post("lockd", { action: "change", current: "pw", next: "new" });
-  expect(res.headers.get("location")).toBe("/lockd");
+  expect(res.headers.get("location")).toBe("/lockd/settings?saved=1");
   expect(cookies(res)).toEqual(setBoth("lockd"));
   expect((await post("lockd", { action: "unlock", password: "pw" })).headers.get("location")).toBe("/lockd?error=auth");
   expect((await post("lockd", { action: "unlock", password: "new" })).headers.get("location")).toBe("/lockd");
 });
 
 test("change with a wrong current password or a bad new one goes back with the error", async () => {
-  expect((await post("lockd", { action: "change", current: "x", next: "new" })).headers.get("location")).toBe("/lockd?error=auth");
-  expect((await post("lockd", { action: "change", current: "pw", next: "" })).headers.get("location")).toBe("/lockd?error=invalid_body");
+  expect((await post("lockd", { action: "change", current: "x", next: "new" })).headers.get("location")).toBe("/lockd/settings?error=auth");
+  expect((await post("lockd", { action: "change", current: "pw", next: "" })).headers.get("location")).toBe("/lockd/settings?error=invalid_body");
 });
 
 test("remove with the right current password opens the feed and clears the cookie", async () => {

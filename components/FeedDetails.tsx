@@ -1,18 +1,21 @@
 "use client";
 
-import { useRef, useState, useSyncExternalStore, type FormEvent } from "react";
+import { ImagePlus, Trash2, X, SlidersHorizontal } from "lucide-react";
+import { useRef, useState, useSyncExternalStore, type FormEvent, type ReactNode } from "react";
 import { deleteFeed, updateFeed } from "@/app/_lib/api";
+import { heading } from "@/components/styles";
 import { feedDetailsErrorMessage } from "@/app/_lib/messages";
 import { uploadImageFile, useApiForm } from "@/app/_lib/useApiForm";
 
 const input = "w-full rounded-sm border border-rule bg-transparent px-3 py-1.5 focus:border-carbon focus:outline-none";
-const summary = "cursor-pointer select-none text-muted hover:text-ink";
+const secondary = "inline-flex items-center gap-1.5 rounded-sm border border-rule px-3 py-1 font-bold hover:border-carbon disabled:opacity-60";
 
-// A feed's title and description, and deleting it: plain forms to POST /<feed>/settings and /delete. With
+// A feed's title, description and title image, and deleting it: plain forms to POST /<feed>/details and /delete.
+// `children` (the sharing and password sections) sit between the two, so deleting stays last. With
 // JavaScript they go through the generated API client and show refusals inline; without, the browser follows
 // the 303 (the feed page says "Saved." or shows the refusal as `error`, or the home page says "Feed deleted.").
-export function FeedDetails({ feed, title: savedTitle, description: savedDescription, image, imageUrl, error: initialError }: { feed: string; title: string; description: string; image: string; imageUrl: string | null; error?: string }) {
-  const page = `/${feed}`;
+export function FeedDetails({ feed, title: savedTitle, description: savedDescription, image, imageUrl, error: initialError, children }: { children?: ReactNode; feed: string; title: string; description: string; image: string; imageUrl: string | null; error?: string }) {
+  const page = `/${feed}/settings`;
   const { run, error, setError, pending, setPending, router } = useApiForm(page, initialError, feedDetailsErrorMessage);
   const [title, setTitle] = useState(savedTitle);
   const [description, setDescription] = useState(savedDescription);
@@ -43,10 +46,13 @@ export function FeedDetails({ feed, title: savedTitle, description: savedDescrip
   const remove = (e: FormEvent) => run(e, () => deleteFeed(opts()), () => router.replace("/?deleted=" + feed), 404); // already gone: the goal is met
 
   return (
-    <section aria-label="Feed details" className="mb-10 space-y-3 text-sm">
-      <details>
-        <summary className={summary}>Feed settings</summary>
-        <form method="post" action={`${page}/settings`} onSubmit={(e) => save(e)} className="mt-3 max-w-md">
+    <div className="space-y-10 text-sm">
+      <section aria-labelledby="general">
+        <h2 id="general" className={heading}>
+          <SlidersHorizontal aria-hidden className="h-4 w-4" />
+          General
+        </h2>
+        <form method="post" action={`/${feed}/details`} onSubmit={(e) => save(e)} className="max-w-md">
           <label htmlFor="feed-title" className="mb-1 block text-muted">
             Title
           </label>
@@ -56,7 +62,7 @@ export function FeedDetails({ feed, title: savedTitle, description: savedDescrip
           </label>
           <input id="feed-description" name="description" maxLength={500} value={description} onChange={(e) => setDescription(e.target.value)} className={`${input} mb-2`} />
           <button type="submit" disabled={pending} className="rounded-sm bg-carbon px-4 py-1.5 font-bold text-on-carbon disabled:opacity-60">
-            Save
+            Save changes
           </button>
         </form>
         {hydrated && (
@@ -78,7 +84,8 @@ export function FeedDetails({ feed, title: savedTitle, description: savedDescrip
                 if (file) choose(file);
               }}
             />
-            <button type="button" disabled={pending} onClick={() => picker.current?.click()} className="rounded-sm border border-rule px-3 py-1 font-bold disabled:opacity-60">
+            <button type="button" disabled={pending} onClick={() => picker.current?.click()} className={secondary}>
+              <ImagePlus aria-hidden className="h-4 w-4" />
               Choose image
             </button>
             {image && (
@@ -86,17 +93,22 @@ export function FeedDetails({ feed, title: savedTitle, description: savedDescrip
                 type="button"
                 disabled={pending}
                 onClick={() => save(undefined, { title, description, image: "" })}
-                className="ml-2 rounded-sm border border-rule px-3 py-1 text-muted disabled:opacity-60"
+                className={`${secondary} ml-2 font-normal text-muted`}
               >
+                <X aria-hidden className="h-4 w-4" />
                 Remove image
               </button>
             )}
           </div>
         )}
-      </details>
-      <details>
-        <summary className={summary}>Delete feed</summary>
-        <form method="post" action={`${page}/delete`} onSubmit={remove} className="mt-3 max-w-md">
+      </section>
+      {children}
+      <section aria-labelledby="delete" className="border-t border-rule pt-6">
+        <h2 id="delete" className={`${heading} text-error`}>
+          <Trash2 aria-hidden className="h-4 w-4" />
+          Delete feed
+        </h2>
+        <form method="post" action={`/${feed}/delete`} onSubmit={remove} className="max-w-md">
           <p className="text-muted">This deletes the feed and all its notes. It can&apos;t be undone. Type the feed&apos;s name to confirm.</p>
           <label htmlFor="feed-confirm" className="mb-1 mt-2 block text-muted">
             Feed name
@@ -111,14 +123,15 @@ export function FeedDetails({ feed, title: savedTitle, description: savedDescrip
             onChange={(e) => setConfirm(e.target.value)}
             className={`${input} mb-2`}
           />
-          <button type="submit" disabled={pending || (hydrated && confirm !== feed)} className="rounded-sm border border-error px-4 py-1.5 font-bold text-error disabled:opacity-60">
+          <button type="submit" disabled={pending || (hydrated && confirm !== feed)} className="inline-flex items-center gap-2 rounded-sm border border-error px-4 py-1.5 font-bold text-error disabled:opacity-60">
+            <Trash2 aria-hidden className="h-4 w-4" />
             Delete feed
           </button>
         </form>
-      </details>
+      </section>
       <p role="alert" className="text-error">
         {error}
       </p>
-    </section>
+    </div>
   );
 }

@@ -1,3 +1,5 @@
+import { KeyRound, Lock } from "lucide-react";
+import { heading } from "@/components/styles";
 import { PASSWORD_HINT } from "@/app/_lib/messages";
 import { PASSWORD_PATTERN } from "@/shared/password";
 
@@ -7,9 +9,12 @@ const input = "min-w-0 flex-1 rounded-sm border border-rule bg-transparent px-3 
 export function FeedSettings({ feed, error }: { feed: string; error?: string }) {
   const action = `/${feed}/access`;
   return (
-    <details className="mb-10 text-sm" open={error ? true : undefined}>
-      <summary className="cursor-pointer select-none text-muted hover:text-ink">Feed password</summary>
-      <form method="post" action={action} className="mt-3 max-w-sm">
+    <section aria-labelledby="access" className="text-sm">
+      <h2 id="access" className={heading}>
+        <KeyRound aria-hidden className="h-4 w-4" />
+        Feed password
+      </h2>
+      <form method="post" action={action} className="max-w-sm">
         <label htmlFor="current-password" className="mb-1 block text-muted">
           Current password
         </label>
@@ -46,10 +51,11 @@ export function FeedSettings({ feed, error }: { feed: string; error?: string }) 
         <span className="ml-1 text-muted">(needs the current password)</span>
       </form>
       <form method="post" action={action} className="mt-3">
-        <button type="submit" name="action" value="lock" className="text-muted hover:text-ink hover:underline">
-          Lock
+        <button type="submit" name="action" value="lock" className="inline-flex items-center gap-1.5 text-muted hover:text-ink hover:underline">
+          <Lock aria-hidden className="h-4 w-4" />
+          Lock this browser
         </button>
       </form>
-    </details>
+    </section>
   );
 }

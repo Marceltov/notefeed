@@ -1,10 +1,10 @@
 // POST /<feed>/access: the web UI's plain forms for a feed password (unlock, lock, change, remove).
-// Always answers with a redirect back to the feed page; the cookie is the feed's unlock cookie.
+// Always answers with a redirect back to the feed page (unlock, lock) or the settings page (change, remove); the cookie is the feed's unlock cookie.
 import { AuthError, InvalidRequestError, NotefeedError } from "../errors";
 import { changePassword, feedCookieName, protectedFeed, removePassword, unlock } from "../feedlock";
 import { assertFeed } from "../feeds";
 import { clientIp } from "../limits";
-import { API_PREFIX, feedPath, publicUrl } from "../urls";
+import { API_PREFIX, feedPath, publicUrl, settingsPath } from "../urls";
 import { errorResponse } from "./errors";
 import { errorRedirect, parseForm, readCapped, sameOrigin, seeOther } from "./request";
 
@@ -26,6 +26,7 @@ export async function feedAccessRoute(req: Request, feed: string): Promise<Respo
   const page = feedPath(feed);
   const set = (value: string) => feedCookies(h, feed, value);
   const clear = () => feedCookies(h, feed, "", 0);
+  let back = page; // where a refusal goes: the form it came from
   try {
     assertFeed(feed); // before anything touches the disk
     const bytes = await readCapped(req, 4096);
@@ -33,6 +34,7 @@ export async function feedAccessRoute(req: Request, feed: string): Promise<Respo
     const field = (name: string) => String(form?.get(name) ?? "");
     const action = field("action");
     if (!["unlock", "lock", "change", "remove"].includes(action)) throw new InvalidRequestError("unknown action");
+    if (action === "change" || action === "remove") back = settingsPath(feed);
     // Only this instance's own pages may send these: they set, use or drop the cookie's session, and another
     // site's form must not spend a visitor's password attempts either.
     if (!sameOrigin(h)) throw new AuthError();
@@ -43,12 +45,12 @@ export async function feedAccessRoute(req: Request, feed: string): Promise<Respo
     if (action === "lock") return seeOther(page, clear());
     if (action === "remove") {
       await removePassword(feed, field("current"), clientIp(h));
-      return seeOther(page, clear());
+      return seeOther(page, clear()); // the feed is open now: its settings page would redirect anyway
     }
-    return seeOther(page, set(await changePassword(feed, field("current"), field("next"), clientIp(h))));
+    return seeOther(`${settingsPath(feed)}?saved=1`, set(await changePassword(feed, field("current"), field("next"), clientIp(h))));
   } catch (e) {
     if (!(e instanceof NotefeedError)) throw e;
     if (["invalid_feed", "reserved_feed", "invalid_request"].includes(e.code)) return errorResponse(e);
-    return errorRedirect(page, e);
+    return errorRedirect(back, e);
   }
 }

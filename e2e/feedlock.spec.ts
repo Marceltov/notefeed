@@ -61,16 +61,18 @@ test("change the password, then remove it", async ({ page, browser, baseURL }) =
   const name = feedName();
   await create(page, name, "old-pw");
 
-  await page.getByText("Feed password", { exact: true }).click();
+  await page.getByRole("link", { name: "Settings" }).click();
   await page.getByLabel("Current password").fill("nope");
   await page.getByLabel("New password").fill("new-pw");
-  await page.getByRole("button", { name: "Change" }).click();
+  await page.getByRole("button", { name: "Change", exact: true }).click();
   await expect(page.locator("#settings-error")).toHaveText("That password is wrong.");
 
   await page.getByLabel("Current password").fill("old-pw");
   await page.getByLabel("New password").fill("new-pw");
-  await page.getByRole("button", { name: "Change" }).click();
-  await expect(page.getByRole("link", { name: "Secret note" })).toBeVisible(); // this browser stays unlocked
+  await page.getByRole("button", { name: "Change", exact: true }).click();
+  await expect(page.getByRole("status")).toHaveText("Saved."); // this browser stays unlocked
+  await page.getByRole("link", { name }).click();
+  await expect(page.getByRole("link", { name: "Secret note" })).toBeVisible();
 
   const other = await fresh(browser, baseURL);
   await unlock(other, name, "old-pw");
@@ -78,7 +80,7 @@ test("change the password, then remove it", async ({ page, browser, baseURL }) =
   await unlock(other, name, "new-pw");
   await expect(other.getByRole("link", { name: "Secret note" })).toBeVisible();
 
-  await page.getByText("Feed password", { exact: true }).click();
+  await page.getByRole("link", { name: "Settings" }).click();
   await page.getByLabel("Current password").fill("new-pw");
   await page.getByRole("button", { name: "Remove password" }).click();
   await expect(page.getByRole("link", { name: "Secret note" })).toBeVisible();
@@ -91,8 +93,8 @@ test("change the password, then remove it", async ({ page, browser, baseURL }) =
 test("Lock forgets the unlock in this browser", async ({ page }) => {
   const name = feedName();
   await create(page, name, "pw");
-  await page.getByText("Feed password", { exact: true }).click();
-  await page.getByRole("button", { name: "Lock" }).click();
+  await page.getByRole("link", { name: "Settings" }).click();
+  await page.getByRole("button", { name: "Lock this browser" }).click();
   await expect(page.getByRole("button", { name: "Unlock" })).toBeVisible();
 });
 

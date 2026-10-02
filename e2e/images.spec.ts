@@ -55,7 +55,7 @@ test("editing a note offers the same control", async ({ page }) => {
 test("a title image shows in the header and the read-only view, and can be removed", async ({ page }) => {
   const name = feedName();
   await post(page, name, "# Titled");
-  await page.getByText("Feed settings", { exact: true }).click();
+  await page.getByRole("link", { name: "Settings" }).click();
   await page.getByLabel("Title", { exact: true }).fill("Typed, not saved"); // choosing an image keeps what is typed
   await choose(page, "Choose image", PNG);
   await expect(page.getByRole("status")).toHaveText("Saved.");
@@ -66,7 +66,7 @@ test("a title image shows in the header and the read-only view, and can be remov
   await page.getByRole("link", { name: "Open read-only view" }).click();
   await expect(page.locator("header img:not([src=\"/icon.svg\"])")).toBeVisible();
   await page.goBack();
-  await page.getByText("Feed settings", { exact: true }).click();
+  await page.getByRole("link", { name: "Settings" }).click();
   await page.getByRole("button", { name: "Remove image" }).click();
   await expect(page.getByRole("status")).toHaveText("Saved.");
   await expect(page.locator("header img:not([src=\"/icon.svg\"])")).toHaveCount(0);

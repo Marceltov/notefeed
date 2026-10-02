@@ -10,7 +10,7 @@ import { imagePath } from "./urls";
 export type { Note };
 export { SESSION_COOKIE, locked, sessionOk } from "./auth";
 export { checkFeed } from "./feeds";
-export { feedPath, publicUrl, readPath, rssPath, safeNext } from "./urls";
+export { feedPath, publicUrl, readPath, rssPath, safeNext, settingsPath } from "./urls";
 // Every write is one of these HTTP handlers; the frontend only mounts them and renders.
 export { dispatch } from "./http/api";
 export { feedCookieName, feedUnlocked } from "./feedlock";

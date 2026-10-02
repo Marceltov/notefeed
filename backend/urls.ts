@@ -15,6 +15,7 @@ export function publicUrl(headers: Headers): string {
 
 export const API_PREFIX = "/api/v1";
 export const feedPath = (feed: string) => `/${feed}`;
+export const settingsPath = (feed: string) => `/${feed}/settings`;
 export const readPath = (readId: string) => `/r/${readId}`;
 export const imagePath = (readId: string, file: string) => `${readPath(readId)}/images/${file}`;
 export const rssPath = (readId: string) => `${readPath(readId)}/feed.xml`;

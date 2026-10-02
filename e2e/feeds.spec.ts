@@ -11,7 +11,7 @@ async function post(page: Page, name: string, markdown = "# A note", password?: 
 }
 
 async function setDetails(page: Page, title: string, description: string) {
-  await page.getByText("Feed settings", { exact: true }).click();
+  await page.getByRole("link", { name: "Settings" }).click();
   await page.getByLabel("Title").fill(title);
   await page.getByLabel("Description").fill(description);
   await page.getByRole("button", { name: "Save" }).click();
@@ -22,7 +22,8 @@ test("title and description show on the feed page, the read-only view and in the
   const name = feedName();
   await post(page, name);
   await setDetails(page, "My ideas", "Things I think about");
-  await expect(page).toHaveURL(/\?saved=1$/);
+  await expect(page).toHaveURL(/\/settings\?saved=1$/);
+  await page.getByRole("link", { name }).click();
   await expect(page.getByRole("heading", { name: "My ideas" })).toBeVisible();
   await expect(page.getByText("Things I think about")).toBeVisible();
   await expect(page.getByRole("link", { name })).toBeVisible(); // the name stays visible
@@ -38,29 +39,28 @@ test("title and description show on the feed page, the read-only view and in the
   expect(xml).toContain("Things I think about");
 });
 
-test("a refused title says why, in the settings section and not under the compose box", async ({ page }) => {
+test("a refused title says why, on the settings page", async ({ page }) => {
   const name = feedName();
   await post(page, name);
-  const details = page.getByRole("region", { name: "Feed details" });
   const refusal = "The title or description is too long or has characters that aren't allowed.";
   // With JavaScript: the API refuses a tab, and the form shows it.
-  await page.getByText("Feed settings", { exact: true }).click();
+  await page.getByRole("link", { name: "Settings" }).click();
   await page.getByLabel("Title").fill("a\tb");
   await page.getByRole("button", { name: "Save" }).click();
-  await expect(details.getByRole("alert")).toHaveText(refusal);
+  await expect(page.getByRole("alert").filter({ hasText: refusal })).toBeVisible();
   // Without: where the plain forms' redirects land.
-  await page.goto(`/${name}?form=details&error=invalid_body`);
-  await expect(details.getByRole("alert")).toHaveText(refusal);
-  await expect(page.locator("#compose-error")).toBeEmpty();
-  await page.goto(`/${name}?form=details&error=invalid_request`);
-  await expect(details.getByRole("alert")).toHaveText("Type the feed's name to confirm.");
+  await page.goto(`/${name}/settings?form=details&error=invalid_body`);
+  await expect(page.getByRole("alert").filter({ hasText: refusal })).toBeVisible();
+  await expect(page.locator("#compose-error")).toHaveCount(0); // the compose box lives on the feed page
+  await page.goto(`/${name}/settings?form=details&error=invalid_request`);
+  await expect(page.getByRole("alert").filter({ hasText: "Type the feed's name" })).toHaveText("Type the feed's name to confirm.");
 });
 
 test("delete by typing the name lands on the home page; the feed and its read link are empty", async ({ page }) => {
   const name = feedName();
   await post(page, name);
   const readHref = await page.getByRole("link", { name: "Open read-only view" }).getAttribute("href");
-  await page.locator("summary", { hasText: "Delete feed" }).click();
+  await page.getByRole("link", { name: "Settings" }).click();
   const button = page.getByRole("button", { name: "Delete feed" });
   await expect(button).toBeDisabled();
   await page.getByLabel("Feed name").fill(name.slice(0, -1));
@@ -91,7 +91,7 @@ test("a locked feed's page does not contain its title", async ({ page, browser, 
 test("deleting a protected feed works for the unlocked browser", async ({ page }) => {
   const name = feedName();
   await post(page, name, "# Secret note", "hunter2");
-  await page.locator("summary", { hasText: "Delete feed" }).click();
+  await page.getByRole("link", { name: "Settings" }).click();
   await page.getByLabel("Feed name").fill(name);
   await page.getByRole("button", { name: "Delete feed" }).click();
   await expect(page.getByRole("status")).toHaveText("Feed deleted.");
@@ -102,7 +102,7 @@ test("deleting a protected feed works for the unlocked browser", async ({ page }
 test("a refused save says why", async ({ page }) => {
   const name = feedName();
   await post(page, name);
-  await page.getByText("Feed settings", { exact: true }).click();
+  await page.getByRole("link", { name: "Settings" }).click();
   await page.route("**/api/v1/feeds/*", (route) => route.fulfill({ status: 429, headers: { "retry-after": "7" }, json: { error: "slow down", code: "rate_limited" } }));
   await page.getByRole("button", { name: "Save" }).click();
   await expect(page.getByRole("alert").filter({ hasText: "seconds" })).toContainText("Too many requests, try again in 7 seconds.");
@@ -114,14 +114,15 @@ test("without JavaScript, settings and delete still work", async ({ browser, bas
   await page.goto(`/${name}`);
   await page.getByLabel("Note in markdown").fill("# Plain note");
   await page.getByRole("button", { name: "Post note" }).click();
-  await page.getByText("Feed settings", { exact: true }).click();
+  await page.getByRole("link", { name: "Settings" }).click();
   await page.getByLabel("Title").fill("Plain title");
   await page.getByRole("button", { name: "Save" }).click();
-  await expect(page).toHaveURL(/\?saved=1$/);
+  await expect(page).toHaveURL(/\/settings\?saved=1$/);
   await expect(page.getByRole("status")).toHaveText("Saved.");
+  await page.getByRole("link", { name }).click();
   await expect(page.getByRole("heading", { name: "Plain title" })).toBeVisible();
+  await page.getByRole("link", { name: "Settings" }).click();
 
-  await page.locator("summary", { hasText: "Delete feed" }).click();
   await page.getByLabel("Feed name").fill(name);
   await page.getByRole("button", { name: "Delete feed" }).click();
   await expect(page).toHaveURL(/\/\?deleted=/);
