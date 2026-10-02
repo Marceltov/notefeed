@@ -64,7 +64,7 @@ curl -H "X-Note-Tags: ci,deploy" --data-binary '# Deploy finished' "$NOTEFEED_UR
 curl -H "Content-Type: application/json" -d '{"markdown": "# Deploy finished", "tags": ["ci", "deploy"]}' "$NOTEFEED_URL/$FEED"
 ```
 
-- **Where:** the `X-Note-Tags` header (comma-separated) for a raw markdown body, a `tags` array in a JSON body, or a repeated `tags` field in a multipart form. When a JSON or form body has `tags`, it wins over the header. An empty header or an empty list is no tags.
+- **Where:** the `X-Note-Tags` header (comma-separated) for a raw markdown body, a `tags` array in a JSON body, or a repeated `tags` field in a multipart form (each value may itself be comma-separated, which is what the web UI's Tags field sends). When a JSON or form body has `tags`, it wins over the header. An empty header or an empty list is no tags.
 - **Rules:** at most 10 tags per note, each 1 to 32 characters of lowercase letters, digits, `-`, `_`, `.` and `:` (so `env:prod` works). Capitals are folded to lowercase and duplicates are dropped. Anything else is a `400` (`invalid_body`) that names the tag.
 - **Not verified:** tags are free labels set by whoever posts. They are no identity and give no access, and `source:github-actions` is a convention you choose, not something notefeed checks. They are shown on the public read link and in RSS like the note itself, and a feed's **Show who posted** setting does not hide them.
 - **Where they show:** the `tags` array of the note in the API (an empty list for a note without any, including every note posted before tags existed), the [web UI](web-ui.md#tags), the [MCP](mcp.md) tools, and the RSS item as one `<category>` per tag.

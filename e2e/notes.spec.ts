@@ -102,3 +102,24 @@ test("without JavaScript, edit and delete still work", async ({ browser, baseURL
   await expect(page.getByRole("status")).toHaveText("Note deleted.");
   await expect(page.getByText("Plain edited")).toHaveCount(0);
 });
+
+test("tags typed in the compose box show as links that filter the feed", async ({ page }) => {
+  const name = feedName();
+  await page.goto(`/${name}`);
+  await page.getByLabel("Note in markdown").fill("# Tagged");
+  await page.getByLabel("Tags (optional, separated by commas)").fill("CI, deploy");
+  await page.getByRole("button", { name: "Post note" }).click();
+  await expect(page.getByRole("link", { name: "Tagged" })).toBeVisible();
+  await page.getByRole("link", { name: "ci", exact: true }).click();
+  await expect(page).toHaveURL(new RegExp(`/${name}\\?tag=ci$`));
+  await expect(page.getByText("Notes tagged")).toBeVisible();
+  await expect(page.getByRole("link", { name: "Tagged" })).toBeVisible();
+});
+
+test("the browser refuses a tag with a space in it", async ({ page }) => {
+  await page.goto(`/${feedName()}`);
+  await page.getByLabel("Note in markdown").fill("# Nope");
+  await page.getByLabel("Tags (optional, separated by commas)").fill("two words");
+  await page.getByRole("button", { name: "Post note" }).click();
+  await expect(page.getByRole("link", { name: "Nope" })).toHaveCount(0);
+});

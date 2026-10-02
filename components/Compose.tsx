@@ -8,6 +8,7 @@ import { useApiForm } from "@/app/_lib/useApiForm";
 import { PASSWORD_HINT, SENDER_NOTICE } from "@/app/_lib/messages";
 import { extractTitle, idStamp, slugify } from "@/shared/notes";
 import { PASSWORD_PATTERN } from "@/shared/password";
+import { TAGS_HINT, TAGS_PATTERN } from "@/shared/tags";
 
 // A plain multipart form to POST /<feed>, the same endpoint scripts use: without JavaScript the browser
 // follows the 303 back to the feed page. With JavaScript the box posts through the API client generated
@@ -18,11 +19,13 @@ export function Compose({ feed, action, error: initialError, isNew, exists = tru
   const { run, error, pending, router } = useApiForm(action, initialError);
   const [text, setText] = useState("");
   const [password, setPassword] = useState("");
+  const [tags, setTags] = useState("");
   const [busy, setBusy] = useState(false); // an image is uploading
   const filename = `${idStamp(new Date())}-${slugify(extractTitle(text))}.md`;
 
+  const tagList = tags.split(",").map((t) => t.trim()).filter(Boolean);
   const submit = (e: FormEvent) =>
-    run(e, () => postNote({ baseUrl: window.location.origin, path: { feed }, body: { markdown: text, ...(password && { password }) } }), ({ data }) => router.push(`${action}?posted=${data?.id}`)); // the page remounts this box empty
+    run(e, () => postNote({ baseUrl: window.location.origin, path: { feed }, body: { markdown: text, ...(password && { password }), ...(tagList.length && { tags: tagList }) } }), ({ data }) => router.push(`${action}?posted=${data?.id}`)); // the page remounts this box empty
 
   return (
     <form method="post" action={action} encType="multipart/form-data" onSubmit={submit} className="mb-12">
@@ -55,6 +58,23 @@ export function Compose({ feed, action, error: initialError, isNew, exists = tru
           <Send aria-hidden className="h-4 w-4" />
           {pending ? "Posting…" : "Post note"}
         </button>
+      </div>
+      <div className="mt-2 text-sm">
+        <label htmlFor="note-tags" className="sr-only">
+          Tags (optional, separated by commas)
+        </label>
+        <input
+          id="note-tags"
+          name="tags"
+          type="text"
+          autoComplete="off"
+          placeholder="Tags, e.g. ci, deploy"
+          pattern={TAGS_PATTERN}
+          title={TAGS_HINT}
+          value={tags}
+          onChange={(e) => setTags(e.target.value)}
+          className="w-full max-w-sm rounded-sm border border-rule bg-transparent px-3 py-1.5 focus:border-carbon focus:outline-none"
+        />
       </div>
       {isNew && (
         <div className="mt-2 text-sm">
