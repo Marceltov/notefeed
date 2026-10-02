@@ -6,7 +6,7 @@ Post short markdown notes to a named feed — from a script over HTTP, or by han
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/screenshot-dark.png">
-  <img alt="A notefeed feed page: a compose box, the feed's read link, and notes grouped by day" src="docs/assets/screenshot-light.png">
+  <img alt="A notefeed feed page: a header with read-only, RSS and settings buttons, a compose box, and notes grouped by day" src="docs/assets/screenshot-light.png">
 </picture>
 
 ## Quick start

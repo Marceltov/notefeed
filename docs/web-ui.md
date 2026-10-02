@@ -11,8 +11,8 @@ Open notefeed in a browser. The start page asks for a feed name and suggests a r
 
 `/<feed>` shows one feed: a box to write a note, the feed's read link, and its newest 50 notes. A feed with no notes yet shows an empty list and a `curl` command to post the first one; it's saved to disk with its first note, and its read link appears then too.
 
-![A notefeed feed page: a compose box, the feed's read link, and notes grouped by day](assets/screenshot-light.png#only-light)
-![A notefeed feed page: a compose box, the feed's read link, and notes grouped by day](assets/screenshot-dark.png#only-dark)
+![A notefeed feed page: a header with read-only, RSS and settings buttons, a compose box, and notes grouped by day](assets/screenshot-light.png#only-light)
+![A notefeed feed page: a header with read-only, RSS and settings buttons, a compose box, and notes grouped by day](assets/screenshot-dark.png#only-dark)
 
 ### Writing a note
 
@@ -50,7 +50,12 @@ Anyone who can open the feed can edit and delete its notes. On a feed with [its 
 
 ## Feed settings and deleting a feed
 
+![A feed's settings page: General, Read link, Post from a script and Delete feed](assets/screenshot-settings-light.png#only-light)
+![A feed's settings page: General, Read link, Post from a script and Delete feed](assets/screenshot-settings-dark.png#only-dark)
+
 The **Settings** button at the top right of the feed page opens `/<feed>/settings`, a page with four sections: **General**, **Read link** (with the `curl` command), **Feed password** and **Delete feed**. It exists once the feed has a note. **General** has a **Title** and a **Description** and a **Save changes** button. The title is shown as a heading at the top of the feed page and in the browser tab, with the description below it; the feed's name stays in the page header. Both also show in the [read-only view](#the-read-only-view) and are the RSS feed's title and description, so anyone with the read link sees them. Leave a field empty to clear it. The feed's name never changes.
+
+**Read link** shows the feed's [read link](#the-read-link) with a **Copy** button, so you can hand it to a feed reader or a dashboard; until the feed has its first note it says so instead. **Post from a script** is a `curl` command for this feed, with the headers it needs: `Authorization` on an instance with a password, and `X-Feed-Password` on an unlocked protected feed. **Feed password** only appears on a protected feed you have unlocked (see [A password for a feed](#a-password-for-a-feed)). On a phone, the buttons at the top of the page show only their icons.
 
 The **Title image** control has a **Choose image** button, which uploads an image and saves it as the feed's title image at once, and a **Remove image** button. Either one saves what is typed in the title and description too. The title image shows in the page header and in the read-only view, and is the RSS feed's channel image. Like the title, it is public to anyone with the read link. Choosing and removing an image need JavaScript.
 
