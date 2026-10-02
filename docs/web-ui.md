@@ -40,6 +40,10 @@ Notes are listed newest first, grouped by day, with the time on the left. Times 
 
 Raw HTML in notes is shown as text, never run.
 
+### Tags
+
+A note's [tags](posting.md#tags) show next to its title in the list and on its page, in the feed and in the read-only view. Each is a link: it opens the list with only the notes carrying that tag (`?tag=ci`), with a **Show all notes** link above it. The compose box does not set tags; post them from a script, the API or an MCP client.
+
 ### Editing and deleting a note
 
 A note's own page, `/<feed>/<id>`, has an **Edit** control and a **Delete** control. **Edit** shows a box with the note's markdown; change it and press **Save**. The note keeps its address, its place in the list and its RSS item identity, and its title follows the new text. **Delete** asks you to confirm before it removes the note; once confirmed it is gone for good, and you land back on the feed, which stays even if it now has no notes.

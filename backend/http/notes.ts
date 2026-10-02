@@ -5,6 +5,7 @@ import { cookieValue } from "../feedlock";
 import { clientIp } from "../limits";
 import { MAX_BYTES } from "../notes";
 import { postNote } from "../posting";
+import { tagsFromHeader } from "../tags";
 import { feedPath, publicUrl, rssPath } from "../urls";
 import { feedCookies } from "./feedsession";
 import { authorize, errorRedirect, feedAccess, sameOrigin, sender, mediaType, parseForm, readCapped, wantsHtml } from "./request";
@@ -17,9 +18,15 @@ const TEXT_TYPES = ["", "text/markdown", "text/plain", "application/x-www-form-u
 type PostReply = { status: 201; body: Created; headers?: HeadersInit } | { status: 303; body: undefined; headers: HeadersInit };
 const redirect = (location: string, more: [string, string][] = []): PostReply => ({ status: 303, body: undefined, headers: [["Location", location], ...more] });
 
-// The note's markdown (and the optional new-feed password) from a raw text body, JSON, or a form's fields.
+// The note's markdown (and the optional new-feed password and tags) from a raw text body, JSON, or a form's fields.
+// Tags come from the body; a raw body has none, so it takes the X-Note-Tags header.
 // The 100 KB cap counts the whole body, so a form's own framing takes a few bytes of it.
-export async function readMarkdown(req: Request): Promise<{ markdown: string; password?: string }> {
+export async function readMarkdown(req: Request): Promise<{ markdown: string; password?: string; tags?: string[] }> {
+  const note = await readBody(req);
+  return { ...note, tags: note.tags ?? tagsFromHeader(req.headers.get("x-note-tags")) };
+}
+
+async function readBody(req: Request): Promise<{ markdown: string; password?: string; tags?: string[] }> {
   const type = mediaType(req.headers);
   const isJson = type === "application/json";
   const isForm = type === "multipart/form-data";
@@ -29,7 +36,8 @@ export async function readMarkdown(req: Request): Promise<{ markdown: string; pa
   if (!bytes) throw new NoteTooLargeError();
 
   if (isForm) {
-    const form = await parseForm(bytes, req.headers).then(Object.fromEntries, () => null);
+    // A repeated `tags` field is a list; Object.fromEntries would keep only the last.
+    const form = await parseForm(bytes, req.headers).then((f) => ({ ...Object.fromEntries(f), ...(f.has("tags") && { tags: f.getAll("tags") }) }), () => null);
     const parsed = PostForm.safeParse(form);
     if (!parsed.success) throw new InvalidBodyError('form needs a "markdown" field');
     return parsed.data;

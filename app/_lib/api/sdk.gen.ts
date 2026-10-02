@@ -32,7 +32,7 @@ export const listNotes = <ThrowOnError extends boolean = false>(options: Options
 /**
  * Post a note
  *
- * Creates the feed with its first note, optionally protected by its own password (`X-Feed-Password` header or a `password` field in the JSON or form body; 1 to 256 printable ASCII characters, with no space at the start or end). Posting to a protected feed needs that password. Also served at `POST /{feed}`, the short form the client packages and curl one-liners use. The body is at most 102400 bytes and must be UTF-8. `application/x-www-form-urlencoded` (what `curl -d` sends) is read as raw markdown, not as form fields.
+ * Creates the feed with its first note, optionally protected by its own password (`X-Feed-Password` header or a `password` field in the JSON or form body; 1 to 256 printable ASCII characters, with no space at the start or end). Posting to a protected feed needs that password. Also served at `POST /{feed}`, the short form the client packages and curl one-liners use. The body is at most 102400 bytes and must be UTF-8. `application/x-www-form-urlencoded` (what `curl -d` sends) is read as raw markdown, not as form fields. Tags (at most 10 tags, each 1 to 32 characters of letters, digits, `-`, `_`, `.` and `:`; case is folded to lowercase, duplicates are removed) go in the JSON `tags` array, a repeated `tags` form field, or, for a raw body, the `X-Note-Tags` header.
  */
 export const postNote = <ThrowOnError extends boolean = false>(options: Options<PostNoteData, ThrowOnError>): RequestResult<PostNoteResponses, PostNoteErrors, ThrowOnError> => (options.client ?? client).post<PostNoteResponses, PostNoteErrors, ThrowOnError>({
     security: [{ scheme: 'bearer', type: 'http' }],

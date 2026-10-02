@@ -4,7 +4,7 @@ import { cache } from "react";
 import { notFound } from "next/navigation";
 import { Compose } from "@/components/Compose";
 import { Header } from "@/components/Header";
-import { NoteList } from "@/components/NoteList";
+import { NoteList, TagFilter } from "@/components/NoteList";
 import { UnlockForm } from "@/components/UnlockForm";
 import { curlFor } from "@/app/_lib/curl";
 import { errorMessage, feedErrorMessage } from "@/app/_lib/messages";
@@ -12,7 +12,7 @@ import { checkFeed, feedCookieName, feedPath, feedUnlocked, getFeed, IDENTITY_CO
 
 export const dynamic = "force-dynamic";
 
-const feedData = cache(getFeed); // the metadata and the page share one read per request
+const feedData = cache(getFeed); // the metadata and the page share one read per request (the metadata reads it unfiltered)
 
 export async function generateMetadata({ params }: PageProps<"/[feed]">): Promise<Metadata> {
   const { feed } = await params;
@@ -24,7 +24,8 @@ export async function generateMetadata({ params }: PageProps<"/[feed]">): Promis
 
 export default async function FeedPage({ params, searchParams }: PageProps<"/[feed]">) {
   const { feed } = await params;
-  const { posted, deleted, error, retry } = await searchParams;
+  const { posted, deleted, error, retry, tag: tagParam } = await searchParams;
+  const tag = typeof tagParam === "string" ? tagParam.toLowerCase() : undefined;
   const jar = await cookies();
   const access = await feedUnlocked(feed, jar.get(feedCookieName(feed))?.value);
   // A locked feed shows nothing of itself: no notes, no read link.
@@ -36,7 +37,7 @@ export default async function FeedPage({ params, searchParams }: PageProps<"/[fe
       </>
     );
   }
-  const data = await feedData(feed);
+  const data = tag ? await getFeed(feed, tag) : await feedData(feed);
   if (!data) notFound();
   const { notes, readId, exists, title, description } = data;
   const base = publicUrl(await headers());
@@ -60,7 +61,10 @@ export default async function FeedPage({ params, searchParams }: PageProps<"/[fe
       <Compose key={String(posted)} feed={feed} action={feedPath(feed)} error={errorMessage(error, retry)}
         isNew={access === "open" && !exists} exists={exists} sender={identitySender(jar.get(IDENTITY_COOKIE)?.value) !== undefined}
       />
-      {notes.length === 0 ? (
+      {tag && <TagFilter tag={tag} base={feedPath(feed)} />}
+      {tag && notes.length === 0 ? (
+        <p className="text-muted">No notes with this tag.</p>
+      ) : notes.length === 0 ? (
         <section className="text-muted">
           <p>No notes yet. Write one above, or post from a script:</p>
           <pre className="mt-3 overflow-x-auto font-mono text-sm text-ink">{curlExample}</pre>

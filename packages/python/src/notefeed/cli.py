@@ -21,6 +21,7 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("post", help="post a note; prints its URL")
     p.add_argument("text", nargs="?", help='the markdown, or "-" to read stdin')
     p.add_argument("--file", help="read the markdown from this file")
+    p.add_argument("--tag", action="append", help="label the note with this tag (repeat for several)")
     e = sub.add_parser("edit", help="replace a note's markdown; prints its URL")
     e.add_argument("id", help="the note's id")
     e.add_argument("text", nargs="?", help='the new markdown, or "-" to read stdin')
@@ -32,6 +33,7 @@ def main(argv: list[str] | None = None) -> int:
     n = sub.add_parser("notes", help="print the newest notes: time, title, URL")
     n.add_argument("--limit", type=int, default=20, help="how many notes (default: 20)")
     n.add_argument("--json", action="store_true", help="one JSON object per line")
+    n.add_argument("--tag", help="only notes carrying this tag")
     for s_ in (p, e, d, i, n):
         s_.add_argument("--url", help="notefeed base URL (default: $NOTEFEED_URL)")
         s_.add_argument("--feed", help="feed name (default: $NOTEFEED_FEED)")
@@ -41,7 +43,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if args.command == "post":
             markdown = _read(args)
-            print(_client(args).post(markdown).url)
+            print(_client(args).post(markdown, tags=args.tag).url)
         elif args.command == "edit":
             markdown = _read(args)
             print(_client(args).edit(args.id, markdown).url)
@@ -57,7 +59,7 @@ def main(argv: list[str] | None = None) -> int:
         else:
             if args.limit < 1:
                 raise _UsageError("--limit must be a whole number, 1 or more")
-            for note in itertools.islice(_client(args).notes(page_size=min(args.limit, 100)), args.limit):
+            for note in itertools.islice(_client(args).notes(page_size=min(args.limit, 100), tag=args.tag), args.limit):
                 print(_line(note, args.json))
     except BrokenPipeError:
         # The reader went away (`notefeed notes | head -1`): stop quietly, and point stdout at devnull so

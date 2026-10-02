@@ -33,7 +33,7 @@
       "post": {
         "operationId": "postNote",
         "summary": "Post a note",
-        "description": "Creates the feed with its first note, optionally protected by its own password (`X-Feed-Password` header or a `password` field in the JSON or form body; 1 to 256 printable ASCII characters, with no space at the start or end). Posting to a protected feed needs that password. Also served at `POST /{feed}`, the short form the client packages and curl one-liners use. The body is at most 102400 bytes and must be UTF-8. `application/x-www-form-urlencoded` (what `curl -d` sends) is read as raw markdown, not as form fields.",
+        "description": "Creates the feed with its first note, optionally protected by its own password (`X-Feed-Password` header or a `password` field in the JSON or form body; 1 to 256 printable ASCII characters, with no space at the start or end). Posting to a protected feed needs that password. Also served at `POST /{feed}`, the short form the client packages and curl one-liners use. The body is at most 102400 bytes and must be UTF-8. `application/x-www-form-urlencoded` (what `curl -d` sends) is read as raw markdown, not as form fields. Tags (at most 10 tags, each 1 to 32 characters of letters, digits, `-`, `_`, `.` and `:`; case is folded to lowercase, duplicates are removed) go in the JSON `tags` array, a repeated `tags` form field, or, for a raw body, the `X-Note-Tags` header.",
         "tags": [
           "Feeds"
         ],
@@ -59,6 +59,15 @@
             "in": "header",
             "required": false,
             "description": "The feed's own password, when it has one: to post, list or get, and (as the current password) to change or remove it. On the `POST` that creates a feed it sets the feed's password; on a `POST` to an existing feed that has none it answers 409. An empty value is the same as no header, so a `POST` with an empty one creates an open feed.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Note-Tags",
+            "in": "header",
+            "required": false,
+            "description": "Tags for the note, comma-separated (`ci,deploy`): at most 10 tags, each 1 to 32 characters of letters, digits, `-`, `_`, `.` and `:`; case is folded to lowercase, duplicates are removed. For a raw markdown body; a JSON or form body's own `tags` wins. Empty is none.",
             "schema": {
               "type": "string"
             }
@@ -117,7 +126,7 @@
             }
           },
           "400": {
-            "description": "Invalid or reserved feed name; empty note; bad JSON, form or UTF-8; a new password that is not printable ASCII",
+            "description": "Invalid or reserved feed name; empty note; bad JSON, form or UTF-8; a new password that is not printable ASCII; invalid tags",
             "content": {
               "application/json": {
                 "schema": {
@@ -249,6 +258,15 @@
             "schema": {
               "type": "string",
               "pattern": "^\\d{8}T\\d{6}Z-[a-z0-9-]+$"
+            }
+          },
+          {
+            "name": "tag",
+            "in": "query",
+            "required": false,
+            "description": "Only notes carrying this tag",
+            "schema": {
+              "type": "string"
             }
           }
         ],
@@ -1394,6 +1412,15 @@
               "type": "string",
               "pattern": "^\\d{8}T\\d{6}Z-[a-z0-9-]+$"
             }
+          },
+          {
+            "name": "tag",
+            "in": "query",
+            "required": false,
+            "description": "Only notes carrying this tag",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -1548,6 +1575,13 @@
               "string",
               "null"
             ]
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Labels the poster gave the note (not verified, and shown to readers like the note itself); empty when none"
           }
         },
         "required": [
@@ -1555,7 +1589,8 @@
           "title",
           "markdown",
           "created_at",
-          "url"
+          "url",
+          "tags"
         ],
         "additionalProperties": false
       },
@@ -1689,6 +1724,13 @@
           "password": {
             "type": "string",
             "description": "Protects the feed: 1 to 256 printable ASCII characters, with no space at the start or end. Only honored on the post that creates the feed; an existing open feed answers 409. Empty is the same as leaving it out."
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Labels for the note: at most 10 tags, each 1 to 32 characters of letters, digits, `-`, `_`, `.` and `:`; case is folded to lowercase, duplicates are removed. Free labels, not verified, shown with the note (also to readers of the read link and RSS). Ignored when editing a note: an edit keeps its tags."
           }
         },
         "required": [
@@ -1705,6 +1747,13 @@
           "password": {
             "type": "string",
             "description": "Protects the feed: 1 to 256 printable ASCII characters, with no space at the start or end. Only honored on the post that creates the feed; an existing open feed answers 409. Empty is the same as leaving it out."
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Labels for the note: at most 10 tags, each 1 to 32 characters of letters, digits, `-`, `_`, `.` and `:`; case is folded to lowercase, duplicates are removed. Free labels, not verified, shown with the note (also to readers of the read link and RSS). Ignored when editing a note: an edit keeps its tags."
           }
         },
         "required": [

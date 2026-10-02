@@ -32,6 +32,7 @@ def note(h):
         "markdown": f"# N{h}",
         "created_at": f"2026-09-30T{h:02d}:00:00.000Z",
         "url": f"https://n.example/inbox/n{h}",
+        "tags": [],
     }
 
 
@@ -61,6 +62,16 @@ def test_post_sends_markdown_as_json_and_returns_created(server):
     assert (req["method"], req["path"]) == ("POST", "/api/v1/feeds/inbox/notes")
     assert json.loads(req["body"]) == {"markdown": "# Café\r\nx"}
     assert "Authorization" not in req["headers"]
+
+
+def test_tags_go_in_the_json_body_and_tag_in_the_list_query(server):
+    Client(server.url, "inbox").post("x", tags=["ci", "deploy"])
+    Client(server.url, "inbox").post("x")
+    assert json.loads(server.requests[0]["body"]) == {"markdown": "x", "tags": ["ci", "deploy"]}
+    assert json.loads(server.requests[1]["body"]) == {"markdown": "x"}
+    server.reply(200, {"notes": [], "next": None})
+    assert list(Client(server.url, "inbox").notes(tag="ci")) == []
+    assert "tag=ci" in server.requests[2]["path"]
 
 
 def test_post_to_a_feed_without_a_read_link_has_read_url_none(server):

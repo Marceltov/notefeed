@@ -9,10 +9,11 @@ import { imagePath, publicUrl } from "../urls";
 
 export async function rssRoute(req: Request, readId: string): Promise<Response> {
   if (!isReadId(readId)) return new Response("not found", { status: 404 });
+  const tag = new URL(req.url).searchParams.get("tag")?.toLowerCase(); // an unknown tag is an empty feed, like an unknown read id
   const feed = await feedForReadId(readId);
   const settings = feed ? await getSettings(feed) : { title: "", description: "", image: "", showSender: true };
   const title = settings.title || config.title();
-  const xml = renderFeed(feed ? forReaders(await listNotes(feed, 50), settings) : [], {
+  const xml = renderFeed(feed ? forReaders(await listNotes(feed, 50, undefined, tag), settings) : [], {
     title,
     description: settings.description || title,
     baseUrl: publicUrl(req.headers),

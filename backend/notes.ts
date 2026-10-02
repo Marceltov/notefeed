@@ -1,11 +1,12 @@
 // Notes: validation, ids and reading them back. Storage itself is in data/notes.ts.
 import { extractTitle, idStamp, slugify } from "../shared/notes";
+import type { Meta } from "./data/frontmatter";
 import { isErrno } from "./data/fs";
 import { deleteNoteFile, replaceNote, writeNote, listNoteFiles, readNote } from "./data/notes";
 import { EmptyNoteError, NoteTooLargeError } from "./errors";
 import { assertFeed, checkFeed, ensureFeed, forgetFeed } from "./feeds";
 
-export type Note = { id: string; title: string; markdown: string; createdAt: Date; sender?: string };
+export type Note = { id: string; title: string; markdown: string; createdAt: Date; sender?: string; tags: string[] };
 
 export const MAX_BYTES = 102400;
 
@@ -15,7 +16,7 @@ export function isValidId(id: string): boolean {
   return ID_RE.test(id);
 }
 
-function toNote(id: string, { markdown, sender }: { markdown: string; sender?: string }): Note {
+function toNote(id: string, { markdown, sender, meta }: { markdown: string; sender?: string; meta?: Meta }): Note {
   const [, y, mo, d, h, mi, s] = ID_RE.exec(id)!;
   return {
     id,
@@ -23,6 +24,8 @@ function toNote(id: string, { markdown, sender }: { markdown: string; sender?: s
     markdown,
     createdAt: new Date(Date.UTC(+y, +mo - 1, +d, +h, +mi, +s)),
     ...(sender !== undefined && { sender }),
+    // A hand-edited file may hold anything under `tags`; only strings count.
+    tags: Array.isArray(meta?.tags) ? meta.tags.filter((t): t is string => typeof t === "string") : [],
   };
 }
 
@@ -33,7 +36,7 @@ export function checkMarkdown(markdown: string): void {
 }
 
 // `readId`: the read id of the feed the note went into (null: that feed has no read link).
-export async function createNote(feed: string, markdown: string, now = new Date(), sender?: string): Promise<{ note: Note; readId: string | null }> {
+export async function createNote(feed: string, markdown: string, now = new Date(), sender?: string, tags: string[] = []): Promise<{ note: Note; readId: string | null }> {
   assertFeed(feed);
   checkMarkdown(markdown);
   // ponytail: checked, not locked. A post that is past ensureFeed when its feed is deleted and the name
@@ -42,7 +45,7 @@ export async function createNote(feed: string, markdown: string, now = new Date(
   for (let retried = false; ; retried = true) {
     const readId = await ensureFeed(feed);
     try {
-      return { note: toNote(await writeNote(feed, base, markdown, sender), { markdown, sender }), readId };
+      return { note: toNote(await writeNote(feed, base, markdown, sender, tags), { markdown, sender, meta: tags.length ? { tags } : {} }), readId };
     } catch (e) {
       // The listed feed's directory is gone (deleted since ensureFeed, or removed by hand): this is a new
       // feed. Once only: gone again means another delete, and that is an error.
@@ -58,14 +61,20 @@ async function noteIds(feed: string): Promise<string[]> {
 }
 
 // Newest first. `before` (a note id) pages backwards: ids sort by time, so older notes sort lower.
-export async function listNotes(feed: string, limit = 50, before?: string): Promise<Note[]> {
+// `tag`: only notes carrying it; the files are read newest first until `limit` match.
+export async function listNotes(feed: string, limit = 50, before?: string, tag?: string): Promise<Note[]> {
   const ids = (await noteIds(feed))
     .filter((id) => before === undefined || id < before)
     .sort()
-    .reverse()
-    .slice(0, limit);
-  const notes = await Promise.all(ids.map((id) => getNote(feed, id)));
-  return notes.filter((n) => n !== null); // a note deleted between readdir and read
+    .reverse();
+  const read = async (page: string[]) => (await Promise.all(page.map((id) => getNote(feed, id)))).filter((n) => n !== null); // null: deleted between readdir and read
+  if (tag === undefined) return read(ids.slice(0, limit));
+  // ponytail: a rare tag reads every note of the feed; a tag index would fix it if feeds get large.
+  const found: Note[] = [];
+  for (let i = 0; i < ids.length && found.length < limit; i += limit) {
+    found.push(...(await read(ids.slice(i, i + limit))).filter((n) => n.tags.includes(tag)));
+  }
+  return found.slice(0, limit);
 }
 
 export async function countNotes(feed: string): Promise<number> {

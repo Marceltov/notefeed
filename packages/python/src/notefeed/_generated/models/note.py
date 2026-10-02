@@ -20,6 +20,8 @@ class Note:
         markdown (str): The note, byte-for-byte as posted
         created_at (datetime.datetime): When the note was posted (UTC)
         url (str): The note's page in the web UI
+        tags (list[str]): Labels the poster gave the note (not verified, and shown to readers like the note itself);
+            empty when none
         sender (None | str | Unset): Verified sign-in name of the poster; absent when the note was posted without a
             sign-in
     """
@@ -29,6 +31,7 @@ class Note:
     markdown: str
     created_at: datetime.datetime
     url: str
+    tags: list[str]
     sender: None | str | Unset = UNSET
 
     def to_dict(self) -> dict[str, Any]:
@@ -41,6 +44,8 @@ class Note:
         created_at = self.created_at.isoformat()
 
         url = self.url
+
+        tags = self.tags
 
         sender: None | str | Unset
         if isinstance(self.sender, Unset):
@@ -57,6 +62,7 @@ class Note:
                 "markdown": markdown,
                 "created_at": created_at,
                 "url": url,
+                "tags": tags,
             }
         )
         if sender is not UNSET:
@@ -77,6 +83,8 @@ class Note:
 
         url = d.pop("url")
 
+        tags = cast(list[str], d.pop("tags"))
+
         def _parse_sender(data: object) -> None | str | Unset:
             if data is None:
                 return data
@@ -92,6 +100,7 @@ class Note:
             markdown=markdown,
             created_at=created_at,
             url=url,
+            tags=tags,
             sender=sender,
         )
 

@@ -29,6 +29,10 @@ export type Note = {
      * Verified sign-in name of the poster; absent when the note was posted without a sign-in
      */
     sender?: string | null;
+    /**
+     * Labels the poster gave the note (not verified, and shown to readers like the note itself); empty when none
+     */
+    tags: Array<string>;
 };
 
 export type NoteList = {
@@ -90,6 +94,10 @@ export type PostJson = {
      * Protects the feed: 1 to 256 printable ASCII characters, with no space at the start or end. Only honored on the post that creates the feed; an existing open feed answers 409. Empty is the same as leaving it out.
      */
     password?: string;
+    /**
+     * Labels for the note: at most 10 tags, each 1 to 32 characters of letters, digits, `-`, `_`, `.` and `:`; case is folded to lowercase, duplicates are removed. Free labels, not verified, shown with the note (also to readers of the read link and RSS). Ignored when editing a note: an edit keeps its tags.
+     */
+    tags?: Array<string>;
 };
 
 export type PostForm = {
@@ -98,6 +106,10 @@ export type PostForm = {
      * Protects the feed: 1 to 256 printable ASCII characters, with no space at the start or end. Only honored on the post that creates the feed; an existing open feed answers 409. Empty is the same as leaving it out.
      */
     password?: string;
+    /**
+     * Labels for the note: at most 10 tags, each 1 to 32 characters of letters, digits, `-`, `_`, `.` and `:`; case is folded to lowercase, duplicates are removed. Free labels, not verified, shown with the note (also to readers of the read link and RSS). Ignored when editing a note: an edit keeps its tags.
+     */
+    tags?: Array<string>;
 };
 
 export type PasswordJson = {
@@ -195,6 +207,10 @@ export type ListNotesData = {
          * Only notes older than this id: the previous page's `next`
          */
         before?: string;
+        /**
+         * Only notes carrying this tag
+         */
+        tag?: string;
     };
     url: '/api/v1/feeds/{feed}/notes';
 };
@@ -232,6 +248,10 @@ export type PostNoteData = {
          * The feed's own password, when it has one: to post, list or get, and (as the current password) to change or remove it. On the `POST` that creates a feed it sets the feed's password; on a `POST` to an existing feed that has none it answers 409. An empty value is the same as no header, so a `POST` with an empty one creates an open feed.
          */
         'X-Feed-Password'?: string;
+        /**
+         * Tags for the note, comma-separated (`ci,deploy`): at most 10 tags, each 1 to 32 characters of letters, digits, `-`, `_`, `.` and `:`; case is folded to lowercase, duplicates are removed. For a raw markdown body; a JSON or form body's own `tags` wins. Empty is none.
+         */
+        'X-Note-Tags'?: string;
     };
     path: {
         /**
@@ -245,7 +265,7 @@ export type PostNoteData = {
 
 export type PostNoteErrors = {
     /**
-     * Invalid or reserved feed name; empty note; bad JSON, form or UTF-8; a new password that is not printable ASCII
+     * Invalid or reserved feed name; empty note; bad JSON, form or UTF-8; a new password that is not printable ASCII; invalid tags
      */
     400: Error;
     /**
@@ -799,6 +819,10 @@ export type ListReadNotesData = {
          * Only notes older than this id: the previous page's `next`
          */
         before?: string;
+        /**
+         * Only notes carrying this tag
+         */
+        tag?: string;
     };
     url: '/api/v1/read/{readId}/notes';
 };

@@ -5,6 +5,7 @@ import { ERROR_CODES } from "../../shared/errors";
 import { PASSWORD_RULE } from "../../shared/password";
 import { FEED_RE } from "../feeds";
 import { IMAGE_FILE_RE } from "../images";
+import { TAG_RE, TAG_RULE } from "../tags";
 
 export const NOTE_ID = /^\d{8}T\d{6}Z-[a-z0-9-]+$/;
 export const MAX_LIMIT = 100;
@@ -17,6 +18,7 @@ export const NoteJson = z
     created_at: z.iso.datetime().describe("When the note was posted (UTC)"),
     url: z.url().describe("The note's page in the web UI"),
     sender: z.string().nullable().optional().describe("Verified sign-in name of the poster; absent when the note was posted without a sign-in"),
+    tags: z.array(z.string()).describe("Labels the poster gave the note (not verified, and shown to readers like the note itself); empty when none"),
   })
   .meta({ id: "Note" });
 export type NoteJson = z.infer<typeof NoteJson>;
@@ -48,8 +50,9 @@ export const ErrorJson = z
 const NewPassword = z
   .string()
   .describe(`Protects the feed: ${PASSWORD_RULE}. Only honored on the post that creates the feed; an existing open feed answers 409. Empty is the same as leaving it out.`);
-export const PostJson = z.object({ markdown: z.string(), password: NewPassword.optional() }).meta({ id: "PostJson" });
-export const PostForm = z.object({ markdown: z.string(), password: NewPassword.optional() }).meta({ id: "PostForm" });
+const Tags = z.array(z.string()).describe(`Labels for the note: ${TAG_RULE}. Free labels, not verified, shown with the note (also to readers of the read link and RSS). Ignored when editing a note: an edit keeps its tags.`);
+export const PostJson = z.object({ markdown: z.string(), password: NewPassword.optional(), tags: Tags.optional() }).meta({ id: "PostJson" });
+export const PostForm = z.object({ markdown: z.string(), password: NewPassword.optional(), tags: Tags.optional() }).meta({ id: "PostForm" });
 export const PasswordJson = z.object({ password: z.string().describe(`The new password: ${PASSWORD_RULE}`) }).meta({ id: "PasswordJson" });
 
 export const FeedPasswordHeader = z
@@ -59,6 +62,9 @@ export const FeedPasswordHeader = z
       "On the `POST` that creates a feed it sets the feed's password; on a `POST` to an existing feed that has none it answers 409. " +
       "An empty value is the same as no header, so a `POST` with an empty one creates an open feed.",
   );
+export const NoteTagsHeader = z
+  .string()
+  .describe(`Tags for the note, comma-separated (\`ci,deploy\`): ${TAG_RULE}. For a raw markdown body; a JSON or form body's own \`tags\` wins. Empty is none.`);
 export const CurrentPasswordHeader = z.string().describe("The feed's current password");
 
 const TITLE = z.string().describe("Display title, at most 100 characters, one line; empty means none (the feed's name is shown)");
@@ -107,4 +113,5 @@ export const NoteIdParam = z.string().regex(NOTE_ID).describe("The note's id");
 export const PageQuery = z.object({
   limit: z.coerce.number().int().min(1).max(MAX_LIMIT).default(50).describe(`Notes per page, 1–${MAX_LIMIT}`),
   before: z.string().regex(NOTE_ID).optional().describe("Only notes older than this id: the previous page's `next`"),
+  tag: z.string().toLowerCase().pipe(z.string().regex(TAG_RE)).optional().describe("Only notes carrying this tag"),
 });

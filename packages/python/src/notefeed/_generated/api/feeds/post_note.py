@@ -17,10 +17,14 @@ def _get_kwargs(
     *,
     body: PostJson,
     x_feed_password: str | Unset = UNSET,
+    x_note_tags: str | Unset = UNSET,
 ) -> dict[str, Any]:
     headers: dict[str, Any] = {}
     if not isinstance(x_feed_password, Unset):
         headers["X-Feed-Password"] = x_feed_password
+
+    if not isinstance(x_note_tags, Unset):
+        headers["X-Note-Tags"] = x_note_tags
 
     _kwargs: dict[str, Any] = {
         "method": "post",
@@ -107,6 +111,7 @@ def sync_detailed(
     client: AuthenticatedClient,
     body: PostJson,
     x_feed_password: str | Unset = UNSET,
+    x_note_tags: str | Unset = UNSET,
 ) -> Response[Any | Created | Error]:
     """Post a note
 
@@ -115,11 +120,14 @@ def sync_detailed(
     space at the start or end). Posting to a protected feed needs that password. Also served at `POST
     /{feed}`, the short form the client packages and curl one-liners use. The body is at most 102400
     bytes and must be UTF-8. `application/x-www-form-urlencoded` (what `curl -d` sends) is read as raw
-    markdown, not as form fields.
+    markdown, not as form fields. Tags (at most 10 tags, each 1 to 32 characters of letters, digits,
+    `-`, `_`, `.` and `:`; case is folded to lowercase, duplicates are removed) go in the JSON `tags`
+    array, a repeated `tags` form field, or, for a raw body, the `X-Note-Tags` header.
 
     Args:
         feed (str):
         x_feed_password (str | Unset):
+        x_note_tags (str | Unset):
         body (PostJson):
 
     Raises:
@@ -134,6 +142,7 @@ def sync_detailed(
         feed=feed,
         body=body,
         x_feed_password=x_feed_password,
+        x_note_tags=x_note_tags,
     )
 
     response = client.get_httpx_client().request(
@@ -149,6 +158,7 @@ def sync(
     client: AuthenticatedClient,
     body: PostJson,
     x_feed_password: str | Unset = UNSET,
+    x_note_tags: str | Unset = UNSET,
 ) -> Any | Created | Error | None:
     """Post a note
 
@@ -157,11 +167,14 @@ def sync(
     space at the start or end). Posting to a protected feed needs that password. Also served at `POST
     /{feed}`, the short form the client packages and curl one-liners use. The body is at most 102400
     bytes and must be UTF-8. `application/x-www-form-urlencoded` (what `curl -d` sends) is read as raw
-    markdown, not as form fields.
+    markdown, not as form fields. Tags (at most 10 tags, each 1 to 32 characters of letters, digits,
+    `-`, `_`, `.` and `:`; case is folded to lowercase, duplicates are removed) go in the JSON `tags`
+    array, a repeated `tags` form field, or, for a raw body, the `X-Note-Tags` header.
 
     Args:
         feed (str):
         x_feed_password (str | Unset):
+        x_note_tags (str | Unset):
         body (PostJson):
 
     Raises:
@@ -177,6 +190,7 @@ def sync(
         client=client,
         body=body,
         x_feed_password=x_feed_password,
+        x_note_tags=x_note_tags,
     ).parsed
 
 
@@ -186,6 +200,7 @@ async def asyncio_detailed(
     client: AuthenticatedClient,
     body: PostJson,
     x_feed_password: str | Unset = UNSET,
+    x_note_tags: str | Unset = UNSET,
 ) -> Response[Any | Created | Error]:
     """Post a note
 
@@ -194,11 +209,14 @@ async def asyncio_detailed(
     space at the start or end). Posting to a protected feed needs that password. Also served at `POST
     /{feed}`, the short form the client packages and curl one-liners use. The body is at most 102400
     bytes and must be UTF-8. `application/x-www-form-urlencoded` (what `curl -d` sends) is read as raw
-    markdown, not as form fields.
+    markdown, not as form fields. Tags (at most 10 tags, each 1 to 32 characters of letters, digits,
+    `-`, `_`, `.` and `:`; case is folded to lowercase, duplicates are removed) go in the JSON `tags`
+    array, a repeated `tags` form field, or, for a raw body, the `X-Note-Tags` header.
 
     Args:
         feed (str):
         x_feed_password (str | Unset):
+        x_note_tags (str | Unset):
         body (PostJson):
 
     Raises:
@@ -213,6 +231,7 @@ async def asyncio_detailed(
         feed=feed,
         body=body,
         x_feed_password=x_feed_password,
+        x_note_tags=x_note_tags,
     )
 
     response = await client.get_async_httpx_client().request(**kwargs)
@@ -226,6 +245,7 @@ async def asyncio(
     client: AuthenticatedClient,
     body: PostJson,
     x_feed_password: str | Unset = UNSET,
+    x_note_tags: str | Unset = UNSET,
 ) -> Any | Created | Error | None:
     """Post a note
 
@@ -234,11 +254,14 @@ async def asyncio(
     space at the start or end). Posting to a protected feed needs that password. Also served at `POST
     /{feed}`, the short form the client packages and curl one-liners use. The body is at most 102400
     bytes and must be UTF-8. `application/x-www-form-urlencoded` (what `curl -d` sends) is read as raw
-    markdown, not as form fields.
+    markdown, not as form fields. Tags (at most 10 tags, each 1 to 32 characters of letters, digits,
+    `-`, `_`, `.` and `:`; case is folded to lowercase, duplicates are removed) go in the JSON `tags`
+    array, a repeated `tags` form field, or, for a raw body, the `X-Note-Tags` header.
 
     Args:
         feed (str):
         x_feed_password (str | Unset):
+        x_note_tags (str | Unset):
         body (PostJson):
 
     Raises:
@@ -255,5 +278,6 @@ async def asyncio(
             client=client,
             body=body,
             x_feed_password=x_feed_password,
+            x_note_tags=x_note_tags,
         )
     ).parsed

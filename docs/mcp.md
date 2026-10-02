@@ -4,8 +4,8 @@ notefeed has an [MCP](https://modelcontextprotocol.io) endpoint, so AI assistant
 
 | Tool | What it does |
 |---|---|
-| `post_note` | Posts a markdown note to a feed. Takes `feed` and `markdown`. |
-| `list_notes` | Lists a feed's notes, newest first, without their text. Takes `feed`, optionally `limit` (1–100, default 20) and `before`. |
+| `post_note` | Posts a markdown note to a feed. Takes `feed` and `markdown`, optionally `tags` (a list of [tags](posting.md#tags)). |
+| `list_notes` | Lists a feed's notes, newest first, without their text. Takes `feed`, optionally `limit` (1–100, default 20), `before` and `tag` (only notes carrying it). Each note lists its `tags`. |
 | `get_note` | Reads one note with its markdown. Takes `feed` and `id`. |
 | `edit_note` | Replaces a note's markdown; its id stays. Takes `feed`, `id` and `markdown`, and returns the note. |
 | `delete_note` | Permanently deletes a note. Takes `feed` and `id`, and returns `{ "deleted": true }`. It is marked as destructive, so clients can ask you before running it. |

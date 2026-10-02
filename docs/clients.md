@@ -24,6 +24,8 @@ Under the hood both are generated from the server's [OpenAPI description](api.md
 
 Create the client with the server's URL and, usually, a default feed. Every call can name another feed. Pass the password only if the instance has one. `Client.from_env()` / `Client.fromEnv()` reads `NOTEFEED_URL`, `NOTEFEED_FEED` and `NOTEFEED_PASSWORD` instead.
 
+Notes can carry [tags](posting.md#tags): pass `tags=["ci", "deploy"]` (Python) or `{ tags: ["ci", "deploy"] }` (Node) to `post`, and `tag="ci"` / `{ tag: "ci" }` to `notes` and `read_notes` / `readNotes` to list only those. Each `Note` has a `tags` list.
+
 A feed can also have its own password (see [A feed with its own password](posting.md#a-feed-with-its-own-password)). Pass `feed_password=` (Python) or `feedPassword:` (Node) to the client, or per call, for example `client.post(text, feed_password=...)`; `edit`, `delete`, `feed_info`, `update_feed` and `delete_feed` take the same option. It is sent as `X-Feed-Password`; the `password` option stays the instance password. Posting to a new feed with `feed_password` creates it protected; the server accepts 1 to 256 printable ASCII characters with no space at the start or end, and an empty value is the same as none. `from_env()` / `fromEnv()` and the command read `NOTEFEED_FEED_PASSWORD`.
 
 === "Python"
@@ -116,6 +118,7 @@ export NOTEFEED_URL=https://notes.example.com NOTEFEED_FEED=homelab-7f3k2q9x4m8w
 notefeed post "# Backup finished"          # the text as an argument
 backup.sh 2>&1 | notefeed post -           # from stdin
 notefeed post --file report.md             # from a file
+notefeed post "# Deployed" --tag ci --tag deploy   # with tags
 notefeed post "# Disk at 91%" --feed alerts-q9x2m7hd4k1pv
 notefeed edit 20260929T140512Z-backup-finished "# Backup finished, verified"
 notefeed edit 20260929T140512Z-backup-finished --file report.md   # or "-" for stdin
@@ -123,6 +126,7 @@ notefeed delete 20260929T140512Z-backup-finished
 notefeed image photo.png                   # uploads it; prints ![](url) for a note
 notefeed notes                             # the newest 20: time, title, URL
 notefeed notes --limit 100 --json          # one JSON object per line
+notefeed notes --tag ci                     # only notes with this tag
 notefeed --version
 ```
 

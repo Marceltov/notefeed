@@ -157,6 +157,7 @@ def serve_notes(server, count):
             "markdown": f"# Note {i}",
             "created_at": f"2026-09-30T10:{i:02d}:00.000Z",
             "url": f"https://n.example/inbox/n{i}",
+            "tags": [],
         }
         for i in range(count)
     ][::-1]
@@ -215,10 +216,10 @@ def test_notes_rejects_a_bad_limit(server, capsys):
 def test_notes_json_prints_exactly_the_documented_fields(server, capsys):
     server.route = lambda method, path: (
         200,
-        {"notes": [{"id": "20260930T100000Z-a", "title": "A", "markdown": "# A", "created_at": "2026-09-30T10:00:00.000Z", "url": "https://n/a", "mood": "new"}], "next": None},
+        {"notes": [{"id": "20260930T100000Z-a", "title": "A", "markdown": "# A", "created_at": "2026-09-30T10:00:00.000Z", "url": "https://n/a", "tags": [], "mood": "new"}], "next": None},
     )
     assert main(notes_args(server, "--json")) == 0
-    assert list(json.loads(capsys.readouterr().out)) == ["id", "title", "markdown", "created_at", "url"]
+    assert list(json.loads(capsys.readouterr().out)) == ["id", "title", "markdown", "created_at", "url", "tags"]
 
 
 def test_notes_stops_quietly_when_the_reader_goes_away(server, capsys, monkeypatch):
@@ -234,7 +235,7 @@ def test_notes_stops_quietly_when_the_reader_goes_away(server, capsys, monkeypat
     assert capsys.readouterr().err == ""
 
 
-NOTE = {"id": "i", "title": "T", "markdown": "x", "created_at": "2026-09-30T10:00:00.000Z", "url": "https://n.example/inbox/i"}
+NOTE = {"id": "i", "title": "T", "markdown": "x", "created_at": "2026-09-30T10:00:00.000Z", "url": "https://n.example/inbox/i", "tags": []}
 
 
 def test_edit_text_prints_url(server, capsys):

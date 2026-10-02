@@ -152,11 +152,13 @@ class Client:
             feed_password=environ.get("NOTEFEED_FEED_PASSWORD"),
         )
 
-    def post(self, markdown: str, feed: str | None = None, feed_password: str | None = None) -> Created:
-        """`feed_password` overrides the client's, for a feed that has its own password."""
-        kwargs = post_note._get_kwargs(
-            feed=self._feed_for(feed), body=PostJson(markdown=markdown), x_feed_password=self._fp(feed_password)
-        )
+    def post(
+        self, markdown: str, feed: str | None = None, feed_password: str | None = None, tags: list[str] | None = None
+    ) -> Created:
+        """`feed_password` overrides the client's, for a feed that has its own password. `tags` label the note
+        (at most 10, each 1 to 32 characters of letters, digits, `-`, `_`, `.`, `:`; not verified)."""
+        body = PostJson(markdown=markdown, tags=tags or UNSET)
+        kwargs = post_note._get_kwargs(feed=self._feed_for(feed), body=body, x_feed_password=self._fp(feed_password))
         return self._parse(Created, self._call(kwargs))
 
     def upload_image(self, data: bytes, feed: str | None = None, feed_password: str | None = None) -> ImageUploaded:
@@ -194,18 +196,27 @@ class Client:
         """Delete the feed with all its notes, settings and password, for good; its name is free again. Same options as post()."""
         self._call(delete_feed._get_kwargs(feed=self._feed_for(feed), x_feed_password=self._fp(feed_password)))
 
-    def notes(self, feed: str | None = None, page_size: int = 50, feed_password: str | None = None) -> Iterator[Note]:
-        """Every note in the feed, newest first, fetched a page at a time; stop iterating whenever you like."""
+    def notes(
+        self, feed: str | None = None, page_size: int = 50, feed_password: str | None = None, tag: str | None = None
+    ) -> Iterator[Note]:
+        """Every note in the feed, newest first, fetched a page at a time; stop iterating whenever you like.
+        `tag`: only notes carrying it."""
         feed, fp = self._feed_for(feed), self._fp(feed_password)
-        return self._pages(lambda before: list_notes._get_kwargs(feed=feed, limit=page_size, before=before, x_feed_password=fp))
+        return self._pages(
+            lambda before: list_notes._get_kwargs(
+                feed=feed, limit=page_size, before=before, tag=tag or UNSET, x_feed_password=fp
+            )
+        )
 
     def note(self, id: str, feed: str | None = None, feed_password: str | None = None) -> Note:
         kwargs = get_note._get_kwargs(feed=self._feed_for(feed), id=id, x_feed_password=self._fp(feed_password))
         return self._parse(Note, self._call(kwargs))
 
-    def read_notes(self, read_id: str, page_size: int = 50) -> Iterator[Note]:
+    def read_notes(self, read_id: str, page_size: int = 50, tag: str | None = None) -> Iterator[Note]:
         """Like notes(), by the feed's read id: public, read-only, needs no password."""
-        return self._pages(lambda before: list_read_notes._get_kwargs(read_id=read_id, limit=page_size, before=before))
+        return self._pages(
+            lambda before: list_read_notes._get_kwargs(read_id=read_id, limit=page_size, before=before, tag=tag or UNSET)
+        )
 
     def read_note(self, read_id: str, id: str) -> Note:
         return self._parse(Note, self._call(get_read_note._get_kwargs(read_id=read_id, id=id)))

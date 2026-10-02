@@ -106,6 +106,15 @@ describe("tools", () => {
     expect((await getNote("a", r.structuredContent.id))!.sender).toBeUndefined();
   });
 
+  test("post_note takes tags, list_notes shows and filters by them", async () => {
+    const r = await call("post_note", { feed: "a", markdown: "# Tagged", tags: ["CI", "env:prod"] });
+    expect(r.isError).toBeUndefined();
+    await call("post_note", { feed: "a", markdown: "# Untagged" });
+    const listed = (await call("list_notes", { feed: "a", tag: "ci" })).structuredContent.notes;
+    expect(listed.map((n: { id: string; tags: string[] }) => [n.id, n.tags])).toEqual([[r.structuredContent.id, ["ci", "env:prod"]]]);
+    expect((await call("post_note", { feed: "a", markdown: "# x", tags: ["no good"] })).isError).toBe(true);
+  });
+
   test("post_note to a feed without a read link answers read_url null", async () => {
     await mkdir(join(dir, "nolink", ".readid"), { recursive: true }); // can't be read
     const r = await call("post_note", { feed: "nolink", markdown: "# Hi" });
@@ -119,7 +128,7 @@ describe("tools", () => {
     const first = (await call("list_notes", { feed: "a", limit: 2 })).structuredContent;
     expect(first.notes).toHaveLength(2);
     expect(first.notes[0].id).toBe(ids[2]);
-    for (const n of first.notes) expect(Object.keys(n).sort()).toEqual(["created_at", "id", "title", "url"]);
+    for (const n of first.notes) expect(Object.keys(n).sort()).toEqual(["created_at", "id", "tags", "title", "url"]);
     expect(first.next).toBe(first.notes[1].id);
     const rest = (await call("list_notes", { feed: "a", limit: 2, before: first.next })).structuredContent;
     expect(rest.notes).toHaveLength(1);
@@ -138,7 +147,7 @@ describe("tools", () => {
   test("get_note", async () => {
     const { id } = (await call("post_note", { feed: "a", markdown: "# Hi\nbody" })).structuredContent;
     const n = (await call("get_note", { feed: "a", id })).structuredContent;
-    expect(n).toEqual({ id, title: "Hi", markdown: "# Hi\nbody", created_at: expect.any(String), url: `http://localhost:3000/a/${id}` });
+    expect(n).toEqual({ id, title: "Hi", markdown: "# Hi\nbody", created_at: expect.any(String), url: `http://localhost:3000/a/${id}`, tags: [] });
     const miss = await call("get_note", { feed: "a", id: "20260101T000000Z-nope" });
     expect(miss.isError).toBe(true);
     expect(miss.content[0].text).toBe("no such note");
