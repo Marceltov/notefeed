@@ -1,13 +1,15 @@
-import { mkdir, mkdtemp, readdir, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { beforeEach, describe, expect, test, vi } from "vitest";
+import { config } from "../config";
 import { createProtected } from "../feedlock";
 import { getFeed, getReadFeed } from "../index";
 import { deleteFeed, resetFeedsForTests, readIdOf } from "../feeds";
 import { resetRateLimitsForTests } from "../limits";
-import { createNote } from "../notes";
+import { createNote, listNotes, removeNote } from "../notes";
 import { API_PREFIX, dispatch } from "./api";
+import { feedSettingsRoute } from "./feedforms";
 import { imageRoute } from "./images";
 import { rssRoute } from "./rss";
 
@@ -141,6 +143,56 @@ describe("POST /feeds/{feed}/images", () => {
   });
 });
 
+describe("upload: body edge cases", () => {
+  test("a body shorter than its Content-Length is refused and nothing is stored", async () => {
+    await createNote("pics", "# x");
+    const res = await upload("pics", PNG, "image/png", { "content-length": String(PNG.length + 100) });
+    expect(res.status).toBe(413);
+    await expect(readdir(join(process.env.DATA_DIR!, "pics", ".images"))).rejects.toThrow();
+  });
+  test("a configured cap above 10 MiB behaves as 10 MiB (the proxy buffers no more)", async () => {
+    process.env.NOTEFEED_MAX_IMAGE_BYTES = "20971520";
+    expect(config.maxImageBytes()).toBe(10485760);
+    await createNote("pics", "# x");
+    const res = await upload("pics", new Uint8Array([...PNG, ...new Uint8Array(10485760)]));
+    expect(res.status).toBe(413);
+  });
+  test("an open feed that lost all its notes still takes uploads and gets a URL", async () => {
+    const note = await createNote("pics", "# x");
+    await removeNote("pics", note.note.id);
+    expect(await listNotes("pics", 10)).toEqual([]);
+    const res = await upload("pics", PNG);
+    expect(res.status).toBe(201);
+    expect((await res.json()).url).toContain(`/r/${await readIdOf("pics")}/images/`);
+  });
+  test("a feed deleted and created again protected while the body is read gets no file", async () => {
+    await createNote("pics", "# x");
+    let finish!: () => void;
+    let started!: () => void;
+    const gate = new Promise<void>((r) => (finish = r));
+    const reading = new Promise<void>((r) => (started = r));
+    let pulls = 0;
+    const body = new ReadableStream<Uint8Array>({
+      async pull(c) {
+        if (pulls++ === 0) return c.enqueue(PNG.subarray(0, 6));
+        started();
+        await gate;
+        c.enqueue(PNG.subarray(6));
+        c.close();
+      },
+    });
+    const url = new URL(API_PREFIX + "/feeds/pics/images", BASE);
+    const res = dispatch(new Request(url, { method: "POST", body, headers: { host: "localhost:3000" }, duplex: "half" } as RequestInit), ["feeds", "pics", "images"]);
+    await reading;
+    await deleteFeed("pics");
+    await createProtected("pics", "hunter22");
+    await createNote("pics", "# again");
+    finish();
+    expect((await res).status).toBe(404);
+    await expect(readdir(join(process.env.DATA_DIR!, "pics", ".images"))).rejects.toThrow();
+  });
+});
+
 describe("GET /r/{readId}/images/{file}", () => {
   test("bytes with the four headers; a protected feed needs no password", async () => {
     await createProtected("locked", "hunter22");
@@ -221,6 +273,27 @@ describe("feed settings: image", () => {
     await createNote("other", "# y");
     const { file } = await (await upload("other", PNG)).json();
     expect((await put("pics", { title: "", description: "", image: file })).status).toBe(400);
+  });
+  test("a title image removed by hand: saves keep working and it shows nowhere", async () => {
+    await createNote("pics", "# x");
+    const { file } = await (await upload("pics", PNG)).json();
+    expect((await put("pics", { title: "T", description: "D", image: file })).status).toBe(200);
+    await rm(join(process.env.DATA_DIR!, "pics", ".images", file));
+    const res = await put("pics", { title: "T2", description: "D" });
+    expect(res.status).toBe(200);
+    expect((await res.json()).image_url).toBeNull();
+    expect((await (await call("GET", "/feeds/pics")).json()).image_url).toBeNull();
+    const rid = (await readIdOf("pics"))!;
+    expect((await (await call("GET", `/read/${rid}`)).json()).image_url).toBeNull();
+    expect((await getFeed("pics"))!.imageUrl).toBeNull();
+    expect((await getReadFeed(rid))!.imageUrl).toBeNull();
+    const xml = await (await rssRoute(new Request(`${BASE}/r/${rid}/feed.xml`, { headers: { host: "localhost:3000" } }), rid)).text();
+    expect(xml).not.toContain("<image>");
+    const form = await feedSettingsRoute(
+      new Request(`${BASE}/pics/settings`, { method: "POST", headers: { host: "localhost:3000", origin: BASE, "content-type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ title: "T3", description: "D" }) }),
+      "pics",
+    );
+    expect(form.headers.get("location")).toBe("/pics?saved=1");
   });
   test("an old .feed.json without image reads as empty", async () => {
     await createNote("pics", "# x");

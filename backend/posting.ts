@@ -3,7 +3,7 @@
 import { config } from "./config";
 import { FeedExistsError, FeedLimitError, ImageTooLargeError, InvalidBodyError, NotFoundError, NoteLimitError, RateLimitedError } from "./errors";
 import { type FeedAccess, checkFeedAccess, createProtected } from "./feedlock";
-import { type FeedSettings, checkSettings, getSettings, saveSettings } from "./feedsettings";
+import { type FeedSettings, checkSettings, getStoredSettings, saveSettings } from "./feedsettings";
 import { assertFeed, deleteFeed as removeWholeFeed, feedCount, hasFeed, readIdOf } from "./feeds";
 import { knownImage, storeImage } from "./images";
 import { rateLimit } from "./limits";
@@ -80,8 +80,9 @@ export async function updateFeed(feed: string, ip: string, read: () => Promise<u
   await admit(feed, ip, access);
   const given = checkSettings(await read()); // after admit: a refused request never has its body read
   if (!(await hasFeed(feed))) throw new NotFoundError("no such feed");
-  const image = given.image ?? (await getSettings(feed)).image; // omitted: the title image stays
-  if (image && !(await knownImage(feed, image))) throw new InvalidBodyError("image must be empty or the name of an image uploaded to this feed");
+  // Only a given image is checked; an omitted one stays as stored, even if its file has been removed by hand.
+  if (given.image && !(await knownImage(feed, given.image))) throw new InvalidBodyError("image must be empty or the name of an image uploaded to this feed");
+  const image = given.image ?? (await getStoredSettings(feed)).image;
   const checked = { ...given, image };
   await saveSettings(feed, checked);
   return checked;
@@ -97,6 +98,9 @@ export async function uploadImage(feed: string, ip: string, read: () => Promise<
   if (!readId) throw new NotFoundError("this feed has no read link, so an image of it has no URL");
   const bytes = await read();
   if (!bytes) throw new ImageTooLargeError();
+  // The sender decides how long read() takes: the feed may have been deleted and created again meanwhile.
+  // (An open feed that lost all its notes keeps its read id and still takes uploads; that is fine, ADR 0011.)
+  if ((await readIdOf(feed)) !== readId) throw new NotFoundError("no such feed");
   return { file: await storeImage(feed, bytes), readId };
 }
 

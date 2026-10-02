@@ -2,6 +2,7 @@
 import { readSettings, writeSettings } from "./data/settings";
 import { isErrno } from "./data/fs";
 import { InvalidBodyError, NotFoundError } from "./errors";
+import { knownImage } from "./images";
 
 export type FeedSettings = { title: string; description: string; image: string };
 
@@ -27,7 +28,14 @@ export function checkSettings(input: unknown): Omit<FeedSettings, "image"> & { i
   return { title: field(o, "title", MAX_TITLE), description: field(o, "description", MAX_DESCRIPTION), image };
 }
 
-export const getSettings = (feed: string): Promise<FeedSettings> => readSettings(feed);
+// What is stored, whatever has become of the image file (the save path in posting.ts keeps it as it is).
+export const getStoredSettings = (feed: string): Promise<FeedSettings> => readSettings(feed);
+
+// What is shown: a title image whose file is gone (removed by hand) counts as none, so nothing points at a 404.
+export async function getSettings(feed: string): Promise<FeedSettings> {
+  const s = await readSettings(feed);
+  return s.image && !(await knownImage(feed, s.image)) ? { ...s, image: "" } : s;
+}
 
 export async function saveSettings(feed: string, s: FeedSettings): Promise<void> {
   try {
