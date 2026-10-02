@@ -42,7 +42,7 @@ Raw HTML in notes is shown as text, never run.
 
 ### Tags
 
-A note's [tags](posting.md#tags) show next to its title in the list and on its page, in the feed and in the read-only view. Each is a link: it opens the list with only the notes carrying that tag (`?tag=ci`), with a **Show all notes** link above it. The compose box does not set tags; post them from a script, the API or an MCP client.
+A note's [tags](posting.md#tags) show next to its title in the list and on its page, in the feed and in the read-only view. Each is a link: it opens the list with only the notes carrying that tag (`?tag=ci`), with a **Show all notes** link above it. The compose box has an optional **Tags** field under the text: type them separated by commas (`ci, deploy`). The browser refuses more than 10, or characters tags can't have, before it sends anything.
 
 ### Editing and deleting a note
 

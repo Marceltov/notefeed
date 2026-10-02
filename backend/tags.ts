@@ -14,6 +14,7 @@ export function checkTags(tags: readonly string[] = []): string[] {
   return out;
 }
 
-// The `X-Note-Tags` header: comma-separated; empty (or only commas) is none.
-export const tagsFromHeader = (value: string | null): string[] | undefined =>
-  value === null ? undefined : value.split(",").map((t) => t.trim()).filter(Boolean);
+// A comma-separated list (the `X-Note-Tags` header, a form field): trimmed; empty (or only commas) is none.
+export const splitTags = (value: string): string[] => value.split(",").map((t) => t.trim()).filter(Boolean);
+
+export const tagsFromHeader = (value: string | null): string[] | undefined => (value === null ? undefined : splitTags(value));

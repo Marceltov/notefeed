@@ -60,6 +60,13 @@ describe("posting tags", () => {
     await post(f);
     expect((await list())[0].tags).toEqual(["a", "b"]);
   });
+  test("a multipart tags value may be comma-separated, as the compose box sends it", async () => {
+    const f = new FormData();
+    f.append("markdown", "# Form");
+    f.append("tags", "ci, Deploy,");
+    await post(f);
+    expect((await list())[0].tags).toEqual(["ci", "deploy"]);
+  });
   test("no tags is an empty list and no frontmatter key", async () => {
     const { id } = await (await post("# Plain")).json();
     expect(await readFile(join(dir, "t", `${id}.md`), "utf8")).toBe("---\n---\n# Plain");

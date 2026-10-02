@@ -5,7 +5,7 @@ import { cookieValue } from "../feedlock";
 import { clientIp } from "../limits";
 import { MAX_BYTES } from "../notes";
 import { postNote } from "../posting";
-import { tagsFromHeader } from "../tags";
+import { splitTags, tagsFromHeader } from "../tags";
 import { feedPath, publicUrl, rssPath } from "../urls";
 import { feedCookies } from "./feedsession";
 import { authorize, errorRedirect, feedAccess, sameOrigin, sender, mediaType, parseForm, readCapped, wantsHtml } from "./request";
@@ -36,8 +36,10 @@ async function readBody(req: Request): Promise<{ markdown: string; password?: st
   if (!bytes) throw new NoteTooLargeError();
 
   if (isForm) {
-    // A repeated `tags` field is a list; Object.fromEntries would keep only the last.
-    const form = await parseForm(bytes, req.headers).then((f) => ({ ...Object.fromEntries(f), ...(f.has("tags") && { tags: f.getAll("tags") }) }), () => null);
+    // A repeated `tags` field is a list (Object.fromEntries would keep only the last), and each value may itself be
+    // comma-separated: that is what the compose box's one text field sends without JavaScript.
+    const tagsOf = (f: FormData) => f.getAll("tags").flatMap((v) => (typeof v === "string" ? splitTags(v) : [])); // a file part is no tag
+    const form = await parseForm(bytes, req.headers).then((f) => ({ ...Object.fromEntries(f), ...(f.has("tags") && { tags: tagsOf(f) }) }), () => null);
     const parsed = PostForm.safeParse(form);
     if (!parsed.success) throw new InvalidBodyError('form needs a "markdown" field');
     return parsed.data;
