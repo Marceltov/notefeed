@@ -24,7 +24,7 @@ Under the hood both are generated from the server's [OpenAPI description](api.md
 
 Create the client with the server's URL and, usually, a default feed. Every call can name another feed. Pass the password only if the instance has one. `Client.from_env()` / `Client.fromEnv()` reads `NOTEFEED_URL`, `NOTEFEED_FEED` and `NOTEFEED_PASSWORD` instead.
 
-A feed can also have its own password (see [A feed with its own password](posting.md#a-feed-with-its-own-password)). Pass `feed_password=` (Python) or `feedPassword:` (Node) to the client, or per call, for example `client.post(text, feed_password=...)`; `edit` and `delete` take the same option. It is sent as `X-Feed-Password`; the `password` option stays the instance password. Posting to a new feed with `feed_password` creates it protected; the server accepts 1 to 256 printable ASCII characters with no space at the start or end, and an empty value is the same as none. `from_env()` / `fromEnv()` and the command read `NOTEFEED_FEED_PASSWORD`.
+A feed can also have its own password (see [A feed with its own password](posting.md#a-feed-with-its-own-password)). Pass `feed_password=` (Python) or `feedPassword:` (Node) to the client, or per call, for example `client.post(text, feed_password=...)`; `edit`, `delete`, `feed_info`, `update_feed` and `delete_feed` take the same option. It is sent as `X-Feed-Password`; the `password` option stays the instance password. Posting to a new feed with `feed_password` creates it protected; the server accepts 1 to 256 printable ASCII characters with no space at the start or end, and an empty value is the same as none. `from_env()` / `fromEnv()` and the command read `NOTEFEED_FEED_PASSWORD`.
 
 === "Python"
 
@@ -77,13 +77,18 @@ A feed can also have its own password (see [A feed with its own password](postin
 
 | Python | Node | Does |
 |---|---|---|
-| `post(markdown, feed=None)` | `post(markdown, { feed })` | Posts a note; returns `id`, `url`, `feed_url`, `read_url` |
+| `post(markdown, feed=None)` | `post(markdown, { feed })` | Posts a note; returns `id`, `url`, `feed_url`, `read_url` (`None`/`null` for a feed without a read link) |
 | `notes(feed=None, page_size=50)` | `notes({ feed, pageSize })` | Every note in the feed, newest first. It fetches the next page only as you iterate, so stop whenever you have enough |
 | `note(id, feed=None)` | `note(id, { feed })` | One note |
 | `edit(id, markdown, feed=None)` | `edit(id, markdown, { feed })` | Replaces a note's markdown and returns the note. Its id and URLs stay; the title follows the new text. A missing note is a `NotFoundError` |
 | `delete(id, feed=None)` | `delete(id, { feed })` | Deletes a note for good; returns nothing. The feed stays, even with no notes left. A missing note is a `NotFoundError` |
+| `feed_info(feed=None)` | `feedInfo({ feed })` | The feed's `name`, `title`, `description`, `protected` and `read_url` (`None`/`null` while it has no notes) |
+| `update_feed(title, description, feed=None)` | `updateFeed({ title, description }, { feed })` | Replaces the feed's title and description, both at once (an empty string clears one), and returns the feed. The feed must already exist |
+| `delete_feed(feed=None)` | `deleteFeed({ feed })` | Deletes the feed with all its notes, settings, password and read link, for good; returns nothing. The name is free again |
 | `read_notes(read_id, page_size=50)` | `readNotes(readId, { pageSize })` | Like `notes()`, by the feed's [read id](feed.md): public, needs no password, never needs the name |
 | `read_note(read_id, id)` | `readNote(readId, id)` | One note by read id |
+
+The feed methods have no command-line counterpart. `feed_info` and `update_feed` return the feed as an object with `name`, `title`, `description`, `protected` and `read_url` (named the same in both packages). Anyone who can post to a feed can change its settings and delete it, and a delete cannot be undone.
 
 A note has `id`, `title`, `markdown`, `created_at` (a `datetime` in Python, an ISO string in Node) and `url`, its page in the web UI.
 
@@ -138,7 +143,7 @@ Every error is a `NotefeedError` with `status` (the HTTP status) and `code` (the
 | `ConfigError` | – | Empty URL; no feed given; an invalid feed name; a password with control characters (the password itself is never shown) |
 | `InvalidRequestError` | `invalid_feed`, `reserved_feed`, `empty_note`, `invalid_body`, `invalid_request`, `unsupported_type` | The server refused the request itself |
 | `AuthError` | `auth` | The instance or the feed has a password and it's missing or wrong |
-| `NotFoundError` | `not_found` | No such note (also for `edit` and `delete`), or a malformed read id |
+| `NotFoundError` | `not_found` | No such note (also for `edit` and `delete`), no such feed (for `feed_info`, `update_feed` and `delete_feed`), or a malformed read id |
 | `NoteTooLargeError` | `too_large` | Over 100 KB |
 | `RateLimitedError` | `rate_limited`, `too_many_attempts` | Too many posts or wrong passwords. `retry_after` / `retryAfter` is the wait in seconds from `Retry-After`, or `None`/`null` |
 | `LimitReachedError` | `feed_limit`, `note_limit` | The instance's feed cap or the feed's note cap is reached |

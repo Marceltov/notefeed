@@ -1,14 +1,15 @@
-// The MCP endpoint: POST /mcp, protocol 2026-07-28 only, five tools over the same backend the HTTP API uses.
+// The MCP endpoint: POST /mcp, protocol 2026-07-28 only, eight tools over the same backend the HTTP API uses.
 import { McpServer, createMcpHandler, type AuthInfo } from "@modelcontextprotocol/server";
 import * as z from "zod";
 import { bearerOf, checkBearer, locked } from "./auth";
 import { AuthError, NotefeedError, NotFoundError, TooManyAttemptsError } from "./errors";
 import { checkFeedAccess } from "./feedlock";
-import { assertFeed, FEED_RE, readId } from "./feeds";
+import { assertFeed, FEED_RE, hasFeed } from "./feeds";
+import { feedJson } from "./http/api";
 import { clientIp } from "./limits";
 import { getNote, listNotes, type Note } from "./notes";
 import { verify } from "./oauth/tokens";
-import { deleteNote, editNote, postNote } from "./posting";
+import { deleteFeed, deleteNote, editNote, postNote, updateFeed } from "./posting";
 import { feedPath, mcpResource, publicUrl, rssPath } from "./urls";
 
 const SECRET_NOTE = "The feed name works like a password: anyone who knows it can read and post. Don't repeat it in replies.";
@@ -51,12 +52,12 @@ function server(h: Headers): McpServer {
     {
       description: `Post a markdown note to a feed; the feed is created by its first note; a password given then protects the feed for good, and is refused on a feed that already exists. ${PROTECTED} ${SECRET_NOTE}`,
       inputSchema: z.object({ feed, markdown: z.string(), password }),
-      outputSchema: z.object({ id: z.string(), url: z.string(), feed_url: z.string(), read_url: z.string() }),
+      outputSchema: z.object({ id: z.string(), url: z.string(), feed_url: z.string(), read_url: z.string().nullable() }),
     },
     guard(async ({ feed, markdown, password }) => {
-      const { note } = await postNote(feed, clientIp(h), async () => ({ markdown }), { password });
+      const { note, readId } = await postNote(feed, clientIp(h), async () => ({ markdown }), { password });
       const feedUrl = base + feedPath(feed);
-      return ok({ id: note.id, url: `${feedUrl}/${note.id}`, feed_url: feedUrl, read_url: base + rssPath(readId(feed)) });
+      return ok({ id: note.id, url: `${feedUrl}/${note.id}`, feed_url: feedUrl, read_url: readId && base + rssPath(readId) });
     }),
   );
 
@@ -116,6 +117,51 @@ function server(h: Headers): McpServer {
     },
     guard(async ({ feed, id, password }) => {
       await deleteNote(feed, id, clientIp(h), { password });
+      return ok({ deleted: true as const });
+    }),
+  );
+
+  const FeedOut = z.object({ name: z.string(), title: z.string(), description: z.string(), protected: z.boolean(), read_url: z.string().nullable() });
+
+  s.registerTool(
+    "get_feed",
+    {
+      description: `Get a feed's title, description, whether it is protected, and its read link (null while it has no notes). ${PROTECTED} ${SECRET_NOTE}`,
+      inputSchema: z.object({ feed, password }),
+      outputSchema: FeedOut,
+      annotations: { readOnlyHint: true },
+    },
+    guard(async ({ feed, password }) => {
+      await checkAccess(feed, password);
+      if (!(await hasFeed(feed))) throw new NotFoundError("no such feed");
+      return ok(await feedJson(feed, h));
+    }),
+  );
+
+  s.registerTool(
+    "update_feed",
+    {
+      description: `Replace a feed's title (at most 100 characters) and description (at most 500), both one line; an empty title shows the feed's name. The feed must exist. ${PROTECTED} ${SECRET_NOTE}`,
+      inputSchema: z.object({ feed, title: z.string(), description: z.string(), password }),
+      outputSchema: FeedOut,
+      annotations: { destructiveHint: true, idempotentHint: true },
+    },
+    guard(async ({ feed, title, description, password }) => {
+      await updateFeed(feed, clientIp(h), async () => ({ title, description }), { password });
+      return ok(await feedJson(feed, h));
+    }),
+  );
+
+  s.registerTool(
+    "delete_feed",
+    {
+      description: `Permanently delete a feed with all its notes, settings, password and read link. There is no undo. ${PROTECTED} ${SECRET_NOTE}`,
+      inputSchema: z.object({ feed, password }),
+      outputSchema: z.object({ deleted: z.literal(true) }),
+      annotations: { destructiveHint: true },
+    },
+    guard(async ({ feed, password }) => {
+      await deleteFeed(feed, clientIp(h), { password });
       return ok({ deleted: true as const });
     }),
   );

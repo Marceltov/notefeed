@@ -21,10 +21,14 @@ console.log(created.url, created.read_url);
 for await (const note of client.notes()) console.log(note.created_at, note.title); // newest first, page by page
 ```
 
+`read_url` is `null` for a feed without a read link (rare; see the operations docs).
+
 `Client.fromEnv()` reads `NOTEFEED_URL` / `NOTEFEED_FEED` / `NOTEFEED_PASSWORD`; so does the `notefeed` command, unless given `--url` / `--feed` / `--password`.
 
 A feed can have its own password, which gates reading, listing and posting to it. Pass `feedPassword: "..."` to `new Client(...)` (or per call, e.g. `client.post(text, { feedPassword })`), or set `NOTEFEED_FEED_PASSWORD`, which `fromEnv()` and the `notefeed` command both read (there is deliberately no flag, so it stays out of shell history). It is sent as `X-Feed-Password`; `Authorization` stays the instance password. A feed password is 1 to 256 printable ASCII characters with no space at the start or end; an empty one is the same as none.
 
 A posted note can be changed or removed: `await client.edit(id, markdown)` replaces its text and returns the note (its id and URLs stay), and `await client.delete(id)` removes it. Both take the same `{ feed, feedPassword }` options as `post`, and a missing note is a `NotFoundError`. `notefeed edit <id> <text | - | --file PATH>` prints the note URL; `notefeed delete <id>` prints nothing. Anyone who can post to a feed can edit and delete its notes, and deleting is permanent.
+
+A feed can have a title and a description, and can be deleted: `await client.feedInfo()` returns `{ name, title, description, protected, read_url }`, `await client.updateFeed({ title, description })` replaces both (an empty string clears one) and returns the feed, and `await client.deleteFeed()` removes the feed with all its notes for good. All three take the same `{ feed, feedPassword }` options as `post`, and a feed that doesn't exist is a `NotFoundError`. Anyone who can post to a feed can do this, and deleting is permanent; there are no `notefeed` commands for it.
 
 Full documentation: https://docs.notefeed.me/clients/

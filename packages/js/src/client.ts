@@ -3,13 +3,13 @@
  * OpenAPI description (./generated, `npm run generate` in the repo). No runtime dependencies.
  */
 import { createClient, createConfig } from "./generated/client/index.js";
-import { deleteNote, editNote, getNote, getReadNote, listNotes, listReadNotes, postNote } from "./generated/sdk.gen.js";
-import type { Created, Error as ApiError, Note, NoteList } from "./generated/types.gen.js";
+import { deleteFeed, deleteNote, editNote, getFeed, getNote, getReadNote, listNotes, listReadNotes, postNote, updateFeed } from "./generated/sdk.gen.js";
+import type { Created, Error as ApiError, Feed, FeedSettings, Note, NoteList } from "./generated/types.gen.js";
 
 /** The stable error codes the API answers with. */
 export type ErrorCode = NonNullable<ApiError["code"]>;
 
-export type { Created, Note };
+export type { Created, Feed, FeedSettings, Note };
 /** `timeoutMs` (default 10000) limits each whole request, including reading the answer. */
 export type ClientOptions = { url: string; feed?: string; password?: string; feedPassword?: string; timeoutMs?: number };
 
@@ -114,6 +114,25 @@ export class Client {
   async delete(id: string, options: { feed?: string; feedPassword?: string } = {}): Promise<void> {
     const feed = this.feedFor(options.feed);
     await this.call(deleteNote({ client: this.api, path: { feed, id }, ...this.opts(options.feedPassword) }));
+  }
+
+  /** The feed's name, title, description, whether it has a password, and its read link (null while it has no notes). Same options as post(). */
+  async feedInfo(options: { feed?: string; feedPassword?: string } = {}): Promise<Feed> {
+    const feed = this.feedFor(options.feed);
+    return this.call(getFeed({ client: this.api, path: { feed }, ...this.opts(options.feedPassword) }));
+  }
+
+  /** Replace the feed's title and description (both; an empty string clears one). The feed must already exist. Same options as post(). */
+  async updateFeed(settings: FeedSettings, options: { feed?: string; feedPassword?: string } = {}): Promise<Feed> {
+    const feed = this.feedFor(options.feed);
+    const body = { title: settings.title, description: settings.description };
+    return this.call(updateFeed({ client: this.api, path: { feed }, body, ...this.opts(options.feedPassword) }));
+  }
+
+  /** Delete the feed with all its notes, settings and password, for good; its name is free again. Same options as post(). */
+  async deleteFeed(options: { feed?: string; feedPassword?: string } = {}): Promise<void> {
+    const feed = this.feedFor(options.feed);
+    await this.call(deleteFeed({ client: this.api, path: { feed }, ...this.opts(options.feedPassword) }));
   }
 
   /** Every note in the feed, newest first, fetched a page at a time; stop iterating whenever you like. */

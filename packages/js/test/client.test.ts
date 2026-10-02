@@ -48,6 +48,11 @@ describe("post", () => {
     expect(JSON.parse(req.body.toString())).toEqual({ markdown: "# Café\r\nx" });
     expect(req.headers.authorization).toBeUndefined();
   });
+
+  test("a feed without a read link: read_url is null", async () => {
+    server.reply(201, { ...CREATED, read_url: null });
+    expect((await new Client({ url: server.url, feed: "inbox" }).post("# Hi")).read_url).toBeNull();
+  });
   test("the password goes as a bearer; a per-call feed overrides the default", async () => {
     await new Client({ url: server.url, feed: "inbox", password: "pw" }).post("x", { feed: "other" });
     expect(server.requests[0].path).toBe("/api/v1/feeds/other/notes");
@@ -106,6 +111,54 @@ describe("edit and delete", () => {
     server.reply(404, { error: "no such note", code: "not_found" });
     await expect(c.delete(ID)).rejects.toBeInstanceOf(NotFoundError);
     await expect(new Client({ url: server.url }).delete(ID)).rejects.toBeInstanceOf(ConfigError);
+  });
+});
+
+describe("feed settings and deletion", () => {
+  const FEED = { name: "inbox", title: "My inbox", description: "Things", protected: false, read_url: null };
+  test("feedInfo GETs the feed and returns it; feed and feedPassword work as for post", async () => {
+    server.reply(200, FEED);
+    const c = new Client({ url: server.url, feed: "inbox", password: "pw", feedPassword: "fp" });
+    expect(await c.feedInfo()).toEqual(FEED);
+    const req = server.requests[0];
+    expect([req.method, req.path]).toEqual(["GET", "/api/v1/feeds/inbox"]);
+    expect(req.headers.authorization).toBe("Bearer pw");
+    expect(req.headers["x-feed-password"]).toBe("fp");
+    server.reply(200, FEED);
+    await c.feedInfo({ feed: "other", feedPassword: "o" });
+    expect(server.requests[1].path).toBe("/api/v1/feeds/other");
+    expect(server.requests[1].headers["x-feed-password"]).toBe("o");
+  });
+  test("updateFeed PUTs {title, description} and returns the feed", async () => {
+    server.reply(200, FEED);
+    const c = new Client({ url: server.url, feed: "inbox", feedPassword: "fp" });
+    expect(await c.updateFeed({ title: "My inbox", description: "Things" })).toEqual(FEED);
+    const req = server.requests[0];
+    expect([req.method, req.path]).toEqual(["PUT", "/api/v1/feeds/inbox"]);
+    expect(JSON.parse(req.body.toString())).toEqual({ title: "My inbox", description: "Things" });
+    expect(req.headers["x-feed-password"]).toBe("fp");
+    server.reply(200, FEED);
+    await c.updateFeed({ title: "", description: "" }, { feed: "other", feedPassword: "o" });
+    expect(server.requests[1].path).toBe("/api/v1/feeds/other");
+    expect(server.requests[1].headers["x-feed-password"]).toBe("o");
+  });
+  test("deleteFeed sends DELETE and resolves to nothing on 204", async () => {
+    server.reply(204, "", "text/plain");
+    const c = new Client({ url: server.url, feed: "inbox", feedPassword: "fp" });
+    expect(await c.deleteFeed()).toBeUndefined();
+    const req = server.requests[0];
+    expect([req.method, req.path]).toEqual(["DELETE", "/api/v1/feeds/inbox"]);
+    expect(req.headers["x-feed-password"]).toBe("fp");
+    expect(req.body.length).toBe(0);
+  });
+  test("a 404 is a NotFoundError for all three; no feed is a ConfigError", async () => {
+    const c = new Client({ url: server.url, feed: "inbox" });
+    const calls = [() => c.feedInfo(), () => c.updateFeed({ title: "", description: "" }), () => c.deleteFeed()];
+    for (const call of calls) {
+      server.reply(404, { error: "no such feed", code: "not_found" });
+      await expect(call()).rejects.toBeInstanceOf(NotFoundError);
+    }
+    await expect(new Client({ url: server.url }).deleteFeed()).rejects.toBeInstanceOf(ConfigError);
   });
 });
 

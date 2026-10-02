@@ -27,6 +27,7 @@ A read id is an HMAC of the feed name and can't be reversed. To serve `/r/<readI
 
 Chosen option: "an in-memory map", because it makes lookups, existence checks and the feed count O(1) and keeps every existing read link.
 
+* *Amended by ADR 0010: the index maps both ways and is loaded from each feed's `.readid`, falling back to the derived id for feeds without one.*
 * `backend/feeds.ts` builds the map on first use from the feed folders and keeps it in process-wide state (`backend/state.ts`, on `globalThis`), because Next may load a module once per route bundle. `createNote` is the only code that creates feeds, and it adds each new one.
 * The map is keyed by `DATA_DIR`, so tests that switch folders get a fresh one.
 * Notes themselves are always read from disk, so deleting a note or a feed folder takes effect at once.

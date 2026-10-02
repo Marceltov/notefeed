@@ -12,13 +12,13 @@ import httpx
 
 from ._generated import AuthenticatedClient
 from ._generated import Client as _GeneratedClient
-from ._generated.api.feeds import delete_note, edit_note, get_note, list_notes, post_note
+from ._generated.api.feeds import delete_feed, delete_note, edit_note, get_feed, get_note, list_notes, post_note, update_feed
 from ._generated.api.read import get_read_note, list_read_notes
-from ._generated.models import Created, Note, NoteList, PostJson
+from ._generated.models import Created, Feed, FeedSettings, Note, NoteList, PostJson
 from ._generated.types import UNSET
 
 
-_M = TypeVar("_M", Created, Note, NoteList)
+_M = TypeVar("_M", Created, Feed, Note, NoteList)
 
 
 class NotefeedError(Exception):
@@ -168,6 +168,22 @@ class Client:
     def delete(self, id: str, feed: str | None = None, feed_password: str | None = None) -> None:
         """Remove a note for good. The feed stays, even with no notes left. Same options as post()."""
         self._call(delete_note._get_kwargs(feed=self._feed_for(feed), id=id, x_feed_password=self._fp(feed_password)))
+
+    def feed_info(self, feed: str | None = None, feed_password: str | None = None) -> Feed:
+        """The feed's name, title, description, whether it has a password, and its read link (None while it has no notes). Same options as post()."""
+        kwargs = get_feed._get_kwargs(feed=self._feed_for(feed), x_feed_password=self._fp(feed_password))
+        return self._parse(Feed, self._call(kwargs))
+
+    def update_feed(self, title: str, description: str, feed: str | None = None, feed_password: str | None = None) -> Feed:
+        """Replace the feed's title and description (both; an empty string clears one). The feed must already exist. Same options as post()."""
+        kwargs = update_feed._get_kwargs(
+            feed=self._feed_for(feed), body=FeedSettings(title=title, description=description), x_feed_password=self._fp(feed_password)
+        )
+        return self._parse(Feed, self._call(kwargs))
+
+    def delete_feed(self, feed: str | None = None, feed_password: str | None = None) -> None:
+        """Delete the feed with all its notes, settings and password, for good; its name is free again. Same options as post()."""
+        self._call(delete_feed._get_kwargs(feed=self._feed_for(feed), x_feed_password=self._fp(feed_password)))
 
     def notes(self, feed: str | None = None, page_size: int = 50, feed_password: str | None = None) -> Iterator[Note]:
         """Every note in the feed, newest first, fetched a page at a time; stop iterating whenever you like."""

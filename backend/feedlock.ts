@@ -3,9 +3,10 @@
 import { createHmac, randomBytes, scrypt, timingSafeEqual, type ScryptOptions } from "node:crypto";
 import { promisify } from "node:util";
 import { PASSWORD_PATTERN, PASSWORD_RULE } from "../shared/password";
-import { createFeedDirWithHash, readHash, removeHash, writeHash } from "./data/password";
-import { AuthError, FeedExistsError, InvalidBodyError, TooManyAttemptsError } from "./errors";
-import { addFeed, checkFeed, secret } from "./feeds";
+import { isErrno } from "./data/fs";
+import { readHash, removeHash, writeHash } from "./data/password";
+import { AuthError, FeedExistsError, InvalidBodyError, NotFoundError, TooManyAttemptsError } from "./errors";
+import { checkFeed, createProtectedFeed, secret } from "./feeds";
 import { authAttempt } from "./limits";
 
 // An empty password means none, wherever it comes from (header, body field, MCP argument).
@@ -99,7 +100,7 @@ export async function unlock(feed: string, password: string, ip: string): Promis
 
 export async function createProtected(feed: string, password: string): Promise<void> {
   checkNewPassword(password);
-  if (await createFeedDirWithHash(feed, await hashPassword(password))) return void (await addFeed(feed));
+  if (await createProtectedFeed(feed, await hashPassword(password))) return;
   throw (await protectedFeed(feed)) ? new AuthError() : new FeedExistsError();
 }
 
@@ -115,7 +116,14 @@ export async function changePassword(feed: string, current: string, next: string
   checkNewPassword(next);
   await currentHash(feed, current, ip);
   const hash = await hashPassword(next);
-  await writeHash(feed, hash);
+  // ponytail: checked, not locked. The write is by path after the scrypt wait, so a feed deleted and
+  // re-created meanwhile (same name) gets this password; a per-feed lock would close it.
+  try {
+    await writeHash(feed, hash);
+  } catch (e) {
+    if (isErrno(e, "ENOENT")) throw new NotFoundError("no such feed"); // deleted meanwhile
+    throw e;
+  }
   return cookieOf(feed, hash);
 }
 

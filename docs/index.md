@@ -32,4 +32,4 @@ A hosted instance runs at [notefeed.me](https://notefeed.me). To run your own, f
 - [Read links and RSS](feed.md): hooking notefeed up to Glance, Dynacat and other readers.
 - [Configuration](configuration.md): every setting, the password, rate limits and caps.
 - [Reverse proxy](reverse-proxy.md): putting notefeed on the internet behind Caddy.
-- [Operations](operations.md): feed folders, upgrades, backups and deleting notes.
+- [Operations](operations.md): feed folders, upgrades, backups and deleting notes and feeds.

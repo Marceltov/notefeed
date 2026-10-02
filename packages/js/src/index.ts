@@ -9,4 +9,4 @@ export {
   NoteTooLargeError,
   RateLimitedError,
 } from "./client.js";
-export type { ClientOptions, Created, ErrorCode, Note } from "./client.js";
+export type { ClientOptions, Created, ErrorCode, Feed, FeedSettings, Note } from "./client.js";

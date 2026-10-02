@@ -21,7 +21,7 @@ The feed is created by its first note; there's nothing to set up first. notefeed
 
 - `url`: the note's page in the web UI.
 - `feed_url`: the feed's page in the web UI.
-- `read_url`: the feed's read-only RSS link, for feed readers and for sharing. See [Read links and RSS](feed.md).
+- `read_url`: the feed's read-only RSS link, for feed readers and for sharing. See [Read links and RSS](feed.md). It is `null` only for [a feed without a read link](operations.md#a-feed-without-a-read-link).
 
 !!! tip "Use `--data-binary`, not `-d`"
     `curl -d` strips newlines from files. `--data-binary` sends the file unchanged.
@@ -53,12 +53,41 @@ What to know:
 - **Limits:** edits and deletes count toward the same per-client [rate limit](configuration.md#rate-limits-and-caps) as posts. An edit must pass the same checks as a post: not empty, UTF-8, at most 100 KB. A refused edit leaves the note unchanged. A `password` field in the body of an edit is ignored.
 - **Errors:** `404` (`not_found`) means no note has that id in that feed. That includes a feed that does not exist and an id that could not belong to a note. A protected feed answers `401` before it says anything about its notes. The other statuses are those of posting: `400`, `401`, `413`, `415` and `429`. Neither request creates a feed.
 
+## Feed settings and deleting a feed
+
+A feed can have a **title** (at most 100 characters) and a **description** (at most 500), both on one line. The title is shown as a heading on the feed page, where the feed's name stays in the page header, and both show in the read-only view and in the RSS feed (see [Read links and RSS](feed.md#title-and-description)). The feed's name stays as it is: you can't rename a feed. A feed has neither until you set them.
+
+`GET /api/v1/feeds/<feed>` answers with the feed's `name`, `title`, `description`, `protected` and `read_url`. `read_url` is `null` while the feed has no notes, and for [a feed without a read link](operations.md#a-feed-without-a-read-link). `PUT` on the same URL replaces the title and the description, both at once, and answers with the feed; an empty string clears one. Surrounding spaces are trimmed, and control characters, including a line break, are refused.
+
+```sh
+curl -X PUT -H "Content-Type: application/json" \
+  -d '{"title": "Homelab", "description": "Deploys and alerts"}' \
+  https://notes.example.com/api/v1/feeds/homelab-7f3k2q9x4m8wz
+```
+
+`DELETE` removes the feed for good and answers `204` with no body: every note, the title and description, the password and the read link. There is no undo and no trash:
+
+```sh
+curl -X DELETE https://notes.example.com/api/v1/feeds/homelab-7f3k2q9x4m8wz
+```
+
+What to know:
+
+- **Who may:** whoever may post to the feed. On an open feed the name is the key, so anyone who knows it can change its title and delete the whole feed, not only add notes. A feed with [its own password](#a-feed-with-its-own-password) needs `X-Feed-Password` for all three, and an instance with a password needs `Authorization: Bearer` first, as for posting. The [read link](feed.md) can neither change settings nor delete.
+- **The feed must exist.** A feed is created by its first note, and can only get a password then. `GET`, `PUT` and `DELETE` on a feed that doesn't exist answer `404` (`not_found`) and create nothing.
+- **The name is free again,** at once. A feed created under it later is a new feed with a new read link; the old read link stays empty for good, and the old feed's password and settings are gone. A post that was already on its way when the feed was deleted creates such a new feed.
+- **Settings are public to readers.** Anyone with the read link sees the title and description, through `GET /api/v1/read/<read id>` too, which needs no password. Anyone who has the feed's name and its password reads them with `GET /api/v1/feeds/<feed>`.
+- **Limits:** `PUT` and `DELETE` count toward the same per-client [rate limit](configuration.md#rate-limits-and-caps) as posts. The `PUT` body is limited to 8 KB. A refused `PUT` leaves the settings as they were.
+- **Errors:** `400` for an invalid or reserved name, or a body that isn't JSON with string `title` and `description`, or a title or description that is too long or has control characters; `401` when a password is missing or wrong (before it says anything about the feed); `404` when the feed doesn't exist; `429` over the limit.
+
+In the browser the same two things are in the feed page's [Feed settings and Delete feed sections](web-ui.md#feed-settings-and-deleting-a-feed).
+
 ## Feed names
 
 A feed name is 1 to 64 characters of `a`–`z`, `0`–`9`, `-` and `_`. Anything else is rejected with `400`. These names are taken by notefeed itself and are reserved: `r`, `api`, `login`, `logout`, `mcp`, `n`, `_next`, `static`, `health`. Posting to a reserved name answers `400`, except `logout`: that's the web UI's log-out route, which answers with a redirect and stores nothing. A trailing slash is fine: `POST /<feed>/` works like `POST /<feed>`.
 
 !!! warning "The name is the key"
-    Anyone who knows a feed's name can read it, post to it, and edit and delete its notes. Pick one that's hard to guess, like `homelab-7f3k2q9x4m8wz`, and share the read link instead of the name.
+    Anyone who knows a feed's name can read it, post to it, edit and delete its notes, and delete the feed. Pick one that's hard to guess, like `homelab-7f3k2q9x4m8wz`, and share the read link instead of the name.
 
 ## With a password
 

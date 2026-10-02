@@ -26,7 +26,7 @@ const MESSAGES: Record<ErrorCode, string> = {
 // undefined for no code; an unknown code still says something.
 export function errorMessage(code: unknown, retry?: unknown): string | undefined {
   if (typeof code !== "string" || code === "") return undefined;
-  const text = MESSAGES[code as ErrorCode] ?? "Something went wrong.";
+  const text = Object.hasOwn(MESSAGES, code) ? MESSAGES[code as ErrorCode] : "Something went wrong."; // not `in`/`??`: "constructor" is inherited
   return text.replace("{retry}", /^\d+$/.test(String(retry)) ? String(retry) : "a few");
 }
 
@@ -35,6 +35,13 @@ export function feedErrorMessage(code: unknown, retry?: unknown): string | undef
   if (code === "auth") return "That password is wrong.";
   if (code === "invalid_body") return `The new password must be ${PASSWORD_RULE}.`;
   return errorMessage(code, retry);
+}
+
+// The same, for the feed's settings and delete forms, which send a title and a description or the typed name.
+export function feedDetailsErrorMessage(code: unknown, retry?: unknown): string | undefined {
+  if (code === "invalid_body") return "The title or description is too long or has characters that aren't allowed.";
+  if (code === "invalid_request") return "Type the feed's name to confirm.";
+  return noteErrorMessage(code, retry);
 }
 
 // The same, on a note page, where "auth" is a form refused for coming from outside (no feed or instance password involved).

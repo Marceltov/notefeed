@@ -31,7 +31,7 @@ export const Created = z
     id: z.string().regex(NOTE_ID),
     url: z.url().describe("The note's page in the web UI"),
     feed_url: z.url().describe("The feed's page in the web UI"),
-    read_url: z.url().describe("The feed's read-only RSS link, safe to share"),
+    read_url: z.url().nullable().describe("The feed's read-only RSS link, safe to share; null only if the server can't read the feed's stored read id, or if that id and the derived one both belong to other feeds"),
   })
   .meta({ id: "Created" });
 export type Created = z.infer<typeof Created>;
@@ -59,7 +59,21 @@ export const FeedPasswordHeader = z
   );
 export const CurrentPasswordHeader = z.string().describe("The feed's current password");
 
-export const COMPONENTS = [NoteJson, NoteList, Created, ErrorJson, PostJson, PostForm, PasswordJson];
+const TITLE = z.string().describe("Display title, at most 100 characters, one line; empty means none (the feed's name is shown)");
+const DESCRIPTION = z.string().describe("Description, at most 500 characters, one line; may be empty");
+export const FeedSettingsJson = z.object({ title: TITLE, description: DESCRIPTION }).meta({ id: "FeedSettings" });
+export const FeedJson = z
+  .object({
+    name: z.string().describe("The feed's name"),
+    title: TITLE,
+    description: DESCRIPTION,
+    protected: z.boolean().describe("Whether the feed has its own password"),
+    read_url: z.url().nullable().describe("The feed's read-only RSS link; null while the feed has no notes, or if the server can't read the feed's stored read id"),
+  })
+  .meta({ id: "Feed" });
+export const ReadFeedJson = z.object({ title: TITLE, description: DESCRIPTION }).meta({ id: "ReadFeed" });
+
+export const COMPONENTS = [NoteJson, NoteList, Created, ErrorJson, PostJson, PostForm, PasswordJson, FeedSettingsJson, FeedJson, ReadFeedJson];
 
 export const FeedParam = z.string().regex(FEED_RE).describe("The feed's name. It is the write key: anyone who knows it can post.");
 export const ReadIdParam = z.string().regex(READ_ID_RE).describe("The feed's read id, from its read link. Read-only; never reveals the name.");

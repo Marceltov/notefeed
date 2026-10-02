@@ -15,7 +15,7 @@ beforeEach(async () => {
   delete process.env.NOTEFEED_RATE_LIMIT;
   resetFeedsForTests();
   resetRateLimitsForTests();
-  id = (await createNote("openfeed", "# Old")).id;
+  id = (await createNote("openfeed", "# Old")).note.id;
 });
 
 const form = (fields: Record<string, string>) => {
@@ -66,7 +66,7 @@ test.each([["another site", "https://evil.example"], ["no Origin", null]])("from
 test("refusals go back to the note with the code", async () => {
   expect(loc(await send("openfeed", id, "edit", { markdown: "  " }))).toBe(`/openfeed/${id}?error=empty_note`);
   expect(loc(await send("openfeed", "nope", "edit", { markdown: "# x" }))).toBe("/openfeed/nope?error=not_found");
-  });
+});
 
 test("rate limited: the wait is passed on", async () => {
   process.env.NOTEFEED_RATE_LIMIT = "1";
@@ -97,7 +97,7 @@ test("an unknown action is a 404", async () => {
 
 test("a protected feed needs its cookie", async () => {
   await createProtected("lockd", "pw");
-  const lid = (await createNote("lockd", "# Old")).id;
+  const lid = (await createNote("lockd", "# Old")).note.id;
   expect(loc(await send("lockd", lid, "edit", { markdown: "# New" }))).toBe(`/lockd/${lid}?error=auth`);
   expect((await getNote("lockd", lid))?.markdown).toBe("# Old");
   const cookie = `${feedCookieName("lockd")}=${await cookieValue("lockd")}`;

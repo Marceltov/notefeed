@@ -6,13 +6,18 @@ Every feed is a folder in `DATA_DIR` (`/data` in the container), named after the
 
 ```
 data/
-├── .secret                                  # behind the read links; back it up
+├── .secret                                  # signs cookies and tokens, and is behind older feeds' read links; back it up
 ├── homelab-7f3k2q9x4m8wz/
+│   ├── .readid                              # the feed's read id (feeds created since feed deletion was added; older ones have none)
+│   ├── .feed.json                           # title and description, if set
+│   ├── .password                            # only on a protected feed
 │   ├── 20260929T140512Z-backup-finished.md
 │   └── 20260930T081500Z-deploy-done.md
 └── alerts-q9x2m7hd4k1pv/
     └── 20260930T090210Z-disk-space-low.md
 ```
+
+The three dot files in a feed's folder are part of the feed. `.readid` is its read link, `.feed.json` its title and description, `.password` its [password](#a-lost-feed-password). They are plain files you can read and copy; don't edit `.readid` by hand, because the feed's read link changes with it. If you copy a feed's folder to make another feed, remove `.readid` from the copy: two feeds can't share a read link, and at the next start the folder whose name sorts first keeps it, which can be the copy, and the original's readers would then get the copy's notes. The other folder gets the read link computed from its name.
 
 With the quick start's `compose.yaml` that's the `data` folder next to it. You can read, grep or copy the files directly.
 
@@ -30,11 +35,11 @@ git init
 git add -A && git commit -m "notes"
 ```
 
-Leave `.secret` out if the repository goes anywhere public (`echo .secret > .gitignore`): with it, anyone can compute every feed's read link.
+Leave `.secret` out if the repository goes anywhere public (`echo .secret > .gitignore`): with it, anyone can compute the read link of every feed that has no `.readid`, and sign their own unlock cookies and MCP logins. Keep the dot files inside the feed folders, and `.readid` in particular, out of a public repository too: `.readid` is the feed's read link, and `.password` is its password hash. They go into the repository with `git add -A`, so ignore them if the repository is public.
 
 ## Backups
 
-Back up the `data` folder, including `.secret`. There's no database: restoring the files restores the notes, and restoring `.secret` keeps the read links the same (unless `NOTEFEED_SECRET` is set, which then decides them). Restart notefeed after restoring: it reads the list of feeds once at startup, so the read links of restored feeds only work after a restart.
+Back up the `data` folder, including `.secret` and the dot files inside each feed folder: `.readid`, `.feed.json` and `.password`. There's no database: restoring the files restores the notes, the settings and the passwords. A backup that skips hidden files (a plain `cp *`, or a tool with a default exclude) loses them: a feed without its `.readid` gets the read link computed from its name and `.secret` instead, which is a different link for any feed created since feed deletion was added, and a feed without its `.password` is open. Restoring `.secret` keeps the read links of older feeds the same, and unlocked browsers and MCP clients signed in (unless `NOTEFEED_SECRET` is set, which then decides both). Restart notefeed after restoring: it reads the list of feeds once at startup, so the read links of restored feeds only work after a restart.
 
 ```sh
 tar czf notefeed-notes.tgz -C data .
@@ -42,7 +47,9 @@ tar czf notefeed-notes.tgz -C data .
 
 ## Deleting notes and feeds
 
-Delete a note's file, or a feed's whole folder. It disappears from the web UI and the feed straight away. A deleted feed still counts toward `NOTEFEED_MAX_FEEDS` until notefeed restarts.
+A feed's owner can delete it from the web UI or the [API](posting.md#feed-settings-and-deleting-a-feed). That removes the notes, the settings, the password and the read link, frees the name, and takes the feed out of the `NOTEFEED_MAX_FEEDS` count at once. notefeed first renames the folder to `.deleted-<random>` in `DATA_DIR` and then removes it; if it stops in between, the leftover folder is removed at the next start. A new feed's folder is likewise made as `.<random>.tmp` and renamed into place, and one left by a crash is removed at the next start too.
+
+You can also delete a note's file, or a feed's whole folder, yourself. It disappears from the web UI and the feed straight away. notefeed still lists a feed you removed by hand, as an empty feed that counts toward `NOTEFEED_MAX_FEEDS`, until someone posts to that name, deletes the feed, or notefeed restarts. A post to that name creates a new feed, with a new read link and no password.
 
 ```sh
 rm data/homelab-7f3k2q9x4m8wz/20260929T140512Z-backup-finished.md
@@ -58,6 +65,14 @@ rm data/homelab-7f3k2q9x4m8wz/.password
 ```
 
 To keep a feed protected, copy its notes to a new feed created with a new password. Back up `.password` with the notes: it is part of the feed's folder.
+
+### A feed that is empty and cannot get a password
+
+If a feed's first note fails to save (a full disk, say), notefeed may leave an empty feed folder with its `.readid`. That is an existing, open feed with no notes: it counts toward `NOTEFEED_MAX_FEEDS`, and it cannot be given a password, because a password can only be set when a feed is created. Delete the feed and create it again. The easiest way is **Delete feed** on the feed's page in the web UI; `DELETE /api/v1/feeds/<feed>` or removing the folder do the same.
+
+### A feed without a read link
+
+If notefeed can't read a feed's `.readid` when it starts (wrong permissions, say), it logs that, without the feed's name, and lists the feed without a read link until the next start: the feed page shows none, and `read_url` is `null` in the API. Posting and reading by name work as usual. notefeed does not fall back to another read id, because that would change the feed's link. Make the file readable and restart notefeed. The same happens to a feed whose `.readid` and computed read id both belong to other feeds, which takes two hand-made copies.
 
 ## Upgrading
 

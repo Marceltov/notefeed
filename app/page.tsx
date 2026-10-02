@@ -12,7 +12,7 @@ const MESSAGES = {
 };
 
 export default async function Home({ searchParams }: PageProps<"/">) {
-  const { feed } = await searchParams;
+  const { feed, deleted } = await searchParams;
   let error: string | undefined;
   if (typeof feed === "string") {
     const name = normalizeFeedInput(feed);
@@ -24,6 +24,11 @@ export default async function Home({ searchParams }: PageProps<"/">) {
   return (
     <>
       <Header />
+      {deleted && (
+        <p role="status" className="mb-4 text-sm text-carbon">
+          Feed deleted.
+        </p>
+      )}
       <p className="mb-8">
         A feed is a list of markdown notes with a name. Post to it from this page or with one curl command, and
         follow it in any RSS reader through its read link, which shows the notes but not the name.{" "}
