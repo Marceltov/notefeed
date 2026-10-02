@@ -19,6 +19,7 @@ class Feed:
         read_url (None | str): The feed's read-only RSS link; null while the feed has no notes, or if the server can't
             read the feed's stored read id
         image_url (None | str): The feed's title image (absolute URL, served under the read id), or null
+        show_sender (bool): Whether readers see who posted each note
     """
 
     name: str
@@ -27,6 +28,7 @@ class Feed:
     protected: bool
     read_url: None | str
     image_url: None | str
+    show_sender: bool
 
     def to_dict(self) -> dict[str, Any]:
         name = self.name
@@ -43,6 +45,8 @@ class Feed:
         image_url: None | str
         image_url = self.image_url
 
+        show_sender = self.show_sender
+
         field_dict: dict[str, Any] = {}
 
         field_dict.update(
@@ -53,6 +57,7 @@ class Feed:
                 "protected": protected,
                 "read_url": read_url,
                 "image_url": image_url,
+                "show_sender": show_sender,
             }
         )
 
@@ -83,6 +88,8 @@ class Feed:
 
         image_url = _parse_image_url(d.pop("image_url"))
 
+        show_sender = d.pop("show_sender")
+
         feed = cls(
             name=name,
             title=title,
@@ -90,6 +97,7 @@ class Feed:
             protected=protected,
             read_url=read_url,
             image_url=image_url,
+            show_sender=show_sender,
         )
 
         return feed

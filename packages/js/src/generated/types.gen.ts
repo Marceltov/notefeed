@@ -25,6 +25,10 @@ export type Note = {
      * The note's page in the web UI
      */
     url: string;
+    /**
+     * Verified sign-in name of the poster; absent when the note was posted without a sign-in
+     */
+    sender?: string | null;
 };
 
 export type NoteList = {
@@ -116,6 +120,10 @@ export type FeedSettings = {
      * The file name of an image uploaded to this feed (see uploadImage), shown as the feed's title image; empty removes it, omitted leaves it as it is
      */
     image?: string;
+    /**
+     * Whether readers (RSS, the read API and pages) see who posted each note; omitted leaves it as it is, a new feed starts with true
+     */
+    show_sender?: boolean;
 };
 
 export type Feed = {
@@ -143,6 +151,10 @@ export type Feed = {
      * The feed's title image (absolute URL, served under the read id), or null
      */
     image_url: string | null;
+    /**
+     * Whether readers see who posted each note
+     */
+    show_sender: boolean;
 };
 
 export type ReadFeed = {
