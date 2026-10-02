@@ -9,7 +9,7 @@ import { getNote, listNotes, type Note } from "./notes";
 import { imagePath } from "./urls";
 
 export type { Note };
-export { IDENTITY_COOKIE, SESSION_COOKIE, locked, sessionOk } from "./auth";
+export { IDENTITY_COOKIE, SESSION_COOKIE, identitySender, locked, sessionOk } from "./auth";
 export { checkFeed } from "./feeds";
 export { identityOn };
 export { feedPath, publicUrl, readPath, rssPath, safeNext, settingsPath } from "./urls";

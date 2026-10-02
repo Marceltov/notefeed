@@ -4,7 +4,8 @@ import { join } from "node:path";
 import { beforeEach, expect, test } from "vitest";
 import { cookieValue, createProtected } from "./feedlock";
 import { readIdOf, resetFeedsForTests } from "./feeds";
-import { feedUnlocked, getFeed, getFeedNote, getReadFeed, getReadNote, passwordSet, providerName } from "./index";
+import { feedUnlocked, getFeed, getFeedNote, getReadFeed, getReadNote, identitySender, passwordSet, providerName } from "./index";
+import { sign } from "./oauth/tokens";
 import { createNote, removeNote } from "./notes";
 import { saveSettings } from "./feedsettings";
 
@@ -70,4 +71,20 @@ test("read pages hide the sender when the feed says so; getFeed never does", asy
   expect((await getReadNote(rid, note.id))!.sender).toBeUndefined();
   expect((await getFeed("s"))!.notes[0].sender).toBe("Ann");
   expect((await getFeedNote("s", note.id))!.sender).toBe("Ann");
+});
+
+// The compose box says "your name is shown" only to someone signed in through the provider.
+test("identitySender names the signed-in person only while sign-in is on", () => {
+  const vars = { NOTEFEED_OIDC_ISSUER: "https://auth.example.com", NOTEFEED_OIDC_CLIENT_ID: "id", NOTEFEED_OIDC_CLIENT_SECRET: "s", NOTEFEED_OIDC_ALLOW: "*" };
+  process.env.NOTEFEED_PASSWORD = "pw";
+  const c = sign("identity", { sender: "Ann" });
+  try {
+    expect(identitySender(c)).toBeUndefined();
+    Object.assign(process.env, vars);
+    expect(identitySender(c)).toBe("Ann");
+    expect(identitySender(undefined)).toBeUndefined(); // a password session has no identity cookie
+  } finally {
+    for (const k of Object.keys(vars)) delete process.env[k];
+    delete process.env.NOTEFEED_PASSWORD;
+  }
 });
