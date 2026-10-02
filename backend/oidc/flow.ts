@@ -3,7 +3,7 @@
 import { redirectUriOk } from "../oauth/routes";
 import { processState } from "../state";
 import { allowed, type Provider, senderFrom } from "./config";
-import { errorCode, fail } from "./log";
+import { errorCode, fail, logUrl } from "./log";
 
 export type Meta = { issuer: string; authorization_endpoint: string; token_endpoint: string };
 type Fetch = typeof fetch;
@@ -48,10 +48,10 @@ export async function discover(provider: Provider, fetchFn: Fetch = fetch, now =
   const hit = cache.get(key);
   if (hit && now - hit.at < HOUR) return hit.meta;
   // TLS to the provider is what lets exchange skip the id_token's signature: https, or plain http on loopback only.
-  if (!redirectUriOk(issuer)) fail("issuer is not an https URL", { provider: id, issuer });
+  if (!redirectUriOk(issuer)) fail("issuer is not an https URL", { provider: id, issuer: logUrl(issuer) });
   const doc = await getJson(fetchFn, `${key}/.well-known/openid-configuration`, { headers: { accept: "application/json" } }, "discovery failed", provider);
   // A document naming another issuer is not this provider's.
-  if (!sameIssuer(doc.issuer, issuer)) fail("issuer does not match the discovery document", { provider: id, issuer, document: String(doc.issuer) });
+  if (!sameIssuer(doc.issuer, issuer)) fail("issuer does not match the discovery document", { provider: id, issuer: logUrl(issuer), document: logUrl(doc.issuer) });
   const { authorization_endpoint, token_endpoint } = doc;
   if (!redirectUriOk(authorization_endpoint)) fail("discovery endpoint is not https", { provider: id, endpoint: "authorization_endpoint" });
   if (!redirectUriOk(token_endpoint)) fail("discovery endpoint is not https", { provider: id, endpoint: "token_endpoint" });

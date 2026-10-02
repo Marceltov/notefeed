@@ -190,7 +190,7 @@ Take them off the allow-list (`NOTEFEED_OIDC_ALLOW`, or `NOTEFEED_OIDC_<NAME>_AL
 
 ## Logs
 
-notefeed logs one line starting with `oidc:` for each failed sign-in. It names the step that failed and, where it helps, the provider, the issuer, the HTTP status or an error code, and never a secret, token, address or name. Read them with `docker compose logs notefeed`, or your container runtime's equivalent, for example `docker compose logs notefeed | grep oidc:`. A sign-in that works logs nothing.
+notefeed logs one line starting with `oidc:` for each failed sign-in. It names the step that failed and, where it helps, the provider, the issuer (without any user, password or query part), the HTTP status or a short error code. It never logs a secret, token, e-mail address or name, and never echoes text from the request: the `unknown provider` line carries the requested provider id only when it looks like one (lowercase letters, digits and underscores). A sign-in refused because of [too many failed attempts](configuration.md#rate-limits-and-caps) is not logged, since that check comes first. Read them with `docker compose logs notefeed`, or your container runtime's equivalent, for example `docker compose logs notefeed | grep oidc:`. A sign-in that works logs nothing.
 
 ## Troubleshooting
 
@@ -216,7 +216,7 @@ Every failed sign-in shows the same message, "Sign-in didn't work. Try again.", 
 
 | Log line starts with | Cause | Fix |
 |---|---|---|
-| `oidc: unknown provider` | The sign-in named a provider that isn't configured, or none while several are. | Use the buttons on the login page; check the provider's four variables. |
+| `oidc: unknown provider` | The sign-in named a provider that isn't configured (`provider=` shows its id when it has a provider id's shape), or none while several are. | Use the buttons on the login page; check the provider's four variables. |
 | `oidc: issuer is not an https URL` | `NOTEFEED_OIDC_ISSUER` is not a URL, or plain `http` on a host other than `localhost`. | Set the issuer to the `https` URL from the discovery document. |
 | `oidc: discovery failed` with `status=` | The discovery document answered with that HTTP status, or with something other than JSON (`status=200 error="not a JSON object"`). | Open `<issuer>/.well-known/openid-configuration`; a 404 usually means a wrong issuer path. |
 | `oidc: discovery failed` with `error=` | The provider can't be reached from the notefeed container: `ENOTFOUND` (DNS), `ECONNREFUSED` (nothing listening), `CERT_HAS_EXPIRED` or another certificate error, `TimeoutError` (no answer within 10 seconds). | Fix DNS, the firewall or the certificate between notefeed and the provider. |

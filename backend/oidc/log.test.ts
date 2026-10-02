@@ -32,3 +32,10 @@ test("each value is capped at 200 characters", () => {
   logFailure("unknown provider", { provider: "a".repeat(500) });
   expect(line()).toBe(`oidc: unknown provider provider="${"a".repeat(200)}"`);
 });
+
+test("never throws, even when console.warn does", () => {
+  warn.mockImplementation(() => {
+    throw new Error("log down");
+  });
+  expect(() => logFailure("unknown provider", { provider: "x" })).not.toThrow();
+});

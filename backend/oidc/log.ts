@@ -8,8 +8,17 @@ type Detail = Record<string, string | number>;
 // Quoted, without control, format or line-separator characters, so a value can't end the line or fake another one.
 const value = (v: string | number) => (typeof v === "number" ? String(v) : JSON.stringify(v.replace(/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/gu, "").slice(0, 200)));
 
+// Never throws: a failing log must not change what the browser sees or what counts as a failed sign-in.
 export function logFailure(reason: string, detail: Detail = {}): void {
-  console.warn(`oidc: ${reason}${Object.entries(detail).map(([k, v]) => ` ${k}=${value(v)}`).join("")}`);
+  try {
+    console.warn(`oidc: ${reason}${Object.entries(detail).map(([k, v]) => ` ${k}=${value(v)}`).join("")}`);
+  } catch {}
+}
+
+// A URL as logged: without userinfo, query or fragment (they may carry credentials), or a placeholder if it isn't one.
+export function logUrl(v: unknown): string {
+  if (typeof v !== "string" || !URL.canParse(v)) return typeof v === "string" ? "(not a URL)" : typeof v;
+  return v.replace(/[?#].*$/s, "").replace(/^([a-z][a-z\d+.-]*:\/\/)[^/]*@/i, "$1");
 }
 
 // Logs why, then refuses with the plain AuthError the routes word.

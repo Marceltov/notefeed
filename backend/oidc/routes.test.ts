@@ -24,7 +24,7 @@ let lastNonce = "";
 const b64 = (v: unknown) => Buffer.from(JSON.stringify(v)).toString("base64url");
 // Each stub issuer and the client id it issues id_tokens to.
 const CLIENTS: Record<string, string> = { [ISS]: "id", "https://alpha.example": "alpha-id", "https://beta.example": "beta-id" };
-const fetchStub = vi.fn<typeof fetch>(async (url) => {
+const stubImpl: typeof fetch = async (url) => {
   for (const [iss, aud] of Object.entries(CLIENTS)) {
     if (String(url) === `${iss}/.well-known/openid-configuration`) return Response.json({ issuer: iss, authorization_endpoint: `${iss}/authorize`, token_endpoint: `${iss}/token` });
     if (String(url) === `${iss}/token`) {
@@ -33,7 +33,8 @@ const fetchStub = vi.fn<typeof fetch>(async (url) => {
     }
   }
   return new Response("not found", { status: 404 });
-});
+};
+const fetchStub = vi.fn<typeof fetch>(stubImpl);
 
 beforeEach(async () => {
   vi.stubEnv("DATA_DIR", await mkdtemp(join(tmpdir(), "notefeed-oidc-")));
@@ -276,6 +277,41 @@ describe("failure logs", () => {
     expect(logged()).toEqual(['oidc: discovery failed provider="default" error="ENOTFOUND"']);
   });
 
+  test("an unknown provider id that isn't id-shaped is not echoed", async () => {
+    for (const id of ["Evil\nfake", "a b", "x".repeat(65), "ALPHA"]) {
+      const res = await oidcStartRoute(get(`/api/oidc/start?provider=${encodeURIComponent(id)}`));
+      expect(res.headers.get("location")).toBe("/login?error=sign_in_failed");
+    }
+    expect(logged()).toEqual(Array(4).fill("oidc: unknown provider"));
+  });
+
+  test("a discovery issuer that can't be turned into a string still gives the plain failure", async () => {
+    fetchStub.mockImplementation(async () => Response.json({ ...META, issuer: { toString: 1 } }));
+    vi.stubEnv("NOTEFEED_RATE_LIMIT", "1");
+    try {
+      expect((await oidcStartRoute(get("/api/oidc/start"))).headers.get("location")).toBe("/login?error=sign_in_failed");
+      const cookie = sign("oidc", { state: "st", nonce: "no", verifier: "v", next: "/", provider: "default" });
+      failed(await callback("code=c&state=st", cookie));
+      expect((await callback("code=c&state=st", cookie)).headers.get("location")).toMatch(/^\/login\?error=too_many_attempts/);
+    } finally {
+      fetchStub.mockReset();
+      fetchStub.mockImplementation(stubImpl);
+    }
+  });
+
+  test("a console.warn that throws changes nothing the browser sees, and the failure still counts", async () => {
+    warn.mockImplementation(() => {
+      throw new Error("log down");
+    });
+    vi.stubEnv("NOTEFEED_RATE_LIMIT", "1");
+    const s = await start("");
+    failed(await callback(`code=c&state=${s.state}x`, s.cookie));
+    expect((await callback(`code=c&state=${s.state}`, s.cookie)).headers.get("location")).toMatch(/^\/login\?error=too_many_attempts/);
+    resetDiscoveryForTests();
+    fetchStub.mockImplementationOnce(async () => Promise.reject(new TypeError("fetch failed")));
+    expect((await oidcStartRoute(get("/api/oidc/start"))).headers.get("location")).toBe("/login?error=sign_in_failed");
+  });
+
   test("a sign-in that works logs nothing", async () => {
     const s = await start("");
     expect(setCookie(await callback(`code=c&state=${s.state}`, s.cookie), IDENTITY_COOKIE)).toBeDefined();
@@ -306,8 +342,7 @@ describe("several providers", () => {
   test.each(["next=/feed", "provider=&next=/feed", "provider=gamma&next=/feed", "provider=ALPHA&next=/feed", "provider=Default&next=/feed"])("%j is refused before anything is fetched", async (q) => {
     const res = await oidcStartRoute(get(`/api/oidc/start?${q}`));
     expect(res.status).toBe(303);
-    const named = new URLSearchParams(q).get("provider");
-    expect(logged()).toEqual([named ? `oidc: unknown provider provider="${named}"` : "oidc: unknown provider"]);
+    expect(logged()).toEqual([q.includes("gamma") ? 'oidc: unknown provider provider="gamma"' : "oidc: unknown provider"]);
     expect(res.headers.get("location")).toBe("/login?error=sign_in_failed&next=%2Ffeed");
     expect(res.headers.getSetCookie()).toEqual([]);
     expect(fetchStub).not.toHaveBeenCalled();

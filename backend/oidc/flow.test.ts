@@ -262,6 +262,32 @@ describe("failure logs", () => {
     expect(logged()).toEqual([`oidc: token request rejected ${D} status=401 error="invalid_client"`, `oidc: token request rejected ${D} status=401`]);
   });
 
+  test("a document issuer that can't be turned into a string is refused like any mismatch", async () => {
+    await expect(discover(PROV, issuer({ doc: { ...META, issuer: { toString: 1 } } }))).rejects.toBeInstanceOf(AuthError);
+    expect(logged()).toEqual([`oidc: issuer does not match the discovery document ${D} issuer="${ISS}" document="object"`]);
+  });
+
+  test("a console.warn that throws changes nothing", async () => {
+    warn.mockImplementation(() => {
+      throw new Error("log down");
+    });
+    await expect(discover(PROV, issuer({ doc: { ...META, issuer: "https://evil.example" } }))).rejects.toBeInstanceOf(AuthError);
+    await expect(exchange(PROV, META, P, issuer({ tokenStatus: 400 }), NOW)).rejects.toBeInstanceOf(AuthError);
+  });
+
+  test("an issuer is logged without userinfo, query or fragment", async () => {
+    const bad = "http://user:pass@idp.example/x?token=abc#frag";
+    await expect(discover(at(bad), issuer())).rejects.toBeInstanceOf(AuthError);
+    await expect(discover(at("https://user:pass@idp.example/app?token=abc"), vi.fn(async () => Response.json({ ...META, issuer: "https://u:pass@other.example/y?token=abc" })))).rejects.toBeInstanceOf(AuthError);
+    await expect(discover(at("not a url"), issuer())).rejects.toBeInstanceOf(AuthError);
+    expect(logged()).toEqual([
+      `oidc: issuer is not an https URL ${D} issuer="http://idp.example/x"`,
+      `oidc: issuer does not match the discovery document ${D} issuer="https://idp.example/app" document="https://other.example/y"`,
+      `oidc: issuer is not an https URL ${D} issuer="(not a URL)"`,
+    ]);
+    for (const s of ["pass", "token=abc", "frag"]) expect(logged().join("\n")).not.toContain(s);
+  });
+
   test("a sign-in that works logs nothing", async () => {
     const f = issuer();
     expect(await exchange(PROV, await discover(PROV, f), P, f, NOW)).toEqual({ sender: "Ann" });

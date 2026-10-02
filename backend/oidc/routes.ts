@@ -74,7 +74,8 @@ export async function oidcStartRoute(req: Request): Promise<Response> {
   const provider = chosen(start.provider);
   // A missing or unknown provider: back where the sign-in started, with no flight and nothing fetched.
   if (!provider) {
-    logFailure("unknown provider", start.provider ? { provider: start.provider } : {});
+    // The id only when it has a provider id's shape: requested text is never echoed.
+    logFailure("unknown provider", /^[a-z0-9_]{1,64}$/.test(start.provider ?? "") ? { provider: start.provider! } : {});
     return seeOther(failedPage({ next, authorize }, "sign_in_failed"));
   }
   let meta;
