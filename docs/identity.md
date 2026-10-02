@@ -15,7 +15,7 @@ If none of these applies, leave it off. A single person, or scripts posting to f
 
 ## Setup
 
-Set all four variables. The mode is on only when all four are set; with one missing it stays off.
+Set the first four variables. The mode is on only when all four are set; with one missing it stays off. The fifth is optional.
 
 | Variable | Meaning |
 |---|---|
@@ -54,7 +54,54 @@ environment:
 4. Copy the client id and client secret into `NOTEFEED_OIDC_CLIENT_ID` and `NOTEFEED_OIDC_CLIENT_SECRET`.
 5. Set `NOTEFEED_OIDC_ISSUER` to the issuer of the application's OpenID configuration, for example `https://authentik.example.com/application/o/notefeed/`.
 
-Other providers work the same way: any that supports OpenID Connect discovery, the authorization code flow and PKCE.
+Other providers work the same way: see [Other providers](#other-providers) for their issuer URLs, and [URLs and what the provider needs](#urls-and-what-the-provider-needs) for everything the provider has to support.
+
+## URLs and what the provider needs
+
+Everything below is built from your [`PUBLIC_URL`](configuration.md#public_url), here `https://notes.example.com`, and from your provider's issuer URL.
+
+| What | URL | Where it goes |
+|---|---|---|
+| Redirect URI | `https://notes.example.com/api/oidc/callback` | Register it with the provider, as the only redirect (callback) URI. It must match exactly: scheme, host, port, path, and no trailing slash. |
+| Issuer | the provider's issuer URL, for example `https://authentik.example.com/application/o/notefeed/` | `NOTEFEED_OIDC_ISSUER`. |
+| Discovery document | `<issuer>/.well-known/openid-configuration` | notefeed reads it to find the provider's authorize and token endpoints. Nothing to register. |
+| Sign-in start | `https://notes.example.com/api/oidc/start` | What the **Sign in with** button opens. Nothing to register. |
+| MCP endpoint and its OAuth URLs | `/mcp`, `/oauth/authorize`, `/oauth/token`, `/oauth/register`, `/.well-known/oauth-authorization-server` and `/.well-known/oauth-protected-resource/mcp`, all under `PUBLIC_URL` | notefeed is the OAuth server for MCP clients, so the provider never sees them. The provider still only needs the one redirect URI above, and an [MCP client](mcp.md) needs no extra setup there. |
+
+The provider has to support:
+
+- The **authorization code flow with PKCE** (`S256`), for a **confidential** client (one with a client secret).
+- Client authentication with the secret **in the token request body** (`client_secret_post`). A provider that defaults to HTTP Basic authentication (`client_secret_basic`) needs the client switched to `client_secret_post`.
+- The scopes `openid profile email`.
+- An `id_token` from the token endpoint that carries `iss`, `aud` (your client id), `exp`, `nonce` and the claim for the sender. notefeed reads the claims from the `id_token` only and never calls the user-info endpoint, so a provider that leaves `name` or `email` out of the `id_token` needs a setting to include them, or a different [`NOTEFEED_OIDC_SENDER_CLAIM`](#setup).
+- For an allow-list of addresses or domains, the `email` and `email_verified` claims.
+
+Two details trip people up:
+
+- `NOTEFEED_OIDC_ISSUER` must equal the `issuer` value in the discovery document **exactly**, including a trailing slash: Authentik's ends in `/`, Keycloak's does not. Copy it from the document.
+- The redirect URI is built from `PUBLIC_URL`. Without it notefeed uses the `Host` header the request arrived with, and `http` unless `NOTEFEED_TRUST_PROXY` is set, which behind a proxy gives a redirect URI the provider rejects. Set `PUBLIC_URL` to the address people really use, see [Reverse proxy](reverse-proxy.md).
+
+For a try-out on your own machine, `http://localhost:3000` works as `PUBLIC_URL`, with the redirect URI `http://localhost:3000/api/oidc/callback`, if the provider accepts a plain-http redirect for localhost.
+
+## Other providers
+
+These are the usual issuer URLs. Your provider's discovery document is the authority: open `<issuer>/.well-known/openid-configuration` and use its `issuer`.
+
+| Provider | Issuer | Notes |
+|---|---|---|
+| Authentik | `https://authentik.example.com/application/o/<slug>/` | Trailing slash. See the [example](#example-authentik). |
+| Keycloak | `https://keycloak.example.com/realms/<realm>` | Older versions have `/auth` before `/realms`. Create an OpenID Connect client with **Client authentication** on and the standard flow enabled. |
+| Authelia | `https://auth.example.com` | Set the client's `token_endpoint_auth_method` to `client_secret_post`; Authelia defaults to `client_secret_basic`. |
+| Google | `https://accounts.google.com` | Create an OAuth client of type **Web application** and add the redirect URI. Use an address or domain allow-list, not `*`: `*` would let any Google account sign in. |
+| Microsoft Entra ID | `https://login.microsoftonline.com/<tenant-id>/v2.0` | Register the redirect URI under the **Web** platform. Entra may leave `email` or `email_verified` out of the `id_token`; check yours. If it does, address and domain entries can't match, so restrict who may use the app in Entra and set `NOTEFEED_OIDC_ALLOW` to `*`, or use `preferred_username` as [`NOTEFEED_OIDC_SENDER_CLAIM`](#setup). |
+
+## Check that it works
+
+1. Open `<issuer>/.well-known/openid-configuration` in a browser, or run `curl -s <issuer>/.well-known/openid-configuration | jq -r .issuer`. It must return JSON whose `issuer` is exactly what you set in `NOTEFEED_OIDC_ISSUER`.
+2. Restart notefeed and open `https://notes.example.com/login`. There is a **Sign in with** button named after your provider's host. If it is missing, one of the four variables is empty or unset.
+3. Click it and sign in at the provider. You land back on notefeed, signed in.
+4. Post a note from the web UI. It shows **by** and your name or address next to the time.
+5. Optional: connect an [MCP client](mcp.md). Its authorize page has the same button.
 
 ## What is stored
 
@@ -97,6 +144,24 @@ Take them off `NOTEFEED_OIDC_ALLOW` and restart: they can no longer sign in. Wha
 - Sessions are signed with a key derived from the server secret and the password, so changing `NOTEFEED_PASSWORD` or `NOTEFEED_SECRET` signs everyone out.
 - Failed sign-ins count toward the [rate limit](configuration.md#rate-limits-and-caps). Without `NOTEFEED_TRUST_PROXY`, all clients share one bucket.
 - A note file stored by an older notefeed (it has no header) whose first lines are `---`, then only `key: <JSON>` lines or nothing, then `---` reads as having a header: that part is hidden from the displayed body (the file is untouched), and a `sender: "X"` line in it reads as a note from `X`, with sign-in on or off. A legacy note starting `---` and `---` loses that pair from the displayed body. Notes written since always start with the header, so text typed into a note can never read as a sender or other metadata.
+
+## Troubleshooting
+
+Every failed sign-in shows the same message, "Sign-in didn't work. Try again.", and notefeed logs nothing, so use this list. To tell an allow-list problem from a provider problem, set `NOTEFEED_OIDC_ALLOW` to `*` for a moment: if signing in then works, the allow-list was the cause.
+
+| What you see | Likely cause |
+|---|---|
+| No **Sign in with** button on the login page | One of the four variables is unset or empty, or `NOTEFEED_OIDC_ALLOW` is empty. |
+| The provider shows a redirect or `redirect_uri` error before you return | The registered redirect URI differs from `<PUBLIC_URL>/api/oidc/callback`: scheme, host, port, path or a trailing slash. Behind a proxy, `PUBLIC_URL` is not set. |
+| Back on notefeed with "Sign-in didn't work" | The issuer differs from the discovery document's `issuer`, often a missing or extra trailing slash. |
+| The same | The provider can't be reached from the notefeed container (DNS, a firewall, a certificate it doesn't trust), or its URLs are plain `http`. |
+| The same | The person isn't on the allow-list, or the provider doesn't report their e-mail address as verified. |
+| The same | The `id_token` has none of the sender claims, which by default are `name` and `email`. Check the scopes and the provider's claim settings, or set `NOTEFEED_OIDC_SENDER_CLAIM`. |
+| The same | The client secret is wrong, or the provider expects `client_secret_basic` instead of `client_secret_post`. |
+| The same | The sign-in took longer than 10 minutes, or the browser blocks cookies. Try again. |
+| The same, after many tries | Failed sign-ins count toward the [rate limit](configuration.md#rate-limits-and-caps). Wait a minute. |
+| Signed out after a while, or after changing the password | Expected: a sign-in lasts 7 days, and a changed `NOTEFEED_PASSWORD` or `NOTEFEED_SECRET` signs everyone out. |
+| A note has no sender | It was posted with the instance password or by a script, which never carries a sender. |
 
 ## Privacy page and imprint
 
