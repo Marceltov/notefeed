@@ -1541,6 +1541,13 @@
             "type": "string",
             "format": "uri",
             "description": "The note's page in the web UI"
+          },
+          "sender": {
+            "description": "Verified sign-in name of the poster; absent when the note was posted without a sign-in",
+            "type": [
+              "string",
+              "null"
+            ]
           }
         },
         "required": [

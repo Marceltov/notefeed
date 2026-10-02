@@ -6,7 +6,7 @@ import { config } from "../config";
 import { InvalidBodyError, NotFoundError } from "../errors";
 import { changePassword, checkFeedAccess, protectedFeed, removePassword } from "../feedlock";
 import { isReadId, assertFeed, feedForReadId, hasFeed, readIdOf } from "../feeds";
-import { getSettings } from "../feedsettings";
+import { forReaders, getSettings } from "../feedsettings";
 import { clientIp } from "../limits";
 import { MAX_BYTES, countNotes, getNote, listNotes, type Note } from "../notes";
 import { PASSWORD_RULE } from "../../shared/password";
@@ -62,6 +62,7 @@ const noteJson = (n: Note, base: string): NoteJson => ({
   markdown: n.markdown,
   created_at: n.createdAt.toISOString(),
   url: `${base}/${n.id}`,
+  ...(n.sender !== undefined && { sender: n.sender }),
 });
 
 // One page of notes, newest first, and the cursor for the next one.
@@ -452,7 +453,8 @@ const OPS: AnyOp[] = [
   }).handle(async ({ req, params, query }) => {
     if (!isReadId(params.readId)) throw new NotFoundError("malformed read id");
     const feed = await feedForReadId(params.readId);
-    const notes = (l: number, b?: string) => (feed ? listNotes(feed, l, b) : Promise.resolve([]));
+    const settings = feed ? await getSettings(feed) : null;
+    const notes = async (l: number, b?: string) => (feed && settings ? forReaders(await listNotes(feed, l, b), settings) : []);
     return page(notes, query, publicUrl(req.headers) + readPath(params.readId));
   }),
 
@@ -470,8 +472,9 @@ const OPS: AnyOp[] = [
     },
   }).handle(async ({ req, params }) => {
     const feed = await feedForReadId(params.readId);
-    const note = feed ? await getNote(feed, params.id) : null;
-    if (!note) throw new NotFoundError("no such note");
+    const found = feed ? await getNote(feed, params.id) : null;
+    if (!feed || !found) throw new NotFoundError("no such note");
+    const [note] = forReaders([found], await getSettings(feed));
     return { status: 200, body: noteJson(note, publicUrl(req.headers) + readPath(params.readId)) };
   }),
 

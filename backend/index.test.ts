@@ -4,8 +4,9 @@ import { join } from "node:path";
 import { beforeEach, expect, test } from "vitest";
 import { cookieValue, createProtected } from "./feedlock";
 import { readIdOf, resetFeedsForTests } from "./feeds";
-import { feedUnlocked, getFeed, passwordSet, providerName } from "./index";
+import { feedUnlocked, getFeed, getFeedNote, getReadFeed, getReadNote, passwordSet, providerName } from "./index";
 import { createNote, removeNote } from "./notes";
+import { saveSettings } from "./feedsettings";
 
 beforeEach(async () => {
   process.env.DATA_DIR = await mkdtemp(join(tmpdir(), "notefeed-index-"));
@@ -57,4 +58,16 @@ test("providerName is the issuer's host while identity is on, else empty; passwo
     delete process.env.NOTEFEED_PASSWORD;
   }
   expect(providerName()).toBe("");
+});
+
+test("read pages hide the sender when the feed says so; getFeed never does", async () => {
+  const { note } = await createNote("s", "# Hi", undefined, "Ann");
+  const rid = (await readIdOf("s"))!;
+  expect((await getReadFeed(rid))!.notes[0].sender).toBe("Ann");
+  expect((await getReadNote(rid, note.id))!.sender).toBe("Ann");
+  await saveSettings("s", { title: "", description: "", image: "", showSender: false });
+  expect((await getReadFeed(rid))!.notes[0].sender).toBeUndefined();
+  expect((await getReadNote(rid, note.id))!.sender).toBeUndefined();
+  expect((await getFeed("s"))!.notes[0].sender).toBe("Ann");
+  expect((await getFeedNote("s", note.id))!.sender).toBe("Ann");
 });

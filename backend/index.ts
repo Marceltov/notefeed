@@ -3,7 +3,7 @@
 // the endpoint it would become if the backend moved out, so the cut would be here and nowhere else.
 import { config } from "./config";
 import { identityOn } from "./oidc/config";
-import { getSettings } from "./feedsettings";
+import { forReaders, getSettings } from "./feedsettings";
 import { isReadId, checkFeed, feedForReadId, hasFeed, readIdOf } from "./feeds";
 import { getNote, listNotes, type Note } from "./notes";
 import { imagePath } from "./urls";
@@ -67,11 +67,13 @@ export async function getFeedNote(feed: string, id: string): Promise<Note | null
 export async function getReadFeed(id: string): Promise<{ notes: Note[]; title: string; description: string; imageUrl: string | null } | null> {
   if (!isReadId(id)) return null;
   const feed = await feedForReadId(id);
-  const { title, description, image } = feed ? await getSettings(feed) : { title: "", description: "", image: "" };
-  return { notes: feed ? await listNotes(feed, PAGE) : [], title, description, imageUrl: image ? imagePath(id, image) : null };
+  const settings = feed ? await getSettings(feed) : { title: "", description: "", image: "", showSender: true };
+  const { title, description, image } = settings;
+  return { notes: feed ? forReaders(await listNotes(feed, PAGE), settings) : [], title, description, imageUrl: image ? imagePath(id, image) : null };
 }
 
 export async function getReadNote(readId: string, id: string): Promise<Note | null> {
   const feed = await feedForReadId(readId);
-  return feed ? getNote(feed, id) : null;
+  const note = feed ? await getNote(feed, id) : null;
+  return note && feed ? forReaders([note], await getSettings(feed))[0] : null;
 }

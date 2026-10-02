@@ -16,6 +16,7 @@ export const NoteJson = z
     markdown: z.string().describe("The note, byte-for-byte as posted"),
     created_at: z.iso.datetime().describe("When the note was posted (UTC)"),
     url: z.url().describe("The note's page in the web UI"),
+    sender: z.string().nullable().optional().describe("Verified sign-in name of the poster; absent when the note was posted without a sign-in"),
   })
   .meta({ id: "Note" });
 export type NoteJson = z.infer<typeof NoteJson>;

@@ -49,6 +49,7 @@ export function NoteList({ notes, base, posted }: { notes: Note[]; base: string;
               <Link href={`${base}/${n.id}`} className="font-bold hover:text-carbon hover:underline">
                 {n.title || n.id}
               </Link>
+              {n.sender && <span className="ml-2 text-sm text-muted">by {n.sender}</span>}
               {bodyAfterTitle(n.markdown) && (
                 <div className="mt-1">
                   <NoteView markdown={bodyAfterTitle(n.markdown)} />
@@ -69,6 +70,7 @@ export function NoteArticle({ note, back }: { note: Note; back: string }) {
         <time dateTime={note.createdAt.toISOString()} className="text-sm text-muted">
           {note.createdAt.toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" })}
         </time>
+        {note.sender && <span className="text-sm text-muted"> by {note.sender}</span>}
         <div className="mt-2">
           <NoteView markdown={note.markdown} />
         </div>

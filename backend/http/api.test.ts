@@ -7,6 +7,7 @@ import { cookieValue } from "../feedlock";
 import { resetFeedsForTests, readIdOf } from "../feeds";
 import { resetRateLimitsForTests } from "../limits";
 import { createNote } from "../notes";
+import { saveSettings } from "../feedsettings";
 import { API_PREFIX, dispatch } from "./api";
 import { rssRoute } from "./rss";
 
@@ -404,5 +405,27 @@ describe("editing and deleting notes", () => {
   test("the read paths answer 405 to PUT and DELETE", async () => {
     const id = await make();
     for (const method of ["PUT", "DELETE"]) expect((await call(method, `/read/${(await readIdOf("backups"))!}/notes/${id}`)).status).toBe(405);
+  });
+});
+
+describe("sender", () => {
+  test("authenticated list and get include it; a note without one has no key", async () => {
+    const { note: a } = await createNote("backups", "# A", new Date("2026-09-29T10:00:00Z"), "Ann");
+    const { note: b } = await createNote("backups", "# B", new Date("2026-09-29T11:00:00Z"));
+    const list = (await json(await call("GET", "/feeds/backups/notes"))).notes;
+    expect(list[1].sender).toBe("Ann");
+    expect(list[0]).not.toHaveProperty("sender");
+    expect((await json(await call("GET", `/feeds/backups/notes/${a.id}`))).sender).toBe("Ann");
+    expect(await json(await call("GET", `/feeds/backups/notes/${b.id}`))).not.toHaveProperty("sender");
+  });
+  test("the public read endpoints honour showSender", async () => {
+    const { note } = await createNote("backups", "# A", undefined, "Ann");
+    const rid = (await readIdOf("backups"))!;
+    expect((await json(await call("GET", `/read/${rid}/notes`))).notes[0].sender).toBe("Ann");
+    expect((await json(await call("GET", `/read/${rid}/notes/${note.id}`))).sender).toBe("Ann");
+    await saveSettings("backups", { title: "", description: "", image: "", showSender: false });
+    expect((await json(await call("GET", `/read/${rid}/notes`))).notes[0]).not.toHaveProperty("sender");
+    expect(await json(await call("GET", `/read/${rid}/notes/${note.id}`))).not.toHaveProperty("sender");
+    expect((await json(await call("GET", "/feeds/backups/notes"))).notes[0].sender).toBe("Ann");
   });
 });

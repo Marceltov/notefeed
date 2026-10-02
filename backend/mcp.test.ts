@@ -117,6 +117,15 @@ describe("tools", () => {
     expect(rest.next).toBeNull();
   });
 
+  test("list_notes and get_note include the sender when there is one", async () => {
+    const { note } = await createNote("a", "# Hi", undefined, "Ann");
+    await createNote("a", "# No", new Date(Date.now() - 5000));
+    const l = (await call("list_notes", { feed: "a" })).structuredContent.notes;
+    expect(l[0].sender).toBe("Ann");
+    expect(l[1]).not.toHaveProperty("sender");
+    expect((await call("get_note", { feed: "a", id: note.id })).structuredContent.sender).toBe("Ann");
+  });
+
   test("get_note", async () => {
     const { id } = (await call("post_note", { feed: "a", markdown: "# Hi\nbody" })).structuredContent;
     const n = (await call("get_note", { feed: "a", id })).structuredContent;
