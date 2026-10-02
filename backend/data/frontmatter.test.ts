@@ -2,38 +2,38 @@ import { describe, expect, test } from "vitest";
 import { decode, encode } from "./frontmatter";
 
 describe("frontmatter", () => {
+  test("every note gets a block, empty without metadata", () => {
+    expect(encode("# hi", {})).toBe("---\n---\n# hi");
+    expect(decode("---\n---\n# hi")).toEqual({ markdown: "# hi", meta: {} });
+  });
+  test("meta lines are JSON, alphabetical by key", () => {
+    expect(encode("hello", { sender: "Ann", agent: 1 })).toBe('---\nagent: 1\nsender: "Ann"\n---\nhello');
+    expect(decode(encode("hello", { sender: "Ann", agent: 1 }))).toEqual({ markdown: "hello", meta: { agent: 1, sender: "Ann" }, sender: "Ann" });
+  });
   test("round trips a sender, JSON-quoted", () => {
-    expect(encode("hello", "Ann")).toBe('---\nsender: "Ann"\n---\nhello');
-    expect(decode(encode("hello", "Ann"))).toEqual({ markdown: "hello", sender: "Ann" });
-    const odd = 'A: "B"\nC';
-    expect(decode(encode("x", odd))).toEqual({ markdown: "x", sender: odd });
+    const odd = 'A: "B"\nC ---';
+    expect(decode(encode("x", { sender: odd }))).toEqual({ markdown: "x", meta: { sender: odd }, sender: odd });
   });
-  test.each(["a\u2028b", "a\u2029b", "a\rb", "\u2028\u2029\r\n"])("round trips the sender %j", (sender) => {
-    expect(decode(encode("hi", sender))).toEqual({ markdown: "hi", sender });
+  test.each(["a b", "a b", "a\rb", "  \r\n"])("round trips the sender %j", (sender) => {
+    expect(decode(encode("hi", { sender }))).toEqual({ markdown: "hi", meta: { sender }, sender });
   });
-  test("no sender and a plain body is the body unchanged", () => {
-    expect(encode("# hi", undefined)).toBe("# hi");
-    expect(decode("# hi")).toEqual({ markdown: "# hi" });
-  });
-  test("a body starting with --- gets an empty block ahead and decodes back exactly", () => {
-    const body = "---\nrule above\n";
-    expect(encode(body)).toBe("---\n---\n" + body);
-    expect(decode(encode(body))).toEqual({ markdown: body });
-  });
-  test("a typed block is never taken for the sender", () => {
+  test("a typed block is always body, never metadata", () => {
     const typed = '---\nsender: "Boss"\n---\nhi';
-    expect(decode(encode(typed))).toEqual({ markdown: typed });
-    expect(decode(encode(typed, "Ann"))).toEqual({ markdown: typed, sender: "Ann" });
+    expect(encode(typed, {})).toBe("---\n---\n" + typed);
+    expect(decode(encode(typed, {}))).toEqual({ markdown: typed, meta: {} });
+    expect(decode(encode(typed, { sender: "Ann" }))).toEqual({ markdown: typed, meta: { sender: "Ann" }, sender: "Ann" });
   });
-  test("a legacy block with an unknown key and non-JSON value is all body", () => {
-    const raw = "---\ntitle: x\n---\ntext";
-    expect(decode(raw)).toEqual({ markdown: raw });
+  test.each([
+    ["no block", "# hi"],
+    ["non-JSON value", "---\ntitle: x\n---\ntext"],
+    ["invalid JSON", '---\nsender: "Ann\n---\ntext'],
+    ["bad key", '---\nSender: "x"\n---\ntext'],
+    ["CRLF", '---\r\nsender: "x"\r\n---\r\ntext'],
+    ["no closing line", '---\nsender: "x"\ntext'],
+  ])("legacy file (%s) is all body", (_n, raw) => {
+    expect(decode(raw)).toEqual({ markdown: raw, meta: {} });
   });
-  test("any other key or value, even valid JSON, is all body and survives an edit unchanged", () => {
-    for (const raw of ['---\ntitle: "x"\n---\ntext', '---\nsender: "Ann"\ntitle: "x"\n---\ntext', "---\nsender: 5\n---\ntext"]) {
-      const d = decode(raw);
-      expect(d).toEqual({ markdown: raw });
-      expect(decode(encode(d.markdown, d.sender))).toEqual({ markdown: raw });
-    }
+  test("a non-string sender is kept in meta but is no sender", () => {
+    expect(decode("---\nsender: 5\n---\nt")).toEqual({ markdown: "t", meta: { sender: 5 } });
   });
 });

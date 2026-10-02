@@ -1,8 +1,8 @@
-// A note on disk is `<DATA_DIR>/<feed>/<id>.md`: the body as posted, behind a frontmatter block when it has a sender.
+// A note on disk is `<DATA_DIR>/<feed>/<id>.md`: a frontmatter block (empty without metadata), then the body as posted.
 import { randomBytes } from "node:crypto";
 import { link, readdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { decode, encode } from "./frontmatter";
+import { decode, encode, type Meta } from "./frontmatter";
 import { feedDir, isErrno, orMissing } from "./fs";
 
 const file = (feed: string, id: string) => join(feedDir(feed), `${id}.md`);
@@ -14,7 +14,7 @@ export async function writeNote(feed: string, base: string, markdown: string, se
   const dir = feedDir(feed);
   const tmp = join(dir, `.${randomBytes(6).toString("hex")}.tmp`);
   try {
-    await writeFile(/*turbopackIgnore: true*/ tmp, encode(markdown, sender));
+    await writeFile(/*turbopackIgnore: true*/ tmp, encode(markdown, sender === undefined ? {} : { sender }));
     // link() fails with EEXIST instead of overwriting, so the final name appears atomically and exclusively.
     for (let n = 1; ; n++) {
       const id = n === 1 ? base : `${base}-${n}`;
@@ -30,7 +30,7 @@ export async function writeNote(feed: string, base: string, markdown: string, se
   }
 }
 
-export async function readNote(feed: string, id: string): Promise<{ markdown: string; sender?: string } | null> {
+export async function readNote(feed: string, id: string): Promise<{ markdown: string; meta: Meta; sender?: string } | null> {
   const raw = await orMissing(readFile(/*turbopackIgnore: true*/ file(feed, id), "utf8"), null);
   return raw === null ? null : decode(raw);
 }
@@ -41,7 +41,7 @@ export async function listNoteFiles(feed: string): Promise<string[]> {
   return files.filter((f) => f.endsWith(".md")).map((f) => f.slice(0, -3));
 }
 
-// Replaces an existing note's body atomically, keeping its stored sender (temp file, then rename over it); false, and nothing
+// Replaces an existing note's body atomically, keeping all its stored metadata (temp file, then rename over it); false, and nothing
 // created, when there is no such note. ponytail: a delete landing between the read and the rename
 // brings the note back with the edit; a per-feed lock would close it.
 export async function replaceNote(feed: string, id: string, markdown: string): Promise<boolean> {
@@ -49,7 +49,7 @@ export async function replaceNote(feed: string, id: string, markdown: string): P
   if (!old) return false;
   const tmp = join(feedDir(feed), `.${randomBytes(6).toString("hex")}.tmp`);
   try {
-    await writeFile(/*turbopackIgnore: true*/ tmp, encode(markdown, old.sender));
+    await writeFile(/*turbopackIgnore: true*/ tmp, encode(markdown, old.meta));
     await rename(/*turbopackIgnore: true*/ tmp, file(feed, id));
     return true;
   } catch (e) {

@@ -1,31 +1,37 @@
-// The verified sender of a note lives in a leading `---` block of its `.md`: `sender: <JSON string>`.
-// Read and written only by data/notes.ts. Note.markdown stays the typed body.
-const BLOCK = /^---\n((?:[^\n]*\n)*?)---\n/;
+// Every note file starts with a block of `key: <JSON value>` lines between `---` lines (empty when there is no
+// metadata); everything after it is the body. Read and written only by data/notes.ts. Note.markdown is the body.
+const KEY = /^[a-z][a-z0-9_]*$/;
 
-export function encode(markdown: string, sender?: string): string {
-  if (sender !== undefined) return `---\nsender: ${JSON.stringify(sender)}\n---\n${markdown}`;
-  // An empty block ahead of a body that starts with `---`, so decode never takes the typed text for ours.
-  return markdown.startsWith("---\n") ? `---\n---\n${markdown}` : markdown;
+export type Meta = Record<string, unknown>;
+
+export function encode(markdown: string, meta: Meta = {}): string {
+  const lines = Object.keys(meta)
+    .sort()
+    .map((k) => `${k}: ${JSON.stringify(meta[k])}\n`);
+  return `---\n${lines.join("")}---\n${markdown}`;
 }
 
-// Only the first block counts, and only if every line is `sender: <JSON string>` (or it is empty);
-// anything else, any other key or value, is a legacy note and all body.
-// ponytail: a legacy note that is exactly such a sender-only block, or starts `---\n---\n`, reads as having one.
-export function decode(raw: string): { markdown: string; sender?: string } {
-  const m = BLOCK.exec(raw);
-  if (!m) return { markdown: raw };
-  let sender: string | undefined;
-  for (const line of m[1].split("\n").slice(0, -1)) {
-    const kv = /^sender: ([^]*)$/.exec(line);
-    let v: unknown;
+// Only the first block counts, and only if every line before its closing `---` is `key: <valid JSON>`;
+// anything else (no block, CRLF, any other line, no closing line) is a legacy note and all body.
+// ponytail: a legacy note whose first lines are `---`, only `key: <JSON>` lines (or none), then `---` reads as having
+// a block, so that header is hidden from the displayed body (the file is untouched); one starting `---\n---\n`
+// loses that pair from the displayed body.
+export function decode(raw: string): { markdown: string; meta: Meta; sender?: string } {
+  const legacy = { markdown: raw, meta: {} };
+  if (!raw.startsWith("---\n")) return legacy;
+  const lines = raw.split("\n");
+  const end = lines.indexOf("---", 1);
+  if (end < 0) return legacy;
+  const meta: Meta = {};
+  for (const line of lines.slice(1, end)) {
+    const m = /^([^:]*): ([^]*)$/.exec(line);
+    if (!m || !KEY.test(m[1])) return legacy;
     try {
-      v = kv && JSON.parse(kv[1]);
+      meta[m[1]] = JSON.parse(m[2]);
     } catch {
-      return { markdown: raw };
+      return legacy;
     }
-    if (typeof v !== "string") return { markdown: raw };
-    sender = v;
   }
-  const markdown = raw.slice(m[0].length);
-  return sender === undefined ? { markdown } : { markdown, sender };
+  const markdown = lines.slice(end + 1).join("\n");
+  return typeof meta.sender === "string" ? { markdown, meta, sender: meta.sender } : { markdown, meta };
 }
