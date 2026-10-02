@@ -59,6 +59,10 @@ export async function logStartup(): Promise<void> {
     const { fields, warnings } = startupReport();
     logger("startup").info(fields, "notefeed started");
     warn(warnings);
-    warn(await reservedFeedWarnings()); // loads the feed index (and creates missing reserved feeds) a little early
-  } catch {}
+    warn(await reservedFeedWarnings()); // loads the feed index, which creates missing reserved feeds
+  } catch (e) {
+    try {
+      logger("startup").error({ err: e }, "startup report failed");
+    } catch {}
+  }
 }

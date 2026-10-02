@@ -11,7 +11,7 @@ function int(name: string, fallback: number): number {
 export const LOG_LEVELS = ["error", "warn", "info", "debug", "silent"] as const;
 export type LogLevel = (typeof LOG_LEVELS)[number];
 
-const positive =(name: string, fallback: number) => (int(name, fallback) > 0 ? int(name, fallback) : fallback);
+const positive = (name: string, fallback: number) => (int(name, fallback) > 0 ? int(name, fallback) : fallback);
 
 export const config = {
   dataDir: () => env("DATA_DIR") || "/data",

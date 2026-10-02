@@ -71,6 +71,14 @@ test("logStartup never throws, and its info line comes first even when the outpu
   restore();
 });
 
+test("a startup report that fails leaves an error line, and logStartup still resolves", async () => {
+  await writeFile(join(dir, "file"), "");
+  stub({ DATA_DIR: join(dir, "file"), NOTEFEED_RESERVED_FEEDS: "news", NOTEFEED_RESERVED_PASSWORD: "pw" }); // a file where the data directory should be
+  resetFeedsForTests();
+  const logs = await logsOf(logStartup);
+  expect(logs.at(-1)).toMatchObject({ level: "error", component: "startup", msg: "startup report failed", err: { code: "ENOTDIR" } });
+});
+
 test("a reserved name that was already an open feed, or has another read id, is warned about by name only", async () => {
   await createNote("news", "# old open feed"); // made before `news` was reserved: open, random read id
   await createNote("jobs", "# x");

@@ -3,11 +3,13 @@
 // passwords, tokens, secrets, codes, state, nonce, cookies, e-mail addresses, names, claim values, client IP
 // addresses, request headers or bodies. An Error goes in `err`, which errorFields() scrubs. The redaction below is
 // only a safety net.
+import { realpathSync } from "node:fs";
 import { join, resolve } from "node:path";
 import pino, { type DestinationStream, type Logger } from "pino";
 import { config } from "./config";
 import { processState } from "./state";
 
+// A safety net only: pino's `*.x` wildcards match one level down, so a value nested deeper or inside an array passes.
 const REDACT = ["password", "secret", "token", "authorization", "cookie", "client_secret", "code", "state", "nonce", "email", "name"].flatMap((p) =>
   ["code", "state", "nonce", "client_secret"].includes(p) ? [p] : [p, `*.${p}`],
 );
@@ -37,6 +39,14 @@ export function createLogger(destination: DestinationStream, level: string = con
       base: undefined, // no pid or hostname
       timestamp: pino.stdTimeFunctions.isoTime,
       serializers: { err: errorFields },
+      // `log.warn(error)` would make the error's (unscrubbed) message the msg: it goes into `err`, and msg is its type.
+      hooks: {
+        logMethod(args, method) {
+          const [first, msg] = args as unknown[];
+          if (!(first instanceof Error)) return method.apply(this, args);
+          return method.apply(this, [{ err: first }, typeof msg === "string" ? msg : first.name]);
+        },
+      },
       formatters: {
         level: (label) => ({ level: label }),
         // `err` keeps its stack (errorFields caps it).
@@ -72,15 +82,24 @@ export function logger(component: string): Logger {
 
 const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-// Every `<DATA_DIR>/<first segment>` (a feed's directory, as fs errors name it) becomes `<DATA_DIR>/<feed>`.
-export function scrubPaths(s: string): string {
-  for (const dir of new Set([join(config.dataDir()), resolve(config.dataDir())].map((d) => d.replace(/\/+$/, "")))) {
-    s = s.replace(new RegExp(`${escapeRe(dir)}/[^/\\s'"]+`, "g"), `${dir}/<feed>`);
+const realpath = (p: string) => {
+  try {
+    return realpathSync(p);
+  } catch {
+    return p;
   }
+};
+
+// Everything below DATA_DIR becomes `<DATA_DIR>/<path>`: fs errors name `<DATA_DIR>/<feed>/<time>-<title slug>.md`,
+// and both the feed name and the note's title are secrets. DATA_DIR as given, resolved, and with symlinks resolved.
+export function scrubPaths(s: string): string {
+  const d = config.dataDir();
+  const dirs = new Set([join(d), resolve(d), realpath(resolve(d))].map((p) => p.replace(/\/+$/, "")).filter(Boolean));
+  for (const dir of [...dirs].sort((a, b) => b.length - a.length)) s = s.replace(new RegExp(`${escapeRe(dir)}/[^\\s'"]+`, "g"), `${dir}/<path>`);
   return s;
 }
 
-// `err` as logged: its type, message and stack with feed paths scrubbed, and the fs fields that name no path.
+// `err` as logged: its type, message and stack with paths under DATA_DIR scrubbed, and the fs fields that name no path.
 // Anything thrown that isn't an Error is logged by its type only.
 export function errorFields(e: unknown): { type: string; message?: string; stack?: string; code?: string; errno?: number; syscall?: string } {
   if (!(e instanceof Error)) return { type: typeof e };

@@ -23,7 +23,6 @@ export { loginRoute, logoutRoute } from "./http/session";
 export { imageRoute } from "./http/images";
 export { rssRoute } from "./http/rss";
 export { mcpRoute } from "./mcp";
-export { logStartup } from "./startup";
 export { oidcCallbackRoute, oidcStartRoute } from "./oidc/routes";
 export { authServerRoute, authorizeRoute, checkAuthorize, metadataPreflight, protectedResourceRoute, registerPreflight, registerRoute, tokenRoute } from "./oauth/routes";
 

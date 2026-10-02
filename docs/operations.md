@@ -111,7 +111,7 @@ Read the logs with `docker compose logs notefeed`, or your container runtime's e
 | `warn` | `startup` | `sign-in is on without PUBLIC_URL: the redirect URI comes from each request's Host header` | At start-up, when sign-in is on and `PUBLIC_URL` is not set. |
 | `warn` | `startup` | `NOTEFEED_LOG_LEVEL is not a level; using info` | At start-up. |
 | `warn` | `feeds` | `reserved feeds are listed but have no password; they are not created` | At start-up, when `NOTEFEED_RESERVED_FEEDS` is set and `NOTEFEED_RESERVED_PASSWORD` is not. |
-| `warn` | `feeds` | `reserved feed exists but is not protected`, or `reserved feed exists with another read id than its name` | At start-up, for a [reserved feed](configuration.md#reserved-feeds) that already existed as an ordinary feed when its name was listed; `feed` is the reserved name and `hint` says what to do: delete its folder in `DATA_DIR` and restart, so it is recreated protected with its name as read id. |
+| `warn` | `feeds` | `reserved feed exists but is not protected`, or `reserved feed exists with another read id than its name` | At start-up, for a [reserved feed](configuration.md#reserved-feeds) that already existed as an ordinary feed when its name was listed; `feed` is the reserved name and `hint` says what to do: delete its folder in `DATA_DIR` and restart, so it is recreated protected with its name as read id. With `NOTEFEED_RESERVED_PASSWORD` set, this check makes notefeed read its feeds and create the missing reserved feeds at start-up, rather than at the first request. |
 | `info` | `oidc` | `sign-in succeeded` | A sign-in worked; `provider` is the provider's id. |
 | `warn` | `oidc` | why a sign-in failed | See [What the log says](identity.md#what-the-log-says). |
 | `info` | `oauth` | `authorization granted` | An MCP client got access; `via` is `password` or the sign-in provider's id. |
@@ -119,7 +119,8 @@ Read the logs with `docker compose logs notefeed`, or your container runtime's e
 | `warn` | `auth` | `password login failed` | A wrong instance password on the login page (`"page":"login"`) or on an MCP client's authorize page (`"page":"authorize"`). Refusals for [too many attempts](configuration.md#rate-limits-and-caps) are not logged at this level. |
 | `warn` | `limits` | `cap reached` | A post or upload was refused by `NOTEFEED_MAX_FEEDS`, `NOTEFEED_MAX_NOTES_PER_FEED` or `NOTEFEED_MAX_IMAGES_PER_FEED`; `kind` is `feed`, `note` or `image`. |
 | `warn`, `error` | `feeds` | a feed's read id or a leftover folder | A problem with a feed's files that notefeed works around, such as a `.readid` it can't read; the feed's name is never in it. |
-| `error` | `http`, `mcp` | `request failed`, `tool failed` | An unexpected failure, answered with a bare `500` or `internal error`; `err` carries the error, with each feed folder in a path replaced by `<feed>`. |
+| `error` | `http`, `mcp` | `request failed`, `tool failed` | An unexpected failure, answered with a bare `500` or `internal error`; `err` carries the error, with everything below the data directory in a path replaced by `<path>` (so no feed name or note title). |
+| `error` | `http` | `an operation answered a status it doesn't declare` | A bug: an API operation answered a status its OpenAPI description doesn't list, and the client got a bare `500`; `operation` is the operation's id and `status` the status it tried to send. |
 | `debug` | `limits` | `rate limit reached` | A request over `NOTEFEED_RATE_LIMIT`; `kind` is `post` or `password`. |
 | `debug` | `auth` | `password bearer refused` | A script sent a wrong instance password as its bearer token. |
 
