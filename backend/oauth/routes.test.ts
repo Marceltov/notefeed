@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { resetFeedsForTests } from "../feeds";
 import { resetRateLimitsForTests } from "../limits";
 import { mcpRoute } from "../mcp";
-import { authServerRoute, authorizeRoute, checkAuthorize, metadataPreflight, protectedResourceRoute, registerPreflight, registerRoute, tokenRoute } from "./routes";
+import { authServerRoute, authorizeRoute, checkAuthorize, issueCode, metadataPreflight, protectedResourceRoute, registerPreflight, registerRoute, tokenRoute } from "./routes";
 import { cid, newJti, resetTokensForTests, sign, verify } from "./tokens";
 
 const BASE = "http://localhost:3000";
@@ -263,6 +263,33 @@ describe("login", () => {
     expect(res.headers.get("location")).toBe(`/oauth/authorize?${p}&error=auth`);
     const next = await authorizeRoute(form("/api/oauth/authorize", { ...Object.fromEntries(p), password: "pw" }));
     expect(next.headers.get("location")).toMatch(new RegExp(`^/oauth/authorize\\?.*&error=too_many_attempts&retry=\\d+$`));
+  });
+
+  test("with sign-in and no password, no password (not even an empty one) is accepted", async () => {
+    vi.stubEnv("NOTEFEED_OIDC_ISSUER", "https://idp.example");
+    vi.stubEnv("NOTEFEED_OIDC_CLIENT_ID", "id");
+    vi.stubEnv("NOTEFEED_OIDC_CLIENT_SECRET", "secret");
+    vi.stubEnv("NOTEFEED_OIDC_ALLOW", "*");
+    vi.stubEnv("NOTEFEED_PASSWORD", "");
+    try {
+      const q = authParams(await clientId(), pkce().challenge);
+      for (const password of ["", "pw"]) {
+        const res = await authorizeRoute(form("/api/oauth/authorize", { ...Object.fromEntries(q), password }));
+        expect(res.headers.get("location")).toBe(`/oauth/authorize?${q}&error=auth`);
+      }
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  test("issueCode sends the browser back with a code carrying the sender", async () => {
+    const id = await clientId();
+    const fields = Object.fromEntries(authParams(id, pkce().challenge));
+    const loc = new URL(issueCode(fields, new Headers(H), "Ann").headers.get("location")!);
+    expect(loc.searchParams.get("state")).toBe("a b&c");
+    expect(loc.searchParams.get("iss")).toBe(BASE);
+    expect(verify("code", loc.searchParams.get("code")!)).toMatchObject({ cid: cid(id), redirect_uri: CB, resource: RESOURCE, sender: "Ann" });
+    expect(verify("code", new URL(issueCode(fields, new Headers(H)).headers.get("location")!).searchParams.get("code")!)).not.toHaveProperty("sender");
   });
 
   test("an invalid client on the POST is a 400, no redirect", async () => {

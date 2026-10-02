@@ -72,6 +72,22 @@ test("logout clears the cookie and goes to the login page (/ when open)", () => 
   expect(logoutRoute().headers.get("location")).toBe("/");
 });
 
+test("logout clears the identity cookie too; with sign-in alone it goes to the login page", () => {
+  const cleared = (res: Response) => res.headers.getSetCookie().map((c) => c.split("=")[0]);
+  expect(cleared(logoutRoute())).toEqual([SESSION_COOKIE, IDENTITY_COOKIE]);
+  expect(logoutRoute().headers.getSetCookie()[1]).toMatch(new RegExp(`^${IDENTITY_COOKIE}=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax$`));
+  process.env.NOTEFEED_PASSWORD = "";
+  vi.stubEnv("NOTEFEED_OIDC_ISSUER", "https://idp.example");
+  vi.stubEnv("NOTEFEED_OIDC_CLIENT_ID", "id");
+  vi.stubEnv("NOTEFEED_OIDC_CLIENT_SECRET", "secret");
+  vi.stubEnv("NOTEFEED_OIDC_ALLOW", "*");
+  try {
+    expect(logoutRoute().headers.get("location")).toBe("/login");
+  } finally {
+    vi.unstubAllEnvs();
+  }
+});
+
 describe("identity session", () => {
   const SAME = { host: "localhost:3000", origin: "http://localhost:3000" };
   const id = () => `${IDENTITY_COOKIE}=${sign("identity", { sender: "Ann" })}`;

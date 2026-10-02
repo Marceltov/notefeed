@@ -144,12 +144,19 @@ export async function authorizeRoute(req: Request): Promise<Response> {
     const retry = e instanceof RateLimitedError ? `&retry=${e.retryAfter}` : "";
     return seeOther(`/oauth/authorize?${new URLSearchParams(fields)}&error=${e.code}${retry}`);
   }
+  return issueCode(fields, h);
+}
+
+// Back to the client with a code, after a password login or an identity sign-in (`sender`). `fields` must come
+// from checkAuthorize, never from a request.
+export function issueCode(fields: Record<string, string>, h: Headers, sender?: string): Response {
   const code = sign("code", {
     cid: cid(fields.client_id),
     redirect_uri: fields.redirect_uri,
     code_challenge: fields.code_challenge,
     resource: fields.resource ?? mcpResource(h),
     jti: newJti(),
+    ...(sender === undefined ? {} : { sender }),
   });
   const to = new URL(fields.redirect_uri);
   to.searchParams.set("code", code);

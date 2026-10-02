@@ -1,6 +1,6 @@
 // POST /login (proxy.ts rewrites it to /api/login) and POST /logout: the web UI's plain login and
 // logout forms. Both answer with a redirect, for browsers and scripts alike.
-import { SESSION_COOKIE, locked, login } from "../auth";
+import { IDENTITY_COOKIE, SESSION_COOKIE, locked, login } from "../auth";
 import { NotefeedError, RateLimitedError } from "../errors";
 import { clientIp } from "../limits";
 import { publicUrl, safeNext } from "../urls";
@@ -26,5 +26,6 @@ export async function loginRoute(req: Request): Promise<Response> {
 
 // Relative Location, so it stays correct behind a reverse proxy.
 export function logoutRoute(): Response {
-  return seeOther(locked() ? "/login" : "/", { "Set-Cookie": `${SESSION_COOKIE}=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax` });
+  const clear = (name: string): [string, string] => ["Set-Cookie", `${name}=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax`];
+  return seeOther(locked() ? "/login" : "/", [clear(SESSION_COOKIE), clear(IDENTITY_COOKIE)]);
 }
