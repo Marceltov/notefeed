@@ -5,7 +5,7 @@
 Open notefeed in a browser. The start page asks for a feed name and suggests a random one, such as `quiet-otter-x7k2p4m9qd8zr`. Type a name (uppercase letters are lowered and spaces become `-`) and press **Open** to go to `/<name>`. There's no list of feeds: you only reach a feed by knowing its name.
 
 !!! warning "Pick a hard-to-guess name"
-    Anyone who knows a feed's name can read and post to it. Keep the suggested name or make up something as random.
+    Anyone who knows a feed's name can read it, post to it, and edit and delete its notes. Keep the suggested name or make up something as random.
 
 ## A feed page
 
@@ -31,6 +31,14 @@ Once the feed has a note, its read link is under the box, with a copy button and
 Notes are listed newest first, grouped by day, with the time on the left. Times use the server's time zone (see [`TZ`](configuration.md)). Click a title to open the note on its own page, `/<feed>/<id>`.
 
 Raw HTML in notes is shown as text, never run.
+
+### Editing and deleting a note
+
+A note's own page, `/<feed>/<id>`, has an **Edit** control and a **Delete** control. **Edit** shows a box with the note's markdown; change it and press **Save**. The note keeps its address, its place in the list and its RSS item identity, and its title follows the new text. **Delete** asks you to confirm before it removes the note; once confirmed it is gone for good, and you land back on the feed, which stays even if it now has no notes.
+
+Both work without JavaScript. They are plain forms that post to `/<feed>/<id>/edit` and `/<feed>/<id>/delete`, and they only accept requests from the instance's own pages: a script uses the [API](posting.md#editing-and-deleting-notes) instead. If a change is refused (an empty note, one over the size limit, too many requests), the page says why and the note stays as it was. They count toward the same [rate limit](configuration.md#rate-limits-and-caps) as posting.
+
+Anyone who can open the feed can edit and delete its notes. On a feed with [its own password](#a-password-for-a-feed) that means anyone who has unlocked it. The [read-only view](#the-read-only-view) has neither control.
 
 ## A password for a feed
 

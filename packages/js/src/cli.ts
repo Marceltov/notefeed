@@ -1,4 +1,4 @@
-/** `notefeed post ...` and `notefeed notes ...`: post and read notes from the command line. */
+/** `notefeed post`, `edit`, `delete` and `notes`: post, change, remove and read notes from the command line. */
 import { readFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { parseArgs } from "node:util";
@@ -14,6 +14,8 @@ class UsageError extends Error {}
 
 const USAGE = [
   "usage: notefeed post <text | - | --file PATH> [--url URL] [--feed FEED] [--password PASSWORD]",
+  "       notefeed edit <id> <text | - | --file PATH> [--url URL] [--feed FEED] [--password PASSWORD]",
+  "       notefeed delete <id> [--url URL] [--feed FEED] [--password PASSWORD]",
   "       notefeed notes [--limit N] [--json] [--url URL] [--feed FEED] [--password PASSWORD]",
 ].join("\n");
 
@@ -48,6 +50,15 @@ export async function main(argv: string[], io: Io = process): Promise<number> {
       const markdown = await read(text, values.file, io);
       const note = await client(values).post(markdown);
       io.stdout.write(`${note.url}\n`);
+      return 0;
+    }
+    if (command === "edit" && text !== undefined && rest.length <= 1) {
+      const note = await client(values).edit(text, await read(rest[0], values.file, io));
+      io.stdout.write(`${note.url}\n`);
+      return 0;
+    }
+    if (command === "delete" && text !== undefined && !rest.length) {
+      await client(values).delete(text);
       return 0;
     }
     if (command === "notes" && text === undefined) {

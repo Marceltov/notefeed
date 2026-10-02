@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { beforeEach, expect, test } from "vitest";
 import { readId, resetFeedsForTests } from "../feeds";
-import { createNote } from "../notes";
+import { createNote, updateNote } from "../notes";
 import { rssRoute } from "./rss";
 
 const BASE = "http://localhost:3000";
@@ -60,4 +60,13 @@ test("public even when the instance is locked", async () => {
   const res = await get(readId("test"));
   expect(res.status).toBe(200);
   expect((await res.text()).match(/<item>/g)).toHaveLength(1);
+});
+
+test("an edited note keeps its guid and shows the new text", async () => {
+  const n = await createNote("test", "# Old\nbefore");
+  await updateNote("test", n.id, "# Old\nafter edit");
+  const xml = await (await get(readId("test"))).text();
+  expect(xml).toContain(`${n.id}</guid>`);
+  expect(xml).toContain("after edit");
+  expect(xml).not.toContain("before");
 });

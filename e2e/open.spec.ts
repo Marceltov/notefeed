@@ -69,7 +69,7 @@ test("a note opens on its own page, with raw HTML shown as text", async ({ page 
   await post(page, "# Hello\n\n<b id=injected>bold?</b>");
   await page.getByRole("link", { name: "Hello" }).click();
   await expect(page).toHaveURL(new RegExp(`/${name}/\\d{8}T\\d{6}Z-hello$`));
-  await expect(page.getByText("<b id=injected>bold?</b>")).toBeVisible();
+  await expect(page.locator("article").getByText("<b id=injected>bold?</b>")).toBeVisible();
   await expect(page.locator("#injected")).toHaveCount(0);
   await page.getByRole("link", { name: "Back to all notes" }).click();
   await expect(page).toHaveURL(`/${name}`);

@@ -11,7 +11,8 @@ import { MAX_BYTES, getNote, listNotes, type Note } from "../notes";
 import { PASSWORD_RULE } from "../../shared/password";
 import { API_PREFIX, feedPath, publicUrl, readPath } from "../urls";
 import { createDispatcher, op, type AnyOp, type ResponseSpec } from "./dispatch";
-import { handlePostNote } from "./notes";
+import { deleteNote, editNote } from "../posting";
+import { handlePostNote, readMarkdown } from "./notes";
 import { authorize, feedAccess, readCapped } from "./request";
 import {
   COMPONENTS,
@@ -151,6 +152,65 @@ const OPS: AnyOp[] = [
     const note = await getNote(params.feed, params.id);
     if (!note) throw new NotFoundError("no such note");
     return { status: 200, body: noteJson(note, publicUrl(req.headers) + feedPath(params.feed)) };
+  }),
+
+  op({
+    method: "PUT",
+    path: `${API_PREFIX}/feeds/{feed}/notes/{id}`,
+    operationId: "editNote",
+    summary: "Edit a note",
+    description:
+      "Replaces the note's markdown; its id and creation time stay, the title follows the new text. " +
+      "Needs the feed's password if it has one, and counts against the post rate limit. Read links can't edit. " +
+      `The body is as for posting: at most ${MAX_BYTES} bytes, UTF-8, a \`password\` field is ignored.`,
+    tags: ["Feeds"],
+    password: true,
+    params: { feed: FeedParam, id: NoteIdParam },
+    headers: { "X-Feed-Password": FeedPasswordHeader },
+    body: {
+      "text/markdown": z.string(),
+      "text/plain": z.string(),
+      "application/x-www-form-urlencoded": z.string(),
+      "application/json": PostJson,
+      "multipart/form-data": PostForm,
+    },
+    responses: {
+      200: { description: "The note as it is now", schema: NoteJson },
+      400: err("Invalid or reserved feed name; empty note; bad JSON, form or UTF-8"),
+      401: UNAUTHORIZED,
+      404: err("No such note"),
+      413: err(`Body over ${MAX_BYTES} bytes`),
+      415: err("Unsupported content type"),
+      429: { ...err("Too many posts, edits and deletes, or wrong passwords, from this client"), headers: RETRY },
+    },
+    before: passwordAndFeed,
+  }).handle(async ({ req, params }) => {
+    const ip = clientIp(req.headers);
+    const note = await editNote(params.feed, params.id, ip, () => readMarkdown(req), feedAccess(req.headers, params.feed));
+    return { status: 200, body: noteJson(note, publicUrl(req.headers) + feedPath(params.feed)) };
+  }),
+
+  op({
+    method: "DELETE",
+    path: `${API_PREFIX}/feeds/{feed}/notes/{id}`,
+    operationId: "deleteNote",
+    summary: "Delete a note",
+    description: "Needs the feed's password if it has one, and counts against the post rate limit. The feed stays, even with no notes left. Read links can't delete.",
+    tags: ["Feeds"],
+    password: true,
+    params: { feed: FeedParam, id: NoteIdParam },
+    headers: { "X-Feed-Password": FeedPasswordHeader },
+    responses: {
+      204: { description: "Deleted" },
+      400: err("Invalid or reserved feed name"),
+      401: UNAUTHORIZED,
+      404: err("No such note"),
+      429: { ...err("Too many posts, edits and deletes, or wrong passwords, from this client"), headers: RETRY },
+    },
+    before: passwordAndFeed,
+  }).handle(async ({ req, params }) => {
+    await deleteNote(params.feed, params.id, clientIp(req.headers), feedAccess(req.headers, params.feed));
+    return { status: 204, body: undefined };
   }),
 
   op({

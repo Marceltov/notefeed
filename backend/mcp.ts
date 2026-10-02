@@ -1,4 +1,4 @@
-// The MCP endpoint: POST /mcp, protocol 2026-07-28 only, three tools over the same backend the HTTP API uses.
+// The MCP endpoint: POST /mcp, protocol 2026-07-28 only, five tools over the same backend the HTTP API uses.
 import { McpServer, createMcpHandler, type AuthInfo } from "@modelcontextprotocol/server";
 import * as z from "zod";
 import { bearerOf, checkBearer, locked } from "./auth";
@@ -8,7 +8,7 @@ import { assertFeed, FEED_RE, readId } from "./feeds";
 import { clientIp } from "./limits";
 import { getNote, listNotes, type Note } from "./notes";
 import { verify } from "./oauth/tokens";
-import { postNote } from "./posting";
+import { deleteNote, editNote, postNote } from "./posting";
 import { feedPath, mcpResource, publicUrl, rssPath } from "./urls";
 
 const SECRET_NOTE = "The feed name works like a password: anyone who knows it can read and post. Don't repeat it in replies.";
@@ -89,6 +89,34 @@ function server(h: Headers): McpServer {
       const note = await getNote(feed, id);
       if (!note) throw new NotFoundError("no such note");
       return ok({ ...summary(feed, note), markdown: note.markdown });
+    }),
+  );
+
+  s.registerTool(
+    "edit_note",
+    {
+      description: `Replace a note's markdown; its id stays. ${PROTECTED} ${SECRET_NOTE}`,
+      inputSchema: z.object({ feed, id: z.string(), markdown: z.string(), password }),
+      outputSchema: NoteFull,
+      annotations: { destructiveHint: true, idempotentHint: true },
+    },
+    guard(async ({ feed, id, markdown, password }) => {
+      const note = await editNote(feed, id, clientIp(h), async () => ({ markdown }), { password });
+      return ok({ ...summary(feed, note), markdown: note.markdown });
+    }),
+  );
+
+  s.registerTool(
+    "delete_note",
+    {
+      description: `Permanently delete a note. ${PROTECTED} ${SECRET_NOTE}`,
+      inputSchema: z.object({ feed, id: z.string(), password }),
+      outputSchema: z.object({ deleted: z.literal(true) }),
+      annotations: { destructiveHint: true },
+    },
+    guard(async ({ feed, id, password }) => {
+      await deleteNote(feed, id, clientIp(h), { password });
+      return ok({ deleted: true as const });
     }),
   );
   return s;

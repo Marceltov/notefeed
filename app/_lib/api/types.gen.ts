@@ -201,6 +201,58 @@ export type PostNoteResponses = {
 
 export type PostNoteResponse = PostNoteResponses[keyof PostNoteResponses];
 
+export type DeleteNoteData = {
+    body?: never;
+    headers?: {
+        /**
+         * The feed's own password, when it has one: to post, list or get, and (as the current password) to change or remove it. On the `POST` that creates a feed it sets the feed's password; on a `POST` to an existing feed that has none it answers 409. An empty value is the same as no header, so a `POST` with an empty one creates an open feed.
+         */
+        'X-Feed-Password'?: string;
+    };
+    path: {
+        /**
+         * The feed's name. It is the write key: anyone who knows it can post.
+         */
+        feed: string;
+        /**
+         * The note's id
+         */
+        id: string;
+    };
+    query?: never;
+    url: '/api/v1/feeds/{feed}/notes/{id}';
+};
+
+export type DeleteNoteErrors = {
+    /**
+     * Invalid or reserved feed name
+     */
+    400: Error;
+    /**
+     * The instance has a password, or the feed has its own, and it is missing or wrong
+     */
+    401: Error;
+    /**
+     * No such note
+     */
+    404: Error;
+    /**
+     * Too many posts, edits and deletes, or wrong passwords, from this client
+     */
+    429: Error;
+};
+
+export type DeleteNoteError = DeleteNoteErrors[keyof DeleteNoteErrors];
+
+export type DeleteNoteResponses = {
+    /**
+     * Deleted
+     */
+    204: void;
+};
+
+export type DeleteNoteResponse = DeleteNoteResponses[keyof DeleteNoteResponses];
+
 export type GetNoteData = {
     body?: never;
     headers?: {
@@ -252,6 +304,66 @@ export type GetNoteResponses = {
 };
 
 export type GetNoteResponse = GetNoteResponses[keyof GetNoteResponses];
+
+export type EditNoteData = {
+    body: PostJson;
+    headers?: {
+        /**
+         * The feed's own password, when it has one: to post, list or get, and (as the current password) to change or remove it. On the `POST` that creates a feed it sets the feed's password; on a `POST` to an existing feed that has none it answers 409. An empty value is the same as no header, so a `POST` with an empty one creates an open feed.
+         */
+        'X-Feed-Password'?: string;
+    };
+    path: {
+        /**
+         * The feed's name. It is the write key: anyone who knows it can post.
+         */
+        feed: string;
+        /**
+         * The note's id
+         */
+        id: string;
+    };
+    query?: never;
+    url: '/api/v1/feeds/{feed}/notes/{id}';
+};
+
+export type EditNoteErrors = {
+    /**
+     * Invalid or reserved feed name; empty note; bad JSON, form or UTF-8
+     */
+    400: Error;
+    /**
+     * The instance has a password, or the feed has its own, and it is missing or wrong
+     */
+    401: Error;
+    /**
+     * No such note
+     */
+    404: Error;
+    /**
+     * Body over 102400 bytes
+     */
+    413: Error;
+    /**
+     * Unsupported content type
+     */
+    415: Error;
+    /**
+     * Too many posts, edits and deletes, or wrong passwords, from this client
+     */
+    429: Error;
+};
+
+export type EditNoteError = EditNoteErrors[keyof EditNoteErrors];
+
+export type EditNoteResponses = {
+    /**
+     * The note as it is now
+     */
+    200: Note;
+};
+
+export type EditNoteResponse = EditNoteResponses[keyof EditNoteResponses];
 
 export type RemoveFeedPasswordData = {
     body?: never;

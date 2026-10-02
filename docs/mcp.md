@@ -7,8 +7,10 @@ notefeed has an [MCP](https://modelcontextprotocol.io) endpoint, so AI assistant
 | `post_note` | Posts a markdown note to a feed. Takes `feed` and `markdown`. |
 | `list_notes` | Lists a feed's notes, newest first, without their text. Takes `feed`, optionally `limit` (1–100, default 20) and `before`. |
 | `get_note` | Reads one note with its markdown. Takes `feed` and `id`. |
+| `edit_note` | Replaces a note's markdown; its id stays. Takes `feed`, `id` and `markdown`, and returns the note. |
+| `delete_note` | Permanently deletes a note. Takes `feed` and `id`, and returns `{ "deleted": true }`. It is marked as destructive, so clients can ask you before running it. |
 
-Posting follows the same rules as the [HTTP API](posting.md): size limit, rate limit, caps, and the first post creates the feed. Results use the API's field names.
+Posting follows the same rules as the [HTTP API](posting.md): size limit, rate limit, caps, and the first post creates the feed. Editing and deleting follow [Editing and deleting notes](posting.md#editing-and-deleting-notes): the same access as posting, the same rate limit, and a note that does not exist is the error "no such note". Anyone who can post to a feed can use these tools on it, and a deleted note cannot be brought back, so think before giving an assistant a feed it should only add to. Results use the API's field names.
 
 !!! note "Protocol version"
     The endpoint speaks MCP **2026-07-28** and nothing older. A client that only knows older versions can't connect: it gets a `400` naming the supported version. Update the client.
@@ -37,13 +39,13 @@ A client may register only `https://` redirect URIs, or plain `http://` on `loca
 
 ## Feeds with a password
 
-A feed can have its own password (see [Posting notes](posting.md#a-feed-with-its-own-password)). The three tools take an optional `password`; an empty one is the same as none. `post_note` with a password to a feed that doesn't exist yet creates it protected; to an existing feed that has none, it answers with the error "feed already exists and has no password". On a protected feed, `post_note`, `list_notes` and `get_note` all need the right `password`, or answer with the error "missing or wrong password". Wrong passwords count toward the [failed-attempt limit](configuration.md#rate-limits-and-caps); a call without a password does not. The password is not remembered between calls, and it is part of the conversation, so tell the assistant only passwords you would give that service. It is in addition to the instance login, which still decides who may use `/mcp` at all.
+A feed can have its own password (see [Posting notes](posting.md#a-feed-with-its-own-password)). All five tools take an optional `password`; an empty one is the same as none. `post_note` with a password to a feed that doesn't exist yet creates it protected; to an existing feed that has none, it answers with the error "feed already exists and has no password". On a protected feed, every tool needs the right `password`, or answers with the error "missing or wrong password". Wrong passwords count toward the [failed-attempt limit](configuration.md#rate-limits-and-caps); a call without a password does not. The password is not remembered between calls, and it is part of the conversation, so tell the assistant only passwords you would give that service. It is in addition to the instance login, which still decides who may use `/mcp` at all.
 
 ## Telling the assistant which feed
 
 The assistant needs a feed name. Put it in a project or custom instruction, for example "Post notes to the notefeed feed `homelab-7f3k2q9x4m8wz`."
 
 !!! warning "The feed name works like a password"
-    Anyone who knows it can read the feed and post to it, and the assistant sees it. The tool descriptions ask the model not to repeat it, but don't give it a name you wouldn't share with that service. Use a [hard-to-guess name](index.md#how-feeds-work).
+    Anyone who knows it can read the feed, post to it, and edit and delete its notes, and the assistant sees it. The tool descriptions ask the model not to repeat it, but don't give it a name you wouldn't share with that service. Use a [hard-to-guess name](index.md#how-feeds-work).
 
 Notes the assistant reads are text from your feed: don't point it at a feed that strangers can post to.

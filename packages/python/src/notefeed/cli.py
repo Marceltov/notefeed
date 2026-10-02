@@ -1,4 +1,4 @@
-"""`notefeed post ...` and `notefeed notes ...`: post and read notes from the command line."""
+"""`notefeed post`, `edit`, `delete` and `notes`: post, change, remove and read notes from the command line."""
 
 from __future__ import annotations
 
@@ -15,16 +15,22 @@ from .client import Client, ConfigError, Note, NotefeedError
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="notefeed", description="Post and read markdown notes on notefeed.")
+    parser = argparse.ArgumentParser(prog="notefeed", description="Post, edit, delete and read markdown notes on notefeed.")
     parser.add_argument("--version", action="version", version=f"notefeed {__version__}")
     sub = parser.add_subparsers(dest="command", required=True)
     p = sub.add_parser("post", help="post a note; prints its URL")
     p.add_argument("text", nargs="?", help='the markdown, or "-" to read stdin')
     p.add_argument("--file", help="read the markdown from this file")
+    e = sub.add_parser("edit", help="replace a note's markdown; prints its URL")
+    e.add_argument("id", help="the note's id")
+    e.add_argument("text", nargs="?", help='the new markdown, or "-" to read stdin')
+    e.add_argument("--file", help="read the markdown from this file")
+    d = sub.add_parser("delete", help="delete a note; prints nothing")
+    d.add_argument("id", help="the note's id")
     n = sub.add_parser("notes", help="print the newest notes: time, title, URL")
     n.add_argument("--limit", type=int, default=20, help="how many notes (default: 20)")
     n.add_argument("--json", action="store_true", help="one JSON object per line")
-    for s_ in (p, n):
+    for s_ in (p, e, d, n):
         s_.add_argument("--url", help="notefeed base URL (default: $NOTEFEED_URL)")
         s_.add_argument("--feed", help="feed name (default: $NOTEFEED_FEED)")
         s_.add_argument("--password", help="instance password, if it has one (default: $NOTEFEED_PASSWORD)")
@@ -34,6 +40,11 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "post":
             markdown = _read(args)
             print(_client(args).post(markdown).url)
+        elif args.command == "edit":
+            markdown = _read(args)
+            print(_client(args).edit(args.id, markdown).url)
+        elif args.command == "delete":
+            _client(args).delete(args.id)
         else:
             if args.limit < 1:
                 raise _UsageError("--limit must be a whole number, 1 or more")
