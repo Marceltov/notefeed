@@ -77,3 +77,7 @@ The [read-only view](#the-read-only-view) and the RSS link stay open. See [A fee
 If the instance has a password (`NOTEFEED_PASSWORD`), every page except the login page and the read-only views asks for it first. After logging in you land on the page you were trying to open. The login lasts a year on that browser. **Log out** at the top ends it in that browser. To log out *every* browser, change `NOTEFEED_PASSWORD` and restart notefeed; scripts use the same password, so update them too.
 
 Wrong passwords count toward the [rate limit](configuration.md#rate-limits-and-caps): after too many, the login page asks you to wait up to a minute.
+
+## Install it and share a link
+
+notefeed ships a web manifest and icons, so a browser can install it as an app (**Install** in Chrome and Edge, **Add to Home Screen** on a phone). Pages also carry a share image and description, so a link pasted into WhatsApp, Slack or similar shows a preview with the notefeed wordmark. The image URL in that preview is absolute: set `PUBLIC_URL` on a public instance, or it follows the `Host` header of the request (see [Configuration](configuration.md)). On a [locked instance](configuration.md#the-password) the icons, manifest and share image stay public, but the pages themselves ask for a login, so a preview of a feed link shows only the image and the generic description.
