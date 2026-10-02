@@ -1,5 +1,6 @@
 "use client";
 
+import { Check, Copy } from "lucide-react";
 import { useState } from "react";
 
 export function CopyButton({ text }: { text: string }) {
@@ -14,8 +15,9 @@ export function CopyButton({ text }: { text: string }) {
           () => setLabel("Copy failed"),
         )
       }
-      className="shrink-0 text-muted hover:text-ink hover:underline"
+      className="inline-flex shrink-0 items-center gap-1.5 rounded-sm border border-rule px-2.5 py-1 text-sm text-muted hover:border-carbon hover:text-ink"
     >
+      {label === "Copied" ? <Check aria-hidden className="h-4 w-4" /> : <Copy aria-hidden className="h-4 w-4" />}
       <span aria-live="polite">{label}</span>
     </button>
   );

@@ -1,5 +1,6 @@
 "use client";
 
+import { Send } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import { postNote } from "@/app/_lib/api";
 import { MarkdownInput } from "@/components/MarkdownInput";
@@ -49,8 +50,9 @@ export function Compose({ feed, action, error: initialError, isNew, exists = tru
         <button
           type="submit"
           disabled={pending || busy}
-          className="rounded-sm bg-carbon px-4 py-1.5 font-bold text-on-carbon disabled:opacity-60"
+          className="inline-flex items-center gap-2 rounded-sm bg-carbon px-4 py-1.5 font-bold text-on-carbon disabled:opacity-60"
         >
+          <Send aria-hidden className="h-4 w-4" />
           {pending ? "Posting…" : "Post note"}
         </button>
       </div>

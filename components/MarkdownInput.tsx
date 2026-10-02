@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState, useSyncExternalStore, type ClipboardEvent, type DragEvent } from "react";
+import { ImagePlus } from "lucide-react";
 import { uploadImageFile } from "@/app/_lib/useApiForm";
 
 const ACCEPT = "image/png,image/jpeg,image/gif,image/webp";
@@ -112,7 +113,13 @@ export function MarkdownInput({ id, name, label, value, onChange, feed, rows, pl
               if (files.length) upload(files);
             }}
           />
-          <button type="button" disabled={uploading} onClick={() => picker.current?.click()} className="text-carbon hover:underline disabled:opacity-60">
+          <button
+            type="button"
+            disabled={uploading}
+            onClick={() => picker.current?.click()}
+            className="inline-flex items-center gap-1.5 rounded-sm border border-rule px-2.5 py-1 font-bold text-carbon hover:border-carbon disabled:opacity-60"
+          >
+            <ImagePlus aria-hidden className="h-4 w-4" />
             {uploading ? "Uploading…" : "Add image"}
           </button>
         </div>

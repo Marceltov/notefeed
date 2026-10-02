@@ -1,15 +1,15 @@
-// POST /<feed>/settings and /<feed>/delete: the web UI's plain forms for a feed's title, description and deletion.
-// Always answers with a redirect: back to the feed page (saved or refused), to the home page after a delete.
+// POST /<feed>/details and /<feed>/delete: the web UI's plain forms for a feed's title, description and deletion.
+// Always answers with a redirect: back to the settings page (saved or refused), to the home page after a delete.
 import { InvalidBodyError, InvalidRequestError } from "../errors";
 import { deleteFeed, updateFeed } from "../posting";
-import { feedPath } from "../urls";
+import { settingsPath } from "../urls";
 import { feedCookies } from "./feedsession";
 import { feedAccess, formPost, readFields, seeOther } from "./request";
 
 const FORM_MAX = 8192; // 100 + 500 characters at up to 4 bytes, plus framing
 
 // `form=details` tells the feed page which of its forms the refusal belongs to.
-const refused = (feed: string) => `${feedPath(feed)}?form=details`;
+const refused = (feed: string) => `${settingsPath(feed)}?form=details`;
 
 export const feedSettingsRoute = (req: Request, feed: string): Promise<Response> =>
   formPost(req, feed, refused(feed), async (h, ip) => {
@@ -20,7 +20,7 @@ export const feedSettingsRoute = (req: Request, feed: string): Promise<Response>
       return { title: form.get("title"), description: form.get("description") };
     };
     await updateFeed(feed, ip, read, feedAccess(h, feed));
-    return seeOther(`${feedPath(feed)}?saved=1`);
+    return seeOther(`${settingsPath(feed)}?saved=1`);
   });
 
 export function feedDeleteRoute(req: Request, feed: string): Promise<Response> {

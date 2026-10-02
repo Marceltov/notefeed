@@ -293,7 +293,7 @@ describe("feed settings: image", () => {
       new Request(`${BASE}/pics/settings`, { method: "POST", headers: { host: "localhost:3000", origin: BASE, "content-type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ title: "T3", description: "D" }) }),
       "pics",
     );
-    expect(form.headers.get("location")).toBe("/pics?saved=1");
+    expect(form.headers.get("location")).toBe("/pics/settings?saved=1");
   });
   test("an old .feed.json without image reads as empty", async () => {
     await createNote("pics", "# x");
