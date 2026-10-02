@@ -3,12 +3,17 @@ import { cookies } from "next/headers";
 import { SESSION_COOKIE, feedPath, locked, sessionOk } from "@/backend";
 
 // `feed` only on the writable pages; the read-only pages must never show it.
-export async function Header({ feed, rss }: { feed?: string; rss?: string }) {
+export async function Header({ feed, rss, image }: { feed?: string; rss?: string; image?: string | null }) {
   // Readers of /r/** on a locked instance have no session: no "Log out" for them.
   const loggedIn = locked() && sessionOk((await cookies()).get(SESSION_COOKIE)?.value);
   return (
     <header className="mb-8 flex items-baseline justify-between gap-4">
-      <p className="min-w-0 break-all text-xl font-bold tracking-tight">
+      {image && (
+        // The feed's title image: decorative (the name is next to it), served by our own route.
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={image} alt="" loading="lazy" className="h-10 w-auto max-w-24 shrink-0 self-center rounded-sm object-contain" />
+      )}
+      <p className="mr-auto min-w-0 break-all text-xl font-bold tracking-tight">
         <Link href="/">notefeed</Link>
         {feed && (
           <>

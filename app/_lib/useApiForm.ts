@@ -2,7 +2,8 @@
 
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
-import { errorMessage } from "@/app/_lib/messages";
+import { uploadImage } from "@/app/_lib/api";
+import { errorMessage, imageErrorMessage } from "@/app/_lib/messages";
 
 type Result = { data?: unknown; error?: { code?: string }; response?: Response };
 
@@ -14,8 +15,8 @@ export function useApiForm(page: string, initialError?: string) {
   const [error, setError] = useState(initialError);
   const [pending, setPending] = useState(false);
 
-  async function run<T extends Result>(e: FormEvent, call: () => Promise<T>, done: (result: T) => void, doneOn?: number) {
-    e.preventDefault();
+  async function run<T extends Result>(e: FormEvent | undefined, call: () => Promise<T>, done: (result: T) => void, doneOn?: number) {
+    e?.preventDefault();
     setPending(true);
     try {
       const result = await call();
@@ -31,4 +32,17 @@ export function useApiForm(page: string, initialError?: string) {
   }
 
   return { run, error, setError, pending, setPending, router };
+}
+
+// Uploads one image to the feed (the generated client; the server decides the format by the bytes) and returns
+// its file name and the markdown-ready URL, or the refusal's message. Shared by the markdown boxes and the title image.
+export async function uploadImageFile(feed: string, file: File): Promise<{ file: string; url: string } | { error: string }> {
+  try {
+    const { data, error, response } = await uploadImage({ baseUrl: window.location.origin, path: { feed }, body: file, headers: { "Content-Type": file.type || "application/octet-stream" } });
+    if (!response) throw new Error("no response");
+    if (response.ok && data) return data;
+    return { error: imageErrorMessage((error as { code?: string } | undefined)?.code ?? "unknown", response.headers.get("retry-after")) ?? "Something went wrong." };
+  } catch {
+    return { error: "Could not reach notefeed. Check your connection and try again." };
+  }
 }

@@ -2,6 +2,7 @@
 
 import { useState, type FormEvent } from "react";
 import { postNote } from "@/app/_lib/api";
+import { MarkdownInput } from "@/components/MarkdownInput";
 import { useApiForm } from "@/app/_lib/useApiForm";
 import { PASSWORD_HINT } from "@/app/_lib/messages";
 import { extractTitle, idStamp, slugify } from "@/shared/notes";
@@ -10,8 +11,9 @@ import { PASSWORD_PATTERN } from "@/shared/password";
 // A plain multipart form to POST /<feed>, the same endpoint scripts use: without JavaScript the browser
 // follows the 303 back to the feed page. With JavaScript the box posts through the API client generated
 // from openapi.json (JSON, the session cookie rides along same-origin) and shows refusals inline.
+// `exists`: false for a feed without a first note, which cannot take image uploads yet.
 // `isNew`: a feed that doesn't exist yet, so the box offers to protect it with a password.
-export function Compose({ feed, action, error: initialError, isNew }: { feed: string; action: string; error?: string; isNew?: boolean }) {
+export function Compose({ feed, action, error: initialError, isNew, exists = true }: { feed: string; action: string; error?: string; isNew?: boolean; exists?: boolean }) {
   const { run, error, pending, router } = useApiForm(action, initialError);
   const [text, setText] = useState("");
   const [password, setPassword] = useState("");
@@ -22,21 +24,17 @@ export function Compose({ feed, action, error: initialError, isNew }: { feed: st
 
   return (
     <form method="post" action={action} encType="multipart/form-data" onSubmit={submit} className="mb-12">
-      <label htmlFor="markdown" className="sr-only">
-        Note in markdown
-      </label>
-      <textarea
+      <MarkdownInput
         id="markdown"
         name="markdown"
+        label="Note in markdown"
         value={text}
-        onChange={(e) => setText(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) e.currentTarget.form?.requestSubmit();
-        }}
+        onChange={setText}
+        feed={feed}
         rows={5}
         placeholder="# Write a note in markdown"
-        aria-describedby="compose-hint compose-error"
-        className="block w-full resize-y rounded-sm border border-rule bg-transparent p-3 text-ink placeholder:text-muted focus:border-carbon focus:outline-none"
+        describedBy="compose-hint compose-error"
+        images={exists}
       />
       <div className="mt-2 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-2">
         <p id="compose-hint" className="min-w-0 break-all text-sm text-muted">

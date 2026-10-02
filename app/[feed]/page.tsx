@@ -48,7 +48,7 @@ export default async function FeedPage({ params, searchParams }: PageProps<"/[fe
 
   return (
     <>
-      <Header feed={feed} rss={readUrl} />
+      <Header feed={feed} rss={readUrl} image={data.imageUrl} />
       {(title || description) && (
         <div className="mb-8">
           {title && <h1 className="text-2xl font-bold tracking-tight">{title}</h1>}
@@ -66,7 +66,7 @@ export default async function FeedPage({ params, searchParams }: PageProps<"/[fe
         </p>
       )}
       <Compose key={String(posted)} feed={feed} action={feedPath(feed)} error={settingsError ? undefined : errorMessage(error, retry)}
-        isNew={access === "open" && !exists}
+        isNew={access === "open" && !exists} exists={exists}
       />
       {readId && readUrl && (
         <section aria-labelledby="read-link" className="-mt-6 mb-10 text-sm">
@@ -85,7 +85,7 @@ export default async function FeedPage({ params, searchParams }: PageProps<"/[fe
           </div>
         </section>
       )}
-      {exists && <FeedDetails key={`${title}\n${description}`} feed={feed} title={title} description={description} />}
+      {exists && <FeedDetails key={`${title}\n${description}\n${data.image}`} feed={feed} title={title} description={description} image={data.image} imageUrl={data.imageUrl} />}
       {access === "unlocked" && <FeedSettings feed={feed} error={settingsError ? feedErrorMessage(error, retry) : undefined} />}
       {notes.length === 0 ? (
         <section className="text-muted">

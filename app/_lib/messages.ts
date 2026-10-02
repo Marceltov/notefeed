@@ -42,3 +42,15 @@ export function feedErrorMessage(code: unknown, retry?: unknown): string | undef
 export function noteErrorMessage(code: unknown, retry?: unknown): string | undefined {
   return code === "auth" ? "That didn't work. Reload the page and try again." : errorMessage(code, retry);
 }
+
+// The same, for an image upload, where "too_large" and "unsupported_type" are about the image, "auth" about a login that has
+// lapsed, and "not_found" about a feed that has no note yet.
+export function imageErrorMessage(code: unknown, retry?: unknown): string | undefined {
+  const own: Record<string, string> = {
+    too_large: "That image is too large.",
+    unsupported_type: "Only PNG, JPEG, GIF and WebP images can be added.",
+    auth: "You are not signed in for this feed. Reload the page and try again.",
+    not_found: "Post the feed's first note before adding images.",
+  };
+  return own[String(code)] ?? errorMessage(code, retry);
+}
