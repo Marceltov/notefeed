@@ -7,7 +7,7 @@ import { resetFeedsForTests } from "../feeds";
 import { resetRateLimitsForTests } from "../limits";
 import { mcpRoute } from "../mcp";
 import { authServerRoute, authorizeRoute, checkAuthorize, issueCode, metadataPreflight, protectedResourceRoute, registerPreflight, registerRoute, tokenRoute } from "./routes";
-import { cid, newJti, resetTokensForTests, sign, verify } from "./tokens";
+import { TTL, cid, resetTokensForTests, verify } from "./tokens";
 
 const BASE = "http://localhost:3000";
 const RESOURCE = `${BASE}/mcp`;
@@ -24,6 +24,7 @@ beforeEach(async () => {
 });
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.unstubAllEnvs();
   for (const k of ["NOTEFEED_PASSWORD", "NOTEFEED_RATE_LIMIT", "PUBLIC_URL"]) delete process.env[k];
 });
 
@@ -114,16 +115,58 @@ describe("flow", () => {
     expect(await again.json()).toEqual({ error: "invalid_grant" });
   });
 
-  test("a code's sender is carried into the access token and through refresh", async () => {
+  // A code from a sign-in, as issueCode makes it after the provider's callback.
+  async function signedInCode() {
     const id = await clientId();
     const { verifier, challenge } = pkce();
-    const c = sign("code", { cid: cid(id), redirect_uri: CB, code_challenge: challenge, resource: RESOURCE, jti: newJti(), sender: "Ann" });
-    const first = await (await exchange({ id, verifier, code: c })).json();
+    const fields = Object.fromEntries(authParams(id, challenge));
+    const code = new URL(issueCode(fields, new Headers(H), "Ann").headers.get("location")!).searchParams.get("code")!;
+    return { id, verifier, code };
+  }
+  const signInOn = () => {
+    vi.stubEnv("NOTEFEED_OIDC_ISSUER", "https://idp.example");
+    vi.stubEnv("NOTEFEED_OIDC_CLIENT_ID", "id");
+    vi.stubEnv("NOTEFEED_OIDC_CLIENT_SECRET", "client-secret");
+    vi.stubEnv("NOTEFEED_OIDC_ALLOW", "ann@x.com");
+  };
+
+  test("a code's sender and sign-in limit are carried into the tokens and through refresh", async () => {
+    signInOn();
+    const c = await signedInCode();
+    const until = verify("code", c.code)!.until!;
+    expect(Math.abs(until - (Math.floor(Date.now() / 1000) + TTL.identity))).toBeLessThanOrEqual(1);
+    const first = await (await exchange(c)).json();
     expect(verify("access", first.access_token)?.sender).toBe("Ann");
-    expect(verify("refresh", first.refresh_token)?.sender).toBe("Ann");
-    const second = await (await token({ grant_type: "refresh_token", refresh_token: first.refresh_token, client_id: id })).json();
+    expect(verify("refresh", first.refresh_token)).toMatchObject({ sender: "Ann", until });
+    const second = await (await token({ grant_type: "refresh_token", refresh_token: first.refresh_token, client_id: c.id })).json();
     expect(verify("access", second.access_token)?.sender).toBe("Ann");
-    expect(verify("refresh", second.refresh_token)?.sender).toBe("Ann");
+    expect(verify("refresh", second.refresh_token)).toMatchObject({ sender: "Ann", until });
+  });
+
+  test("a sign-in's refresh is refused once sign-in is switched off", async () => {
+    signInOn();
+    const c = await signedInCode();
+    const { refresh_token } = await (await exchange(c)).json();
+    vi.unstubAllEnvs();
+    expect((await (await token({ grant_type: "refresh_token", refresh_token, client_id: c.id })).json()).error).toBe("invalid_grant");
+  });
+
+  test("a sign-in's refresh chain ends with the sign-in lifetime", async () => {
+    signInOn();
+    const c = await signedInCode();
+    const { refresh_token } = await (await exchange(c)).json();
+    vi.spyOn(Date, "now").mockReturnValue(Date.now() + (TTL.identity + 2) * 1000);
+    expect((await (await token({ grant_type: "refresh_token", refresh_token, client_id: c.id })).json()).error).toBe("invalid_grant");
+  });
+
+  test("a password login's refresh has no limit but its own", async () => {
+    const c = await code();
+    const { refresh_token } = await (await exchange(c)).json();
+    expect(verify("refresh", refresh_token)).not.toHaveProperty("until");
+    vi.spyOn(Date, "now").mockReturnValue(Date.now() + (TTL.identity + 2) * 1000);
+    const res = await token({ grant_type: "refresh_token", refresh_token, client_id: c.id });
+    expect(res.status).toBe(200);
+    expect(verify("refresh", (await res.json()).refresh_token)).not.toHaveProperty("until");
   });
 
   test("a password login's tokens have no sender", async () => {

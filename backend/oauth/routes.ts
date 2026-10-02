@@ -7,6 +7,7 @@ import { checkPassword, locked } from "../auth";
 import { NotefeedError, RateLimitedError } from "../errors";
 import { parseForm, readCapped, seeOther } from "../http/request";
 import { clientIp } from "../limits";
+import { identityOn } from "../oidc/config";
 import { mcpResource, publicUrl } from "../urls";
 import { cid, newJti, sign, spendOnce, TTL, verify } from "./tokens";
 
@@ -157,7 +158,7 @@ export function issueCode(fields: Record<string, string>, h: Headers, sender?: s
     code_challenge: fields.code_challenge,
     resource: fields.resource ?? mcpResource(h),
     jti: newJti(),
-    ...(sender === undefined ? {} : { sender }),
+    ...(sender === undefined ? {} : { sender, until: Math.floor(Date.now() / 1000) + TTL.identity }),
   });
   const to = new URL(fields.redirect_uri);
   to.searchParams.set("code", code);
@@ -166,11 +167,13 @@ export function issueCode(fields: Record<string, string>, h: Headers, sender?: s
   return seeOther(to.href);
 }
 
-// The sender (an identity login's) goes from the code into both tokens, and from each refresh token into the next.
-function issue(clientHash: string, aud: string, sender: string | undefined): Response {
+// The sender (an identity login's) goes from the code into both tokens, and from each refresh token into the
+// next; its `until` goes into each refresh token, so the chain ends with the sign-in.
+function issue(clientHash: string, aud: string, sender: string | undefined, until: number | undefined): Response {
   const s = sender === undefined ? {} : { sender };
+  const u = until === undefined ? {} : { until };
   return Response.json(
-    { access_token: sign("access", { aud, ...s }), token_type: "Bearer", expires_in: TTL.access, refresh_token: sign("refresh", { cid: clientHash, aud, jti: newJti(), ...s }) },
+    { access_token: sign("access", { aud, ...s }), token_type: "Bearer", expires_in: TTL.access, refresh_token: sign("refresh", { cid: clientHash, aud, jti: newJti(), ...s, ...u }) },
     { headers: noStore },
   );
 }
@@ -199,7 +202,7 @@ export async function tokenRoute(req: Request): Promise<Response> {
     if (createHash("sha256").update(verifier).digest("base64url") !== c.code_challenge) return oauthError("invalid_grant");
     if (resource !== undefined && resource !== c.resource) return oauthError("invalid_grant");
     if (!spendOnce(c.jti, c.exp!)) return oauthError("invalid_grant");
-    return issue(c.cid, c.resource, c.sender);
+    return issue(c.cid, c.resource, c.sender, c.until);
   }
 
   if (grant === "refresh_token") {
@@ -211,8 +214,10 @@ export async function tokenRoute(req: Request): Promise<Response> {
     if (!verify("client", clientId)) return oauthError("invalid_client");
     if (r.cid !== cid(clientId)) return oauthError("invalid_grant");
     if (resource !== undefined && resource !== r.aud) return oauthError("invalid_grant");
+    // A sign-in's chain ends with sign-in switched off or with the sign-in's lifetime, like a browser session.
+    if (r.sender !== undefined && !(identityOn() && r.until !== undefined && Date.now() <= r.until * 1000)) return oauthError("invalid_grant");
     if (!spendOnce(r.jti, r.exp!)) return oauthError("invalid_grant");
-    return issue(r.cid, r.aud, r.sender);
+    return issue(r.cid, r.aud, r.sender, r.until);
   }
 
   return oauthError(grant === undefined ? "invalid_request" : "unsupported_grant_type");

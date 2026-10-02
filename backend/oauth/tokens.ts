@@ -1,17 +1,19 @@
-// Stateless OAuth tokens: base64url(JSON payload) "." base64url(HMAC-SHA256). The key is derived from the
-// server secret and the password, so changing either one invalidates every token.
+// Stateless signed values: the OAuth tokens, the nf_identity sign-in cookie and the cookie of a sign-in in flight.
+// base64url(JSON payload) "." base64url(HMAC-SHA256). The key is derived from the server secret and the password,
+// so changing either one invalidates every token and cookie signed here.
 import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { config } from "../config";
 import { secret } from "../feeds";
 import { processState } from "../state";
 
-// `sender` is the signed-in person's name, from an identity login; a password login has none.
+// `sender` is the signed-in person's name, from an identity login; a password login has none. `until` (epoch
+// seconds) is when that sign-in ends: the refresh chain it starts stops there.
 export type Kind = "client" | "code" | "access" | "refresh" | "identity" | "oidc";
 export type Payloads = {
   client: { client_name?: string; redirect_uris: string[] };
-  code: { cid: string; redirect_uri: string; code_challenge: string; resource: string; jti: string; sender?: string };
+  code: { cid: string; redirect_uri: string; code_challenge: string; resource: string; jti: string; sender?: string; until?: number };
   access: { aud: string; sender?: string };
-  refresh: { cid: string; aud: string; jti: string; sender?: string };
+  refresh: { cid: string; aud: string; jti: string; sender?: string; until?: number };
   identity: { sender: string }; // the nf_identity session cookie
   oidc: { state: string; nonce: string; verifier: string; next?: string; authorize?: Record<string, string> }; // a sign-in in flight
 };
