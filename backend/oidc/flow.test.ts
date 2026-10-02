@@ -66,12 +66,32 @@ describe("discover", () => {
 
   test.each([
     ["an issuer mismatch", { ...META, issuer: "https://evil.example" }],
-    ["an issuer differing only by a slash", { ...META, issuer: `${ISS}/` }],
+    ["an issuer on another host", { ...META, issuer: "https://other.example/app" }],
+    ["an issuer with another path", { ...META, issuer: `${ISS}/x` }],
+    ["an issuer with another scheme", { ...META, issuer: "http://idp.example/app" }],
+    ["an issuer with two trailing slashes", { ...META, issuer: `${ISS}//` }],
     ["no token endpoint", { ...META, token_endpoint: undefined }],
     ["an endpoint that isn't a URL", { ...META, authorization_endpoint: "nope" }],
     ["not an object", "x"],
   ])("refuses %s", async (_, doc) => {
     await expect(discover(PROV, issuer({ doc }))).rejects.toBeInstanceOf(AuthError);
+  });
+
+  test.each([
+    ["without a slash, the document with one", ISS, `${ISS}/`],
+    ["with a slash, the document without one", `${ISS}/`, ISS],
+  ])("the issuer configured %s matches", async (_, configured, inDoc) => {
+    const f = issuer({ doc: { ...META, issuer: inDoc } });
+    const meta = await discover(at(configured), f);
+    expect(f).toHaveBeenCalledWith(`${ISS}/.well-known/openid-configuration`, expect.anything());
+    for (const iss of [ISS, `${ISS}/`]) expect(await exchange(at(configured), meta, P, issuer({ claims: { ...GOOD, iss } }), NOW)).toEqual({ sender: "Ann" });
+  });
+
+  test("an issuer with and without a trailing slash share one cache entry", async () => {
+    const f = issuer();
+    await discover(PROV, f, NOW);
+    await discover(at(`${ISS}/`), f, NOW);
+    expect(f).toHaveBeenCalledTimes(1);
   });
 
   test("a plain http issuer is refused before anything is fetched", async () => {
@@ -165,6 +185,10 @@ describe("exchange", () => {
 
   test.each([
     ["wrong iss", { ...GOOD, iss: "https://evil.example" }],
+    ["iss on another host", { ...GOOD, iss: "https://other.example/app" }],
+    ["iss with another path", { ...GOOD, iss: `${ISS}/x` }],
+    ["iss with another scheme", { ...GOOD, iss: "http://idp.example/app" }],
+    ["iss with two trailing slashes", { ...GOOD, iss: `${ISS}//` }],
     ["wrong aud", { ...GOOD, aud: "other" }],
     ["aud array without the client id", { ...GOOD, aud: ["other"] }],
     ["several audiences and no azp", { ...GOOD, aud: ["id", "other"] }],

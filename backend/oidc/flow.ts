@@ -13,6 +13,11 @@ const HOUR = 3_600_000;
 const cache = processState("oidc-discovery-v2", () => new Map<string, { at: number; meta: Meta }>());
 export const resetDiscoveryForTests = (): void => cache.clear();
 
+// Issuers compare exactly (OIDC Discovery 4.3, Core 3.1.3.7) except for one trailing slash, which operators get wrong
+// and which names the same provider: `https://x/a` and `https://x/a/` match, `https://x/a//` does not.
+const bare = (issuer: string) => issuer.replace(/\/$/, "");
+const sameIssuer = (a: unknown, b: string) => typeof a === "string" && bare(a) === bare(b);
+
 // The JSON object a provider answers with; anything else (unreachable, non-2xx, not JSON, not an object) refuses.
 async function getJson(fetchFn: Fetch, url: string, init: RequestInit): Promise<Record<string, unknown>> {
   try {
@@ -24,15 +29,16 @@ async function getJson(fetchFn: Fetch, url: string, init: RequestInit): Promise<
 }
 
 export async function discover({ issuer }: Provider, fetchFn: Fetch = fetch, now = Date.now()): Promise<Meta> {
-  const hit = cache.get(issuer);
+  const key = bare(issuer);
+  const hit = cache.get(key);
   if (hit && now - hit.at < HOUR) return hit.meta;
   // TLS to the provider is what lets exchange skip the id_token's signature: https, or plain http on loopback only.
   if (!redirectUriOk(issuer)) throw new AuthError();
-  const doc = await getJson(fetchFn, `${issuer.replace(/\/$/, "")}/.well-known/openid-configuration`, { headers: { accept: "application/json" } });
-  // Exact, as OIDC Discovery 4.3 requires: a document naming another issuer is not this provider's.
-  if (doc.issuer !== issuer || !redirectUriOk(doc.authorization_endpoint) || !redirectUriOk(doc.token_endpoint)) throw new AuthError();
+  const doc = await getJson(fetchFn, `${key}/.well-known/openid-configuration`, { headers: { accept: "application/json" } });
+  // A document naming another issuer is not this provider's.
+  if (!sameIssuer(doc.issuer, issuer) || !redirectUriOk(doc.authorization_endpoint) || !redirectUriOk(doc.token_endpoint)) throw new AuthError();
   const meta = { issuer, authorization_endpoint: doc.authorization_endpoint, token_endpoint: doc.token_endpoint };
-  cache.set(issuer, { at: now, meta });
+  cache.set(key, { at: now, meta });
   return meta;
 }
 
@@ -62,7 +68,7 @@ function check(provider: Provider, c: Record<string, unknown>, meta: Meta, nonce
   const aud = Array.isArray(c.aud) ? c.aud : [c.aud];
   const audOk = aud.includes(clientId) && (aud.length === 1 || c.azp === clientId) && (c.azp === undefined || c.azp === clientId);
   const expOk = typeof c.exp === "number" && c.exp * 1000 > now;
-  if (c.iss !== meta.issuer || !audOk || !expOk || c.nonce !== nonce) throw new AuthError();
+  if (!sameIssuer(c.iss, meta.issuer) || !audOk || !expOk || c.nonce !== nonce) throw new AuthError();
   const person = { email: str(c.email), email_verified: c.email_verified === true };
   const sender = senderFrom(c, provider.senderClaim);
   if (!allowed(provider, person) || sender === undefined) throw new AuthError();
