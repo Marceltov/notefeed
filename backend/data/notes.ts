@@ -1,7 +1,8 @@
-// A note on disk is `<DATA_DIR>/<feed>/<id>.md`, byte-for-byte as posted.
+// A note on disk is `<DATA_DIR>/<feed>/<id>.md`: the body as posted, behind a frontmatter block when it has a sender.
 import { randomBytes } from "node:crypto";
-import { link, readdir, readFile, rename, stat, unlink, writeFile } from "node:fs/promises";
+import { link, readdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { decode, encode } from "./frontmatter";
 import { feedDir, isErrno, orMissing } from "./fs";
 
 const file = (feed: string, id: string) => join(feedDir(feed), `${id}.md`);
@@ -9,11 +10,11 @@ const file = (feed: string, id: string) => join(feedDir(feed), `${id}.md`);
 // Stores `markdown` as `<base>.md`, or `<base>-2.md`, `-3`, … if taken; returns the id used.
 // The feed directory must exist (ensureFeed creates it): a feed deleted meanwhile is ENOENT here, never
 // a directory made again without its `.readid`. Never overwrites, never leaves a partial file behind.
-export async function writeNote(feed: string, base: string, markdown: string): Promise<string> {
+export async function writeNote(feed: string, base: string, markdown: string, sender?: string): Promise<string> {
   const dir = feedDir(feed);
   const tmp = join(dir, `.${randomBytes(6).toString("hex")}.tmp`);
   try {
-    await writeFile(/*turbopackIgnore: true*/ tmp, markdown);
+    await writeFile(/*turbopackIgnore: true*/ tmp, encode(markdown, sender));
     // link() fails with EEXIST instead of overwriting, so the final name appears atomically and exclusively.
     for (let n = 1; ; n++) {
       const id = n === 1 ? base : `${base}-${n}`;
@@ -29,8 +30,9 @@ export async function writeNote(feed: string, base: string, markdown: string): P
   }
 }
 
-export function readNote(feed: string, id: string): Promise<string | null> {
-  return orMissing(readFile(/*turbopackIgnore: true*/ file(feed, id), "utf8"), null);
+export async function readNote(feed: string, id: string): Promise<{ markdown: string; sender?: string } | null> {
+  const raw = await orMissing(readFile(/*turbopackIgnore: true*/ file(feed, id), "utf8"), null);
+  return raw === null ? null : decode(raw);
 }
 
 // Every `*.md` name in the feed, without the extension; the caller filters for valid ids.
@@ -39,18 +41,19 @@ export async function listNoteFiles(feed: string): Promise<string[]> {
   return files.filter((f) => f.endsWith(".md")).map((f) => f.slice(0, -3));
 }
 
-// Replaces an existing note's content atomically (temp file, then rename over it); false, and nothing
-// created, when there is no such note. ponytail: a delete landing between the stat and the rename
+// Replaces an existing note's body atomically, keeping its stored sender (temp file, then rename over it); false, and nothing
+// created, when there is no such note. ponytail: a delete landing between the read and the rename
 // brings the note back with the edit; a per-feed lock would close it.
 export async function replaceNote(feed: string, id: string, markdown: string): Promise<boolean> {
-  if (!(await orMissing(stat(/*turbopackIgnore: true*/ file(feed, id)).then(() => true), false))) return false;
+  const old = await readNote(feed, id);
+  if (!old) return false;
   const tmp = join(feedDir(feed), `.${randomBytes(6).toString("hex")}.tmp`);
   try {
-    await writeFile(/*turbopackIgnore: true*/ tmp, markdown);
+    await writeFile(/*turbopackIgnore: true*/ tmp, encode(markdown, old.sender));
     await rename(/*turbopackIgnore: true*/ tmp, file(feed, id));
     return true;
   } catch (e) {
-    if (isErrno(e, "ENOENT")) return false; // the feed was deleted since the stat
+    if (isErrno(e, "ENOENT")) return false; // the feed was deleted since the read
     throw e;
   } finally {
     await unlink(/*turbopackIgnore: true*/ tmp).catch(() => {});

@@ -119,6 +119,33 @@ describe("feeds", () => {
   });
 });
 
+describe("sender", () => {
+  test("createNote stores it as frontmatter; getNote returns it without the block", async () => {
+    const { note } = await createNote("test", "# Hi", undefined, "Ann");
+    expect(note.sender).toBe("Ann");
+    expect(await readFile(join(dir, `${note.id}.md`), "utf8")).toBe('---\nsender: "Ann"\n---\n# Hi');
+    const got = await getNote("test", note.id);
+    expect(got?.markdown).toBe("# Hi");
+    expect(got?.sender).toBe("Ann");
+    expect(got?.title).toBe("Hi");
+  });
+  test("updateNote keeps the sender", async () => {
+    const { note } = await createNote("test", "# Old", undefined, "Ann");
+    const u = await updateNote("test", note.id, "# New");
+    expect(u?.sender).toBe("Ann");
+    expect((await getNote("test", note.id))?.sender).toBe("Ann");
+    expect((await getNote("test", note.id))?.markdown).toBe("# New");
+  });
+  test("a file on disk with no block still lists, without a sender", async () => {
+    const { note } = await createNote("test", "# One");
+    await writeFile(join(dir, "20260101T000000Z-hand.md"), "# Hand");
+    const all = await listNotes("test");
+    expect(all.map((n) => n.markdown).sort()).toEqual(["# Hand", "# One"]);
+    expect(all.every((n) => n.sender === undefined)).toBe(true);
+    expect(note.sender).toBeUndefined();
+  });
+});
+
 describe("getNote", () => {
   test("rejects traversal ids", async () => {
     expect(await getNote("test", "../x")).toBeNull();
