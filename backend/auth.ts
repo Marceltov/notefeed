@@ -16,7 +16,7 @@ export const IDENTITY_COOKIE = "nf_identity";
 export const locked = () => config.password() !== "" || identityOn();
 
 // Hash both sides so lengths match and timingSafeEqual never throws.
-function safeEqual(a: string, b: string): boolean {
+export function safeEqual(a: string, b: string): boolean {
   const h = (s: string) => createHash("sha256").update(s).digest();
   return timingSafeEqual(h(a), h(b));
 }

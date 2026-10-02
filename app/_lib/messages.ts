@@ -6,7 +6,8 @@ import { PASSWORD_RULE } from "@/shared/password";
 // Under a new-password field, and what the browser says when the field's pattern doesn't match.
 export const PASSWORD_HINT = `Use ${PASSWORD_RULE}: unaccented letters, digits and symbols.`;
 
-const MESSAGES: Record<ErrorCode, string> = {
+// sign_in_failed is no API code: only the OIDC callback's ?error= (backend/oidc/routes.ts).
+const MESSAGES: Record<ErrorCode | "sign_in_failed", string> = {
   invalid_feed: "Invalid feed name.",
   reserved_feed: "That feed name is reserved.",
   auth: "That password doesn't match NOTEFEED_PASSWORD.",
@@ -22,12 +23,13 @@ const MESSAGES: Record<ErrorCode, string> = {
   invalid_request: "Something went wrong.",
   not_found: "Not found.",
   feed_exists: "This feed already exists, so it can't be given a password.",
+  sign_in_failed: "Sign-in didn't work. Try again.",
 };
 
 // undefined for no code; an unknown code still says something.
 export function errorMessage(code: unknown, retry?: unknown): string | undefined {
   if (typeof code !== "string" || code === "") return undefined;
-  const text = Object.hasOwn(MESSAGES, code) ? MESSAGES[code as ErrorCode] : "Something went wrong."; // not `in`/`??`: "constructor" is inherited
+  const text = Object.hasOwn(MESSAGES, code) ? MESSAGES[code as keyof typeof MESSAGES] : "Something went wrong."; // not `in`/`??`: "constructor" is inherited
   return text.replace("{retry}", /^\d+$/.test(String(retry)) ? String(retry) : "a few");
 }
 
