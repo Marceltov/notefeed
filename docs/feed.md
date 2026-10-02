@@ -6,7 +6,7 @@ Every feed has a **read link**:
 https://notes.example.com/r/<read id>/feed.xml
 ```
 
-The read id is 22 characters, e.g. `q2Zc9kD0bTnVx4LmAe7sWp`. A feed created since feed deletion was added gets a random read id that notefeed stores in the feed's folder (`.readid`). A feed that existed before keeps the read id computed from its name and the server secret, so no read link has changed. You find the link on the feed page, and in every `POST /<feed>` answer as `read_url`.
+The read id is 22 characters, e.g. `q2Zc9kD0bTnVx4LmAe7sWp`; the one exception is a [reserved feed](configuration.md#reserved-feeds), whose read id is its name (`/r/news`). A feed created since feed deletion was added gets a random read id that notefeed stores in the feed's folder (`.readid`). A feed that existed before keeps the read id computed from its name and the server secret, so no read link has changed. You find the link on the feed page, and in every `POST /<feed>` answer as `read_url`.
 
 A read link:
 
@@ -18,7 +18,7 @@ A read link:
 That makes it the link to give to feed readers, dashboards and other people. Keep the feed name itself to the scripts that post.
 
 !!! note "An unknown read link shows an empty feed"
-    A read link that doesn't belong to any feed answers with an empty feed, not an error. That's on purpose: nobody can probe which read links exist. The web UI shows a feed's read link once the feed has its first note. A read link that isn't 22 characters of `A`–`Z`, `a`–`z`, `0`–`9`, `-`, `_` is a `404`.
+    A read link that doesn't belong to any feed answers with an empty feed, not an error. That's on purpose: nobody can probe which read links exist. The web UI shows a feed's read link once the feed has its first note. A read link that is neither 22 characters of `A`–`Z`, `a`–`z`, `0`–`9`, `-`, `_` nor the name of a reserved feed is a `404`.
 
 !!! warning "The secret behind older read links"
     The read ids of feeds created before feed deletion was added are computed from the feed name and a server secret: `NOTEFEED_SECRET` if set, otherwise a random one that notefeed creates once in `DATA_DIR/.secret`. Changing `NOTEFEED_SECRET`, or deleting `.secret` without setting it, **changes the read link of every such feed**, and readers must resubscribe. Feeds created since have a stored read id, and their read links are not affected. The secret is still needed on every instance: it also signs the unlock cookies of protected feeds and the logins of MCP clients. Back up `.secret` with your notes. See [Configuration](configuration.md).

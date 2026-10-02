@@ -48,6 +48,19 @@ Besides the instance password, a single feed can have its own, set by whoever cr
 
 Each feed's password is stored as a salted scrypt hash in `DATA_DIR/<feed>/.password`. If a password is lost, delete that file: the feed is open from the next request. See [Operations](operations.md#a-lost-feed-password). Wrong feed passwords count toward the same [failed-attempt limit](#rate-limits-and-caps) as the instance password. A request that sends no feed password at all is refused without being counted, so strangers who merely open a protected feed can't lock its owner out.
 
+## Reserved feeds
+
+For feeds that only the operator posts to but everyone may subscribe to, such as `news` or `announcements`. List the names in `NOTEFEED_RESERVED_FEEDS` and set `NOTEFEED_RESERVED_PASSWORD`:
+
+```yaml
+NOTEFEED_RESERVED_FEEDS: news,announcements,updates
+NOTEFEED_RESERVED_PASSWORD: a-long-operator-password
+```
+
+At start-up each listed name that doesn't exist yet is created as a [protected feed](posting.md#a-feed-with-its-own-password) with that password. Post to it like any protected feed, with `X-Feed-Password: <the password>` (or `Authorization: Bearer` first, if the instance has a password too). Its read id is its name, with no obfuscation: `/r/news` and `/r/news/feed.xml` are the links to hand out, and they never change, even if the feed is deleted and made again at the next start. A reserved feed deleted while running comes back at the next start.
+
+Nobody can create a listed name by posting: that answers `400` (`reserved_feed`). Without `NOTEFEED_RESERVED_PASSWORD` the names are still blocked, but the feeds don't exist. A feed that already had such a name keeps working as it was.
+
 ## OAuth
 
 Clients that can't send a header, such as the Claude.ai and Claude Desktop connectors for [MCP](mcp.md), log in through notefeed's own OAuth 2.1 login page with the instance password. It only exists on an instance with a password; on an open one these endpoints answer `404`.
