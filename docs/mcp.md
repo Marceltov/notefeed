@@ -35,7 +35,7 @@ claude mcp add notefeed --transport http https://notes.example.com/mcp --header 
 
 ## Claude.ai and Claude Desktop
 
-Add a custom connector and give it the URL `https://notes.example.com/mcp`. On an open instance that's all. On an instance with a password, the connector opens notefeed's login page: check that it names the client and the host it returns to, enter the instance password and press **Allow**. See [OAuth](configuration.md#oauth) for how that works and how long it lasts.
+Add a custom connector and give it the URL `https://notes.example.com/mcp`. On an open instance that's all. On an instance with a password, the connector opens notefeed's login page: check that it names the client and the host it returns to, enter the instance password and press **Allow**. See [OAuth](configuration.md#oauth) for how that works and how long it lasts. If the instance has [sign-in](identity.md#mcp) switched on, that login page also has a **Sign in with** button for each provider, and no extra setup is needed at the providers: the one redirect URI of [the sign-in setup](identity.md#urls-and-what-the-provider-needs) covers MCP clients too.
 
 OAuth needs the instance's public `https://` address: set `PUBLIC_URL=https://notes.example.com`, or `NOTEFEED_TRUST_PROXY=1` behind a reverse proxy that sets `X-Forwarded-Proto` and `X-Forwarded-Host`.
 

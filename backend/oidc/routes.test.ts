@@ -22,11 +22,15 @@ const CHALLENGE = "a".repeat(43);
 let person: Record<string, unknown>;
 let lastNonce = "";
 const b64 = (v: unknown) => Buffer.from(JSON.stringify(v)).toString("base64url");
+// Each stub issuer and the client id it issues id_tokens to.
+const CLIENTS: Record<string, string> = { [ISS]: "id", "https://alpha.example": "alpha-id", "https://beta.example": "beta-id" };
 const fetchStub = vi.fn<typeof fetch>(async (url) => {
-  if (String(url) === `${ISS}/.well-known/openid-configuration`) return Response.json(META);
-  if (String(url) === META.token_endpoint) {
-    const claims = { iss: ISS, aud: "id", exp: Math.floor(Date.now() / 1000) + 300, nonce: lastNonce, ...person };
-    return Response.json({ id_token: `${b64({ alg: "RS256" })}.${b64(claims)}.c2ln` });
+  for (const [iss, aud] of Object.entries(CLIENTS)) {
+    if (String(url) === `${iss}/.well-known/openid-configuration`) return Response.json({ issuer: iss, authorization_endpoint: `${iss}/authorize`, token_endpoint: `${iss}/token` });
+    if (String(url) === `${iss}/token`) {
+      const claims = { iss, aud, exp: Math.floor(Date.now() / 1000) + 300, nonce: lastNonce, ...person };
+      return Response.json({ id_token: `${b64({ alg: "RS256" })}.${b64(claims)}.c2ln` });
+    }
   }
   return new Response("not found", { status: 404 });
 });
@@ -100,7 +104,7 @@ describe("start", () => {
     expect(res.status).toBe(303);
     expect(loc!.origin + loc!.pathname).toBe(META.authorization_endpoint);
     const flight = verify("oidc", cookie)!;
-    expect(flight).toMatchObject({ state, nonce: lastNonce, next: "/feed" });
+    expect(flight).toMatchObject({ state, nonce: lastNonce, next: "/feed", provider: "default" });
     expect(flight.authorize).toBeUndefined();
     expect(state).toMatch(/^[\w-]{22,}$/);
     expect(lastNonce).toMatch(/^[\w-]{22,}$/);
@@ -223,7 +227,7 @@ describe("callback", () => {
   });
 
   test("an expired flight cookie signs nobody in", async () => {
-    const cookie = sign("oidc", { state: "st", nonce: "no", verifier: "v", next: "/" }, Date.now() - 601_000);
+    const cookie = sign("oidc", { state: "st", nonce: "no", verifier: "v", next: "/", provider: "default" }, Date.now() - 601_000);
     failed(await callback("code=c&state=st", cookie));
   });
 
@@ -243,5 +247,116 @@ describe("callback", () => {
     expect(setCookie(res, IDENTITY_COOKIE)).toBeUndefined();
     expect(setCookie(res, "nf_oidc")).toMatch(/Max-Age=0/);
     expect(fetchStub).not.toHaveBeenCalled();
+  });
+});
+
+describe("several providers", () => {
+  beforeEach(() => {
+    const set = (name: string, v: Record<string, string>) => Object.entries(v).forEach(([k, val]) => vi.stubEnv(`NOTEFEED_OIDC_${name}_${k}`, val));
+    set("ALPHA", { ISSUER: "https://alpha.example", CLIENT_ID: "alpha-id", CLIENT_SECRET: "alpha-secret", ALLOW: "ann@x.com" });
+    set("BETA", { ISSUER: "https://beta.example", CLIENT_ID: "beta-id", CLIENT_SECRET: "beta-secret", ALLOW: "@y.com", SENDER_CLAIM: "email" });
+  });
+  const tokenCall = () => fetchStub.mock.calls.find(([u]) => String(u).endsWith("/token"));
+
+  test.each([
+    ["alpha", "https://alpha.example", "alpha-id"],
+    ["beta", "https://beta.example", "beta-id"],
+    ["default", ISS, "id"],
+  ])("start with provider=%s goes to that provider with its client id", async (id, iss, clientId) => {
+    const { loc, cookie } = await start(`provider=${id}&next=/feed`);
+    expect(loc!.origin + loc!.pathname).toBe(`${iss}/authorize`);
+    expect(loc!.searchParams.get("client_id")).toBe(clientId);
+    expect(loc!.searchParams.get("redirect_uri")).toBe(`${BASE}/api/oidc/callback`);
+    expect(verify("oidc", cookie)).toMatchObject({ provider: id, next: "/feed" });
+  });
+
+  test.each(["next=/feed", "provider=&next=/feed", "provider=gamma&next=/feed", "provider=ALPHA&next=/feed", "provider=Default&next=/feed"])("%j is refused before anything is fetched", async (q) => {
+    const res = await oidcStartRoute(get(`/api/oidc/start?${q}`));
+    expect(res.status).toBe(303);
+    expect(res.headers.get("location")).toBe("/login?error=sign_in_failed&next=%2Ffeed");
+    expect(res.headers.getSetCookie()).toEqual([]);
+    expect(fetchStub).not.toHaveBeenCalled();
+  });
+
+  test("an unknown provider is refused even when only one is configured", async () => {
+    vi.stubEnv("NOTEFEED_OIDC_ALPHA_ISSUER", "");
+    vi.stubEnv("NOTEFEED_OIDC_BETA_ISSUER", "");
+    const res = await oidcStartRoute(get("/api/oidc/start?provider=alpha"));
+    expect(res.headers.get("location")).toBe("/login?error=sign_in_failed");
+    expect(fetchStub).not.toHaveBeenCalled();
+    expect((await start("provider=default")).loc!.origin).toBe(ISS);
+  });
+
+  test("provider=default is refused when only named providers are configured", async () => {
+    vi.stubEnv("NOTEFEED_OIDC_ISSUER", "");
+    const res = await oidcStartRoute(get("/api/oidc/start?provider=default"));
+    expect(res.headers.get("location")).toBe("/login?error=sign_in_failed");
+    expect(res.headers.getSetCookie()).toEqual([]);
+    expect(fetchStub).not.toHaveBeenCalled();
+  });
+
+  test("a single named provider works without the parameter", async () => {
+    vi.stubEnv("NOTEFEED_OIDC_ISSUER", "");
+    vi.stubEnv("NOTEFEED_OIDC_ALPHA_ISSUER", "");
+    const { loc, cookie } = await start("next=/feed");
+    expect(loc!.origin).toBe("https://beta.example");
+    expect(verify("oidc", cookie)!.provider).toBe("beta");
+  });
+
+  test("an MCP POST names its provider in a hidden field; a missing or unknown one goes back to the authorize page", async () => {
+    const fields = await mcpFields({ state: "s1" });
+    const { loc, cookie } = await start({ ...fields, provider: "beta" });
+    expect(loc!.origin + loc!.pathname).toBe("https://beta.example/authorize");
+    expect(verify("oidc", cookie)).toMatchObject({ provider: "beta", authorize: fields });
+    fetchStub.mockClear();
+    for (const extra of [{}, { provider: "gamma" }] as Record<string, string>[]) {
+      const res = await postStart({ ...fields, ...extra });
+      expect(res.headers.get("location")).toBe(`/oauth/authorize?${new URLSearchParams(fields)}&error=sign_in_failed`);
+      expect(res.headers.getSetCookie()).toEqual([]);
+    }
+    expect(fetchStub).not.toHaveBeenCalled();
+    expect((await postStart({ ...fields, provider: "beta" }, "https://evil.example")).status).toBe(403);
+  });
+
+  test("the callback uses the cookie's provider, never the request's", async () => {
+    person = { name: "Bob", email: "bob@y.com", email_verified: true };
+    const s = await start("provider=beta&next=/feed");
+    const res = await callback(`code=c&state=${s.state}&provider=alpha`, s.cookie);
+    expect(res.headers.get("location")).toBe("/feed");
+    expect(verify("identity", valueOf(setCookie(res, IDENTITY_COOKIE))!)!.sender).toBe("bob@y.com"); // beta's sender claim
+    const [url, init] = tokenCall()!;
+    expect(url).toBe("https://beta.example/token");
+    const body = new URLSearchParams(String(init!.body));
+    expect([body.get("client_id"), body.get("client_secret")]).toEqual(["beta-id", "beta-secret"]);
+  });
+
+  test("each provider's allow-list applies to its own sign-ins", async () => {
+    let s = await start("provider=beta");
+    failed(await callback(`code=c&state=${s.state}`, s.cookie)); // ann@x.com is alpha's, not beta's
+    s = await start("provider=alpha");
+    const res = await callback(`code=c&state=${s.state}`, s.cookie);
+    expect(verify("identity", valueOf(setCookie(res, IDENTITY_COOKIE))!)!.sender).toBe("Ann");
+  });
+
+  test("an MCP sign-in through a named provider issues the code", async () => {
+    const s = await start({ ...(await mcpFields({ state: "s1" })), provider: "alpha" });
+    const loc = new URL((await callback(`code=c&state=${s.state}`, s.cookie)).headers.get("location")!);
+    expect(verify("code", loc.searchParams.get("code")!)!.sender).toBe("Ann");
+  });
+
+  test("a flight whose provider is no longer configured signs nobody in, and counts as a failure", async () => {
+    vi.stubEnv("NOTEFEED_RATE_LIMIT", "1");
+    const s = await start("provider=alpha");
+    vi.stubEnv("NOTEFEED_OIDC_ALPHA_ALLOW", "");
+    fetchStub.mockClear();
+    failed(await callback(`code=c&state=${s.state}`, s.cookie));
+    expect(fetchStub).not.toHaveBeenCalled();
+    vi.stubEnv("NOTEFEED_OIDC_ALPHA_ALLOW", "ann@x.com");
+    expect((await callback(`code=c&state=${s.state}`, s.cookie)).headers.get("location")).toMatch(/^\/login\?error=too_many_attempts/);
+  });
+
+  test("a flight cookie without a provider signs nobody in", async () => {
+    const cookie = sign("oidc", { state: "st", nonce: "no", verifier: "v", next: "/" } as never);
+    failed(await callback("code=c&state=st", cookie));
   });
 });
