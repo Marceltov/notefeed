@@ -115,14 +115,14 @@ test("a percent-encoded or non-ASCII feed name is a 400 invalid_feed", async () 
 
 describe("GET /feeds/{feed}/notes/{id}", () => {
   test("one note, or 404", async () => {
-    const n = await createNote("backups", "# Hi");
+    const { note: n } = await createNote("backups", "# Hi");
     expect((await json(await call("GET", `/feeds/backups/notes/${n.id}`))).markdown).toBe("# Hi");
     const res = await call("GET", "/feeds/backups/notes/20260101T000000Z-nope");
     expect(res.status).toBe(404);
     expect((await json(res)).code).toBe("not_found");
   });
   test("locked: 401 without the password", async () => {
-    const n = await createNote("backups", "# Hi");
+    const { note: n } = await createNote("backups", "# Hi");
     process.env.NOTEFEED_PASSWORD = "pw";
     expect((await call("GET", `/feeds/backups/notes/${n.id}`)).status).toBe(401);
   });
@@ -143,7 +143,7 @@ describe("GET /read/{readId}/notes", () => {
     expect((await call("GET", "/read/short/notes")).status).toBe(404);
   });
   test("one note by read id, or 404", async () => {
-    const n = await createNote("secretname", "# Shared");
+    const { note: n } = await createNote("secretname", "# Shared");
     expect((await json(await call("GET", `/read/${(await readIdOf("secretname"))!}/notes/${n.id}`))).title).toBe("Shared");
     expect((await call("GET", `/read/${"A".repeat(22)}/notes/${n.id}`)).status).toBe(404);
   });
@@ -170,7 +170,7 @@ describe("the OpenAPI document", () => {
 // Every error each entry can raise reaches the client with that status (the dispatcher turns an
 // undeclared one into a 500, so these fail if an entry starts throwing something it doesn't declare).
 describe("each entry's errors arrive with their declared status", () => {
-  const feedNote = async () => (await createNote("backups", "# Hi")).id;
+  const feedNote = async () => (await createNote("backups", "# Hi")).note.id;
   const locked = (rate = "60") => {
     process.env.NOTEFEED_PASSWORD = "pw";
     process.env.NOTEFEED_RATE_LIMIT = rate;

@@ -11,12 +11,13 @@ import { checkMarkdown, countNotes, createNote, removeNote, updateNote, type Not
 // `readMarkdown` runs only once the post is admitted, so a refused request never has its body read.
 // A password (header, or body `password`) is set only by the post that creates the feed.
 // `created`: this post created the feed protected, so its sender is the one who chose the password.
+// `readId`: the read id of the feed the note went into; null when that feed has no read link.
 export async function postNote(
   feed: string,
   ip: string,
   read: () => Promise<{ markdown: string; password?: string }>,
   access: FeedAccess,
-): Promise<{ note: Note; created: boolean }> {
+): Promise<{ note: Note; created: boolean; readId: string | null }> {
   assertFeed(feed);
   const proved = await checkFeedAccess(feed, access, ip);
   const wait = rateLimit(ip);
@@ -42,11 +43,10 @@ export async function postNote(
   // The sender decides how long read() takes, and the feed may have been created protected meanwhile:
   // a post that proved nothing above is checked again, with nothing to show.
   if (!proved && !created) await checkFeedAccess(feed, {}, ip);
-  // ponytail: checked, not locked. A protected creation can still land in the few microseconds between
-  // this check and the note's file, in two ways: it completes before writeNote's mkdir, or its rename()
-  // claims the directory writeNote just made while that is still empty. Either way this one note is then
-  // in the protected feed. A lock around creation, per feed, would close both.
-  return { note: await createNote(feed, markdown), created };
+  // ponytail: checked, not locked. A protected creation can still complete in the few microseconds between
+  // this check and createNote's ensureFeed, which then finds the feed and writes into it: this one note is
+  // then in the protected feed. A lock around creation, per feed, would close it.
+  return { ...(await createNote(feed, markdown)), created };
 }
 
 // Same gate as posting, minus the caps. An edit or delete targets an existing note, so its feed
@@ -75,9 +75,9 @@ export async function deleteNote(feed: string, id: string, ip: string, access: F
 
 // Settings and deletion of a whole feed: the same gate as posting, then the feed must exist. An open feed is
 // changed by anyone who knows its name, as it is posted to (ADR 0001); a protected one needs its password.
-export async function updateFeed(feed: string, ip: string, settings: unknown, access: FeedAccess): Promise<FeedSettings> {
+export async function updateFeed(feed: string, ip: string, read: () => Promise<unknown>, access: FeedAccess): Promise<FeedSettings> {
   await admit(feed, ip, access);
-  const checked = checkSettings(typeof settings === "function" ? await settings() : settings); // a reader runs after admit: a refused request never has its body read
+  const checked = checkSettings(await read()); // after admit: a refused request never has its body read
   if (!(await hasFeed(feed))) throw new NotFoundError("no such feed");
   await saveSettings(feed, checked);
   return checked;

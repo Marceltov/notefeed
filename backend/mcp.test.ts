@@ -1,4 +1,4 @@
-import { mkdtemp, readdir, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
@@ -87,9 +87,17 @@ describe("tools", () => {
     expect(JSON.parse(r.content[0].text)).toEqual(r.structuredContent);
   });
 
+  test("post_note to a feed without a read link answers read_url null", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    await mkdir(join(dir, "nolink", ".readid"), { recursive: true }); // can't be read
+    const r = await call("post_note", { feed: "nolink", markdown: "# Hi" });
+    expect(r.isError).toBeFalsy();
+    expect(r.structuredContent.read_url).toBeNull();
+  });
+
   test("list_notes pages newest first without markdown", async () => {
     const ids: string[] = [];
-    for (const [i, m] of ["# One", "# Two", "# Three"].entries()) ids.push((await createNote("a", m, new Date(Date.UTC(2026, 8, 29, 10 + i)))).id);
+    for (const [i, m] of ["# One", "# Two", "# Three"].entries()) ids.push((await createNote("a", m, new Date(Date.UTC(2026, 8, 29, 10 + i)))).note.id);
     const first = (await call("list_notes", { feed: "a", limit: 2 })).structuredContent;
     expect(first.notes).toHaveLength(2);
     expect(first.notes[0].id).toBe(ids[2]);

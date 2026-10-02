@@ -25,7 +25,7 @@ test("getFeed gives no read id until the feed has a note", async () => {
 });
 
 test("getFeed says whether the feed exists: an emptied one still does", async () => {
-  const { id } = await createNote("emptied", "# Hi");
+  const { id } = (await createNote("emptied", "# Hi")).note;
   expect((await getFeed("emptied"))!.exists).toBe(true);
   await removeNote("emptied", id);
   expect(await getFeed("emptied")).toEqual({ notes: [], readId: null, exists: true, title: "", description: "" });

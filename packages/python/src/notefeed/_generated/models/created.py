@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Any, Self, TypeVar
+from typing import Any, Self, TypeVar, cast
 
 from attrs import define as _attrs_define
 
@@ -15,13 +15,14 @@ class Created:
         id (str):
         url (str): The note's page in the web UI
         feed_url (str): The feed's page in the web UI
-        read_url (str): The feed's read-only RSS link, safe to share
+        read_url (None | str): The feed's read-only RSS link, safe to share; null only if the server can't read the
+            feed's stored read id
     """
 
     id: str
     url: str
     feed_url: str
-    read_url: str
+    read_url: None | str
 
     def to_dict(self) -> dict[str, Any]:
         id = self.id
@@ -30,6 +31,7 @@ class Created:
 
         feed_url = self.feed_url
 
+        read_url: None | str
         read_url = self.read_url
 
         field_dict: dict[str, Any] = {}
@@ -54,7 +56,12 @@ class Created:
 
         feed_url = d.pop("feed_url")
 
-        read_url = d.pop("read_url")
+        def _parse_read_url(data: object) -> None | str:
+            if data is None:
+                return data
+            return cast(None | str, data)
+
+        read_url = _parse_read_url(d.pop("read_url"))
 
         created = cls(
             id=id,

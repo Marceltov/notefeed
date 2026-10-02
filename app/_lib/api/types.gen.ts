@@ -49,9 +49,9 @@ export type Created = {
      */
     feed_url: string;
     /**
-     * The feed's read-only RSS link, safe to share
+     * The feed's read-only RSS link, safe to share; null only if the server can't read the feed's stored read id
      */
-    read_url: string;
+    read_url: string | null;
 };
 
 export type Error = {
@@ -117,7 +117,7 @@ export type Feed = {
      */
     protected: boolean;
     /**
-     * The feed's read-only RSS link; null while the feed has no notes
+     * The feed's read-only RSS link; null while the feed has no notes, or if the server can't read the feed's stored read id
      */
     read_url: string | null;
 };

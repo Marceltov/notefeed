@@ -16,7 +16,8 @@ class Feed:
         title (str): Display title, at most 100 characters, one line; empty means none (the feed's name is shown)
         description (str): Description, at most 500 characters, one line; may be empty
         protected (bool): Whether the feed has its own password
-        read_url (None | str): The feed's read-only RSS link; null while the feed has no notes
+        read_url (None | str): The feed's read-only RSS link; null while the feed has no notes, or if the server can't
+            read the feed's stored read id
     """
 
     name: str

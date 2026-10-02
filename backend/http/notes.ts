@@ -1,7 +1,6 @@
 // POST /api/v1/feeds/<feed>/notes, also POST /<feed> (proxy.ts rewrites it): the only way to post a
 // note, for scripts, the client packages and the web UI's compose box alike.
 import { AuthError, InvalidBodyError, NoteTooLargeError, UnsupportedTypeError } from "../errors";
-import { readIdOf } from "../feeds";
 import { cookieValue } from "../feedlock";
 import { clientIp } from "../limits";
 import { MAX_BYTES } from "../notes";
@@ -69,7 +68,7 @@ export async function handlePostNote(req: Request, feed: string): Promise<PostRe
       if (e instanceof AuthError && wantsHtml(h)) return redirect(`/login?next=${encodeURIComponent(feedPath(feed))}`);
       throw e;
     }
-    const { note, created } = await postNote(feed, ip, () => readMarkdown(req), feedAccess(h, feed));
+    const { note, created, readId } = await postNote(feed, ip, () => readMarkdown(req), feedAccess(h, feed));
     // Only the post that created a protected feed gets the cookie: that browser chose the password, so it
     // stays unlocked without asking again. Any other post either came with the cookie or is a script.
     const value = created && sameOrigin(h) ? await cookieValue(feed) : null;
@@ -82,7 +81,7 @@ export async function handlePostNote(req: Request, feed: string): Promise<PostRe
         id: note.id,
         url: `${base}${feedPath(feed)}/${note.id}`,
         feed_url: base + feedPath(feed),
-        read_url: base + rssPath((await readIdOf(feed))!),
+        read_url: readId && base + rssPath(readId),
       },
       headers: unlocked,
     };
