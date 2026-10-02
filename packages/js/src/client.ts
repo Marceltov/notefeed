@@ -3,13 +3,13 @@
  * OpenAPI description (./generated, `npm run generate` in the repo). No runtime dependencies.
  */
 import { createClient, createConfig } from "./generated/client/index.js";
-import { deleteFeed, deleteNote, editNote, getFeed, getNote, getReadNote, listNotes, listReadNotes, postNote, updateFeed } from "./generated/sdk.gen.js";
-import type { Created, Error as ApiError, Feed, FeedSettings, Note, NoteList } from "./generated/types.gen.js";
+import { deleteFeed, deleteNote, editNote, getFeed, getNote, getReadNote, listNotes, listReadNotes, postNote, updateFeed, uploadImage } from "./generated/sdk.gen.js";
+import type { Created, Error as ApiError, Feed, FeedSettings, ImageUploaded, Note, NoteList } from "./generated/types.gen.js";
 
 /** The stable error codes the API answers with. */
 export type ErrorCode = NonNullable<ApiError["code"]>;
 
-export type { Created, Feed, FeedSettings, Note };
+export type { Created, Feed, FeedSettings, ImageUploaded, Note };
 /** `timeoutMs` (default 10000) limits each whole request, including reading the answer. */
 export type ClientOptions = { url: string; feed?: string; password?: string; feedPassword?: string; timeoutMs?: number };
 
@@ -41,9 +41,9 @@ export class RateLimitedError extends NotefeedError {
 }
 /** No such note, or a malformed read id. */
 export class NotFoundError extends NotefeedError {}
-/** The instance's feed or note limit is reached. */
+/** The instance's feed or note limit, or the feed's image limit, is reached. */
 export class LimitReachedError extends NotefeedError {}
-/** The note is over the server's size limit. */
+/** The note or image is over the server's size limit. */
 export class NoteTooLargeError extends NotefeedError {}
 /** The server refused the request itself: invalid or reserved feed, empty note, bad body or parameter. */
 export class InvalidRequestError extends NotefeedError {}
@@ -53,6 +53,7 @@ const BY_CODE: Partial<Record<ErrorCode, typeof NotefeedError>> = {
   not_found: NotFoundError,
   feed_limit: LimitReachedError,
   note_limit: LimitReachedError,
+  image_limit: LimitReachedError,
   too_large: NoteTooLargeError,
   invalid_feed: InvalidRequestError,
   reserved_feed: InvalidRequestError,
@@ -104,6 +105,14 @@ export class Client {
     return this.call(postNote({ client: this.api, path: { feed }, body: { markdown }, ...this.opts(options.feedPassword) }));
   }
 
+  /** Upload a PNG, JPEG, GIF or WebP image to an existing feed. The server decides the format by the bytes, so no content type is needed. `markdown` in the answer is `![](url)`, to put in a note. Same options as post(). */
+  async uploadImage(data: Uint8Array | Blob, options: { feed?: string; feedPassword?: string } = {}): Promise<ImageUploaded> {
+    const feed = this.feedFor(options.feed);
+    const body = data instanceof Blob ? data : new Blob([data as BlobPart]);
+    const headers = { ...this.opts(options.feedPassword).headers, "Content-Type": "application/octet-stream" };
+    return this.call(uploadImage({ client: this.api, path: { feed }, body, signal: AbortSignal.timeout(this.timeoutMs), headers }));
+  }
+
   /** Replace a note's markdown; its id and URLs stay. Same options as post(). */
   async edit(id: string, markdown: string, options: { feed?: string; feedPassword?: string } = {}): Promise<Note> {
     const feed = this.feedFor(options.feed);
@@ -122,10 +131,10 @@ export class Client {
     return this.call(getFeed({ client: this.api, path: { feed }, ...this.opts(options.feedPassword) }));
   }
 
-  /** Replace the feed's title and description (both; an empty string clears one). The feed must already exist. Same options as post(). */
+  /** Replace the feed's title and description (both; an empty string clears one), and set (`image`: a file name from uploadImage) or clear (`""`) the title image; leave `image` out to keep it. The feed must already exist. Same options as post(). */
   async updateFeed(settings: FeedSettings, options: { feed?: string; feedPassword?: string } = {}): Promise<Feed> {
     const feed = this.feedFor(options.feed);
-    const body = { title: settings.title, description: settings.description };
+    const body = { title: settings.title, description: settings.description, ...(settings.image === undefined ? {} : { image: settings.image }) };
     return this.call(updateFeed({ client: this.api, path: { feed }, body, ...this.opts(options.feedPassword) }));
   }
 

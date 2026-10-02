@@ -308,3 +308,27 @@ test("deleteErrors", async () => {
   expect(await main(["delete", "--url", server.url, "--feed", "inbox"], io().io)).toBe(2);
   expect(await main(["delete", "i", "--url", server.url], io().io)).toBe(2);
 });
+
+test("imagePrintsMarkdownAndSendsTheFileBytes", async () => {
+  const f = join(mkdtempSync(join(tmpdir(), "nf-")), "p.png");
+  writeFileSync(f, Buffer.from([0x89, 0x50, 0x4e, 0x47, 0, 255]));
+  server.reply(201, { file: "a.png", url: "https://n.example/r/X/images/a.png", markdown: "![](https://n.example/r/X/images/a.png)" });
+  const t = io();
+  expect(await main(["image", f, "--url", server.url, "--feed", "inbox"], t.io)).toBe(0);
+  expect(t.out.stdout).toBe("![](https://n.example/r/X/images/a.png)\n");
+  expect(server.requests[0].path).toBe("/api/v1/feeds/inbox/images");
+  expect([...server.requests[0].body]).toEqual([0x89, 0x50, 0x4e, 0x47, 0, 255]);
+});
+
+test("imageErrorsExitLikePost", async () => {
+  const t = io();
+  expect(await main(["image", "/nonexistent/x.png", "--url", "http://x", "--feed", "inbox"], t.io)).toBe(2);
+  expect(await main(["image", "--url", "http://x", "--feed", "inbox"], io().io)).toBe(2);
+  const f = join(mkdtempSync(join(tmpdir(), "nf-")), "p.svg");
+  writeFileSync(f, "<svg/>");
+  server.reply(415, { error: "not an image", code: "unsupported_type" });
+  const u = io();
+  expect(await main(["image", f, "--url", server.url, "--feed", "inbox"], u.io)).toBe(1);
+  expect(u.out.stderr).toBe("notefeed: not an image\n");
+  expect(await main(["image", f, "--feed", "inbox"], io().io)).toBe(2);
+});

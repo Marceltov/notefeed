@@ -276,3 +276,24 @@ def test_delete_errors(server, capsys):
     assert main(["delete", "i", "--url", server.url, "--feed", "inbox"]) == 1
     assert capsys.readouterr().err == "notefeed: no such note\n"
     assert main(["delete", "i", "--url", server.url]) == 2
+
+
+def test_image_prints_markdown_and_sends_the_file_bytes(server, capsys, tmp_path):
+    f = tmp_path / "p.png"
+    f.write_bytes(bytes([0x89, 0x50, 0x4E, 0x47, 0, 255]))
+    server.reply(201, {"file": "a.png", "url": "https://n.example/r/X/images/a.png", "markdown": "![](https://n.example/r/X/images/a.png)"})
+    assert main(["image", str(f), "--url", server.url, "--feed", "inbox"]) == 0
+    assert capsys.readouterr().out == "![](https://n.example/r/X/images/a.png)\n"
+    assert server.requests[0]["path"] == "/api/v1/feeds/inbox/images"
+    assert server.requests[0]["body"] == f.read_bytes()
+
+
+def test_image_errors_exit_like_post(server, capsys, tmp_path):
+    assert main(["image", "/nonexistent/x.png", "--url", "http://x", "--feed", "inbox"]) == 2
+    f = tmp_path / "p.svg"
+    f.write_text("<svg/>")
+    server.reply(415, {"error": "not an image", "code": "unsupported_type"})
+    capsys.readouterr()
+    assert main(["image", str(f), "--url", server.url, "--feed", "inbox"]) == 1
+    assert capsys.readouterr().err == "notefeed: not an image\n"
+    assert main(["image", str(f), "--feed", "inbox"]) == 2

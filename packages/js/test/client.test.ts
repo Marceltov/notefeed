@@ -157,6 +157,53 @@ describe("feed settings and deletion", () => {
   });
 });
 
+describe("images", () => {
+  const UPLOADED = { file: "a".repeat(32) + ".png", url: "https://n.example/r/X/images/" + "a".repeat(32) + ".png", markdown: "![](https://n.example/r/X/images/x.png)" };
+  const bytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0, 255]);
+  test("uploadImage POSTs the raw bytes as application/octet-stream and returns {file, url, markdown}", async () => {
+    server.reply(201, UPLOADED);
+    const c = new Client({ url: server.url, feed: "inbox", password: "pw", feedPassword: "fp" });
+    expect(await c.uploadImage(bytes)).toEqual(UPLOADED);
+    const req = server.requests[0];
+    expect([req.method, req.path]).toEqual(["POST", "/api/v1/feeds/inbox/images"]);
+    expect(req.headers["content-type"]).toBe("application/octet-stream");
+    expect([...req.body]).toEqual([...bytes]);
+    expect(req.headers.authorization).toBe("Bearer pw");
+    expect(req.headers["x-feed-password"]).toBe("fp");
+  });
+  test("a Blob works, and a per-call feed and feedPassword win", async () => {
+    server.reply(201, UPLOADED);
+    await new Client({ url: server.url, feed: "inbox", feedPassword: "fp" }).uploadImage(new Blob([bytes], { type: "image/png" }), { feed: "other", feedPassword: "o" });
+    const req = server.requests[0];
+    expect(req.path).toBe("/api/v1/feeds/other/images");
+    expect(req.headers["content-type"]).toBe("application/octet-stream");
+    expect([...req.body]).toEqual([...bytes]);
+    expect(req.headers["x-feed-password"]).toBe("o");
+  });
+  test("no feed is a ConfigError; 415, 413, 507 and 404 map to the usual classes", async () => {
+    await expect(new Client({ url: server.url }).uploadImage(bytes)).rejects.toBeInstanceOf(ConfigError);
+    const c = new Client({ url: server.url, feed: "inbox" });
+    for (const [status, code, cls] of [
+      [415, "unsupported_type", InvalidRequestError],
+      [413, "too_large", NoteTooLargeError],
+      [507, "image_limit", LimitReachedError],
+      [404, "not_found", NotFoundError],
+    ] as const) {
+      server.reply(status, { error: code, code });
+      await expect(c.uploadImage(bytes)).rejects.toBeInstanceOf(cls);
+    }
+  });
+  test("updateFeed sends image when given (an empty string clears it) and leaves it out otherwise", async () => {
+    server.reply(200, {});
+    const c = new Client({ url: server.url, feed: "inbox" });
+    await c.updateFeed({ title: "t", description: "d", image: "a.png" });
+    await c.updateFeed({ title: "t", description: "d", image: "" });
+    await c.updateFeed({ title: "t", description: "d" });
+    const bodies = server.requests.map((r) => JSON.parse(r.body.toString()));
+    expect(bodies).toEqual([{ title: "t", description: "d", image: "a.png" }, { title: "t", description: "d", image: "" }, { title: "t", description: "d" }]);
+  });
+});
+
 describe("errors map from the response's code", () => {
   test.each([
     ["auth", 401, AuthError],
@@ -165,6 +212,7 @@ describe("errors map from the response's code", () => {
     ["not_found", 404, NotFoundError],
     ["feed_limit", 507, LimitReachedError],
     ["note_limit", 507, LimitReachedError],
+    ["image_limit", 507, LimitReachedError],
     ["too_large", 413, NoteTooLargeError],
     ["invalid_feed", 400, InvalidRequestError],
     ["reserved_feed", 400, InvalidRequestError],
