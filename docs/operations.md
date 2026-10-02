@@ -2,7 +2,7 @@
 
 ## Where notes live
 
-Every feed is a folder in `DATA_DIR` (`/data` in the container), named after the feed, and every note is a plain markdown file in it, named `<id>.md`:
+Every feed is a folder in `DATA_DIR` (`/data` in the container), named after the feed, and every note is a plain markdown file in it, named `<id>.md`. New notes start with a small `---` header block (empty without a sender), then the body; older note files are untouched:
 
 ```
 data/

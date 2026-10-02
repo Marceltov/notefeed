@@ -39,5 +39,6 @@ Chosen option: "Private by default, identity optional". The default is the model
 ### Resolved questions
 
 * **Storage and claim:** the claim is configurable with `NOTEFEED_OIDC_SENDER_CLAIM` (a comma-separated list of id_token claims tried in order); the default is `name`, falling back to `email`. It is stored as a `sender: "<name>"` frontmatter line in the note's `.md` file, read and written only in `backend/data/notes.ts`.
+  * Note (2026-10-02): the block is written on every note, empty (`---\n---\n`) without a sender, so it can be extended later (for example a `modified` field) and so a block typed into a body is always body text and can never become metadata. Accepted ceiling: an older note whose first lines are `---`, only `key: <JSON>` lines (or none) and `---` reads as having a block, hiding that header from the displayed body; the file is untouched.
 * **Where it is shown:** everywhere by default (feed page, read view, RSS item, API JSON), with a per-feed "Show who posted" setting (`show_sender`) that hides it from the public read view, RSS and public read API. The sign-in page says the name is shown on the public read link and RSS.
 * **Providers:** generic OIDC discovery with the authorization code flow and PKCE first.

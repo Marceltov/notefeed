@@ -10,7 +10,7 @@ curl --data-binary @note.md https://notes.example.com/homelab-7f3k2q9x4m8wz
 
 A note posted with the password has no sender. Only a person signed in through [sign-in](identity.md), which is opt-in, posts with one.
 
-The feed is created by its first note; there's nothing to set up first. notefeed gives the body back exactly as sent, byte for byte (on disk, a body that starts with `---` gets an empty `---` block in front, never shown), and answers `201 Created`:
+The feed is created by its first note; there's nothing to set up first. The API returns the body exactly as posted. The file on disk starts with a small `---` header block (empty unless the note has a sender), then the body, so a `---` block you type at the start of a body stays body text. notefeed answers `201 Created`:
 
 ```json
 {
@@ -212,7 +212,7 @@ EOF
 ## Titles and filenames
 
 - **Title:** the first `# ` heading. Without one, it's the first non-empty line, with list and quote markers removed. `#` lines inside fenced code blocks are ignored. Titles are cut to 100 characters.
-- **File:** `<DATA_DIR>/<feed>/<id>.md`, where the id is the UTC time to the second plus a slug of the title, e.g. `20260929T140512Z-backup-finished`. Accented letters become plain ones (`Café` → `cafe`). A title with no usable letters becomes `note`.
+- **File:** `<DATA_DIR>/<feed>/<id>.md`, a `---` header block (`---` and `---` on two lines when empty) followed by the body, where the id is the UTC time to the second plus a slug of the title, e.g. `20260929T140512Z-backup-finished`. Accented letters become plain ones (`Café` → `cafe`). A title with no usable letters becomes `note`.
 - **Collisions:** two notes with the same title in the same second get `-2`, `-3` and so on. An existing note is never overwritten.
 
 ## Errors

@@ -58,7 +58,7 @@ Other providers work the same way: any that supports OpenID Connect discovery, t
 
 ## What is stored
 
-One line per note, and nothing else. A note posted by a signed-in person starts with a block in its `.md` file:
+Every note file starts with a small `---` header block, with sign-in on or off: empty (`---` then `---`) for a note without a sender. For a note posted by a signed-in person the sender is one line in that header, and nothing else is stored about them. Note files written before this are untouched. The body follows the header exactly as posted:
 
 ```markdown
 ---
@@ -96,8 +96,8 @@ Take them off `NOTEFEED_OIDC_ALLOW` and restart: they can no longer sign in. Wha
 - A sign-in lasts 7 days, in the browser and for an MCP client, then the person signs in again.
 - Sessions are signed with a key derived from the server secret and the password, so changing `NOTEFEED_PASSWORD` or `NOTEFEED_SECRET` signs everyone out.
 - Failed sign-ins count toward the [rate limit](configuration.md#rate-limits-and-caps). Without `NOTEFEED_TRUST_PROXY`, all clients share one bucket.
-- A note stored by an older notefeed whose text is exactly `---`, a `sender: "X"` line and `---` reads as a note from `X`, with sign-in on or off. Notes posted since are stored so that typed text never reads as a sender.
+- A note file stored by an older notefeed (it has no header) whose first lines are `---`, then only `key: <JSON>` lines or nothing, then `---` reads as having a header: that part is hidden from the displayed body (the file is untouched), and a `sender: "X"` line in it reads as a note from `X`, with sign-in on or off. A legacy note starting `---` and `---` loses that pair from the displayed body. Notes written since always start with the header, so text typed into a note can never read as a sender or other metadata.
 
 ## Privacy page and imprint
 
-A sender name or e-mail address is personal data, and as the operator you are its controller. Before you switch sign-in on, check that your privacy page and imprint say that notes carry the signed-in person's name or e-mail, that it is shown on the public read link and in RSS unless the feed hides it, and how a person can have it removed.
+A sender name or e-mail address is personal data, and as the operator you are its controller. Before you switch sign-in on, check that your privacy page and imprint say that notes carry the signed-in person's name, e-mail or other identifier, as configured, that it is shown on the public read link and in RSS unless the feed hides it, and how a person can have it removed.
