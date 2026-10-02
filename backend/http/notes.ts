@@ -7,7 +7,7 @@ import { MAX_BYTES } from "../notes";
 import { postNote } from "../posting";
 import { feedPath, publicUrl, rssPath } from "../urls";
 import { feedCookies } from "./feedsession";
-import { authorize, errorRedirect, feedAccess, sameOrigin, mediaType, parseForm, readCapped, wantsHtml } from "./request";
+import { authorize, errorRedirect, feedAccess, sameOrigin, sender, mediaType, parseForm, readCapped, wantsHtml } from "./request";
 import { type Created, PostForm, PostJson } from "./schemas";
 
 // curl --data-binary sends x-www-form-urlencoded by default; treat it (and no type) as raw markdown.
@@ -68,7 +68,7 @@ export async function handlePostNote(req: Request, feed: string): Promise<PostRe
       if (e instanceof AuthError && wantsHtml(h)) return redirect(`/login?next=${encodeURIComponent(feedPath(feed))}`);
       throw e;
     }
-    const { note, created, readId } = await postNote(feed, ip, () => readMarkdown(req), feedAccess(h, feed));
+    const { note, created, readId } = await postNote(feed, ip, () => readMarkdown(req), feedAccess(h, feed), sender(h));
     // Only the post that created a protected feed gets the cookie: that browser chose the password, so it
     // stays unlocked without asking again. Any other post either came with the cookie or is a script.
     const value = created && sameOrigin(h) ? await cookieValue(feed) : null;

@@ -18,6 +18,7 @@ export async function postNote(
   ip: string,
   read: () => Promise<{ markdown: string; password?: string }>,
   access: FeedAccess,
+  sender?: string, // verified by the caller (identity cookie or OAuth token), never taken from a request body
 ): Promise<{ note: Note; created: boolean; readId: string | null }> {
   assertFeed(feed);
   const proved = await checkFeedAccess(feed, access, ip);
@@ -47,7 +48,7 @@ export async function postNote(
   // ponytail: checked, not locked. A protected creation can still complete in the few microseconds between
   // this check and createNote's ensureFeed, which then finds the feed and writes into it: this one note is
   // then in the protected feed. A lock around creation, per feed, would close it.
-  return { ...(await createNote(feed, markdown)), created };
+  return { ...(await createNote(feed, markdown, undefined, sender)), created };
 }
 
 // Same gate as posting, minus the caps. An edit or delete targets an existing note, so its feed

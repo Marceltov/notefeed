@@ -7,6 +7,7 @@ import { AuthError, NotefeedError, NotFoundError, TooManyAttemptsError } from ".
 import { checkFeedAccess } from "./feedlock";
 import { assertFeed, FEED_RE, hasFeed } from "./feeds";
 import { feedJson } from "./http/api";
+import { sender } from "./http/request";
 import { clientIp } from "./limits";
 import { getNote, listNotes, type Note } from "./notes";
 import { verify } from "./oauth/tokens";
@@ -56,7 +57,7 @@ function server(h: Headers): McpServer {
       outputSchema: z.object({ id: z.string(), url: z.string(), feed_url: z.string(), read_url: z.string().nullable() }),
     },
     guard(async ({ feed, markdown, password }) => {
-      const { note, readId } = await postNote(feed, clientIp(h), async () => ({ markdown }), { password });
+      const { note, readId } = await postNote(feed, clientIp(h), async () => ({ markdown }), { password }, sender(h));
       const feedUrl = base + feedPath(feed);
       return ok({ id: note.id, url: `${feedUrl}/${note.id}`, feed_url: feedUrl, read_url: readId && base + rssPath(readId) });
     }),

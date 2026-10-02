@@ -112,3 +112,10 @@ export async function formPost(req: Request, feed: string, page: string, act: (h
     return errorRedirect(page, e);
   }
 }
+
+// The verified sender of a request, or undefined. Stub: the real one, from the identity cookie or an OAuth
+// access token, arrives with the sign-in routes.
+export function sender(h: Headers): string | undefined {
+  void h;
+  return undefined;
+}

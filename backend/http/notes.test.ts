@@ -6,6 +6,8 @@ import { SESSION_COOKIE, login } from "../auth";
 import { hasFeed, readIdOf, resetFeedsForTests } from "../feeds";
 import { resetRateLimitsForTests } from "../limits";
 import { cookieValue, feedCookieName, protectedFeed } from "../feedlock";
+import { getNote } from "../notes";
+import { editNote, postNote } from "../posting";
 import { dispatch } from "./api";
 
 // POST /<feed> as proxy.ts hands it on: through the dispatcher.
@@ -496,4 +498,25 @@ test("a same-origin post that creates a protected feed leaves this browser unloc
   ]);
   const script = await post(JSON.stringify({ markdown: "# Mine", password: "pw2" }), { "content-type": "application/json" }, "mine2");
   expect(script.headers.get("set-cookie")).toBeNull();
+});
+
+test("postNote stores a verified sender, and editNote keeps it", async () => {
+  const { note } = await postNote("test", "1.1.1.1", async () => ({ markdown: "# Hi" }), {}, "Ann");
+  expect((await getNote("test", note.id))!.sender).toBe("Ann");
+  const edited = await editNote("test", note.id, "1.1.1.1", async () => ({ markdown: "# Ho" }), {});
+  expect(edited.sender).toBe("Ann");
+  expect((await getNote("test", note.id))!.sender).toBe("Ann");
+});
+
+test("a sender in the request body is ignored", async () => {
+  const res = await post(JSON.stringify({ markdown: "x", sender: "Boss" }), { "content-type": "application/json" });
+  expect(res.status).toBe(201);
+  expect((await getNote("test", (await res.json()).id))!.sender).toBeUndefined();
+});
+
+test("a post with the password bearer has no sender", async () => {
+  process.env.NOTEFEED_PASSWORD = "secret";
+  const res = await post("x", { authorization: "Bearer secret" });
+  expect(res.status).toBe(201);
+  expect((await getNote("test", (await res.json()).id))!.sender).toBeUndefined();
 });

@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { readIdOf, resetFeedsForTests } from "./feeds";
 import { resetRateLimitsForTests } from "./limits";
-import { createNote } from "./notes";
+import { createNote, getNote } from "./notes";
 import { mcpRoute } from "./mcp";
 import { sign } from "./oauth/tokens";
 
@@ -85,6 +85,12 @@ describe("tools", () => {
       read_url: `http://localhost:3000/r/${(await readIdOf("a"))!}/feed.xml`,
     });
     expect(JSON.parse(r.content[0].text)).toEqual(r.structuredContent);
+  });
+
+  test("post_note ignores a sender argument and stores none", async () => {
+    const r = await call("post_note", { feed: "a", markdown: "# Hi", sender: "Boss" });
+    expect(r.isError).toBeUndefined();
+    expect((await getNote("a", r.structuredContent.id))!.sender).toBeUndefined();
   });
 
   test("post_note to a feed without a read link answers read_url null", async () => {
