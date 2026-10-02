@@ -82,13 +82,14 @@ A feed can also have its own password (see [A feed with its own password](postin
 | `note(id, feed=None)` | `note(id, { feed })` | One note |
 | `edit(id, markdown, feed=None)` | `edit(id, markdown, { feed })` | Replaces a note's markdown and returns the note. Its id and URLs stay; the title follows the new text. A missing note is a `NotFoundError` |
 | `delete(id, feed=None)` | `delete(id, { feed })` | Deletes a note for good; returns nothing. The feed stays, even with no notes left. A missing note is a `NotFoundError` |
-| `feed_info(feed=None)` | `feedInfo({ feed })` | The feed's `name`, `title`, `description`, `protected` and `read_url` (`None`/`null` while it has no notes) |
-| `update_feed(title, description, feed=None)` | `updateFeed({ title, description }, { feed })` | Replaces the feed's title and description, both at once (an empty string clears one), and returns the feed. The feed must already exist |
+| `feed_info(feed=None)` | `feedInfo({ feed })` | The feed's `name`, `title`, `description`, `image_url`, `protected` and `read_url` (`None`/`null` while it has no notes or no title image) |
+| `update_feed(title, description, feed=None, image=None)` | `updateFeed({ title, description, image }, { feed })` | Replaces the feed's title and description, both at once (an empty string clears one), and returns the feed. `image` is the `file` of an uploaded image to use as the title image; `""` removes it, and leaving it out keeps it. The feed must already exist |
+| `upload_image(data, feed=None)` | `uploadImage(data, { feed })` | Uploads a PNG, JPEG, GIF or WebP image (`bytes` in Python, a `Uint8Array` or `Blob` in Node) to an existing feed and returns `file`, `url` and `markdown` (`![](url)`, to put in a note). The server recognizes the format by the bytes. See [Images](posting.md#images). A refused image is an `InvalidRequestError` (not an image), `NoteTooLargeError` (too large) or `LimitReachedError` (the feed's image cap) |
 | `delete_feed(feed=None)` | `deleteFeed({ feed })` | Deletes the feed with all its notes, settings, password and read link, for good; returns nothing. The name is free again |
 | `read_notes(read_id, page_size=50)` | `readNotes(readId, { pageSize })` | Like `notes()`, by the feed's [read id](feed.md): public, needs no password, never needs the name |
 | `read_note(read_id, id)` | `readNote(readId, id)` | One note by read id |
 
-The feed methods have no command-line counterpart. `feed_info` and `update_feed` return the feed as an object with `name`, `title`, `description`, `protected` and `read_url` (named the same in both packages). Anyone who can post to a feed can change its settings and delete it, and a delete cannot be undone.
+The feed methods have no command-line counterpart. `feed_info` and `update_feed` return the feed as an object with `name`, `title`, `description`, `image_url`, `protected` and `read_url` (named the same in both packages). Anyone who can post to a feed can change its settings and delete it, and a delete cannot be undone.
 
 A note has `id`, `title`, `markdown`, `created_at` (a `datetime` in Python, an ISO string in Node) and `url`, its page in the web UI.
 
@@ -119,6 +120,7 @@ notefeed post "# Disk at 91%" --feed alerts-q9x2m7hd4k1pv
 notefeed edit 20260929T140512Z-backup-finished "# Backup finished, verified"
 notefeed edit 20260929T140512Z-backup-finished --file report.md   # or "-" for stdin
 notefeed delete 20260929T140512Z-backup-finished
+notefeed image photo.png                   # uploads it; prints ![](url) for a note
 notefeed notes                             # the newest 20: time, title, URL
 notefeed notes --limit 100 --json          # one JSON object per line
 notefeed --version
@@ -126,13 +128,13 @@ notefeed --version
 
 Text that starts with `-`, like a list item, works as-is: `notefeed post "- buy milk"`. The usual `notefeed post -- "-x"` works too.
 
-`post` prints the new note's URL, and `edit` prints the edited note's URL; `edit` takes its text the same ways as `post`. `delete` prints nothing and exits `0` when the note is gone. A note that does not exist is an exit code `1`, for `edit` and `delete` alike. Anyone who can post to a feed can edit and delete its notes, and a delete cannot be undone. `notes` prints one line per note, `2026-09-30T14:05:12Z  Backup finished  https://…`, with the time in UTC to the second (the same in both packages and in `--json`). On failure the command prints `notefeed: <reason>` to stderr and exits with:
+`post` prints the new note's URL, and `edit` prints the edited note's URL; `edit` takes its text the same ways as `post`. `delete` prints nothing and exits `0` when the note is gone. `image <PATH>` reads the file, uploads it to the feed and prints the `markdown` (`![](url)`) to put in a note; the feed must already exist, and it takes the same flags and has the same exit codes as `post`. A note that does not exist is an exit code `1`, for `edit` and `delete` alike. Anyone who can post to a feed can edit and delete its notes, and a delete cannot be undone. `notes` prints one line per note, `2026-09-30T14:05:12Z  Backup finished  https://…`, with the time in UTC to the second (the same in both packages and in `--json`). On failure the command prints `notefeed: <reason>` to stderr and exits with:
 
 | Exit code | Meaning |
 |---|---|
 | `0` | Done |
 | `1` | The server refused (including a wrong password, a rate limit or a full cap), or couldn't be reached |
-| `2` | Usage or configuration problem: no text, an unreadable or non-UTF-8 file or stdin, no URL or feed, an invalid feed name or `--limit`, a password with control characters |
+| `2` | Usage or configuration problem: no text or image path, an unreadable image file, an unreadable or non-UTF-8 file or stdin, no URL or feed, an invalid feed name or `--limit`, a password with control characters |
 
 ## Errors
 
@@ -144,9 +146,9 @@ Every error is a `NotefeedError` with `status` (the HTTP status) and `code` (the
 | `InvalidRequestError` | `invalid_feed`, `reserved_feed`, `empty_note`, `invalid_body`, `invalid_request`, `unsupported_type` | The server refused the request itself |
 | `AuthError` | `auth` | The instance or the feed has a password and it's missing or wrong |
 | `NotFoundError` | `not_found` | No such note (also for `edit` and `delete`), no such feed (for `feed_info`, `update_feed` and `delete_feed`), or a malformed read id |
-| `NoteTooLargeError` | `too_large` | Over 100 KB |
+| `NoteTooLargeError` | `too_large` | A note over 100 KB, or an image over the size limit |
 | `RateLimitedError` | `rate_limited`, `too_many_attempts` | Too many posts or wrong passwords. `retry_after` / `retryAfter` is the wait in seconds from `Retry-After`, or `None`/`null` |
-| `LimitReachedError` | `feed_limit`, `note_limit` | The instance's feed cap or the feed's note cap is reached |
+| `LimitReachedError` | `feed_limit`, `note_limit`, `image_limit` | The instance's feed cap, or the feed's note or image cap, is reached |
 
 The message is the server's own reason. See the [REST API](api.md) for every status and code.
 

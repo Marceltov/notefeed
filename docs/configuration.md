@@ -10,6 +10,8 @@ notefeed is configured with environment variables. With Compose, set them under 
 | `NOTEFEED_RATE_LIMIT` | `60` | Posts, edits and deletes per client per minute, and separately wrong passwords per client per minute. `0` or less turns the limit off. |
 | `NOTEFEED_MAX_FEEDS` | `0`: no limit (so is any value below 1) | Most feeds on the instance. Posting to a new feed beyond it answers `507`. |
 | `NOTEFEED_MAX_NOTES_PER_FEED` | `0`: no limit (so is any value below 1) | Most notes in one feed. Posting beyond it answers `507`. |
+| `NOTEFEED_MAX_IMAGE_BYTES` | `5242880` (5 MiB) | Largest uploaded image, in bytes. Beyond it, the upload answers `413`. |
+| `NOTEFEED_MAX_IMAGES_PER_FEED` | `0`: no limit (so is any value below 1) | Most images in one feed. A new image beyond it answers `507`. |
 | `NOTEFEED_SECRET` | random, kept in `DATA_DIR/.secret` | Secret the [read links](feed.md) of feeds created before feed deletion existed are derived from, at least 32 characters (`openssl rand -hex 32`); notefeed refuses a shorter one, or a `.secret` file shorter than 32 bytes. Changing it changes the read link of each of those feeds; feeds created since have a stored read id and keep theirs. |
 | `NOTEFEED_TITLE` | `notefeed` | Title of the RSS feed and of the read-only view, for a feed that has no title of its own. |
 | `DATA_DIR` | `/data` | Folder holding the feeds, one subfolder each. |
@@ -69,6 +71,14 @@ On a public open instance, cap how much space strangers can take:
 environment:
   NOTEFEED_MAX_FEEDS: 100
   NOTEFEED_MAX_NOTES_PER_FEED: 1000
+```
+
+Two settings limit images. `NOTEFEED_MAX_IMAGE_BYTES` is the size of one uploaded image (5242880, 5 MiB, by default); over it, the upload answers `413`. `NOTEFEED_MAX_IMAGES_PER_FEED` is how many images one feed may hold (`0`, the default, means no limit); over it, uploading a new image answers `507`, while uploading one the feed already has still works. It defaults to off because there is no way yet to delete a single image through notefeed, so a limit could only be cleared by deleting the feed or removing files by hand. Uploads also count toward `NOTEFEED_RATE_LIMIT`.
+
+```yaml
+environment:
+  NOTEFEED_MAX_IMAGE_BYTES: 2097152
+  NOTEFEED_MAX_IMAGES_PER_FEED: 200
 ```
 
 Over a cap, posting answers `507`. The caps are checked, not locked, so several posts at the same moment can overshoot by a few. Delete notes or feeds to make room (see [Operations](operations.md#deleting-notes-and-feeds)).

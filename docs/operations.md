@@ -11,6 +11,8 @@ data/
 │   ├── .readid                              # the feed's read id (feeds created since feed deletion was added; older ones have none)
 │   ├── .feed.json                           # title and description, if set
 │   ├── .password                            # only on a protected feed
+│   ├── .images/                             # uploaded images, only once one was uploaded
+│   │   └── 3b1f0c9d5a7e42c8b6d1e0f4a9c27d58.png
 │   ├── 20260929T140512Z-backup-finished.md
 │   └── 20260930T081500Z-deploy-done.md
 └── alerts-q9x2m7hd4k1pv/
@@ -24,6 +26,20 @@ With the quick start's `compose.yaml` that's the `data` folder next to it. You c
 notefeed writes them as the **owner of that folder**: create it yourself (`mkdir data`) and the notes are yours. To choose a different owner, set `PUID` and `PGID`. If Docker created the folder (owned by root), notefeed falls back to uid/gid 1000.
 
 notefeed only reads folders with valid feed names and files named like notes. Anything else in `DATA_DIR`, such as `.git` or loose files, is ignored. So are symlinks, even to a folder: a feed must be a real folder inside `DATA_DIR`, so a link can't expose files from elsewhere on the disk.
+
+## Images
+
+Uploaded images are in `.images/` inside the feed's folder, each named by the first 32 characters of its SHA-256 hash and an extension (`png`, `jpg`, `gif` or `webp`), and stored exactly as uploaded. Back them up with the rest of `data`: they are in the feed's folder, so a `tar` of `data` includes them, but a tool that skips hidden folders does not. A note that links to an image that was lost shows a broken image.
+
+Two things to know:
+
+- **Metadata stays.** notefeed does not resize, re-encode or clean images, so EXIF data in a photo, including GPS position, camera and time, is in the stored file and in what readers download. The image is public to anyone with the feed's read link, so strip metadata before uploading if the photo is sensitive. For example, `exiftool -all= photo.jpg` removes it.
+- **Images are not removed with notes.** Deleting a note leaves its images, because another note may use them, and notefeed has no endpoint to list or delete one image. They go when the feed is [deleted](#deleting-notes-and-feeds). To remove one image sooner, delete its file; the image then answers `404`, and notes that link to it show a broken image. If it was the feed's title image, remove the title image in the feed settings first.
+
+```sh
+ls -l data/homelab-7f3k2q9x4m8wz/.images/
+rm data/homelab-7f3k2q9x4m8wz/.images/3b1f0c9d5a7e42c8b6d1e0f4a9c27d58.png
+```
 
 ## Keeping notes in git
 
@@ -39,7 +55,7 @@ Leave `.secret` out if the repository goes anywhere public (`echo .secret > .git
 
 ## Backups
 
-Back up the `data` folder, including `.secret` and the dot files inside each feed folder: `.readid`, `.feed.json` and `.password`. There's no database: restoring the files restores the notes, the settings and the passwords. A backup that skips hidden files (a plain `cp *`, or a tool with a default exclude) loses them: a feed without its `.readid` gets the read link computed from its name and `.secret` instead, which is a different link for any feed created since feed deletion was added, and a feed without its `.password` is open. Restoring `.secret` keeps the read links of older feeds the same (unless `NOTEFEED_SECRET` is set, which then decides them). Restart notefeed after restoring: it reads the list of feeds once at startup, so the read links of restored feeds only work after a restart.
+Back up the `data` folder, including `.secret` and the dot files and the `.images` folder inside each feed folder: `.readid`, `.feed.json`, `.password` and `.images/`. There's no database: restoring the files restores the notes, the settings and the passwords. A backup that skips hidden files (a plain `cp *`, or a tool with a default exclude) loses them: a feed without its `.readid` gets the read link computed from its name and `.secret` instead, which is a different link for any feed created since feed deletion was added, and a feed without its `.password` is open. Restoring `.secret` keeps the read links of older feeds the same (unless `NOTEFEED_SECRET` is set, which then decides them). Restart notefeed after restoring: it reads the list of feeds once at startup, so the read links of restored feeds only work after a restart.
 
 ```sh
 tar czf notefeed-notes.tgz -C data .
@@ -47,7 +63,7 @@ tar czf notefeed-notes.tgz -C data .
 
 ## Deleting notes and feeds
 
-A feed's owner can delete it from the web UI or the [API](posting.md#feed-settings-and-deleting-a-feed). That removes the notes, the settings, the password and the read link, frees the name, and takes the feed out of the `NOTEFEED_MAX_FEEDS` count at once. notefeed first renames the folder to `.deleted-<random>` in `DATA_DIR` and then removes it; if it stops in between, the leftover folder is removed at the next start.
+A feed's owner can delete it from the web UI or the [API](posting.md#feed-settings-and-deleting-a-feed). That removes the notes, the uploaded images, the settings, the password and the read link, frees the name, and takes the feed out of the `NOTEFEED_MAX_FEEDS` count at once. notefeed first renames the folder to `.deleted-<random>` in `DATA_DIR` and then removes it; if it stops in between, the leftover folder is removed at the next start.
 
 You can also delete a note's file, or a feed's whole folder, yourself. It disappears from the web UI and the feed straight away, but a feed you removed by hand still counts toward `NOTEFEED_MAX_FEEDS` until notefeed restarts.
 
