@@ -136,6 +136,12 @@ describe("sender", () => {
     expect((await getNote("test", note.id))?.sender).toBe("Ann");
     expect((await getNote("test", note.id))?.markdown).toBe("# New");
   });
+  test.each(["a\u2028b", "a\u2029b", "a\rb"])("sender %j survives create, get and update", async (sender) => {
+    const { note } = await createNote("test", "# Hi", undefined, sender);
+    expect((await getNote("test", note.id))?.sender).toBe(sender);
+    expect((await updateNote("test", note.id, "# New"))?.sender).toBe(sender);
+    expect(await getNote("test", note.id)).toMatchObject({ markdown: "# New", sender });
+  });
   test("a file on disk with no block still lists, without a sender", async () => {
     const { note } = await createNote("test", "# One");
     await writeFile(join(dir, "20260101T000000Z-hand.md"), "# Hand");

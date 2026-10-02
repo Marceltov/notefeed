@@ -8,6 +8,9 @@ describe("frontmatter", () => {
     const odd = 'A: "B"\nC';
     expect(decode(encode("x", odd))).toEqual({ markdown: "x", sender: odd });
   });
+  test.each(["a\u2028b", "a\u2029b", "a\rb", "\u2028\u2029\r\n"])("round trips the sender %j", (sender) => {
+    expect(decode(encode("hi", sender))).toEqual({ markdown: "hi", sender });
+  });
   test("no sender and a plain body is the body unchanged", () => {
     expect(encode("# hi", undefined)).toBe("# hi");
     expect(decode("# hi")).toEqual({ markdown: "# hi" });

@@ -16,7 +16,7 @@ export function decode(raw: string): { markdown: string; sender?: string } {
   if (!m) return { markdown: raw };
   let sender: string | undefined;
   for (const line of m[1].split("\n").slice(0, -1)) {
-    const kv = /^sender: (.*)$/.exec(line);
+    const kv = /^sender: ([^]*)$/.exec(line);
     let v: unknown;
     try {
       v = kv && JSON.parse(kv[1]);
