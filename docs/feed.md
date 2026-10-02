@@ -38,7 +38,7 @@ The RSS feed holds the newest 50 notes. Its title is the feed's title, or `NOTEF
 - a link to the note's read-only page, `<PUBLIC_URL>/r/<read id>/<id>`
 - the time it was posted
 - the note's raw markdown as its description
-- the sender, as `<dc:creator>`, only when [sign-in](identity.md) is on, the note has one and the feed's **Show who posted** setting is on
+- the sender, as `<dc:creator>`, only when the note has one (from [sign-in](identity.md)) and the feed's **Show who posted** setting is on
 
 Images in notes are plain markdown image links, `![](https://...)`, in that raw markdown, pointing at absolute URLs under the same read id (see [Images](posting.md#images)). A reader that shows the description as text shows the link, not the picture; notefeed does not turn the markdown into HTML for the feed.
 

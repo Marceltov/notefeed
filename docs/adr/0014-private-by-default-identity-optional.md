@@ -34,7 +34,7 @@ Chosen option: "Private by default, identity optional". The default is the model
 * Bad, because a stored sender is personal data inside plain note files: deleting a person's data means deleting or editing their notes, and a copy in a backup or an RSS reader is out of notefeed's reach.
 * Bad, because without identity mode there is still no audit trail, and a shared password cannot be taken from one person.
 
-* Bad, because enabling identity mode over an existing data directory whose notes came from untrusted writers lets a typed note that is exactly `---\nsender: "X"\n---` read as having a sender, since earlier notes can't be told apart from typed ones.
+* Bad, because a note stored before this change whose text is exactly `---\nsender: "X"\n---` reads as having a sender, with identity mode on or off, since earlier notes can't be told apart from typed ones.
 
 ### Resolved questions
 

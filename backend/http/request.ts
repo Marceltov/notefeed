@@ -117,7 +117,7 @@ export async function formPost(req: Request, feed: string, page: string, act: (h
 
 // The verified sender of a request, or undefined: from the identity cookie, honoured like the session cookie
 // in authorize (same origin, no Authorization header), or from an unexpired OAuth access token. Only while
-// identity mode is on; never from the request body.
+// identity mode is on; never from the request body. Callers must already have checked the access token's audience.
 export function sender(h: Headers): string | undefined {
   if (!identityOn()) return undefined;
   if (!h.has("authorization")) return sameOrigin(h) ? identitySender(cookie(h, IDENTITY_COOKIE)) : undefined;

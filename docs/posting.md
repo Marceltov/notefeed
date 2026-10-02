@@ -10,7 +10,7 @@ curl --data-binary @note.md https://notes.example.com/homelab-7f3k2q9x4m8wz
 
 A note posted with the password has no sender. Only a person signed in through [sign-in](identity.md), which is opt-in, posts with one.
 
-The feed is created by its first note; there's nothing to set up first. notefeed stores the body exactly as sent, byte for byte, and answers `201 Created`:
+The feed is created by its first note; there's nothing to set up first. notefeed gives the body back exactly as sent, byte for byte (on disk, a body that starts with `---` gets an empty `---` block in front, never shown), and answers `201 Created`:
 
 ```json
 {

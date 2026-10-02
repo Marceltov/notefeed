@@ -1,7 +1,7 @@
 # Sign-in and sender
 
 !!! info "notefeed is private by default"
-    notefeed stores nothing about a person: no accounts, no profiles, no names. Sign-in on this page is **opt-in**, and only the four `NOTEFEED_OIDC_*` environment variables below switch it on. With them unset, nothing described on this page applies to your instance.
+    notefeed stores nothing about a person: no accounts, no profiles, no names. Sign-in on this page is **opt-in**, and only the four `NOTEFEED_OIDC_*` environment variables below switch it on. With them unset, nobody can sign in and no new note gets a sender; senders stored while sign-in was on stay on their notes and keep showing.
 
 With sign-in on, people log in through your own OpenID Connect provider (Authentik, Keycloak and the like) instead of sharing the instance password, and the notes they post carry their name as a **sender**. It only adds to what notefeed does: read links, RSS, feed passwords and licences work as before.
 
@@ -87,15 +87,15 @@ On the OAuth authorize page that MCP clients such as Claude.ai open, there is a 
 
 ## Removing a person
 
-Take them off `NOTEFEED_OIDC_ALLOW` and restart: they can no longer sign in. Their existing browser sessions run until they expire, up to 7 days; to end them at once, change `NOTEFEED_PASSWORD` (see below). Their notes keep the `sender` line until you delete the notes or edit that line out of the note files. There are no user records to delete.
+Take them off `NOTEFEED_OIDC_ALLOW` and restart: they can no longer sign in. What they already signed in with runs out within 7 days on every path: browser sessions expire then, and MCP clients authorised through the provider must sign in again after the same 7 days (their last access token works up to an hour longer). Turning sign-in off ends those MCP clients at their next token refresh. To sign everyone out at once, change `NOTEFEED_SECRET`; on an instance that also has a password, changing `NOTEFEED_PASSWORD` works too (see below). Their notes keep the `sender` line until you delete the notes or edit that line out of the note files. There are no user records to delete.
 
 ## Limits
 
 - The provider must use `https`. Plain `http` is accepted only for a loopback address such as `localhost`, for testing.
-- A sign-in lasts 7 days, then the person signs in again.
+- A sign-in lasts 7 days, in the browser and for an MCP client, then the person signs in again.
 - Sessions are signed with a key derived from the server secret and the password, so changing `NOTEFEED_PASSWORD` or `NOTEFEED_SECRET` signs everyone out.
 - Failed sign-ins count toward the [rate limit](configuration.md#rate-limits-and-caps). Without `NOTEFEED_TRUST_PROXY`, all clients share one bucket.
-- Enabling sign-in on a data directory whose notes came from people you don't trust: a typed note that is exactly `---`, a `sender: "X"` line and `---` reads as a note from `X`. Notes posted while sign-in was off can't be told apart from typed ones.
+- A note stored by an older notefeed whose text is exactly `---`, a `sender: "X"` line and `---` reads as a note from `X`, with sign-in on or off. Notes posted since are stored so that typed text never reads as a sender.
 
 ## Privacy page and imprint
 
