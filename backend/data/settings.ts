@@ -1,4 +1,5 @@
-// A feed's settings are `<DATA_DIR>/<feed>/.feed.json`: `{ "title": "...", "description": "...", "image": "<name>", "showSender": true }`. Absent or
+// A feed's settings are `<DATA_DIR>/<feed>/.feed.json`: `{ "title": "...", "description": "...", "image": "<name>" }`, plus
+// `"showSender": false` only when false (absent reads as true, so a file without sign-in stays as before). Absent or
 // unreadable means empty (a file from before images has no `image`). Not a `.md` file, so never a note.
 import { randomBytes } from "node:crypto";
 import { readFile, rename, rm, writeFile } from "node:fs/promises";
@@ -24,7 +25,8 @@ export async function readSettings(feed: string): Promise<Settings> {
 export async function writeSettings(feed: string, s: Settings): Promise<void> {
   const tmp = join(feedDir(feed), `.${randomBytes(6).toString("hex")}.tmp`);
   try {
-    await writeFile(/*turbopackIgnore: true*/ tmp, JSON.stringify(s));
+    const { showSender, ...rest } = s;
+    await writeFile(/*turbopackIgnore: true*/ tmp, JSON.stringify(showSender ? rest : s));
     await rename(/*turbopackIgnore: true*/ tmp, file(feed));
   } catch (e) {
     await rm(/*turbopackIgnore: true*/ tmp, { force: true });
