@@ -8,7 +8,7 @@ import { NoteList } from "@/components/NoteList";
 import { UnlockForm } from "@/components/UnlockForm";
 import { curlFor } from "@/app/_lib/curl";
 import { errorMessage, feedErrorMessage } from "@/app/_lib/messages";
-import { checkFeed, feedCookieName, feedPath, feedUnlocked, getFeed, publicUrl, readPath, rssPath, settingsPath } from "@/backend";
+import { checkFeed, feedCookieName, feedPath, feedUnlocked, getFeed, identityOn, publicUrl, readPath, rssPath, settingsPath } from "@/backend";
 
 export const dynamic = "force-dynamic";
 
@@ -57,7 +57,7 @@ export default async function FeedPage({ params, searchParams }: PageProps<"/[fe
         </p>
       )}
       <Compose key={String(posted)} feed={feed} action={feedPath(feed)} error={errorMessage(error, retry)}
-        isNew={access === "open" && !exists} exists={exists}
+        isNew={access === "open" && !exists} exists={exists} sender={identityOn()}
       />
       {notes.length === 0 ? (
         <section className="text-muted">

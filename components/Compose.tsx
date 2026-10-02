@@ -5,7 +5,7 @@ import { useState, type FormEvent } from "react";
 import { postNote } from "@/app/_lib/api";
 import { MarkdownInput } from "@/components/MarkdownInput";
 import { useApiForm } from "@/app/_lib/useApiForm";
-import { PASSWORD_HINT } from "@/app/_lib/messages";
+import { PASSWORD_HINT, SENDER_NOTICE } from "@/app/_lib/messages";
 import { extractTitle, idStamp, slugify } from "@/shared/notes";
 import { PASSWORD_PATTERN } from "@/shared/password";
 
@@ -14,7 +14,7 @@ import { PASSWORD_PATTERN } from "@/shared/password";
 // from openapi.json (JSON, the session cookie rides along same-origin) and shows refusals inline.
 // `exists`: false for a feed without a first note, which cannot take image uploads yet.
 // `isNew`: a feed that doesn't exist yet, so the box offers to protect it with a password.
-export function Compose({ feed, action, error: initialError, isNew, exists = true }: { feed: string; action: string; error?: string; isNew?: boolean; exists?: boolean }) {
+export function Compose({ feed, action, error: initialError, isNew, exists = true, sender }: { feed: string; action: string; error?: string; isNew?: boolean; exists?: boolean; sender?: boolean }) {
   const { run, error, pending, router } = useApiForm(action, initialError);
   const [text, setText] = useState("");
   const [password, setPassword] = useState("");
@@ -79,6 +79,7 @@ export function Compose({ feed, action, error: initialError, isNew, exists = tru
           </p>
         </div>
       )}
+      {sender && <p className="mt-2 text-sm text-muted">{SENDER_NOTICE}</p>}
       <p id="compose-error" role="alert" className="mt-2 text-sm text-error">
         {error}
       </p>

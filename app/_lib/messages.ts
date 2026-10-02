@@ -6,6 +6,9 @@ import { PASSWORD_RULE } from "@/shared/password";
 // Under a new-password field, and what the browser says when the field's pattern doesn't match.
 export const PASSWORD_HINT = `Use ${PASSWORD_RULE}: unaccented letters, digits and symbols.`;
 
+// Under the sign-in button and the compose box while sign-in is on.
+export const SENDER_NOTICE = "Your name is shown on your notes, including on the public read link and RSS.";
+
 // sign_in_failed is no API code: only the OIDC callback's ?error= (backend/oidc/routes.ts).
 const MESSAGES: Record<ErrorCode | "sign_in_failed", string> = {
   invalid_feed: "Invalid feed name.",

@@ -1,7 +1,7 @@
 import { headers } from "next/headers";
 import { notFound, redirect } from "next/navigation";
-import { errorMessage } from "@/app/_lib/messages";
-import { checkAuthorize, locked } from "@/backend";
+import { SENDER_NOTICE, errorMessage } from "@/app/_lib/messages";
+import { checkAuthorize, identityOn, locked, passwordSet, providerName } from "@/backend";
 
 export const dynamic = "force-dynamic";
 
@@ -27,6 +27,19 @@ export default async function AuthorizePage({ searchParams }: PageProps<"/oauth/
     <main className="mt-[18vh]">
       <h1 className="mb-2 text-xl font-bold tracking-tight">Connect {checked.clientName}</h1>
       <p className="mb-6 text-muted">After login you&apos;ll be sent to {checked.redirectHost}.</p>
+      {identityOn() && (
+        // A form POST, not a link: a cross-site GET must never start an MCP sign-in.
+        <form method="post" action="/api/oidc/start" className="mb-6 max-w-sm">
+          {Object.entries(checked.fields).map(([name, value]) => (
+            <input key={name} type="hidden" name={name} value={value} />
+          ))}
+          <button type="submit" className="rounded-sm bg-carbon px-4 py-1.5 font-bold text-on-carbon">
+            Sign in with {providerName()}
+          </button>
+          <p className="mt-2 text-sm text-muted">{SENDER_NOTICE}</p>
+        </form>
+      )}
+      {passwordSet() && (
       <form method="post" action="/api/oauth/authorize" className="max-w-sm">
         {Object.entries(checked.fields).map(([name, value]) => (
           <input key={name} type="hidden" name={name} value={value} />
@@ -54,6 +67,7 @@ export default async function AuthorizePage({ searchParams }: PageProps<"/oauth/
           {errorMessage(error, retry)}
         </p>
       </form>
+      )}
     </main>
   );
 }
