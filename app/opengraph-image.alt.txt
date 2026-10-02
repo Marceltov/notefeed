@@ -1,0 +1,1 @@
+notefeed: markdown notes under a name. Post with curl, follow in any RSS reader.
