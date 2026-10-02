@@ -21,7 +21,7 @@ The feed is created by its first note; there's nothing to set up first. notefeed
 
 - `url`: the note's page in the web UI.
 - `feed_url`: the feed's page in the web UI.
-- `read_url`: the feed's read-only RSS link, for feed readers and for sharing. See [Read links and RSS](feed.md).
+- `read_url`: the feed's read-only RSS link, for feed readers and for sharing. See [Read links and RSS](feed.md). It is `null` only for [a feed without a read link](operations.md#a-feed-without-a-read-link).
 
 !!! tip "Use `--data-binary`, not `-d`"
     `curl -d` strips newlines from files. `--data-binary` sends the file unchanged.
@@ -55,9 +55,9 @@ What to know:
 
 ## Feed settings and deleting a feed
 
-A feed can have a **title** (at most 100 characters) and a **description** (at most 500), both on one line. The title replaces the feed's name in the headings of the web UI, and both show in the read-only view and in the RSS feed (see [Read links and RSS](feed.md#title-and-description)). The feed's name stays as it is: you can't rename a feed. A feed has neither until you set them.
+A feed can have a **title** (at most 100 characters) and a **description** (at most 500), both on one line. The title is shown as a heading on the feed page, where the feed's name stays in the page header, and both show in the read-only view and in the RSS feed (see [Read links and RSS](feed.md#title-and-description)). The feed's name stays as it is: you can't rename a feed. A feed has neither until you set them.
 
-`GET /api/v1/feeds/<feed>` answers with the feed's `name`, `title`, `description`, `protected` and `read_url`. `read_url` is `null` while the feed has no notes. `PUT` on the same URL replaces the title and the description, both at once, and answers with the feed; an empty string clears one. Surrounding spaces are trimmed, and control characters, including a line break, are refused.
+`GET /api/v1/feeds/<feed>` answers with the feed's `name`, `title`, `description`, `protected` and `read_url`. `read_url` is `null` while the feed has no notes, and for [a feed without a read link](operations.md#a-feed-without-a-read-link). `PUT` on the same URL replaces the title and the description, both at once, and answers with the feed; an empty string clears one. Surrounding spaces are trimmed, and control characters, including a line break, are refused.
 
 ```sh
 curl -X PUT -H "Content-Type: application/json" \
