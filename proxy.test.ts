@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
-import { afterEach, beforeEach, expect, test } from "vitest";
-import { SESSION_COOKIE } from "@/backend";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { IDENTITY_COOKIE, SESSION_COOKIE } from "@/backend";
+import { sign } from "@/backend/oauth/tokens";
 import { login } from "@/backend/auth";
 import { config, proxy } from "./proxy";
 
@@ -8,6 +9,7 @@ beforeEach(() => {
   delete process.env.NOTEFEED_PASSWORD;
 });
 afterEach(() => {
+  vi.unstubAllEnvs();
   delete process.env.PUBLIC_URL;
   delete process.env.NOTEFEED_TRUST_PROXY;
 });
@@ -100,6 +102,18 @@ test("locked: the redirect keeps the query in next, and / needs none", () => {
 test("locked: a valid session cookie passes", () => {
   process.env.NOTEFEED_PASSWORD = "pw";
   expect(isNext(proxy(req("/backups", { headers: { cookie: `${SESSION_COOKIE}=${login("pw", "test")}` } })))).toBe(true);
+});
+
+test("identity on: an identity cookie passes the lock; a forged one, or one when identity is off, does not", () => {
+  vi.stubEnv("NOTEFEED_SECRET", "a".repeat(40));
+  for (const [k, v] of Object.entries({ ISSUER: "https://idp.example", CLIENT_ID: "id", CLIENT_SECRET: "s", ALLOW: "*" })) vi.stubEnv(`NOTEFEED_OIDC_${k}`, v);
+  const cookie = `${IDENTITY_COOKIE}=${sign("identity", { sender: "Ann" })}`;
+  expect(isNext(proxy(req("/backups", { headers: { cookie } })))).toBe(true);
+  expect(isNext(proxy(req("/backups", { headers: { cookie: `${IDENTITY_COOKIE}=x.y` } })))).toBe(false);
+  vi.stubEnv("NOTEFEED_OIDC_ALLOW", "");
+  vi.stubEnv("NOTEFEED_PASSWORD", "pw");
+  const signed = `${IDENTITY_COOKIE}=${sign("identity", { sender: "Ann" })}`;
+  expect(isNext(proxy(req("/backups", { headers: { cookie: signed } })))).toBe(false);
 });
 
 test("locked: POST /login is rewritten without a session (that's how you get one)", () => {

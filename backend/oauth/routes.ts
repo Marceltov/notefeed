@@ -158,9 +158,11 @@ export async function authorizeRoute(req: Request): Promise<Response> {
   return seeOther(to.href);
 }
 
-function issue(clientHash: string, aud: string): Response {
+// The sender (an identity login's) goes from the code into both tokens, and from each refresh token into the next.
+function issue(clientHash: string, aud: string, sender: string | undefined): Response {
+  const s = sender === undefined ? {} : { sender };
   return Response.json(
-    { access_token: sign("access", { aud }), token_type: "Bearer", expires_in: TTL.access, refresh_token: sign("refresh", { cid: clientHash, aud, jti: newJti() }) },
+    { access_token: sign("access", { aud, ...s }), token_type: "Bearer", expires_in: TTL.access, refresh_token: sign("refresh", { cid: clientHash, aud, jti: newJti(), ...s }) },
     { headers: noStore },
   );
 }
@@ -189,7 +191,7 @@ export async function tokenRoute(req: Request): Promise<Response> {
     if (createHash("sha256").update(verifier).digest("base64url") !== c.code_challenge) return oauthError("invalid_grant");
     if (resource !== undefined && resource !== c.resource) return oauthError("invalid_grant");
     if (!spendOnce(c.jti, c.exp!)) return oauthError("invalid_grant");
-    return issue(c.cid, c.resource);
+    return issue(c.cid, c.resource, c.sender);
   }
 
   if (grant === "refresh_token") {
@@ -202,7 +204,7 @@ export async function tokenRoute(req: Request): Promise<Response> {
     if (r.cid !== cid(clientId)) return oauthError("invalid_grant");
     if (resource !== undefined && resource !== r.aud) return oauthError("invalid_grant");
     if (!spendOnce(r.jti, r.exp!)) return oauthError("invalid_grant");
-    return issue(r.cid, r.aud);
+    return issue(r.cid, r.aud, r.sender);
   }
 
   return oauthError(grant === undefined ? "invalid_request" : "unsupported_grant_type");

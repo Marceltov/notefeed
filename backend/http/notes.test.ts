@@ -1,12 +1,13 @@
 import { mkdtemp, readdir, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { beforeEach, describe, expect, test } from "vitest";
-import { SESSION_COOKIE, login } from "../auth";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+import { IDENTITY_COOKIE, SESSION_COOKIE, login } from "../auth";
 import { hasFeed, readIdOf, resetFeedsForTests } from "../feeds";
 import { resetRateLimitsForTests } from "../limits";
 import { cookieValue, feedCookieName, protectedFeed } from "../feedlock";
 import { getNote } from "../notes";
+import { sign } from "../oauth/tokens";
 import { editNote, postNote } from "../posting";
 import { dispatch } from "./api";
 
@@ -520,3 +521,14 @@ test("a post with the password bearer has no sender", async () => {
   expect(res.status).toBe(201);
   expect((await getNote("test", (await res.json()).id))!.sender).toBeUndefined();
 });
+
+test("identity on: a same-origin post with the identity cookie stores the verified sender, not the body's", async () => {
+  for (const [k, v] of Object.entries({ ISSUER: "https://idp.example", CLIENT_ID: "id", CLIENT_SECRET: "s", ALLOW: "*" })) vi.stubEnv(`NOTEFEED_OIDC_${k}`, v);
+  const cookie = `${IDENTITY_COOKIE}=${sign("identity", { sender: "Ann" })}`;
+  const json = { "content-type": "application/json" };
+  expect((await post(JSON.stringify({ markdown: "x" }), { ...json, cookie })).status).toBe(401); // no Origin: not our page
+  const res = await post(JSON.stringify({ markdown: "x", sender: "Boss" }), { ...json, cookie, origin: BASE });
+  expect(res.status).toBe(201);
+  expect((await getNote("test", (await res.json()).id))!.sender).toBe("Ann");
+});
+afterEach(() => vi.unstubAllEnvs());

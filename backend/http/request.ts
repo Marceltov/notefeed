@@ -1,9 +1,11 @@
 // Reading requests, for the handlers in backend/http.
 import { AuthError, NotefeedError, RateLimitedError } from "../errors";
-import { SESSION_COOKIE, checkBearer, locked, sessionOk } from "../auth";
+import { IDENTITY_COOKIE, SESSION_COOKIE, bearerOf, checkBearer, identitySender, locked, sessionOk } from "../auth";
 import { type FeedAccess, feedCookieName } from "../feedlock";
 import { assertFeed } from "../feeds";
 import { clientIp } from "../limits";
+import { identityOn } from "../oidc/config";
+import { verify } from "../oauth/tokens";
 import { publicUrl } from "../urls";
 import { errorResponse } from "./errors";
 
@@ -76,12 +78,12 @@ export function errorRedirect(page: string, e: unknown): Response {
   return seeOther(`${page}${page.includes("?") ? "&" : "?"}error=${e.code}${retry}`);
 }
 
-// Scripts send the bearer password. The web UI sends the session cookie instead, accepted only from
+// Scripts send the bearer password. The web UI sends a session cookie (password or identity) instead, accepted only from
 // this instance's own pages: a cross-site form would carry no cookie (SameSite=Lax), and the Origin
 // check covers browsers that would. Throws AuthError or TooManyAttemptsError.
 export function authorize(h: Headers, ip: string): void {
   if (!locked()) return;
-  if (!h.has("authorization") && sameOrigin(h) && sessionOk(cookie(h, SESSION_COOKIE))) return;
+  if (!h.has("authorization") && sameOrigin(h) && sessionOk(cookie(h, SESSION_COOKIE), cookie(h, IDENTITY_COOKIE))) return;
   checkBearer(h.get("authorization"), ip);
 }
 
@@ -113,9 +115,11 @@ export async function formPost(req: Request, feed: string, page: string, act: (h
   }
 }
 
-// The verified sender of a request, or undefined. Stub: the real one, from the identity cookie or an OAuth
-// access token, arrives with the sign-in routes.
+// The verified sender of a request, or undefined: from the identity cookie, honoured like the session cookie
+// in authorize (same origin, no Authorization header), or from an unexpired OAuth access token. Only while
+// identity mode is on; never from the request body.
 export function sender(h: Headers): string | undefined {
-  void h;
-  return undefined;
+  if (!identityOn()) return undefined;
+  if (!h.has("authorization")) return sameOrigin(h) ? identitySender(cookie(h, IDENTITY_COOKIE)) : undefined;
+  return verify("access", bearerOf(h.get("authorization")))?.sender;
 }

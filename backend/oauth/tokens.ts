@@ -5,14 +5,17 @@ import { config } from "../config";
 import { secret } from "../feeds";
 import { processState } from "../state";
 
-export type Kind = "client" | "code" | "access" | "refresh";
+// `sender` is the signed-in person's name, from an identity login; a password login has none.
+export type Kind = "client" | "code" | "access" | "refresh" | "identity" | "oidc";
 export type Payloads = {
   client: { client_name?: string; redirect_uris: string[] };
-  code: { cid: string; redirect_uri: string; code_challenge: string; resource: string; jti: string };
-  access: { aud: string };
-  refresh: { cid: string; aud: string; jti: string };
+  code: { cid: string; redirect_uri: string; code_challenge: string; resource: string; jti: string; sender?: string };
+  access: { aud: string; sender?: string };
+  refresh: { cid: string; aud: string; jti: string; sender?: string };
+  identity: { sender: string }; // the nf_identity session cookie
+  oidc: { state: string; nonce: string; verifier: string; next?: string; authorize?: Record<string, string> }; // a sign-in in flight
 };
-export const TTL = { code: 300, access: 3600, refresh: 2592000 } as const;
+export const TTL = { code: 300, access: 3600, refresh: 2592000, identity: 604800, oidc: 600 } as const;
 
 // Derived per call: secret() is cached, the password is not, and either may change.
 function key(): Buffer {

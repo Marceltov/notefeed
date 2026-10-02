@@ -6,9 +6,11 @@ import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import { config } from "./config";
 import { AuthError, TooManyAttemptsError } from "./errors";
 import { authFailed, authWait } from "./limits";
+import { verify } from "./oauth/tokens";
 import { identityOn } from "./oidc/config";
 
 export const SESSION_COOKIE = "nf_session";
+export const IDENTITY_COOKIE = "nf_identity";
 
 // Locked by a password, by sign-in, or both. Sign-in without a password is locked too: an unset password never matches.
 export const locked = () => config.password() !== "" || identityOn();
@@ -47,7 +49,13 @@ export function login(password: string, ip: string): string {
   return sessionValue();
 }
 
-export function sessionOk(cookie: string | undefined): boolean {
+// Who a signed identity cookie names; undefined when identity mode is off or the cookie doesn't verify (forged, expired).
+export const identitySender = (cookie: string | undefined): string | undefined =>
+  identityOn() && cookie ? verify("identity", cookie)?.sender : undefined;
+
+// A password session (only when a password is set) or a signed-in identity.
+export function sessionOk(cookie: string | undefined, identity?: string): boolean {
   if (!locked()) return true;
-  return config.password() !== "" && cookie !== undefined && safeEqual(cookie, sessionValue());
+  if (config.password() !== "" && cookie !== undefined && safeEqual(cookie, sessionValue())) return true;
+  return identitySender(identity) !== undefined;
 }

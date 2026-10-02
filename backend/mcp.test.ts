@@ -18,7 +18,10 @@ beforeEach(async () => {
   resetRateLimitsForTests();
   for (const k of ["NOTEFEED_PASSWORD", "NOTEFEED_RATE_LIMIT", "PUBLIC_URL"]) delete process.env[k];
 });
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.unstubAllEnvs();
+});
 
 async function rpc(method: string, params: Record<string, unknown> = {}, headers: Record<string, string> = {}, version = V, withMeta = true) {
   const name: Record<string, string> = typeof params.name === "string" ? { "mcp-name": params.name } : {};
@@ -253,6 +256,20 @@ describe("gate on a locked instance", () => {
     const res = await rpc("tools/list", {}, bearer("pw"));
     expect(res.status).toBe(429);
     expect(Number(res.headers.get("retry-after"))).toBeGreaterThanOrEqual(1);
+  });
+  test("identity only (no password): an access token works and carries its sender into post_note; an empty bearer never does", async () => {
+    delete process.env.NOTEFEED_PASSWORD;
+    for (const [k, v] of Object.entries({ ISSUER: "https://idp.example", CLIENT_ID: "id", CLIENT_SECRET: "s", ALLOW: "*" })) vi.stubEnv(`NOTEFEED_OIDC_${k}`, v);
+    for (const h of [{}, { authorization: "Bearer " }, { authorization: "Bearer" }, bearer("x")]) expect((await rpc("tools/list", {}, h)).status).toBe(401);
+    const t = sign("access", { aud: "http://localhost:3000/mcp", sender: "Ann" });
+    const res = await rpc("tools/call", { name: "post_note", arguments: { feed: "a", markdown: "# Hi", sender: "Boss" } }, bearer(t));
+    expect(res.status).toBe(200);
+    const id = (await res.json()).result.structuredContent.id;
+    expect((await getNote("a", id))!.sender).toBe("Ann");
+  });
+  test("a post_note with the password bearer has no sender", async () => {
+    const res = await rpc("tools/call", { name: "post_note", arguments: { feed: "a", markdown: "# Hi" } }, bearer("pw"));
+    expect((await getNote("a", (await res.json()).result.structuredContent.id))!.sender).toBeUndefined();
   });
   test("an open instance ignores the bearer", async () => {
     delete process.env.NOTEFEED_PASSWORD;

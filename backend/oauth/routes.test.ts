@@ -7,7 +7,7 @@ import { resetFeedsForTests } from "../feeds";
 import { resetRateLimitsForTests } from "../limits";
 import { mcpRoute } from "../mcp";
 import { authServerRoute, authorizeRoute, checkAuthorize, metadataPreflight, protectedResourceRoute, registerPreflight, registerRoute, tokenRoute } from "./routes";
-import { resetTokensForTests } from "./tokens";
+import { cid, newJti, resetTokensForTests, sign, verify } from "./tokens";
 
 const BASE = "http://localhost:3000";
 const RESOURCE = `${BASE}/mcp`;
@@ -112,6 +112,23 @@ describe("flow", () => {
     const again = await token({ grant_type: "refresh_token", refresh_token: first.refresh_token, client_id: c.id });
     expect(again.status).toBe(400);
     expect(await again.json()).toEqual({ error: "invalid_grant" });
+  });
+
+  test("a code's sender is carried into the access token and through refresh", async () => {
+    const id = await clientId();
+    const { verifier, challenge } = pkce();
+    const c = sign("code", { cid: cid(id), redirect_uri: CB, code_challenge: challenge, resource: RESOURCE, jti: newJti(), sender: "Ann" });
+    const first = await (await exchange({ id, verifier, code: c })).json();
+    expect(verify("access", first.access_token)?.sender).toBe("Ann");
+    expect(verify("refresh", first.refresh_token)?.sender).toBe("Ann");
+    const second = await (await token({ grant_type: "refresh_token", refresh_token: first.refresh_token, client_id: id })).json();
+    expect(verify("access", second.access_token)?.sender).toBe("Ann");
+    expect(verify("refresh", second.refresh_token)?.sender).toBe("Ann");
+  });
+
+  test("a password login's tokens have no sender", async () => {
+    const { access_token } = await (await exchange(await code())).json();
+    expect(verify("access", access_token)).not.toHaveProperty("sender");
   });
 
   test("a refresh token is bound to its client", async () => {
