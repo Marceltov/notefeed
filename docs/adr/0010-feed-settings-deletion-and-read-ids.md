@@ -4,6 +4,8 @@ date: 2026-10-01
 decision-makers: Marcel Bruckner
 ---
 
+> Note: reserved feeds are the exception to random read ids, see ADR 0012.
+
 # Feed settings and feed deletion with the same access as posting, and stored random read ids for new feeds
 
 ## Context and Problem Statement

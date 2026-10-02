@@ -8,7 +8,7 @@ Every feed is a folder in `DATA_DIR` (`/data` in the container), named after the
 data/
 ├── .secret                                  # signs cookies and tokens, and is behind older feeds' read links; back it up
 ├── homelab-7f3k2q9x4m8wz/
-│   ├── .readid                              # the feed's read id (feeds created since feed deletion was added; older ones have none)
+│   ├── .readid                              # the feed's read id (feeds created since feed deletion was added; older ones have none). A reserved feed's holds its name
 │   ├── .feed.json                           # title, description and title image, if set
 │   ├── .password                            # only on a protected feed
 │   ├── .images/                             # uploaded images, only once one was uploaded
@@ -64,6 +64,8 @@ tar czf notefeed-notes.tgz -C data .
 ## Deleting notes and feeds
 
 A feed's owner can delete it from the web UI or the [API](posting.md#feed-settings-and-deleting-a-feed). That removes the notes, the uploaded images, the settings, the password and the read link, frees the name, and takes the feed out of the `NOTEFEED_MAX_FEEDS` count at once. notefeed first renames the folder to `.deleted-<random>` in `DATA_DIR` and then removes it; if it stops in between, the leftover folder is removed at the next start. A new feed's folder is likewise made as `.<random>.tmp` and renamed into place, and one left by a crash is removed at the next start too.
+
+Reserved feeds ([Configuration](configuration.md#reserved-feeds)) are created at every start if they are missing, so one deleted or removed by hand comes back, empty and with the same read link, at the next start. They count toward `NOTEFEED_MAX_FEEDS` like any feed.
 
 You can also delete a note's file, or a feed's whole folder, yourself. It disappears from the web UI and the feed straight away. notefeed still lists a feed you removed by hand, as an empty feed that counts toward `NOTEFEED_MAX_FEEDS`, until someone posts to that name, deletes the feed, or notefeed restarts. A post to that name creates a new feed, with a new read link and no password.
 
