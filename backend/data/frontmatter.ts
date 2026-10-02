@@ -5,9 +5,12 @@ const KEY = /^[a-z][a-z0-9_]*$/;
 export type Meta = Record<string, unknown>;
 
 export function encode(markdown: string, meta: Meta = {}): string {
-  const lines = Object.keys(meta)
-    .sort()
-    .map((k) => `${k}: ${JSON.stringify(meta[k])}\n`);
+  const lines: string[] = [];
+  for (const k of Object.keys(meta).sort()) {
+    if (!KEY.test(k)) throw new Error(`invalid metadata key: ${JSON.stringify(k)}`);
+    const json = JSON.stringify(meta[k]);
+    if (json !== undefined) lines.push(`${k}: ${json}\n`);
+  }
   return `---\n${lines.join("")}---\n${markdown}`;
 }
 

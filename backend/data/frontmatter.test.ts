@@ -33,6 +33,13 @@ describe("frontmatter", () => {
   ])("legacy file (%s) is all body", (_n, raw) => {
     expect(decode(raw)).toEqual({ markdown: raw, meta: {} });
   });
+  test("encode skips values JSON cannot write and round-trips", () => {
+    expect(encode("x", { sender: undefined, f: () => 1 })).toBe("---\n---\nx");
+    expect(decode(encode("x", { sender: undefined }))).toEqual({ markdown: "x", meta: {} });
+  });
+  test("encode throws on a key decode would reject", () => {
+    expect(() => encode("x", { Bad: 1 })).toThrow(Error);
+  });
   test("a non-string sender is kept in meta but is no sender", () => {
     expect(decode("---\nsender: 5\n---\nt")).toEqual({ markdown: "t", meta: { sender: 5 } });
   });
