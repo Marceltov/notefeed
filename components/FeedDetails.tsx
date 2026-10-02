@@ -14,11 +14,12 @@ const secondary = "inline-flex items-center gap-1.5 rounded-sm border border-rul
 // `children` (the sharing and password sections) sit between the two, so deleting stays last. With
 // JavaScript they go through the generated API client and show refusals inline; without, the browser follows
 // the 303 (the feed page says "Saved." or shows the refusal as `error`, or the home page says "Feed deleted.").
-export function FeedDetails({ feed, title: savedTitle, description: savedDescription, image, imageUrl, error: initialError, children }: { children?: ReactNode; feed: string; title: string; description: string; image: string; imageUrl: string | null; error?: string }) {
+export function FeedDetails({ feed, title: savedTitle, description: savedDescription, image, imageUrl, showSender: savedShowSender, identity, error: initialError, children }: { children?: ReactNode; feed: string; title: string; description: string; image: string; imageUrl: string | null; showSender: boolean; identity: boolean; error?: string }) {
   const page = `/${feed}/settings`;
   const { run, error, setError, pending, setPending, router } = useApiForm(page, initialError, feedDetailsErrorMessage);
   const [title, setTitle] = useState(savedTitle);
   const [description, setDescription] = useState(savedDescription);
+  const [showSender, setShowSender] = useState(savedShowSender);
   const [confirm, setConfirm] = useState("");
   // False while rendering on the server, true once hydrated: without JavaScript the delete button stays enabled
   // and the server checks the name.
@@ -26,7 +27,7 @@ export function FeedDetails({ feed, title: savedTitle, description: savedDescrip
   const opts = () => ({ baseUrl: window.location.origin, path: { feed } }); // in handlers only: no window while rendering on the server
 
   const picker = useRef<HTMLInputElement>(null);
-  const save = (e: FormEvent | undefined, body: { title: string; description: string; image?: string } = { title, description }) =>
+  const save = (e: FormEvent | undefined, body: { title: string; description: string; image?: string; show_sender?: boolean } = { title, description, ...(identity && { show_sender: showSender }) }) =>
     run(e, () => updateFeed({ ...opts(), body }), () => {
       setError(undefined);
       setPending(false);
@@ -41,7 +42,7 @@ export function FeedDetails({ feed, title: savedTitle, description: savedDescrip
     if ("error" in up) {
       setError(up.error);
       setPending(false);
-    } else save(undefined, { title, description, image: up.file });
+    } else save(undefined, { title, description, image: up.file, ...(identity && { show_sender: showSender }) });
   }
   const remove = (e: FormEvent) => run(e, () => deleteFeed(opts()), () => router.replace("/?deleted=" + feed), 404); // already gone: the goal is met
 
@@ -61,6 +62,13 @@ export function FeedDetails({ feed, title: savedTitle, description: savedDescrip
             Description
           </label>
           <input id="feed-description" name="description" maxLength={500} value={description} onChange={(e) => setDescription(e.target.value)} className={`${input} mb-2`} />
+          {identity && (
+            <label className="mb-3 flex items-center gap-2">
+              <input type="hidden" name="show_sender_present" value="1" />
+              <input type="checkbox" name="show_sender" checked={showSender} onChange={(e) => setShowSender(e.target.checked)} />
+              Show who posted
+            </label>
+          )}
           <button type="submit" disabled={pending} className="rounded-sm bg-carbon px-4 py-1.5 font-bold text-on-carbon disabled:opacity-60">
             Save changes
           </button>
@@ -92,7 +100,7 @@ export function FeedDetails({ feed, title: savedTitle, description: savedDescrip
               <button
                 type="button"
                 disabled={pending}
-                onClick={() => save(undefined, { title, description, image: "" })}
+                onClick={() => save(undefined, { title, description, image: "", ...(identity && { show_sender: showSender }) })}
                 className={`${secondary} ml-2 font-normal text-muted`}
               >
                 <X aria-hidden className="h-4 w-4" />

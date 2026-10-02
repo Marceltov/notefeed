@@ -2,7 +2,7 @@
 // empty feed, so a reader can subscribe before the first note and ids can't be probed for existence.
 import { config } from "../config";
 import { isReadId, feedForReadId } from "../feeds";
-import { getSettings } from "../feedsettings";
+import { forReaders, getSettings } from "../feedsettings";
 import { listNotes } from "../notes";
 import { renderFeed } from "../rss";
 import { imagePath, publicUrl } from "../urls";
@@ -10,9 +10,9 @@ import { imagePath, publicUrl } from "../urls";
 export async function rssRoute(req: Request, readId: string): Promise<Response> {
   if (!isReadId(readId)) return new Response("not found", { status: 404 });
   const feed = await feedForReadId(readId);
-  const settings = feed ? await getSettings(feed) : { title: "", description: "", image: "" };
+  const settings = feed ? await getSettings(feed) : { title: "", description: "", image: "", showSender: true };
   const title = settings.title || config.title();
-  const xml = renderFeed(feed ? await listNotes(feed, 50) : [], {
+  const xml = renderFeed(feed ? forReaders(await listNotes(feed, 50), settings) : [], {
     title,
     description: settings.description || title,
     baseUrl: publicUrl(req.headers),

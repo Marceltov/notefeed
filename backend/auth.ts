@@ -1,18 +1,23 @@
-// Optional instance password (NOTEFEED_PASSWORD): bearer for POST, HMAC cookie for the UI.
-// Unset or empty → the instance is open and every check passes.
+// Who may use the instance. The optional password (NOTEFEED_PASSWORD) is the bearer for scripts and, as an HMAC
+// cookie (nf_session), the UI's password session. Optional sign-in (backend/oidc) gives a signed nf_identity cookie
+// naming the person. Either one locks the instance; with neither set it is open and every check passes.
 // ponytail: the session is HMAC(password, constant): no expiry, logout only drops the browser's copy;
 // a leaked cookie works until the password changes (see docs/configuration.md). Add an expiry to the signed value if that matters.
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import { config } from "./config";
 import { AuthError, TooManyAttemptsError } from "./errors";
 import { authFailed, authWait } from "./limits";
+import { verify } from "./oauth/tokens";
+import { identityOn } from "./oidc/config";
 
 export const SESSION_COOKIE = "nf_session";
+export const IDENTITY_COOKIE = "nf_identity";
 
-export const locked = () => config.password() !== "";
+// Locked by a password, by sign-in, or both. Sign-in without a password is locked too: an unset password never matches.
+export const locked = () => config.password() !== "" || identityOn();
 
 // Hash both sides so lengths match and timingSafeEqual never throws.
-function safeEqual(a: string, b: string): boolean {
+export function safeEqual(a: string, b: string): boolean {
   const h = (s: string) => createHash("sha256").update(s).digest();
   return timingSafeEqual(h(a), h(b));
 }
@@ -21,6 +26,7 @@ function safeEqual(a: string, b: string): boolean {
 export function checkPassword(candidate: string, ip: string): void {
   const wait = authWait(ip);
   if (wait !== null) throw new TooManyAttemptsError(wait);
+  if (config.password() === "") throw new AuthError();
   if (safeEqual(candidate, config.password())) return;
   authFailed(ip);
   throw new AuthError();
@@ -44,7 +50,13 @@ export function login(password: string, ip: string): string {
   return sessionValue();
 }
 
-export function sessionOk(cookie: string | undefined): boolean {
+// Who a signed identity cookie names; undefined when identity mode is off or the cookie doesn't verify (forged, expired).
+export const identitySender = (cookie: string | undefined): string | undefined =>
+  identityOn() && cookie ? verify("identity", cookie)?.sender : undefined;
+
+// A password session (only when a password is set) or a signed-in identity.
+export function sessionOk(cookie: string | undefined, identity?: string): boolean {
   if (!locked()) return true;
-  return cookie !== undefined && safeEqual(cookie, sessionValue());
+  if (config.password() !== "" && cookie !== undefined && safeEqual(cookie, sessionValue())) return true;
+  return identitySender(identity) !== undefined;
 }

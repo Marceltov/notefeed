@@ -6,8 +6,8 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { resetFeedsForTests } from "../feeds";
 import { resetRateLimitsForTests } from "../limits";
 import { mcpRoute } from "../mcp";
-import { authServerRoute, authorizeRoute, checkAuthorize, metadataPreflight, protectedResourceRoute, registerPreflight, registerRoute, tokenRoute } from "./routes";
-import { resetTokensForTests } from "./tokens";
+import { authServerRoute, authorizeRoute, checkAuthorize, issueCode, metadataPreflight, protectedResourceRoute, registerPreflight, registerRoute, tokenRoute } from "./routes";
+import { TTL, cid, resetTokensForTests, verify } from "./tokens";
 
 const BASE = "http://localhost:3000";
 const RESOURCE = `${BASE}/mcp`;
@@ -24,6 +24,7 @@ beforeEach(async () => {
 });
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.unstubAllEnvs();
   for (const k of ["NOTEFEED_PASSWORD", "NOTEFEED_RATE_LIMIT", "PUBLIC_URL"]) delete process.env[k];
 });
 
@@ -112,6 +113,65 @@ describe("flow", () => {
     const again = await token({ grant_type: "refresh_token", refresh_token: first.refresh_token, client_id: c.id });
     expect(again.status).toBe(400);
     expect(await again.json()).toEqual({ error: "invalid_grant" });
+  });
+
+  // A code from a sign-in, as issueCode makes it after the provider's callback.
+  async function signedInCode() {
+    const id = await clientId();
+    const { verifier, challenge } = pkce();
+    const fields = Object.fromEntries(authParams(id, challenge));
+    const code = new URL(issueCode(fields, new Headers(H), "Ann").headers.get("location")!).searchParams.get("code")!;
+    return { id, verifier, code };
+  }
+  const signInOn = () => {
+    vi.stubEnv("NOTEFEED_OIDC_ISSUER", "https://idp.example");
+    vi.stubEnv("NOTEFEED_OIDC_CLIENT_ID", "id");
+    vi.stubEnv("NOTEFEED_OIDC_CLIENT_SECRET", "client-secret");
+    vi.stubEnv("NOTEFEED_OIDC_ALLOW", "ann@x.com");
+  };
+
+  test("a code's sender and sign-in limit are carried into the tokens and through refresh", async () => {
+    signInOn();
+    const c = await signedInCode();
+    const until = verify("code", c.code)!.until!;
+    expect(Math.abs(until - (Math.floor(Date.now() / 1000) + TTL.identity))).toBeLessThanOrEqual(1);
+    const first = await (await exchange(c)).json();
+    expect(verify("access", first.access_token)?.sender).toBe("Ann");
+    expect(verify("refresh", first.refresh_token)).toMatchObject({ sender: "Ann", until });
+    const second = await (await token({ grant_type: "refresh_token", refresh_token: first.refresh_token, client_id: c.id })).json();
+    expect(verify("access", second.access_token)?.sender).toBe("Ann");
+    expect(verify("refresh", second.refresh_token)).toMatchObject({ sender: "Ann", until });
+  });
+
+  test("a sign-in's refresh is refused once sign-in is switched off", async () => {
+    signInOn();
+    const c = await signedInCode();
+    const { refresh_token } = await (await exchange(c)).json();
+    vi.unstubAllEnvs();
+    expect((await (await token({ grant_type: "refresh_token", refresh_token, client_id: c.id })).json()).error).toBe("invalid_grant");
+  });
+
+  test("a sign-in's refresh chain ends with the sign-in lifetime", async () => {
+    signInOn();
+    const c = await signedInCode();
+    const { refresh_token } = await (await exchange(c)).json();
+    vi.spyOn(Date, "now").mockReturnValue(Date.now() + (TTL.identity + 2) * 1000);
+    expect((await (await token({ grant_type: "refresh_token", refresh_token, client_id: c.id })).json()).error).toBe("invalid_grant");
+  });
+
+  test("a password login's refresh has no limit but its own", async () => {
+    const c = await code();
+    const { refresh_token } = await (await exchange(c)).json();
+    expect(verify("refresh", refresh_token)).not.toHaveProperty("until");
+    vi.spyOn(Date, "now").mockReturnValue(Date.now() + (TTL.identity + 2) * 1000);
+    const res = await token({ grant_type: "refresh_token", refresh_token, client_id: c.id });
+    expect(res.status).toBe(200);
+    expect(verify("refresh", (await res.json()).refresh_token)).not.toHaveProperty("until");
+  });
+
+  test("a password login's tokens have no sender", async () => {
+    const { access_token } = await (await exchange(await code())).json();
+    expect(verify("access", access_token)).not.toHaveProperty("sender");
   });
 
   test("a refresh token is bound to its client", async () => {
@@ -246,6 +306,33 @@ describe("login", () => {
     expect(res.headers.get("location")).toBe(`/oauth/authorize?${p}&error=auth`);
     const next = await authorizeRoute(form("/api/oauth/authorize", { ...Object.fromEntries(p), password: "pw" }));
     expect(next.headers.get("location")).toMatch(new RegExp(`^/oauth/authorize\\?.*&error=too_many_attempts&retry=\\d+$`));
+  });
+
+  test("with sign-in and no password, no password (not even an empty one) is accepted", async () => {
+    vi.stubEnv("NOTEFEED_OIDC_ISSUER", "https://idp.example");
+    vi.stubEnv("NOTEFEED_OIDC_CLIENT_ID", "id");
+    vi.stubEnv("NOTEFEED_OIDC_CLIENT_SECRET", "secret");
+    vi.stubEnv("NOTEFEED_OIDC_ALLOW", "*");
+    vi.stubEnv("NOTEFEED_PASSWORD", "");
+    try {
+      const q = authParams(await clientId(), pkce().challenge);
+      for (const password of ["", "pw"]) {
+        const res = await authorizeRoute(form("/api/oauth/authorize", { ...Object.fromEntries(q), password }));
+        expect(res.headers.get("location")).toBe(`/oauth/authorize?${q}&error=auth`);
+      }
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  test("issueCode sends the browser back with a code carrying the sender", async () => {
+    const id = await clientId();
+    const fields = Object.fromEntries(authParams(id, pkce().challenge));
+    const loc = new URL(issueCode(fields, new Headers(H), "Ann").headers.get("location")!);
+    expect(loc.searchParams.get("state")).toBe("a b&c");
+    expect(loc.searchParams.get("iss")).toBe(BASE);
+    expect(verify("code", loc.searchParams.get("code")!)).toMatchObject({ cid: cid(id), redirect_uri: CB, resource: RESOURCE, sender: "Ann" });
+    expect(verify("code", new URL(issueCode(fields, new Headers(H)).headers.get("location")!).searchParams.get("code")!)).not.toHaveProperty("sender");
   });
 
   test("an invalid client on the POST is a 400, no redirect", async () => {

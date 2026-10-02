@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { SESSION_COOKIE, locked, publicUrl, sessionOk } from "@/backend";
+import { IDENTITY_COOKIE, SESSION_COOKIE, locked, publicUrl, sessionOk } from "@/backend";
 
 // Exactly one segment, after stripping one trailing slash. Kept percent-encoded: the route's
 // [feed] param is decoded by Next and the handler rejects anything outside FEED_RE ("a%2Fb" → "a/b" → 400).
@@ -32,13 +32,17 @@ export function proxy(req: NextRequest) {
   // /login, /mcp, OAuth, and well-known paths are exempt from the lock because each checks credentials itself;
   // redirecting them to /login would turn a script's 401 into a success-looking 307.
   // Icons, the manifest and the share image are public too, so the login page and link previews have them.
+  // /privacy and /imprint are public so the footer links work before signing in (the imprint must be easy to reach,
+  // and the privacy page says what signing in stores).
   const exempt =
     pathname === "/login" ||
     pathname === "/mcp" ||
+    pathname === "/privacy" ||
+    pathname === "/imprint" ||
     /^\/(r|_next|api|oauth|\.well-known)\//.test(pathname) ||
     /^\/(icon\.svg|icon-[\w-]+\.png|apple-icon\.png|opengraph-image\.png|manifest\.webmanifest)$/.test(pathname);
   if (!locked() || exempt) return NextResponse.next();
-  if (sessionOk(req.cookies.get(SESSION_COOKIE)?.value)) return NextResponse.next();
+  if (sessionOk(req.cookies.get(SESSION_COOKIE)?.value, req.cookies.get(IDENTITY_COOKIE)?.value)) return NextResponse.next();
   // Must be absolute (Next rejects a relative Location here); built from the public base,
   // not req.url, so it is right behind a reverse proxy.
   const login = new URL("/login", publicUrl(req.headers));

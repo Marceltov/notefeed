@@ -7,6 +7,7 @@ import { AuthError, NotefeedError, NotFoundError, TooManyAttemptsError } from ".
 import { checkFeedAccess } from "./feedlock";
 import { assertFeed, FEED_RE, hasFeed } from "./feeds";
 import { feedJson } from "./http/api";
+import { sender } from "./http/request";
 import { clientIp } from "./limits";
 import { getNote, listNotes, type Note } from "./notes";
 import { verify } from "./oauth/tokens";
@@ -18,7 +19,7 @@ const SECRET_NOTE = "The feed name works like a password: anyone who knows it ca
 const feed = z.string().regex(FEED_RE);
 const password = z.string().optional();
 const PROTECTED = "A protected feed needs its password as password.";
-const NoteSummary = z.object({ id: z.string(), title: z.string(), created_at: z.string(), url: z.string() });
+const NoteSummary = z.object({ id: z.string(), title: z.string(), created_at: z.string(), url: z.string(), sender: z.string().optional() });
 const NoteFull = NoteSummary.extend({ markdown: z.string() });
 
 // A tool result: the body as structured content and, for clients that only read text, as JSON text.
@@ -40,7 +41,7 @@ function guard<A, R>(f: (args: A) => Promise<R>) {
 
 function server(h: Headers): McpServer {
   const base = publicUrl(h);
-  const summary = (feed: string, n: Note) => ({ id: n.id, title: n.title, created_at: n.createdAt.toISOString(), url: `${base}${feedPath(feed)}/${n.id}` });
+  const summary = (feed: string, n: Note) => ({ id: n.id, title: n.title, created_at: n.createdAt.toISOString(), url: `${base}${feedPath(feed)}/${n.id}`, ...(n.sender !== undefined && { sender: n.sender }) });
   // A reserved name must not reach the filesystem lookup, so it is checked first.
   const checkAccess = async (feed: string, password?: string) => {
     assertFeed(feed);
@@ -56,7 +57,7 @@ function server(h: Headers): McpServer {
       outputSchema: z.object({ id: z.string(), url: z.string(), feed_url: z.string(), read_url: z.string().nullable() }),
     },
     guard(async ({ feed, markdown, password }) => {
-      const { note, readId } = await postNote(feed, clientIp(h), async () => ({ markdown }), { password });
+      const { note, readId } = await postNote(feed, clientIp(h), async () => ({ markdown }), { password }, sender(h));
       const feedUrl = base + feedPath(feed);
       return ok({ id: note.id, url: `${feedUrl}/${note.id}`, feed_url: feedUrl, read_url: readId && base + rssPath(readId) });
     }),

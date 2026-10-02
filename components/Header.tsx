@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { cookies } from "next/headers";
 import { ChevronRight, Eye, LogOut, Rss, Settings } from "lucide-react";
-import { SESSION_COOKIE, feedPath, locked, sessionOk } from "@/backend";
+import { IDENTITY_COOKIE, SESSION_COOKIE, feedPath, locked, sessionOk } from "@/backend";
 
 const action = "inline-flex items-center gap-1.5 rounded-sm px-2 py-1 text-muted hover:bg-rule/50 hover:text-ink";
 const icon = "h-4 w-4 shrink-0";
@@ -12,7 +12,8 @@ const label = "hidden sm:inline";
 // writable feed page's links to its read-only view and its settings page (none on the settings page itself).
 export async function Header({ feed, rss, image, view, settingsHref }: { feed?: string; rss?: string; image?: string | null; view?: string; settingsHref?: string }) {
   // Readers of /r/** on a locked instance have no session: no "Log out" for them.
-  const loggedIn = locked() && sessionOk((await cookies()).get(SESSION_COOKIE)?.value);
+  const jar = await cookies();
+  const loggedIn = locked() && sessionOk(jar.get(SESSION_COOKIE)?.value, jar.get(IDENTITY_COOKIE)?.value);
   return (
     <header className="mb-8 flex items-center justify-between gap-3">
       {image && (

@@ -6,7 +6,7 @@ import { config } from "../config";
 import { InvalidBodyError, NotFoundError } from "../errors";
 import { changePassword, checkFeedAccess, protectedFeed, removePassword } from "../feedlock";
 import { isReadId, assertFeed, feedForReadId, hasFeed, readIdOf } from "../feeds";
-import { getSettings } from "../feedsettings";
+import { forReaders, getSettings } from "../feedsettings";
 import { clientIp } from "../limits";
 import { MAX_BYTES, countNotes, getNote, listNotes, type Note } from "../notes";
 import { PASSWORD_RULE } from "../../shared/password";
@@ -62,6 +62,7 @@ const noteJson = (n: Note, base: string): NoteJson => ({
   markdown: n.markdown,
   created_at: n.createdAt.toISOString(),
   url: `${base}/${n.id}`,
+  ...(n.sender !== undefined && { sender: n.sender }),
 });
 
 // One page of notes, newest first, and the cursor for the next one.
@@ -77,7 +78,7 @@ async function page(notes: (limit: number, before?: string) => Promise<Note[]>, 
 // The feed as the Feeds API shows it; the feed must exist. No read link while it has no notes (ADR 0008).
 export async function feedJson(feed: string, headers: Headers): Promise<z.infer<typeof FeedJson>> {
   const readId = (await countNotes(feed)) ? await readIdOf(feed) : null;
-  const { title, description, image } = await getSettings(feed);
+  const { title, description, image, showSender } = await getSettings(feed);
   return {
     name: feed,
     title,
@@ -85,6 +86,7 @@ export async function feedJson(feed: string, headers: Headers): Promise<z.infer<
     protected: await protectedFeed(feed),
     read_url: readId && publicUrl(headers) + rssPath(readId),
     image_url: readId && image ? publicUrl(headers) + imagePath(readId, image) : null,
+    show_sender: showSender,
   };
 }
 
@@ -302,7 +304,7 @@ const OPS: AnyOp[] = [
     summary: "Change a feed's settings",
     description:
       "Replaces both the title (at most 100 characters) and the description (at most 500); surrounding whitespace is trimmed and control characters are refused. " +
-      "`image` is the file name `uploadImage` returned for this feed (title image), empty to remove it, or omitted to leave it as it is; any other value is a 400. " +
+      "`show_sender` (default true) shows who posted each note to readers; omitted leaves it as it is. `image` is the file name `uploadImage` returned for this feed (title image), empty to remove it, or omitted to leave it as it is; any other value is a 400. " +
       "Needs the feed's password if it has one, and counts against the post rate limit. Only on a feed that exists: it is created by its first note. Read links can't change settings.",
     tags: ["Feeds"],
     password: true,
@@ -321,7 +323,9 @@ const OPS: AnyOp[] = [
     const read = async () => {
       const bytes = await readCapped(req, 8192);
       try {
-        return JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes ?? new Uint8Array()));
+        const j = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes ?? new Uint8Array()));
+        // The API's snake_case name; checkSettings reads the stored one.
+        return j && typeof j === "object" && !Array.isArray(j) ? { ...j, showSender: j.show_sender } : j;
       } catch {
         throw new InvalidBodyError('JSON needs "title" and "description" strings');
       }
@@ -449,7 +453,8 @@ const OPS: AnyOp[] = [
   }).handle(async ({ req, params, query }) => {
     if (!isReadId(params.readId)) throw new NotFoundError("malformed read id");
     const feed = await feedForReadId(params.readId);
-    const notes = (l: number, b?: string) => (feed ? listNotes(feed, l, b) : Promise.resolve([]));
+    const settings = feed ? await getSettings(feed) : null;
+    const notes = async (l: number, b?: string) => (feed && settings ? forReaders(await listNotes(feed, l, b), settings) : []);
     return page(notes, query, publicUrl(req.headers) + readPath(params.readId));
   }),
 
@@ -467,8 +472,9 @@ const OPS: AnyOp[] = [
     },
   }).handle(async ({ req, params }) => {
     const feed = await feedForReadId(params.readId);
-    const note = feed ? await getNote(feed, params.id) : null;
-    if (!note) throw new NotFoundError("no such note");
+    const found = feed ? await getNote(feed, params.id) : null;
+    if (!feed || !found) throw new NotFoundError("no such note");
+    const [note] = forReaders([found], await getSettings(feed));
     return { status: 200, body: noteJson(note, publicUrl(req.headers) + readPath(params.readId)) };
   }),
 

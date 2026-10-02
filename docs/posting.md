@@ -8,7 +8,9 @@ curl --data-binary @note.md https://notes.example.com/homelab-7f3k2q9x4m8wz
 
 `POST /<feed>` is the short form of `POST /api/v1/feeds/<feed>/notes`; both behave the same. To read notes back as JSON, see the [REST API](api.md).
 
-The feed is created by its first note; there's nothing to set up first. notefeed stores the body exactly as sent, byte for byte, and answers `201 Created`:
+A note posted with the password has no sender. Only a person signed in through [sign-in](identity.md), which is opt-in, posts with one.
+
+The feed is created by its first note; there's nothing to set up first. The API returns the body exactly as posted. The file on disk starts with a small `---` header block (empty unless the note has a sender), then the body, so a `---` block you type at the start of a body stays body text. notefeed answers `201 Created`:
 
 ```json
 {
@@ -98,13 +100,15 @@ In the browser, the compose box and the note editor have an [Add image](web-ui.m
 
 A feed can have a **title** (at most 100 characters) and a **description** (at most 500), both on one line. The title is shown as a heading on the feed page, where the feed's name stays in the page header, and both show in the read-only view and in the RSS feed (see [Read links and RSS](feed.md#title-and-description)). The feed's name stays as it is: you can't rename a feed. A feed has neither until you set them.
 
-`GET /api/v1/feeds/<feed>` answers with the feed's `name`, `title`, `description`, `image_url`, `protected` and `read_url`. `read_url` is `null` while the feed has no notes, and for [a feed without a read link](operations.md#a-feed-without-a-read-link), and `image_url` is `null` while the feed has no title image (or its file was removed by hand), while the feed has no notes, and for a feed without a read link. `PUT` on the same URL replaces the title and the description, both at once, and answers with the feed; an empty string clears one. Surrounding spaces are trimmed, and control characters, including a line break, are refused.
+`GET /api/v1/feeds/<feed>` answers with the feed's `name`, `title`, `description`, `show_sender`, `image_url`, `protected` and `read_url`. `read_url` is `null` while the feed has no notes, and for [a feed without a read link](operations.md#a-feed-without-a-read-link), and `image_url` is `null` while the feed has no title image (or its file was removed by hand), while the feed has no notes, and for a feed without a read link. `PUT` on the same URL replaces the title and the description, both at once, and answers with the feed; an empty string clears one. Surrounding spaces are trimmed, and control characters, including a line break, are refused.
 
 ```sh
 curl -X PUT -H "Content-Type: application/json" \
   -d '{"title": "Homelab", "description": "Deploys and alerts"}' \
   https://notes.example.com/api/v1/feeds/homelab-7f3k2q9x4m8wz
 ```
+
+`show_sender` (a boolean, on by default) matters only when [sign-in](identity.md) is on: set to `false` in the `PUT` body, it leaves the sender out of the public read view, the RSS feed and the public read API. Leaving it out keeps the current value.
 
 The feed's **title image** is an image [uploaded to this feed](#images). Add `"image": "<file>"` to the body, with the `file` the upload returned, to show it in the page header, the read-only view and as the RSS channel image. `"image": ""` removes it, and leaving `image` out keeps the one the feed has. A name that is not an existing image of this feed is a `400`. The title image is public, like the title.
 
@@ -208,7 +212,7 @@ EOF
 ## Titles and filenames
 
 - **Title:** the first `# ` heading. Without one, it's the first non-empty line, with list and quote markers removed. `#` lines inside fenced code blocks are ignored. Titles are cut to 100 characters.
-- **File:** `<DATA_DIR>/<feed>/<id>.md`, where the id is the UTC time to the second plus a slug of the title, e.g. `20260929T140512Z-backup-finished`. Accented letters become plain ones (`Café` → `cafe`). A title with no usable letters becomes `note`.
+- **File:** `<DATA_DIR>/<feed>/<id>.md`, a `---` header block (`---` and `---` on two lines when empty) followed by the body, where the id is the UTC time to the second plus a slug of the title, e.g. `20260929T140512Z-backup-finished`. Accented letters become plain ones (`Café` → `cafe`). A title with no usable letters becomes `note`.
 - **Collisions:** two notes with the same title in the same second get `-2`, `-3` and so on. An existing note is never overwritten.
 
 ## Errors

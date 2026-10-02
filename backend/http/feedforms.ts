@@ -17,7 +17,8 @@ export const feedSettingsRoute = (req: Request, feed: string): Promise<Response>
     const read = async () => {
       const form = await readFields(req, FORM_MAX);
       if (!form) throw new InvalidBodyError("form needs title and description");
-      return { title: form.get("title"), description: form.get("description") };
+      // The checkbox is only on the page while identity is on; without its marker the setting stays as it is.
+      return { title: form.get("title"), description: form.get("description"), showSender: form.has("show_sender_present") ? form.has("show_sender") : undefined };
     };
     await updateFeed(feed, ip, read, feedAccess(h, feed));
     return seeOther(`${settingsPath(feed)}?saved=1`);

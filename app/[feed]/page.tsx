@@ -8,7 +8,7 @@ import { NoteList } from "@/components/NoteList";
 import { UnlockForm } from "@/components/UnlockForm";
 import { curlFor } from "@/app/_lib/curl";
 import { errorMessage, feedErrorMessage } from "@/app/_lib/messages";
-import { checkFeed, feedCookieName, feedPath, feedUnlocked, getFeed, publicUrl, readPath, rssPath, settingsPath } from "@/backend";
+import { checkFeed, feedCookieName, feedPath, feedUnlocked, getFeed, IDENTITY_COOKIE, identitySender, publicUrl, readPath, rssPath, settingsPath } from "@/backend";
 
 export const dynamic = "force-dynamic";
 
@@ -25,7 +25,8 @@ export async function generateMetadata({ params }: PageProps<"/[feed]">): Promis
 export default async function FeedPage({ params, searchParams }: PageProps<"/[feed]">) {
   const { feed } = await params;
   const { posted, deleted, error, retry } = await searchParams;
-  const access = await feedUnlocked(feed, (await cookies()).get(feedCookieName(feed))?.value);
+  const jar = await cookies();
+  const access = await feedUnlocked(feed, jar.get(feedCookieName(feed))?.value);
   // A locked feed shows nothing of itself: no notes, no read link.
   if (access === "locked") {
     return (
@@ -57,7 +58,7 @@ export default async function FeedPage({ params, searchParams }: PageProps<"/[fe
         </p>
       )}
       <Compose key={String(posted)} feed={feed} action={feedPath(feed)} error={errorMessage(error, retry)}
-        isNew={access === "open" && !exists} exists={exists}
+        isNew={access === "open" && !exists} exists={exists} sender={identitySender(jar.get(IDENTITY_COOKIE)?.value) !== undefined}
       />
       {notes.length === 0 ? (
         <section className="text-muted">

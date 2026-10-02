@@ -65,6 +65,7 @@ nav:
   - REST API: api.md
   - MCP: mcp.md
   - Read links and RSS: feed.md
+  - Sign-in and sender: identity.md
   - Configuration: configuration.md
   - Reverse proxy: reverse-proxy.md
   - Operations: operations.md

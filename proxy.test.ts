@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
-import { afterEach, beforeEach, expect, test } from "vitest";
-import { SESSION_COOKIE } from "@/backend";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { IDENTITY_COOKIE, SESSION_COOKIE } from "@/backend";
+import { sign } from "@/backend/oauth/tokens";
 import { login } from "@/backend/auth";
 import { config, proxy } from "./proxy";
 
@@ -8,6 +9,7 @@ beforeEach(() => {
   delete process.env.NOTEFEED_PASSWORD;
 });
 afterEach(() => {
+  vi.unstubAllEnvs();
   delete process.env.PUBLIC_URL;
   delete process.env.NOTEFEED_TRUST_PROXY;
 });
@@ -102,6 +104,18 @@ test("locked: a valid session cookie passes", () => {
   expect(isNext(proxy(req("/backups", { headers: { cookie: `${SESSION_COOKIE}=${login("pw", "test")}` } })))).toBe(true);
 });
 
+test("identity on: an identity cookie passes the lock; a forged one, or one when identity is off, does not", () => {
+  vi.stubEnv("NOTEFEED_SECRET", "a".repeat(40));
+  for (const [k, v] of Object.entries({ ISSUER: "https://idp.example", CLIENT_ID: "id", CLIENT_SECRET: "s", ALLOW: "*" })) vi.stubEnv(`NOTEFEED_OIDC_${k}`, v);
+  const cookie = `${IDENTITY_COOKIE}=${sign("identity", { sender: "Ann" })}`;
+  expect(isNext(proxy(req("/backups", { headers: { cookie } })))).toBe(true);
+  expect(isNext(proxy(req("/backups", { headers: { cookie: `${IDENTITY_COOKIE}=x.y` } })))).toBe(false);
+  vi.stubEnv("NOTEFEED_OIDC_ALLOW", "");
+  vi.stubEnv("NOTEFEED_PASSWORD", "pw");
+  const signed = `${IDENTITY_COOKIE}=${sign("identity", { sender: "Ann" })}`;
+  expect(isNext(proxy(req("/backups", { headers: { cookie: signed } })))).toBe(false);
+});
+
 test("locked: POST /login is rewritten without a session (that's how you get one)", () => {
   process.env.NOTEFEED_PASSWORD = "pw";
   expect(rewrite(proxy(req("/login", { method: "POST" })))).toBe("http://localhost:3000/api/login");
@@ -115,6 +129,21 @@ test.each(["/r/x/feed.xml", "/login", "/_next/static/x.js", "/api/v1/feeds/backu
 test.each(["/mcp", "/oauth/authorize?x=1", "/oauth/token", "/.well-known/oauth-authorization-server", "/.well-known/oauth-protected-resource/mcp"])("locked: %s is not sent to /login", (p) => {
   process.env.NOTEFEED_PASSWORD = "pw";
   expect(isNext(proxy(req(p)))).toBe(true);
+});
+
+const OIDC = { NOTEFEED_SECRET: "a".repeat(40), NOTEFEED_OIDC_ISSUER: "https://idp.example", NOTEFEED_OIDC_CLIENT_ID: "id", NOTEFEED_OIDC_CLIENT_SECRET: "s", NOTEFEED_OIDC_ALLOW: "*" };
+
+test.each(["password", "identity-only"])("locked (%s): /privacy and /imprint pass without a session, other pages still redirect", (mode) => {
+  if (mode === "password") process.env.NOTEFEED_PASSWORD = "pw";
+  else for (const [k, v] of Object.entries(OIDC)) vi.stubEnv(k, v);
+  for (const p of ["/privacy", "/imprint"]) {
+    const res = proxy(req(p));
+    expect(isNext(res)).toBe(true);
+    expect(res.status).toBe(200);
+  }
+  expect(proxy(req("/privacy/")).status).toBe(308); // slash strip still runs before the lock check
+  expect(proxy(req("/")).headers.get("location")).toBe("http://localhost:3000/login");
+  expect(proxy(req("/privacy/x")).status).toBe(307);
 });
 
 test("POST /mcp is not rewritten and passes (open instance)", () => {

@@ -1,15 +1,29 @@
-import { afterEach, beforeEach, expect, test } from "vitest";
+import { createHmac } from "node:crypto";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { bearerOf, checkBearer, locked, login, sessionOk } from "./auth";
+import { resetFeedsForTests } from "./feeds";
+import { sign } from "./oauth/tokens";
 import { AuthError, TooManyAttemptsError } from "./errors";
 import { resetRateLimitsForTests } from "./limits";
 
 beforeEach(() => {
   process.env.NOTEFEED_PASSWORD = "s3cret";
+  vi.stubEnv("NOTEFEED_SECRET", "a".repeat(40));
+  resetFeedsForTests();
   resetRateLimitsForTests();
 });
 afterEach(() => {
   delete process.env.NOTEFEED_RATE_LIMIT;
+  vi.unstubAllEnvs();
+  resetFeedsForTests();
 });
+
+const identityOn = () => {
+  vi.stubEnv("NOTEFEED_OIDC_ISSUER", "https://idp.example");
+  vi.stubEnv("NOTEFEED_OIDC_CLIENT_ID", "id");
+  vi.stubEnv("NOTEFEED_OIDC_CLIENT_SECRET", "secret");
+  vi.stubEnv("NOTEFEED_OIDC_ALLOW", "*");
+};
 
 // The thrown error, or null if the call passed.
 const thrown = (f: () => unknown) => {
@@ -81,4 +95,45 @@ test("an empty NOTEFEED_PASSWORD counts as unlocked", () => {
   process.env.NOTEFEED_PASSWORD = "";
   expect(locked()).toBe(false);
   expect(thrown(() => login("", "ip"))).toBeInstanceOf(AuthError);
+});
+
+test("sign-in without a password locks the instance, and an unset password never matches", () => {
+  delete process.env.NOTEFEED_PASSWORD;
+  process.env.NOTEFEED_OIDC_ISSUER = "https://idp.example";
+  process.env.NOTEFEED_OIDC_CLIENT_ID = "id";
+  process.env.NOTEFEED_OIDC_CLIENT_SECRET = "secret";
+  process.env.NOTEFEED_OIDC_ALLOW = "*";
+  try {
+    expect(locked()).toBe(true);
+    expect(thrown(() => checkBearer("Bearer ", "ip"))).toBeInstanceOf(AuthError);
+    expect(thrown(() => login("", "ip"))).toBeInstanceOf(AuthError);
+    expect(sessionOk(createHmac("sha256", "").update("notefeed-session").digest("hex"))).toBe(false);
+  } finally {
+    for (const n of ["ISSUER", "CLIENT_ID", "CLIENT_SECRET", "ALLOW"]) delete process.env[`NOTEFEED_OIDC_${n}`];
+  }
+  expect(locked()).toBe(false);
+});
+
+test("identity on, no password: a signed identity cookie is a session; tampered, expired or foreign ones are not", () => {
+  delete process.env.NOTEFEED_PASSWORD;
+  identityOn();
+  const t = sign("identity", { sender: "Ann" });
+  expect(sessionOk(undefined, t)).toBe(true);
+  expect(sessionOk(undefined, undefined)).toBe(false);
+  expect(sessionOk(undefined, t.slice(0, -2) + (t.endsWith("AA") ? "BB" : "AA"))).toBe(false);
+  expect(sessionOk(undefined, sign("identity", { sender: "Ann" }, Date.now() - 8 * 24 * 3600 * 1000))).toBe(false);
+  expect(sessionOk(undefined, sign("access", { aud: "x", sender: "Ann" }))).toBe(false);
+  vi.stubEnv("NOTEFEED_SECRET", "b".repeat(40));
+  resetFeedsForTests();
+  expect(sessionOk(undefined, t)).toBe(false);
+});
+
+test("identity on with a password: either session passes", () => {
+  identityOn();
+  expect(sessionOk(login("s3cret", "ip"), undefined)).toBe(true);
+  expect(sessionOk(undefined, sign("identity", { sender: "Ann" }))).toBe(true);
+});
+
+test("identity off: an identity cookie is no session", () => {
+  expect(sessionOk(undefined, sign("identity", { sender: "Ann" }))).toBe(false);
 });

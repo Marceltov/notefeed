@@ -7,6 +7,7 @@ import { checkPassword, locked } from "../auth";
 import { NotefeedError, RateLimitedError } from "../errors";
 import { parseForm, readCapped, seeOther } from "../http/request";
 import { clientIp } from "../limits";
+import { identityOn } from "../oidc/config";
 import { mcpResource, publicUrl } from "../urls";
 import { cid, newJti, sign, spendOnce, TTL, verify } from "./tokens";
 
@@ -51,7 +52,8 @@ export function authServerRoute(req: Request): Response {
 }
 
 // https anywhere, plain http only on loopback (native and CLI clients). No fragment, even an empty one.
-function redirectUriOk(u: unknown): u is string {
+// Also the rule for the OIDC provider's issuer and endpoints (oidc/flow.ts).
+export function redirectUriOk(u: unknown): u is string {
   if (typeof u !== "string" || u.length > 512 || u.includes("#") || !URL.canParse(u)) return false;
   const { protocol, hostname } = new URL(u);
   return protocol === "https:" || (protocol === "http:" && (hostname === "localhost" || hostname === "127.0.0.1"));
@@ -144,12 +146,19 @@ export async function authorizeRoute(req: Request): Promise<Response> {
     const retry = e instanceof RateLimitedError ? `&retry=${e.retryAfter}` : "";
     return seeOther(`/oauth/authorize?${new URLSearchParams(fields)}&error=${e.code}${retry}`);
   }
+  return issueCode(fields, h);
+}
+
+// Back to the client with a code, after a password login or an identity sign-in (`sender`). `fields` must come
+// from checkAuthorize, never from a request.
+export function issueCode(fields: Record<string, string>, h: Headers, sender?: string): Response {
   const code = sign("code", {
     cid: cid(fields.client_id),
     redirect_uri: fields.redirect_uri,
     code_challenge: fields.code_challenge,
     resource: fields.resource ?? mcpResource(h),
     jti: newJti(),
+    ...(sender === undefined ? {} : { sender, until: Math.floor(Date.now() / 1000) + TTL.identity }),
   });
   const to = new URL(fields.redirect_uri);
   to.searchParams.set("code", code);
@@ -158,9 +167,13 @@ export async function authorizeRoute(req: Request): Promise<Response> {
   return seeOther(to.href);
 }
 
-function issue(clientHash: string, aud: string): Response {
+// The sender (an identity login's) goes from the code into both tokens, and from each refresh token into the
+// next; its `until` goes into each refresh token, so the chain ends with the sign-in.
+function issue(clientHash: string, aud: string, sender: string | undefined, until: number | undefined): Response {
+  const s = sender === undefined ? {} : { sender };
+  const u = until === undefined ? {} : { until };
   return Response.json(
-    { access_token: sign("access", { aud }), token_type: "Bearer", expires_in: TTL.access, refresh_token: sign("refresh", { cid: clientHash, aud, jti: newJti() }) },
+    { access_token: sign("access", { aud, ...s }), token_type: "Bearer", expires_in: TTL.access, refresh_token: sign("refresh", { cid: clientHash, aud, jti: newJti(), ...s, ...u }) },
     { headers: noStore },
   );
 }
@@ -189,7 +202,7 @@ export async function tokenRoute(req: Request): Promise<Response> {
     if (createHash("sha256").update(verifier).digest("base64url") !== c.code_challenge) return oauthError("invalid_grant");
     if (resource !== undefined && resource !== c.resource) return oauthError("invalid_grant");
     if (!spendOnce(c.jti, c.exp!)) return oauthError("invalid_grant");
-    return issue(c.cid, c.resource);
+    return issue(c.cid, c.resource, c.sender, c.until);
   }
 
   if (grant === "refresh_token") {
@@ -201,8 +214,10 @@ export async function tokenRoute(req: Request): Promise<Response> {
     if (!verify("client", clientId)) return oauthError("invalid_client");
     if (r.cid !== cid(clientId)) return oauthError("invalid_grant");
     if (resource !== undefined && resource !== r.aud) return oauthError("invalid_grant");
+    // A sign-in's chain ends with sign-in switched off or with the sign-in's lifetime, like a browser session.
+    if (r.sender !== undefined && !(identityOn() && r.until !== undefined && Date.now() <= r.until * 1000)) return oauthError("invalid_grant");
     if (!spendOnce(r.jti, r.exp!)) return oauthError("invalid_grant");
-    return issue(r.cid, r.aud);
+    return issue(r.cid, r.aud, r.sender, r.until);
   }
 
   return oauthError(grant === undefined ? "invalid_request" : "unsupported_grant_type");

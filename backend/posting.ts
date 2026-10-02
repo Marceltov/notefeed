@@ -18,6 +18,7 @@ export async function postNote(
   ip: string,
   read: () => Promise<{ markdown: string; password?: string }>,
   access: FeedAccess,
+  sender?: string, // verified by the caller (identity cookie or OAuth token), never taken from a request body
 ): Promise<{ note: Note; created: boolean; readId: string | null }> {
   assertFeed(feed);
   const proved = await checkFeedAccess(feed, access, ip);
@@ -47,7 +48,7 @@ export async function postNote(
   // ponytail: checked, not locked. A protected creation can still complete in the few microseconds between
   // this check and createNote's ensureFeed, which then finds the feed and writes into it: this one note is
   // then in the protected feed. A lock around creation, per feed, would close it.
-  return { ...(await createNote(feed, markdown)), created };
+  return { ...(await createNote(feed, markdown, undefined, sender)), created };
 }
 
 // Same gate as posting, minus the caps. An edit or delete targets an existing note, so its feed
@@ -82,8 +83,8 @@ export async function updateFeed(feed: string, ip: string, read: () => Promise<u
   if (!(await hasFeed(feed))) throw new NotFoundError("no such feed");
   // Only a given image is checked; an omitted one stays as stored, even if its file has been removed by hand.
   if (given.image && !(await knownImage(feed, given.image))) throw new InvalidBodyError("image must be empty or the name of an image uploaded to this feed");
-  const image = given.image ?? (await getStoredSettings(feed)).image;
-  const checked = { ...given, image };
+  const stored = await getStoredSettings(feed);
+  const checked = { ...given, image: given.image ?? stored.image, showSender: given.showSender ?? stored.showSender };
   await saveSettings(feed, checked);
   return checked;
 }

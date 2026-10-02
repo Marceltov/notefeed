@@ -48,3 +48,12 @@ test("strips XML-forbidden control characters", () => {
   expect(out).not.toMatch(/[\x00-\x08\x0B\x0C\x0E-\x1F￾￿]/);
   expect(out).toContain("[31mred[0m\ttab\r\nok");
 });
+
+test("a sender becomes an escaped dc:creator and declares the namespace; none, no namespace", () => {
+  const o = { title: "t", description: "t", baseUrl: "https://x.test", readId: "AbCdEfGhIjKlMnOpQrSt_-" };
+  const out = renderFeed([{ ...notes[1], sender: "A & <B>" }, notes[0]], o);
+  expect(out).toContain('<rss version="2.0" xmlns:dc="http://purl.org/dc/elements/1.1/">');
+  expect(out.match(/<dc:creator>/g)).toHaveLength(1);
+  expect(out).toContain("<dc:creator>A &amp; &lt;B&gt;</dc:creator>");
+  expect(xml).not.toContain("dc");
+});

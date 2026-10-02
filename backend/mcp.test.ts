@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { readIdOf, resetFeedsForTests } from "./feeds";
 import { resetRateLimitsForTests } from "./limits";
-import { createNote } from "./notes";
+import { createNote, getNote } from "./notes";
 import { mcpRoute } from "./mcp";
 import { sign } from "./oauth/tokens";
 
@@ -18,7 +18,10 @@ beforeEach(async () => {
   resetRateLimitsForTests();
   for (const k of ["NOTEFEED_PASSWORD", "NOTEFEED_RATE_LIMIT", "PUBLIC_URL"]) delete process.env[k];
 });
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.unstubAllEnvs();
+});
 
 async function rpc(method: string, params: Record<string, unknown> = {}, headers: Record<string, string> = {}, version = V, withMeta = true) {
   const name: Record<string, string> = typeof params.name === "string" ? { "mcp-name": params.name } : {};
@@ -87,6 +90,12 @@ describe("tools", () => {
     expect(JSON.parse(r.content[0].text)).toEqual(r.structuredContent);
   });
 
+  test("post_note ignores a sender argument and stores none", async () => {
+    const r = await call("post_note", { feed: "a", markdown: "# Hi", sender: "Boss" });
+    expect(r.isError).toBeUndefined();
+    expect((await getNote("a", r.structuredContent.id))!.sender).toBeUndefined();
+  });
+
   test("post_note to a feed without a read link answers read_url null", async () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
     await mkdir(join(dir, "nolink", ".readid"), { recursive: true }); // can't be read
@@ -106,6 +115,15 @@ describe("tools", () => {
     const rest = (await call("list_notes", { feed: "a", limit: 2, before: first.next })).structuredContent;
     expect(rest.notes).toHaveLength(1);
     expect(rest.next).toBeNull();
+  });
+
+  test("list_notes and get_note include the sender when there is one", async () => {
+    const { note } = await createNote("a", "# Hi", undefined, "Ann");
+    await createNote("a", "# No", new Date(Date.now() - 5000));
+    const l = (await call("list_notes", { feed: "a" })).structuredContent.notes;
+    expect(l[0].sender).toBe("Ann");
+    expect(l[1]).not.toHaveProperty("sender");
+    expect((await call("get_note", { feed: "a", id: note.id })).structuredContent.sender).toBe("Ann");
   });
 
   test("get_note", async () => {
@@ -247,6 +265,20 @@ describe("gate on a locked instance", () => {
     const res = await rpc("tools/list", {}, bearer("pw"));
     expect(res.status).toBe(429);
     expect(Number(res.headers.get("retry-after"))).toBeGreaterThanOrEqual(1);
+  });
+  test("identity only (no password): an access token works and carries its sender into post_note; an empty bearer never does", async () => {
+    delete process.env.NOTEFEED_PASSWORD;
+    for (const [k, v] of Object.entries({ ISSUER: "https://idp.example", CLIENT_ID: "id", CLIENT_SECRET: "s", ALLOW: "*" })) vi.stubEnv(`NOTEFEED_OIDC_${k}`, v);
+    for (const h of [{}, { authorization: "Bearer " }, { authorization: "Bearer" }, bearer("x")]) expect((await rpc("tools/list", {}, h)).status).toBe(401);
+    const t = sign("access", { aud: "http://localhost:3000/mcp", sender: "Ann" });
+    const res = await rpc("tools/call", { name: "post_note", arguments: { feed: "a", markdown: "# Hi", sender: "Boss" } }, bearer(t));
+    expect(res.status).toBe(200);
+    const id = (await res.json()).result.structuredContent.id;
+    expect((await getNote("a", id))!.sender).toBe("Ann");
+  });
+  test("a post_note with the password bearer has no sender", async () => {
+    const res = await rpc("tools/call", { name: "post_note", arguments: { feed: "a", markdown: "# Hi" } }, bearer("pw"));
+    expect((await getNote("a", (await res.json()).result.structuredContent.id))!.sender).toBeUndefined();
   });
   test("an open instance ignores the bearer", async () => {
     delete process.env.NOTEFEED_PASSWORD;

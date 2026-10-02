@@ -2,14 +2,16 @@
 // backend/ (enforced in eslint.config.mjs). Calls are in-process today. Each query below is shaped like
 // the endpoint it would become if the backend moved out, so the cut would be here and nowhere else.
 import { config } from "./config";
-import { getSettings } from "./feedsettings";
+import { identityOn } from "./oidc/config";
+import { forReaders, getSettings } from "./feedsettings";
 import { isReadId, checkFeed, feedForReadId, hasFeed, readIdOf } from "./feeds";
 import { getNote, listNotes, type Note } from "./notes";
 import { imagePath } from "./urls";
 
 export type { Note };
-export { SESSION_COOKIE, locked, sessionOk } from "./auth";
+export { IDENTITY_COOKIE, SESSION_COOKIE, identitySender, locked, sessionOk } from "./auth";
 export { checkFeed } from "./feeds";
+export { identityOn };
 export { feedPath, publicUrl, readPath, rssPath, safeNext, settingsPath } from "./urls";
 // Every write is one of these HTTP handlers; the frontend only mounts them and renders.
 export { dispatch } from "./http/api";
@@ -21,9 +23,23 @@ export { loginRoute, logoutRoute } from "./http/session";
 export { imageRoute } from "./http/images";
 export { rssRoute } from "./http/rss";
 export { mcpRoute } from "./mcp";
+export { oidcCallbackRoute, oidcStartRoute } from "./oidc/routes";
 export { authServerRoute, authorizeRoute, checkAuthorize, metadataPreflight, protectedResourceRoute, registerPreflight, registerRoute, tokenRoute } from "./oauth/routes";
 
 export const instanceTitle = config.title;
+
+/** The sign-in provider's name for the button: the issuer's host; empty while identity is off. */
+export function providerName(): string {
+  if (!identityOn()) return "";
+  try {
+    return new URL(config.oidc().issuer).host;
+  } catch {
+    return "";
+  }
+}
+
+/** Whether the instance password is set (sign-in alone can lock an instance too). */
+export const passwordSet = () => config.password() !== "";
 
 const PAGE = 50;
 
@@ -33,7 +49,7 @@ const PAGE = 50;
  * legacy feed's id is derived from the name, so showing one would hand out the read link of whatever
  * feed is created there later. None either for a feed whose stored read id can't be read (backend/feeds.ts).
  */
-export async function getFeed(feed: string): Promise<{ notes: Note[]; readId: string | null; exists: boolean; title: string; description: string; image: string; imageUrl: string | null } | null> {
+export async function getFeed(feed: string): Promise<{ notes: Note[]; readId: string | null; exists: boolean; title: string; description: string; image: string; showSender: boolean; imageUrl: string | null } | null> {
   if (checkFeed(feed)) return null;
   const notes = await listNotes(feed, PAGE);
   // `exists`: a feed that had notes and lost them still exists (it counts toward the feed cap and can't get a password).
@@ -51,11 +67,13 @@ export async function getFeedNote(feed: string, id: string): Promise<Note | null
 export async function getReadFeed(id: string): Promise<{ notes: Note[]; title: string; description: string; imageUrl: string | null } | null> {
   if (!isReadId(id)) return null;
   const feed = await feedForReadId(id);
-  const { title, description, image } = feed ? await getSettings(feed) : { title: "", description: "", image: "" };
-  return { notes: feed ? await listNotes(feed, PAGE) : [], title, description, imageUrl: image ? imagePath(id, image) : null };
+  const settings = feed ? await getSettings(feed) : { title: "", description: "", image: "", showSender: true };
+  const { title, description, image } = settings;
+  return { notes: feed ? forReaders(await listNotes(feed, PAGE), settings) : [], title, description, imageUrl: image ? imagePath(id, image) : null };
 }
 
 export async function getReadNote(readId: string, id: string): Promise<Note | null> {
   const feed = await feedForReadId(readId);
-  return feed ? getNote(feed, id) : null;
+  const note = feed ? await getNote(feed, id) : null;
+  return note && feed ? forReaders([note], await getSettings(feed))[0] : null;
 }

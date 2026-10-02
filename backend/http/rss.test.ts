@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { beforeEach, expect, test } from "vitest";
 import { derivedReadId, readIdOf, resetFeedsForTests } from "../feeds";
 import { createNote, updateNote } from "../notes";
+import { saveSettings } from "../feedsettings";
 import { rssRoute } from "./rss";
 
 const BASE = "http://localhost:3000";
@@ -69,4 +70,14 @@ test("an edited note keeps its guid and shows the new text", async () => {
   expect(xml).toContain(`${n.id}</guid>`);
   expect(xml).toContain("after edit");
   expect(xml).not.toContain("before");
+});
+
+test("dc:creator shows the sender, and not when the feed hides it", async () => {
+  await createNote("test", "# One", undefined, "Ann <a@b.c>");
+  const rid = (await readIdOf("test"))!;
+  expect(await (await get(rid)).text()).toContain("<dc:creator>Ann &lt;a@b.c&gt;</dc:creator>");
+  await saveSettings("test", { title: "", description: "", image: "", showSender: false });
+  const xml = await (await get(rid)).text();
+  expect(xml).not.toContain("dc:creator");
+  expect(xml).not.toContain("xmlns:dc");
 });

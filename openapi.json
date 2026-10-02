@@ -929,7 +929,7 @@
       "put": {
         "operationId": "updateFeed",
         "summary": "Change a feed's settings",
-        "description": "Replaces both the title (at most 100 characters) and the description (at most 500); surrounding whitespace is trimmed and control characters are refused. `image` is the file name `uploadImage` returned for this feed (title image), empty to remove it, or omitted to leave it as it is; any other value is a 400. Needs the feed's password if it has one, and counts against the post rate limit. Only on a feed that exists: it is created by its first note. Read links can't change settings.",
+        "description": "Replaces both the title (at most 100 characters) and the description (at most 500); surrounding whitespace is trimmed and control characters are refused. `show_sender` (default true) shows who posted each note to readers; omitted leaves it as it is. `image` is the file name `uploadImage` returned for this feed (title image), empty to remove it, or omitted to leave it as it is; any other value is a 400. Needs the feed's password if it has one, and counts against the post rate limit. Only on a feed that exists: it is created by its first note. Read links can't change settings.",
         "tags": [
           "Feeds"
         ],
@@ -1541,6 +1541,13 @@
             "type": "string",
             "format": "uri",
             "description": "The note's page in the web UI"
+          },
+          "sender": {
+            "description": "Verified sign-in name of the poster; absent when the note was posted without a sign-in",
+            "type": [
+              "string",
+              "null"
+            ]
           }
         },
         "required": [
@@ -1732,6 +1739,10 @@
           "image": {
             "description": "The file name of an image uploaded to this feed (see uploadImage), shown as the feed's title image; empty removes it, omitted leaves it as it is",
             "type": "string"
+          },
+          "show_sender": {
+            "description": "Whether readers (RSS, the read API and pages) see who posted each note; omitted leaves it as it is, a new feed starts with true",
+            "type": "boolean"
           }
         },
         "required": [
@@ -1782,6 +1793,10 @@
               }
             ],
             "description": "The feed's title image (absolute URL, served under the read id), or null"
+          },
+          "show_sender": {
+            "type": "boolean",
+            "description": "Whether readers see who posted each note"
           }
         },
         "required": [
@@ -1790,7 +1805,8 @@
           "description",
           "protected",
           "read_url",
-          "image_url"
+          "image_url",
+          "show_sender"
         ],
         "additionalProperties": false
       },

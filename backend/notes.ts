@@ -5,7 +5,7 @@ import { deleteNoteFile, replaceNote, writeNote, listNoteFiles, readNote } from 
 import { EmptyNoteError, NoteTooLargeError } from "./errors";
 import { assertFeed, checkFeed, ensureFeed, forgetFeed } from "./feeds";
 
-export type Note = { id: string; title: string; markdown: string; createdAt: Date };
+export type Note = { id: string; title: string; markdown: string; createdAt: Date; sender?: string };
 
 export const MAX_BYTES = 102400;
 
@@ -15,13 +15,14 @@ export function isValidId(id: string): boolean {
   return ID_RE.test(id);
 }
 
-function toNote(id: string, markdown: string): Note {
+function toNote(id: string, { markdown, sender }: { markdown: string; sender?: string }): Note {
   const [, y, mo, d, h, mi, s] = ID_RE.exec(id)!;
   return {
     id,
     title: extractTitle(markdown),
     markdown,
     createdAt: new Date(Date.UTC(+y, +mo - 1, +d, +h, +mi, +s)),
+    ...(sender !== undefined && { sender }),
   };
 }
 
@@ -32,7 +33,7 @@ export function checkMarkdown(markdown: string): void {
 }
 
 // `readId`: the read id of the feed the note went into (null: that feed has no read link).
-export async function createNote(feed: string, markdown: string, now = new Date()): Promise<{ note: Note; readId: string | null }> {
+export async function createNote(feed: string, markdown: string, now = new Date(), sender?: string): Promise<{ note: Note; readId: string | null }> {
   assertFeed(feed);
   checkMarkdown(markdown);
   // ponytail: checked, not locked. A post that is past ensureFeed when its feed is deleted and the name
@@ -41,7 +42,7 @@ export async function createNote(feed: string, markdown: string, now = new Date(
   for (let retried = false; ; retried = true) {
     const readId = await ensureFeed(feed);
     try {
-      return { note: toNote(await writeNote(feed, base, markdown), markdown), readId };
+      return { note: toNote(await writeNote(feed, base, markdown, sender), { markdown, sender }), readId };
     } catch (e) {
       // The listed feed's directory is gone (deleted since ensureFeed, or removed by hand): this is a new
       // feed. Once only: gone again means another delete, and that is an error.
@@ -73,15 +74,15 @@ export async function countNotes(feed: string): Promise<number> {
 
 export async function getNote(feed: string, id: string): Promise<Note | null> {
   if (checkFeed(feed) || !isValidId(id)) return null;
-  const markdown = await readNote(feed, id);
-  return markdown === null ? null : toNote(id, markdown);
+  const stored = await readNote(feed, id);
+  return stored === null ? null : toNote(id, stored);
 }
 
 // The id never changes, so neither does createdAt. null: invalid feed or id, or no such note.
 export async function updateNote(feed: string, id: string, markdown: string): Promise<Note | null> {
   checkMarkdown(markdown);
   if (checkFeed(feed) || !isValidId(id)) return null;
-  return (await replaceNote(feed, id, markdown)) ? toNote(id, markdown) : null;
+  return (await replaceNote(feed, id, markdown)) ? getNote(feed, id) : null;
 }
 
 export async function removeNote(feed: string, id: string): Promise<boolean> {

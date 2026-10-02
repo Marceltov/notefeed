@@ -1,11 +1,14 @@
 import { mkdtemp, readdir, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { beforeEach, describe, expect, test } from "vitest";
-import { SESSION_COOKIE, login } from "../auth";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+import { IDENTITY_COOKIE, SESSION_COOKIE, login } from "../auth";
 import { hasFeed, readIdOf, resetFeedsForTests } from "../feeds";
 import { resetRateLimitsForTests } from "../limits";
 import { cookieValue, feedCookieName, protectedFeed } from "../feedlock";
+import { getNote } from "../notes";
+import { sign } from "../oauth/tokens";
+import { editNote, postNote } from "../posting";
 import { dispatch } from "./api";
 
 // POST /<feed> as proxy.ts hands it on: through the dispatcher.
@@ -47,14 +50,14 @@ test("201 with markdown body; file equals body; response links", async () => {
     feed_url: `${BASE}/test`,
     read_url: `${BASE}/r/${(await readIdOf("test"))!}/feed.xml`,
   });
-  expect(await file(body.id)).toBe("# Hi\nthere");
+  expect(await file(body.id)).toBe("---\n---\n# Hi\nthere");
 });
 
 test.each(["application/x-www-form-urlencoded", "text/plain; charset=utf-8"])("accepts %s as raw text", async (type) => {
   const res = await post("# A&b=c\n100% done", { "content-type": type });
   expect(res.status).toBe(201);
   const { id } = await res.json();
-  expect(await file(id)).toBe("# A&b=c\n100% done");
+  expect(await file(id)).toBe("---\n---\n# A&b=c\n100% done");
 });
 
 test("accepts a body without content type", async () => {
@@ -64,7 +67,7 @@ test("accepts a body without content type", async () => {
 test("accepts JSON {markdown}", async () => {
   const res = await post(JSON.stringify({ markdown: "# J" }), { "content-type": "application/json" });
   expect(res.status).toBe(201);
-  expect(await file((await res.json()).id)).toBe("# J");
+  expect(await file((await res.json()).id)).toBe("---\n---\n# J");
 });
 
 test("400 for JSON without a markdown string, or invalid JSON", async () => {
@@ -102,7 +105,7 @@ test("413 from the Content-Length header alone", async () => {
 
 test("keeps a leading BOM byte-for-byte", async () => {
   const res = await post("﻿# Bom\r\n", { "content-type": "text/plain" });
-  expect(await file((await res.json()).id)).toBe("﻿# Bom\r\n");
+  expect(await file((await res.json()).id)).toBe("---\n---\n﻿# Bom\r\n");
 });
 
 test("400 for a body that is not UTF-8, and nothing written", async () => {
@@ -140,7 +143,7 @@ const form = (fields: Record<string, string>) => {
 test("multipart (curl -F markdown=..., the compose box): the markdown field is the note", async () => {
   const res = await post(form({ markdown: "# From a form\r\nbody" }));
   expect(res.status).toBe(201);
-  expect(await file((await res.json()).id)).toBe("# From a form\r\nbody");
+  expect(await file((await res.json()).id)).toBe("---\n---\n# From a form\r\nbody");
 });
 
 test("an empty password field (the compose box's optional input) means no password", async () => {
@@ -279,7 +282,7 @@ test("a chunked body at the limit is accepted", async () => {
     "test",
   );
   expect(res.status).toBe(201);
-  expect(await file((await res.json()).id)).toBe("a".repeat(102400));
+  expect(await file((await res.json()).id)).toBe("---\n---\n" + ("a".repeat(102400)));
 });
 
 test("61st post in a minute is 429 with numeric Retry-After", async () => {
@@ -497,3 +500,35 @@ test("a same-origin post that creates a protected feed leaves this browser unloc
   const script = await post(JSON.stringify({ markdown: "# Mine", password: "pw2" }), { "content-type": "application/json" }, "mine2");
   expect(script.headers.get("set-cookie")).toBeNull();
 });
+
+test("postNote stores a verified sender, and editNote keeps it", async () => {
+  const { note } = await postNote("test", "1.1.1.1", async () => ({ markdown: "# Hi" }), {}, "Ann");
+  expect((await getNote("test", note.id))!.sender).toBe("Ann");
+  const edited = await editNote("test", note.id, "1.1.1.1", async () => ({ markdown: "# Ho" }), {});
+  expect(edited.sender).toBe("Ann");
+  expect((await getNote("test", note.id))!.sender).toBe("Ann");
+});
+
+test("a sender in the request body is ignored", async () => {
+  const res = await post(JSON.stringify({ markdown: "x", sender: "Boss" }), { "content-type": "application/json" });
+  expect(res.status).toBe(201);
+  expect((await getNote("test", (await res.json()).id))!.sender).toBeUndefined();
+});
+
+test("a post with the password bearer has no sender", async () => {
+  process.env.NOTEFEED_PASSWORD = "secret";
+  const res = await post("x", { authorization: "Bearer secret" });
+  expect(res.status).toBe(201);
+  expect((await getNote("test", (await res.json()).id))!.sender).toBeUndefined();
+});
+
+test("identity on: a same-origin post with the identity cookie stores the verified sender, not the body's", async () => {
+  for (const [k, v] of Object.entries({ ISSUER: "https://idp.example", CLIENT_ID: "id", CLIENT_SECRET: "s", ALLOW: "*" })) vi.stubEnv(`NOTEFEED_OIDC_${k}`, v);
+  const cookie = `${IDENTITY_COOKIE}=${sign("identity", { sender: "Ann" })}`;
+  const json = { "content-type": "application/json" };
+  expect((await post(JSON.stringify({ markdown: "x" }), { ...json, cookie })).status).toBe(401); // no Origin: not our page
+  const res = await post(JSON.stringify({ markdown: "x", sender: "Boss" }), { ...json, cookie, origin: BASE });
+  expect(res.status).toBe(201);
+  expect((await getNote("test", (await res.json()).id))!.sender).toBe("Ann");
+});
+afterEach(() => vi.unstubAllEnvs());

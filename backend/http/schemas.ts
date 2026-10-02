@@ -16,6 +16,7 @@ export const NoteJson = z
     markdown: z.string().describe("The note, byte-for-byte as posted"),
     created_at: z.iso.datetime().describe("When the note was posted (UTC)"),
     url: z.url().describe("The note's page in the web UI"),
+    sender: z.string().nullable().optional().describe("Verified sign-in name of the poster; absent when the note was posted without a sign-in"),
   })
   .meta({ id: "Note" });
 export type NoteJson = z.infer<typeof NoteJson>;
@@ -71,6 +72,7 @@ export const FeedSettingsJson = z
       .string()
       .optional()
       .describe("The file name of an image uploaded to this feed (see uploadImage), shown as the feed's title image; empty removes it, omitted leaves it as it is"),
+    show_sender: z.boolean().optional().describe("Whether readers (RSS, the read API and pages) see who posted each note; omitted leaves it as it is, a new feed starts with true"),
   })
   .meta({ id: "FeedSettings" });
 export const FeedJson = z
@@ -81,6 +83,7 @@ export const FeedJson = z
     protected: z.boolean().describe("Whether the feed has its own password"),
     read_url: z.url().nullable().describe("The feed's read-only RSS link; null while the feed has no notes, or if the server can't read the feed's stored read id"),
     image_url: IMAGE_URL,
+    show_sender: z.boolean().describe("Whether readers see who posted each note"),
   })
   .meta({ id: "Feed" });
 export const ReadFeedJson = z.object({ title: TITLE, description: DESCRIPTION, image_url: IMAGE_URL }).meta({ id: "ReadFeed" });

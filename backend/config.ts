@@ -31,4 +31,14 @@ export const config = {
   // body only up to that, so a larger image would arrive cut. Images per feed: 0 or below, no cap.
   maxImageBytes: () => Math.min(positive("NOTEFEED_MAX_IMAGE_BYTES", 5242880), 10485760),
   maxImagesPerFeed: () => Math.max(0, int("NOTEFEED_MAX_IMAGES_PER_FEED", 0)),
+  // Optional OIDC sign-in (see oidc/config.ts): issuer, client credentials, and who may sign in
+  // (comma-separated addresses, @domain entries or *; lowercased).
+  oidc: () => ({
+    issuer: env("NOTEFEED_OIDC_ISSUER"),
+    clientId: env("NOTEFEED_OIDC_CLIENT_ID"),
+    clientSecret: env("NOTEFEED_OIDC_CLIENT_SECRET"),
+    allow: env("NOTEFEED_OIDC_ALLOW").split(",").map((n) => n.trim().toLowerCase()).filter(Boolean),
+    // id_token claims tried in order for the sender (case-sensitive); not part of "identity is on".
+    senderClaim: ((l) => (l.length ? l : ["name", "email"]))(env("NOTEFEED_OIDC_SENDER_CLAIM").split(",").map((n) => n.trim()).filter(Boolean)),
+  }),
 };

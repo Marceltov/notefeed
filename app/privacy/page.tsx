@@ -1,9 +1,12 @@
 import type { Metadata } from "next";
 import { Header } from "@/components/Header";
+import { identityOn } from "@/backend";
 
 export const metadata: Metadata = { title: "Data privacy" };
 
 const link = "text-carbon underline underline-offset-2";
+
+export const dynamic = "force-dynamic"; // identityOn() reads the environment per request
 
 export default function Privacy() {
   return (
@@ -53,6 +56,25 @@ export default function Privacy() {
           included. Do not post personal data of other people without a reason
           to.
         </p>
+        {identityOn() && (
+          <>
+            <h2 className="pt-2 font-bold">Sign-in and sender name</h2>
+            <p>
+              <strong>What:</strong> signing in is optional and enabled on this
+              instance. If you sign in, a sender name (a name or other identifier
+              from your sign-in provider, as the operator configured) is
+              stored with the notes you post. It is shown on the feed page, on
+              the public read link and in RSS, unless the feed hides it.
+              <br />
+              <strong>Controller:</strong> the operator named above is the
+              controller of this data.
+              <br />
+              <strong>Removal:</strong> it is removed by deleting the notes, or by
+              the operator removing the sender line from the note files.
+              Editing a note keeps its sender.
+            </p>
+          </>
+        )}
         <h2 className="pt-2 font-bold">Server logs and IP addresses</h2>
         <p>
           <strong>What:</strong> when you visit, the web server logs your IP

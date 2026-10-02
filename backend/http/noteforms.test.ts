@@ -1,11 +1,13 @@
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { beforeEach, expect, test } from "vitest";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { IDENTITY_COOKIE } from "../auth";
 import { cookieValue, createProtected, feedCookieName } from "../feedlock";
 import { resetFeedsForTests } from "../feeds";
 import { resetRateLimitsForTests } from "../limits";
 import { createNote, getNote } from "../notes";
+import { sign } from "../oauth/tokens";
 import { noteFormRoute } from "./noteforms";
 
 let id: string;
@@ -108,3 +110,15 @@ test("a protected feed needs its cookie", async () => {
 test("an invalid feed name is a 400", async () => {
   expect((await send("a%2Fb", id, "edit", { markdown: "# x" })).status).toBe(400);
 });
+
+test("identity on: the edit form works with a signed-in cookie, not without one, and keeps no sender", async () => {
+  for (const [k, v] of Object.entries({ ISSUER: "https://idp.example", CLIENT_ID: "id", CLIENT_SECRET: "s", ALLOW: "*" })) vi.stubEnv(`NOTEFEED_OIDC_${k}`, v);
+  vi.stubEnv("NOTEFEED_PASSWORD", "");
+  expect(loc(await send("openfeed", id, "edit", { markdown: "# No" }))).toMatch(/error=auth/);
+  const cookie = `${IDENTITY_COOKIE}=${sign("identity", { sender: "Ann" })}`;
+  expect(loc(await send("openfeed", id, "edit", { markdown: "# New" }, undefined, cookie))).toBe(`/openfeed/${id}?edited=1`);
+  const note = (await getNote("openfeed", id))!;
+  expect(note.markdown).toBe("# New");
+  expect(note.sender).toBeUndefined(); // an edit never adds a sender
+});
+afterEach(() => vi.unstubAllEnvs());
