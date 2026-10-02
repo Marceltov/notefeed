@@ -31,10 +31,9 @@ Chosen option: "Private by default, identity optional". The default is the model
 * Good, because the self-hoster decides: a no-personal-data instance and a team instance are the same software.
 * Good, because the verified sender needs no account system, only the provider's claims and a field on the note.
 * Bad, because two modes need two sets of tests and docs, and the privacy statements differ between them.
-* Bad, because a stored sender is personal data inside plain note files: deleting a person's data means deleting or editing their notes, and a copy in a backup or an RSS reader is out of notefeed's reach.
+* Bad, because a stored sender is personal data inside plain note files: deleting a person's data means deleting their notes or having the operator edit the `sender` line out of the note files (editing a note keeps its sender), and a copy in a backup or an RSS reader is out of notefeed's reach.
 * Bad, because without identity mode there is still no audit trail, and a shared password cannot be taken from one person.
-
-* Bad, because a note stored before this change whose text is exactly `---\nsender: "X"\n---` reads as having a sender, with identity mode on or off, since earlier notes can't be told apart from typed ones.
+* Bad, because a note stored before this change whose first lines are `---`, then only `key: <JSON>` lines (or nothing), then `---` reads as having a header block, which hides that header from the displayed body (a legacy `---\n---\n` pair is dropped); earlier notes can't be told apart from typed ones (see the dated note under the resolved questions).
 
 ### Resolved questions
 

@@ -61,8 +61,9 @@ export default function Imprint() {
               (a name or other identifier from the provider, as configured) is stored with the notes
               you post and shown on the feed page, the public read link and RSS
               unless the feed hides it. I am the controller of that data. It is
-              removed by deleting or editing the notes. See the data privacy
-              page.
+              removed by deleting the notes, or by me removing the sender line
+              from the note files; editing a note keeps its sender. See the
+              data privacy page.
             </p>
           </>
         )}

@@ -69,8 +69,9 @@ export default function Privacy() {
               <strong>Controller:</strong> the operator named above is the
               controller of this data.
               <br />
-              <strong>Removal:</strong> it is removed by deleting or editing the
-              notes.
+              <strong>Removal:</strong> it is removed by deleting the notes, or by
+              the operator removing the sender line from the note files.
+              Editing a note keeps its sender.
             </p>
           </>
         )}
