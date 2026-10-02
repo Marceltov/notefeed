@@ -3,6 +3,8 @@ import { Header } from "@/components/Header";
 
 export const metadata: Metadata = { title: "Data privacy" };
 
+const link = "text-carbon underline underline-offset-2";
+
 export default function Privacy() {
   return (
     <>
@@ -10,41 +12,96 @@ export default function Privacy() {
       <main className="space-y-4">
         <h1 className="text-xl font-bold tracking-tight">Data privacy</h1>
         <p>
-          Marcel Bruckner runs this notefeed instance. This is what it stores
-          about you.
+          This explains which personal data this notefeed instance processes
+          and why, as required by the GDPR (DSGVO). Last updated: 2 October
+          2026.
+        </p>
+        <h2 className="pt-2 font-bold">Controller (Verantwortlicher)</h2>
+        <p>
+          Marcel Bruckner, Kempten, Germany. Email:{" "}
+          <a href="mailto:privacy@notefeed.me" className={link}>
+            privacy@notefeed.me
+          </a>
+          . No data protection officer is appointed, as none is required.
+        </p>
+        <h2 className="pt-2 font-bold">Hosting</h2>
+        <p>
+          The instance runs on my own server in Germany. No hosting provider or
+          other processor has access to the data, and no data is transferred to
+          third countries.
         </p>
         <h2 className="pt-2 font-bold">Notes, feeds and images</h2>
         <p>
-          What you post is stored on the server as you sent it: the notes, the
-          feed name, the optional feed title, description and title image, and
-          uploaded images with their metadata (such as GPS position) left in.
+          <strong>What:</strong> what you post is stored as you sent it: the
+          notes, the feed name, the optional feed title, description and title
+          image, and uploaded images.
+          <br />
+          <strong>Why and legal basis:</strong> to provide the feed you asked
+          for (Art. 6 (1) (b) GDPR).
+          <br />
+          <strong>Retention:</strong> until you delete the feed. Deleting a feed
+          deletes everything in it.
+        </p>
+        <p>
+          <strong>Careful with images:</strong> metadata such as the GPS
+          position is left in uploaded images. Anyone who can read the feed can
+          see it. Remove it before uploading if you do not want to share it.
+        </p>
+        <p>
           Feeds have no accounts. Anyone who knows a feed&apos;s name can read
           and post to it, and anyone with its read link can read it, images
-          included. Deleting a feed deletes everything in it.
+          included. Do not post personal data of other people without a reason
+          to.
         </p>
-        <h2 className="pt-2 font-bold">IP addresses</h2>
+        <h2 className="pt-2 font-bold">Server logs and IP addresses</h2>
         <p>
-          Your IP address is used to rate-limit posting and failed password
-          attempts. It is kept in memory only, for about a minute, and is not
-          written to disk by notefeed. The server or a reverse proxy in front of
-          it may keep ordinary access logs.
+          <strong>What:</strong> when you visit, the web server logs your IP
+          address, the time, the requested path, the status code and your
+          browser&apos;s user agent.
+          <br />
+          <strong>Why and legal basis:</strong> to keep the service secure and
+          to find and stop abuse (Art. 6 (1) (f) GDPR, legitimate interest).
+          <br />
+          <strong>Retention:</strong> 14 days, then the logs are deleted.
+        </p>
+        <p>
+          Separately, notefeed uses your IP address to rate-limit posting and
+          failed password attempts (same legal basis). That is kept in memory
+          only, for about a minute, and is not written to disk by notefeed.
         </p>
         <h2 className="pt-2 font-bold">Cookies</h2>
         <p>
           If the instance or a feed is password-protected, a cookie keeps you
-          logged in. It is strictly necessary, holds no personal data and
-          carries no tracking. There are no analytics, advertising or
-          third-party requests.
+          logged in. It is strictly necessary to provide the service you
+          requested (§ 25 (2) no. 2 TDDDG), so no consent is needed. It holds no
+          personal data and carries no tracking. There are no analytics,
+          advertising or third-party requests, and nothing is loaded from
+          external servers.
+        </p>
+        <h2 className="pt-2 font-bold">Recipients and automated decisions</h2>
+        <p>
+          Your data is not passed on to anyone. There is no automated
+          decision-making or profiling.
         </p>
         <h2 className="pt-2 font-bold">Your rights</h2>
         <p>
-          You can delete a feed and its notes yourself. For anything else, such
-          as access to or removal of data, write to{" "}
-          <a
-            href="mailto:privacy@notefeed.me"
-            className="text-carbon underline underline-offset-2"
-          >
+          You have the right to access (Art. 15), rectification (Art. 16),
+          erasure (Art. 17), restriction of processing (Art. 18), data
+          portability (Art. 20) and to object to processing based on legitimate
+          interest (Art. 21 GDPR). You can delete a feed and its notes
+          yourself. For anything else, write to{" "}
+          <a href="mailto:privacy@notefeed.me" className={link}>
             privacy@notefeed.me
+          </a>
+          . I will answer within one month.
+        </p>
+        <p>
+          You also have the right to lodge a complaint with a supervisory
+          authority. For me that is the Bavarian State Office for Data
+          Protection Supervision (Bayerisches Landesamt für
+          Datenschutzaufsicht), Promenade 18, 91522 Ansbach,{" "}
+          <a href="https://www.lda.bayern.de" className={link}>
+            www.lda.bayern.de
           </a>
           .
         </p>
