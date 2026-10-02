@@ -4,11 +4,11 @@ export default function manifest(): MetadataRoute.Manifest {
   return {
     name: "notefeed",
     short_name: "notefeed",
-    description: "Markdown notes under a name. Post with curl, follow in any RSS reader.",
+    description: "Markdown notes and RSS. Post from where you need it, follow where you want.",
     start_url: "/",
     display: "standalone",
-    background_color: "#f2f3f0",
-    theme_color: "#f2f3f0",
+    background_color: "#f3ead6",
+    theme_color: "#f3ead6",
     icons: [
       { src: "/icon-192.png", sizes: "192x192", type: "image/png" },
       { src: "/icon-512.png", sizes: "512x512", type: "image/png" },
