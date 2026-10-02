@@ -16,6 +16,7 @@ notefeed is configured with environment variables. With Compose, set them under 
 | `NOTEFEED_MAX_IMAGES_PER_FEED` | `0`: no limit (so is any value below 1) | Most images in one feed. A new image beyond it answers `507`. |
 | `NOTEFEED_SECRET` | random, kept in `DATA_DIR/.secret` | The server secret, at least 32 characters (`openssl rand -hex 32`); notefeed refuses a shorter one, or a `.secret` file shorter than 32 bytes. It signs the unlock cookies of [protected feeds](posting.md#a-feed-with-its-own-password) and the [OAuth](#oauth) tokens of MCP clients, and the [read links](feed.md) of feeds created before feed deletion was added are derived from it. Changing it locks unlocked browsers again, signs MCP clients out and changes the read link of each of those older feeds; feeds created since have a stored read id and keep theirs. |
 | `NOTEFEED_TITLE` | `notefeed` | Title of the RSS feed and of the read-only view, for a feed that has no title of its own. |
+| `NOTEFEED_OIDC_ISSUER`, `NOTEFEED_OIDC_CLIENT_ID`, `NOTEFEED_OIDC_CLIENT_SECRET`, `NOTEFEED_OIDC_ALLOW` | none: sign-in off | Optional sign-in through your OpenID Connect provider, so notes carry a verified sender. On only when all four are set; needs `PUBLIC_URL` and `NOTEFEED_SECRET`. See [Sign-in and sender](identity.md). |
 | `DATA_DIR` | `/data` | Folder holding the feeds, one subfolder each. |
 | `TZ` | `UTC` | Time zone for the times shown in the web UI, e.g. `Europe/Berlin`. |
 | `PUID`, `PGID` | owner of `DATA_DIR` | User and group notefeed runs as, and so the owner of new note files. By default the owner of the data folder; uid/gid 1000 if that is root. Docker image only. |
@@ -41,6 +42,10 @@ There is one password for the whole instance. Changing it logs out every browser
 
 !!! note "Logins don't expire"
     The login cookie is derived from the password alone and stays valid for a year. Logging out only removes it from that browser: a copied cookie keeps working until the password changes. If you think a cookie leaked, change `NOTEFEED_PASSWORD`.
+
+## Sign-in
+
+Optional, and off unless all four `NOTEFEED_OIDC_*` variables are set: notefeed stays private by default and stores nothing about a person. With them set, people sign in through your OpenID Connect provider and their notes carry a sender. Setup, what is stored and how to hide it are on [Sign-in and sender](identity.md). Sign-in alone locks the instance to signed-in people, and changing the password signs everyone out.
 
 ## Feed passwords
 

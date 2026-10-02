@@ -38,6 +38,7 @@ The RSS feed holds the newest 50 notes. Its title is the feed's title, or `NOTEF
 - a link to the note's read-only page, `<PUBLIC_URL>/r/<read id>/<id>`
 - the time it was posted
 - the note's raw markdown as its description
+- the sender, as `<dc:creator>`, only when [sign-in](identity.md) is on, the note has one and the feed's **Show who posted** setting is on
 
 Images in notes are plain markdown image links, `![](https://...)`, in that raw markdown, pointing at absolute URLs under the same read id (see [Images](posting.md#images)). A reader that shows the description as text shows the link, not the picture; notefeed does not turn the markdown into HTML for the feed.
 
@@ -45,6 +46,10 @@ Control characters that XML doesn't allow (such as terminal colour codes from sc
 
 !!! note "Links need the right public address"
     Links are built from `PUBLIC_URL`, or from the request when it's unset. If a reader fetches the feed over a LAN address, set `PUBLIC_URL` so links still point at the public site. See [Configuration](configuration.md).
+
+## Who posted
+
+When [sign-in](identity.md) is on, notes posted by a signed-in person carry a sender. The read-only view and the RSS feed show it unless the feed's **Show who posted** setting is off; notes posted with the password have none. A copy a reader already fetched keeps the sender it had.
 
 ## Glance and Dynacat
 

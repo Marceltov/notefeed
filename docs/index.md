@@ -7,6 +7,8 @@ It exists because dashboards like [Glance](https://github.com/glanceapp/glance) 
 ![A notefeed feed page: a header with read-only, RSS and settings buttons, a compose box, and notes grouped by day](assets/screenshot-light.png#only-light)
 ![A notefeed feed page: a header with read-only, RSS and settings buttons, a compose box, and notes grouped by day](assets/screenshot-dark.png#only-dark)
 
+notefeed is private by default and stores nothing about a person. [Sign-in with a verified sender](identity.md) is opt-in.
+
 ## How feeds work
 
 notefeed works like [ntfy](https://ntfy.sh): there are no accounts and nothing to set up. A feed is a name, such as `homelab-7f3k2q9x4m8wz`. Posting to `/<name>` creates the feed on its first note, and `/<name>` in a browser shows it.

@@ -43,4 +43,4 @@ Any proxy works if it:
 If you can't control `Host` and `X-Forwarded-Host` (for example with a CDN in front), `PUBLIC_URL` covers the links. If the proxy doesn't set `X-Forwarded-For`, leave `NOTEFEED_TRUST_PROXY` unset and accept the shared rate limit. notefeed then also ignores `X-Forwarded-Proto` and `X-Forwarded-Host`, so set `PUBLIC_URL`.
 
 !!! warning "Don't put forward auth in front"
-    A login gate such as Authentik forward auth in front of notefeed would block feed readers and scripts. Use `NOTEFEED_PASSWORD` instead: it locks posting and the web UI and leaves read links open.
+    A login gate such as Authentik forward auth in front of notefeed would block feed readers and scripts. Use `NOTEFEED_PASSWORD` instead: it locks posting and the web UI and leaves read links open. If you want people to log in through your provider, use [sign-in](identity.md) rather than a gate: it keeps read links, RSS and scripts working.
