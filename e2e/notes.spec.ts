@@ -78,6 +78,7 @@ test("the read-only view has no edit or delete", async ({ page }) => {
   await postAndOpen(page, name, "# Read me");
   await page.getByRole("link", { name: "Back to all notes" }).click();
   await page.getByRole("link", { name: "Open read-only view" }).click();
+  await expect(page).toHaveURL(/\/r\/[^/]+$/); // else "Read me" can still be the link on the feed page
   await page.getByRole("link", { name: "Read me" }).click();
   await expect(page).toHaveURL(/\/r\/[^/]+\/\d{8}T/);
   await expect(page.getByRole("heading", { name: "Read me" })).toBeVisible();
