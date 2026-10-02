@@ -20,6 +20,7 @@ notefeed is configured with environment variables. With Compose, set them under 
 | `NOTEFEED_OIDC_LABEL` | the issuer's host | Optional. The text after **Sign in with** on the button for this provider. |
 | `NOTEFEED_OIDC_<NAME>_ISSUER`, `_CLIENT_ID`, `_CLIENT_SECRET`, `_ALLOW`, `_SENDER_CLAIM`, `_LABEL` | none | Optional further providers, each with a name of your choosing in `<NAME>` (capitals, digits, underscores). Nothing is predefined. See [Several providers](identity.md#several-providers). |
 | `NOTEFEED_OIDC_SENDER_CLAIM` | `name,email` | Optional. Comma-separated id_token claims tried in order for the sender shown on notes and stored in the note file, so pick one that is fine to publish (`sub` is opaque, `email` exposes an address). Not needed to turn sign-in on. See [Sign-in and sender](identity.md). |
+| `NOTEFEED_LOG_LEVEL` | `info` | How much notefeed logs: `error`, `warn`, `info`, `debug` or `silent`. Any other value counts as `info`. See [Logs](operations.md#logs). |
 | `DATA_DIR` | `/data` | Folder holding the feeds, one subfolder each. |
 | `TZ` | `UTC` | Time zone for the times shown in the web UI, e.g. `Europe/Berlin`. |
 | `PUID`, `PGID` | owner of `DATA_DIR` | User and group notefeed runs as, and so the owner of new note files. By default the owner of the data folder; uid/gid 1000 if that is root. Docker image only. |
@@ -68,6 +69,8 @@ NOTEFEED_RESERVED_PASSWORD: a-long-operator-password
 At start-up each listed name that doesn't exist yet is created as a [protected feed](posting.md#a-feed-with-its-own-password) with that password. Post to it like any protected feed, with `X-Feed-Password: <the password>` (or `Authorization: Bearer` first, if the instance has a password too). Its read id is its name, with no obfuscation: `/r/news` and `/r/news/feed.xml` are the links to hand out, and they never change, even if the feed is deleted and made again at the next start. A reserved feed deleted while running comes back at the next start.
 
 Nobody can create a listed name by posting: that answers `400` (`reserved_feed`). Without `NOTEFEED_RESERVED_PASSWORD` the names are still blocked, but the feeds don't exist. A feed that already had such a name keeps working as it was.
+
+If a reserved name already exists as an open feed, it is not converted: delete its folder in `DATA_DIR` and restart, so notefeed recreates it protected, and the start-up [log](operations.md#logs) warns about it until then.
 
 ## OAuth
 
