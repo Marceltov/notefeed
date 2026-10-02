@@ -49,7 +49,7 @@ export type Created = {
      */
     feed_url: string;
     /**
-     * The feed's read-only RSS link, safe to share; null only if the server can't read the feed's stored read id
+     * The feed's read-only RSS link, safe to share; null only if the server can't read the feed's stored read id, or if that id and the derived one both belong to other feeds
      */
     read_url: string | null;
 };

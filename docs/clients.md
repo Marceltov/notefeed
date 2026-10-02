@@ -77,7 +77,7 @@ A feed can also have its own password (see [A feed with its own password](postin
 
 | Python | Node | Does |
 |---|---|---|
-| `post(markdown, feed=None)` | `post(markdown, { feed })` | Posts a note; returns `id`, `url`, `feed_url`, `read_url` |
+| `post(markdown, feed=None)` | `post(markdown, { feed })` | Posts a note; returns `id`, `url`, `feed_url`, `read_url` (`None`/`null` for a feed without a read link) |
 | `notes(feed=None, page_size=50)` | `notes({ feed, pageSize })` | Every note in the feed, newest first. It fetches the next page only as you iterate, so stop whenever you have enough |
 | `note(id, feed=None)` | `note(id, { feed })` | One note |
 | `edit(id, markdown, feed=None)` | `edit(id, markdown, { feed })` | Replaces a note's markdown and returns the note. Its id and URLs stay; the title follows the new text. A missing note is a `NotFoundError` |

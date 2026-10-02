@@ -7,7 +7,7 @@ import { beforeEach, expect, test, vi } from "vitest";
 // Deletion and creation interleaved on purpose, by slowing single filesystem calls:
 // `rename`: the delete's rename is "slow" (waits, then renames), "held" (renames, then waits: the directory
 // is gone and the index still lists the feed) or "fails" (EACCES). `readId`: reading `.readid` is slow.
-const knobs = vi.hoisted(() => ({ rename: "" as "" | "slow" | "held" | "fails", readId: false }));
+const knobs = vi.hoisted(() => ({ rename: "" as "" | "slow" | "held" | "fails", readId: false, readIdFails: false }));
 const pause = (ms = 50) => new Promise((r) => setTimeout(r, ms));
 vi.mock("node:fs/promises", async (importOriginal) => {
   const fs = await importOriginal<typeof import("node:fs/promises")>();
@@ -22,6 +22,7 @@ vi.mock("node:fs/promises", async (importOriginal) => {
     },
     readFile: async (path: string, ...rest: unknown[]) => {
       if (knobs.readId && String(path).endsWith(".readid")) await pause();
+      if (knobs.readIdFails && String(path).endsWith(".readid")) throw Object.assign(new Error("too many open files"), { code: "EMFILE" });
       return (fs.readFile as (...a: unknown[]) => Promise<unknown>)(path, ...rest);
     },
   };
@@ -38,6 +39,7 @@ beforeEach(async () => {
   process.env.NOTEFEED_SECRET = "test-secret-".padEnd(32, "x");
   knobs.rename = "";
   knobs.readId = false;
+  knobs.readIdFails = false;
   resetFeedsForTests();
   await createNote("w", "x");
   old = (await readIdOf("w"))!;
@@ -122,4 +124,16 @@ test("a creation that lost to another one, whose feed is deleted before it reads
   knobs.readId = false;
   expect(await consistent()).toBe(true);
   expect((await listNotes("w")).length).toBe(1); // the loser's note, in a feed of its own
+});
+
+test("a creation that lost the race and can't read the winner's .readid fails, registers nothing for it, and a retry works", async () => {
+  knobs.readIdFails = true;
+  const posts = await Promise.allSettled([createNote("nf", "# a"), createNote("nf", "# b")]);
+  knobs.readIdFails = false;
+  expect(posts.filter((p) => p.status === "rejected")).toHaveLength(1);
+  const id = await readIdOf("nf");
+  expect(id).toMatch(/^[A-Za-z0-9_-]{22}$/);
+  expect((await readFile(join(dir, "nf", ".readid"), "utf8")).trim()).toBe(id);
+  await createNote("nf", "# c"); // the retry
+  expect(await readIdOf("nf")).toBe(id);
 });
