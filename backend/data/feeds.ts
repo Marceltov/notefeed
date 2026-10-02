@@ -44,7 +44,8 @@ export async function createFeedDir(feed: string, readId: string, hash?: string)
 // reader's point of view), then the files go. A leading dot is no valid feed name, so a leftover is never
 // listed as a feed. false = there was no such directory.
 const DELETED = ".deleted-";
-const LEFTOVER_RE = /^\.deleted-[0-9a-f]{12}$/;
+// What a crash leaves in DATA_DIR: a deleted feed not yet removed, or a feed still being made (createFeedDir).
+const LEFTOVER_RE = /^\.(deleted-[0-9a-f]{12}|[0-9a-f]{12}\.tmp)$/;
 export async function deleteFeedDir(feed: string): Promise<boolean> {
   const gone = join(root(), `${DELETED}${randomBytes(6).toString("hex")}`);
   try {
@@ -58,14 +59,15 @@ export async function deleteFeedDir(feed: string): Promise<boolean> {
   return true;
 }
 
-// A crash between the rename and the removal. Called once, when the index loads. One that can't be
-// removed is logged (no names) and skipped: it must not keep every request from being served.
-export async function removeDeletedLeftovers(): Promise<void> {
+// A crash between a delete's rename and its removal, or in the middle of a creation. Called once, when the
+// index loads, which is before this process creates or deletes anything. One that can't be removed is logged
+// (no names) and skipped: it must not keep every request from being served.
+export async function removeLeftovers(): Promise<void> {
   const entries = await orMissing(readdir(/*turbopackIgnore: true*/ root(), { withFileTypes: true }), []);
   for (const e of entries) {
     if (!e.isDirectory() || !LEFTOVER_RE.test(e.name)) continue;
     await rm(/*turbopackIgnore: true*/ join(root(), e.name), { recursive: true, force: true }).catch((err) =>
-      console.error("could not remove a deleted feed's leftover files; will retry at the next start", (err as NodeJS.ErrnoException).code),
+      console.error("could not remove a leftover directory; will retry at the next start", (err as NodeJS.ErrnoException).code),
     );
   }
 }

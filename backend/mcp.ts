@@ -4,7 +4,7 @@ import * as z from "zod";
 import { bearerOf, checkBearer, locked } from "./auth";
 import { AuthError, NotefeedError, NotFoundError, TooManyAttemptsError } from "./errors";
 import { checkFeedAccess } from "./feedlock";
-import { assertFeed, FEED_RE, readIdOf } from "./feeds";
+import { assertFeed, FEED_RE } from "./feeds";
 import { clientIp } from "./limits";
 import { getNote, listNotes, type Note } from "./notes";
 import { verify } from "./oauth/tokens";
@@ -51,12 +51,12 @@ function server(h: Headers): McpServer {
     {
       description: `Post a markdown note to a feed; the feed is created by its first note; a password given then protects the feed for good, and is refused on a feed that already exists. ${PROTECTED} ${SECRET_NOTE}`,
       inputSchema: z.object({ feed, markdown: z.string(), password }),
-      outputSchema: z.object({ id: z.string(), url: z.string(), feed_url: z.string(), read_url: z.string() }),
+      outputSchema: z.object({ id: z.string(), url: z.string(), feed_url: z.string(), read_url: z.string().nullable() }),
     },
     guard(async ({ feed, markdown, password }) => {
-      const { note } = await postNote(feed, clientIp(h), async () => ({ markdown }), { password });
+      const { note, readId } = await postNote(feed, clientIp(h), async () => ({ markdown }), { password });
       const feedUrl = base + feedPath(feed);
-      return ok({ id: note.id, url: `${feedUrl}/${note.id}`, feed_url: feedUrl, read_url: base + rssPath((await readIdOf(feed))!) });
+      return ok({ id: note.id, url: `${feedUrl}/${note.id}`, feed_url: feedUrl, read_url: readId && base + rssPath(readId) });
     }),
   );
 

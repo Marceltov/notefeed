@@ -1,16 +1,19 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { cache } from "react";
 import { Header } from "@/components/Header";
 import { NoteList } from "@/components/NoteList";
 import { getReadFeed, instanceTitle, readPath, rssPath } from "@/backend";
 
 export const dynamic = "force-dynamic";
 
+const readFeed = cache(getReadFeed); // the metadata and the page share one read per request
+
 // Read-only and public even on a locked instance (proxy.ts skips /r/). Never render the feed name.
 export async function generateMetadata({ params }: PageProps<"/r/[readId]">): Promise<Metadata> {
   const { readId } = await params;
   return {
-    title: { absolute: (await getReadFeed(readId))?.title || instanceTitle() },
+    title: { absolute: (await readFeed(readId))?.title || instanceTitle() },
     alternates: { types: { "application/rss+xml": rssPath(readId) } },
   };
 }
@@ -18,7 +21,7 @@ export async function generateMetadata({ params }: PageProps<"/r/[readId]">): Pr
 // Like the RSS route: a malformed id is a 404, an unknown one an empty feed.
 export default async function ReadPage({ params }: PageProps<"/r/[readId]">) {
   const { readId } = await params;
-  const data = await getReadFeed(readId);
+  const data = await readFeed(readId);
   if (!data) notFound();
   const { notes, title, description } = data;
 

@@ -31,7 +31,7 @@ const PAGE = 50;
  * A feed by its (writable) name: newest notes and its read id; null for an invalid or reserved name.
  * No read id while the feed has no notes: a name nobody has posted to has no feed (and no id) yet, and a
  * legacy feed's id is derived from the name, so showing one would hand out the read link of whatever
- * feed is created there later.
+ * feed is created there later. None either for a feed whose stored read id can't be read (backend/feeds.ts).
  */
 export async function getFeed(feed: string): Promise<{ notes: Note[]; readId: string | null; exists: boolean; title: string; description: string; image: string; imageUrl: string | null } | null> {
   if (checkFeed(feed)) return null;

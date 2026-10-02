@@ -63,6 +63,11 @@ def test_post_sends_markdown_as_json_and_returns_created(server):
     assert "Authorization" not in req["headers"]
 
 
+def test_post_to_a_feed_without_a_read_link_has_read_url_none(server):
+    server.reply(201, {**CREATED, "read_url": None})
+    assert Client(server.url, "inbox").post("# Hi").read_url is None
+
+
 def test_password_is_a_bearer_and_a_per_call_feed_wins(server):
     Client(server.url, "inbox", password="pw").post("x", feed="other")
     assert server.requests[0]["path"] == "/api/v1/feeds/other/notes"

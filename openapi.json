@@ -1594,9 +1594,16 @@
             "description": "The feed's page in the web UI"
           },
           "read_url": {
-            "type": "string",
-            "format": "uri",
-            "description": "The feed's read-only RSS link, safe to share"
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uri"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The feed's read-only RSS link, safe to share; null only if the server can't read the feed's stored read id"
           }
         },
         "required": [
@@ -1762,7 +1769,7 @@
                 "type": "null"
               }
             ],
-            "description": "The feed's read-only RSS link; null while the feed has no notes"
+            "description": "The feed's read-only RSS link; null while the feed has no notes, or if the server can't read the feed's stored read id"
           },
           "image_url": {
             "anyOf": [

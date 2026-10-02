@@ -3,7 +3,7 @@ import { extractTitle, idStamp, slugify } from "../shared/notes";
 import { isErrno } from "./data/fs";
 import { deleteNoteFile, replaceNote, writeNote, listNoteFiles, readNote } from "./data/notes";
 import { EmptyNoteError, NoteTooLargeError } from "./errors";
-import { assertFeed, checkFeed, ensureFeed } from "./feeds";
+import { assertFeed, checkFeed, ensureFeed, forgetFeed } from "./feeds";
 
 export type Note = { id: string; title: string; markdown: string; createdAt: Date };
 
@@ -31,18 +31,23 @@ export function checkMarkdown(markdown: string): void {
   if (Buffer.byteLength(markdown, "utf8") > MAX_BYTES) throw new NoteTooLargeError();
 }
 
-export async function createNote(feed: string, markdown: string, now = new Date()): Promise<Note> {
+// `readId`: the read id of the feed the note went into (null: that feed has no read link).
+export async function createNote(feed: string, markdown: string, now = new Date()): Promise<{ note: Note; readId: string | null }> {
   assertFeed(feed);
   checkMarkdown(markdown);
   // ponytail: checked, not locked. A post that is past ensureFeed when its feed is deleted and the name
   // re-created lands in the new feed (as do settings written after hasFeed); a per-feed lock would close it.
   const base = `${idStamp(now)}-${slugify(extractTitle(markdown))}`;
-  const write = async () => (await ensureFeed(feed), writeNote(feed, base, markdown));
-  try {
-    return toNote(await write(), markdown);
-  } catch (e) {
-    if (!isErrno(e, "ENOENT")) throw e;
-    return toNote(await write(), markdown); // the feed was deleted since ensureFeed: this is a new feed
+  for (let retried = false; ; retried = true) {
+    const readId = await ensureFeed(feed);
+    try {
+      return { note: toNote(await writeNote(feed, base, markdown), markdown), readId };
+    } catch (e) {
+      // The listed feed's directory is gone (deleted since ensureFeed, or removed by hand): this is a new
+      // feed. Once only: gone again means another delete, and that is an error.
+      if (retried || !isErrno(e, "ENOENT")) throw e;
+      await forgetFeed(feed, readId);
+    }
   }
 }
 

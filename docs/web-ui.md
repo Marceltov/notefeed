@@ -50,13 +50,13 @@ Anyone who can open the feed can edit and delete its notes. On a feed with [its 
 
 ## Feed settings and deleting a feed
 
-On the feed page, a **Feed settings** section has a **Title** and a **Description** and a **Save** button. The title is shown at the top of the page in place of the feed's name, and the description below it. Both also show in the [read-only view](#the-read-only-view) and are the RSS feed's title and description, so anyone with the read link sees them. Leave a field empty to clear it. The feed's name never changes.
+On the feed page, a **Feed settings** section has a **Title** and a **Description** and a **Save** button. The title is shown as a heading at the top of the feed page and in the browser tab, with the description below it; the feed's name stays in the page header. Both also show in the [read-only view](#the-read-only-view) and are the RSS feed's title and description, so anyone with the read link sees them. Leave a field empty to clear it. The feed's name never changes.
 
 The **Title image** control has a **Choose image** button, which uploads an image and saves it as the feed's title image at once, and a **Remove image** button. The title image shows in the page header and in the read-only view, and is the RSS feed's channel image. Like the title, it is public to anyone with the read link. Choosing an image needs JavaScript.
 
 Below it, **Delete feed** removes the feed with all its notes, its settings, its password and its read link, for good. You confirm by typing the feed's name, exactly. Afterwards you land on the start page, and the name can be used again. A new feed with that name gets a different read link, and the old link stays empty.
 
-Both work without JavaScript: they are plain forms that post to `/<feed>/settings` and `/<feed>/delete`, and they only accept requests from the instance's own pages. A script uses the [API](posting.md#feed-settings-and-deleting-a-feed) instead. If something is refused (a title that is too long, too many requests), the page says why and nothing changes. They count toward the same [rate limit](configuration.md#rate-limits-and-caps) as posting.
+Both work without JavaScript: they are plain forms that post to `/<feed>/settings` and `/<feed>/delete`, and they only accept requests from the instance's own pages. A script uses the [API](posting.md#feed-settings-and-deleting-a-feed) instead. If something is refused (a title that is too long, too many requests), the page says why next to these sections and nothing changes. They count toward the same [rate limit](configuration.md#rate-limits-and-caps) as posting.
 
 Anyone who can open the feed can change its settings and delete it: on an open feed that is anyone who knows its name, and on a feed with [its own password](#a-password-for-a-feed) it is anyone who has unlocked it. A locked feed shows only its unlock form, without its title, description or title image. The read-only view has neither section.
 

@@ -31,7 +31,7 @@ describe("isValidId", () => {
 describe("createNote", () => {
   test("writes the body byte-for-byte under a timestamped id", async () => {
     const md = "# Backup finished\nok";
-    const note = await createNote("test", md, at("2026-09-29T14:05:12Z"));
+    const { note } = await createNote("test", md, at("2026-09-29T14:05:12Z"));
     expect(note.id).toBe("20260929T140512Z-backup-finished");
     expect(note.title).toBe("Backup finished");
     expect(note.createdAt).toEqual(at("2026-09-29T14:05:12Z"));
@@ -40,9 +40,9 @@ describe("createNote", () => {
 
   test("suffixes collisions and never overwrites", async () => {
     const now = at("2026-09-29T14:05:12Z");
-    const a = await createNote("test", "# Same\nfirst", now);
-    const b = await createNote("test", "# Same\nsecond", now);
-    const c = await createNote("test", "# Same\nthird", now);
+    const { note: a } = await createNote("test", "# Same\nfirst", now);
+    const { note: b } = await createNote("test", "# Same\nsecond", now);
+    const { note: c } = await createNote("test", "# Same\nthird", now);
     expect(b.id).toBe(`${a.id}-2`);
     expect(c.id).toBe(`${a.id}-3`);
     expect(await readFile(join(dir, `${a.id}.md`), "utf8")).toBe("# Same\nfirst");
@@ -50,7 +50,7 @@ describe("createNote", () => {
   });
 
   test("keeps CRLF bytes", async () => {
-    const note = await createNote("test", "# T\r\nx\r\n");
+    const { note } = await createNote("test", "# T\r\nx\r\n");
     expect(await readFile(join(dir, `${note.id}.md`), "utf8")).toBe("# T\r\nx\r\n");
   });
 
@@ -84,7 +84,7 @@ describe("listNotes", () => {
 
 describe("feeds", () => {
   test("notes are isolated per feed", async () => {
-    const n = await createNote("a", "# Hi");
+    const { note: n } = await createNote("a", "# Hi");
     expect(await listNotes("b")).toEqual([]);
     expect(await getNote("b", n.id)).toBeNull();
     expect(await listNotes("a")).toHaveLength(1);
@@ -127,7 +127,7 @@ describe("getNote", () => {
     expect(await getNote("test", "20260101T000000Z-nope")).toBeNull();
   });
   test("reads an existing note", async () => {
-    const created = await createNote("test", "# Hi\nthere");
+    const { note: created } = await createNote("test", "# Hi\nthere");
     const note = await getNote("test", created.id);
     expect(note?.markdown).toBe("# Hi\nthere");
     expect(note?.title).toBe("Hi");
@@ -137,7 +137,7 @@ describe("getNote", () => {
 describe("updateNote and removeNote", () => {
   const now = at("2026-09-29T14:05:12Z");
   test("an edit keeps the id and createdAt, changes markdown and title", async () => {
-    const n = await createNote("test", "# Old", now);
+    const { note: n } = await createNote("test", "# Old", now);
     const u = await updateNote("test", n.id, "# New\nbody");
     expect(u).toEqual({ id: n.id, title: "New", markdown: "# New\nbody", createdAt: now });
     expect((await getNote("test", n.id))?.markdown).toBe("# New\nbody");
@@ -148,13 +148,13 @@ describe("updateNote and removeNote", () => {
     expect(await files()).toHaveLength(1);
   });
   test("a refused edit leaves the file and no temp file", async () => {
-    const n = await createNote("test", "# Old", now);
+    const { note: n } = await createNote("test", "# Old", now);
     await expect(updateNote("test", n.id, "  ")).rejects.toThrow(EmptyNoteError);
     expect(await readFile(join(dir, `${n.id}.md`), "utf8")).toBe("# Old");
     expect(await files()).toEqual([`${n.id}.md`]);
   });
   test("removeNote is true once, then false", async () => {
-    const n = await createNote("test", "# Old", now);
+    const { note: n } = await createNote("test", "# Old", now);
     expect(await removeNote("test", n.id)).toBe(true);
     expect(await removeNote("test", n.id)).toBe(false);
     expect(await getNote("test", n.id)).toBeNull();
@@ -172,7 +172,7 @@ describe("updateNote and removeNote", () => {
 test("editing a note whose feed was deleted meanwhile is no such note, not a crash", async () => {
   const { updateNote } = await import("./notes");
   const { deleteFeed } = await import("./feeds");
-  const n = await createNote("gone", "# a");
+  const { note: n } = await createNote("gone", "# a");
   const p = updateNote("gone", n.id, "# b"); // stat has passed by the time the directory goes
   await deleteFeed("gone");
   expect(await p).toBeNull();

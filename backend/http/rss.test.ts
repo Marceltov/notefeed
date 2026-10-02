@@ -20,8 +20,8 @@ const get = (id: string) =>
   rssRoute(new Request(`${BASE}/r/${id}/feed.xml`, { headers: { host: "localhost:3000" } }), id);
 
 test("serves the feed's notes with read-id links", async () => {
-  const a = await createNote("secretname", "# One", new Date("2026-09-29T10:00:00Z"));
-  const b = await createNote("secretname", "# Two", new Date("2026-09-29T11:00:00Z"));
+  const { note: a } = await createNote("secretname", "# One", new Date("2026-09-29T10:00:00Z"));
+  const { note: b } = await createNote("secretname", "# Two", new Date("2026-09-29T11:00:00Z"));
   await createNote("other", "# Elsewhere");
   const rid = (await readIdOf("secretname"))!;
   const res = await get(rid);
@@ -63,7 +63,7 @@ test("public even when the instance is locked", async () => {
 });
 
 test("an edited note keeps its guid and shows the new text", async () => {
-  const n = await createNote("test", "# Old\nbefore");
+  const { note: n } = await createNote("test", "# Old\nbefore");
   await updateNote("test", n.id, "# Old\nafter edit");
   const xml = await (await get((await readIdOf("test"))!)).text();
   expect(xml).toContain(`${n.id}</guid>`);

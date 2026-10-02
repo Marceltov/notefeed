@@ -21,7 +21,7 @@ The feed is created by its first note; there's nothing to set up first. notefeed
 
 - `url`: the note's page in the web UI.
 - `feed_url`: the feed's page in the web UI.
-- `read_url`: the feed's read-only RSS link, for feed readers and for sharing. See [Read links and RSS](feed.md).
+- `read_url`: the feed's read-only RSS link, for feed readers and for sharing. See [Read links and RSS](feed.md). It is `null` only for [a feed without a read link](operations.md#a-feed-without-a-read-link).
 
 !!! tip "Use `--data-binary`, not `-d`"
     `curl -d` strips newlines from files. `--data-binary` sends the file unchanged.
@@ -87,7 +87,7 @@ What to know:
 - **Stored as sent.** The image is kept byte for byte: no resizing, no re-encoding, and no metadata removed. A photo's EXIF data, which can include where it was taken, stays in the file, and the file is public (see below). Remove it before you upload if that matters.
 - **Same bytes, same URL.** The file is named after a hash of its contents, so uploading the same image twice gives the same URL and stores one file. A URL's content never changes, so browsers may keep it for a year.
 - **Who may upload:** whoever may post to the feed: the instance password, then the [feed's password](#a-feed-with-its-own-password), in the same order as for a note. Uploads count toward the same per-client [rate limit](configuration.md#rate-limits-and-caps) as posts.
-- **The feed must exist.** A feed is created by its first note, so upload after the first note. Uploading to a feed that does not exist answers `404` and creates nothing.
+- **The feed must exist.** A feed is created by its first note, so upload after the first note. Uploading to a feed that does not exist answers `404` and creates nothing, and so does uploading to [a feed without a read link](operations.md#a-feed-without-a-read-link): an image's URL is built from the read id, so nothing is stored.
 - **Images are as public as the read link.** An image is served under the feed's read id, `/r/<read id>/images/<file>`, with no password, even on a locked instance or a protected feed, so that it shows in the read-only view and in feed readers, which have no password to send. Anyone who has the read link, or an image's URL, can fetch it, and the feed's name never appears in the URL. Don't upload anything you would not give to everyone who has the read link.
 - **No list or delete yet.** There is no endpoint to list or delete images. They stay until the feed is [deleted](#feed-settings-and-deleting-a-feed), and deleting a note does not delete the images it used. To remove one by hand, see [Operations](operations.md#images).
 - **Errors:** `400` for an invalid or reserved feed name; `401` when a password is missing or wrong; `404` when the feed does not exist; `413` (`too_large`) when the image is over the size limit; `415` (`unsupported_type`) when it is not a PNG, JPEG, GIF or WebP image, which includes an empty body; `429` over the rate limit; `507` (`image_limit`) when the feed already has `NOTEFEED_MAX_IMAGES_PER_FEED` images. Uploading an image the feed already has is never refused for the cap.
@@ -96,9 +96,9 @@ In the browser, the compose box and the note editor have an [Add image](web-ui.m
 
 ## Feed settings and deleting a feed
 
-A feed can have a **title** (at most 100 characters) and a **description** (at most 500), both on one line. The title replaces the feed's name in the headings of the web UI, and both show in the read-only view and in the RSS feed (see [Read links and RSS](feed.md#title-and-description)). The feed's name stays as it is: you can't rename a feed. A feed has neither until you set them.
+A feed can have a **title** (at most 100 characters) and a **description** (at most 500), both on one line. The title is shown as a heading on the feed page, where the feed's name stays in the page header, and both show in the read-only view and in the RSS feed (see [Read links and RSS](feed.md#title-and-description)). The feed's name stays as it is: you can't rename a feed. A feed has neither until you set them.
 
-`GET /api/v1/feeds/<feed>` answers with the feed's `name`, `title`, `description`, `image_url`, `protected` and `read_url`. `read_url` is `null` while the feed has no notes, and `image_url` is `null` while the feed has no title image. `PUT` on the same URL replaces the title and the description, both at once, and answers with the feed; an empty string clears one. Surrounding spaces are trimmed, and control characters, including a line break, are refused.
+`GET /api/v1/feeds/<feed>` answers with the feed's `name`, `title`, `description`, `image_url`, `protected` and `read_url`. `read_url` is `null` while the feed has no notes, and for [a feed without a read link](operations.md#a-feed-without-a-read-link), and `image_url` is `null` while the feed has no title image, and for a feed without a read link. `PUT` on the same URL replaces the title and the description, both at once, and answers with the feed; an empty string clears one. Surrounding spaces are trimmed, and control characters, including a line break, are refused.
 
 ```sh
 curl -X PUT -H "Content-Type: application/json" \

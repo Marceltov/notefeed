@@ -48,6 +48,11 @@ describe("post", () => {
     expect(JSON.parse(req.body.toString())).toEqual({ markdown: "# Café\r\nx" });
     expect(req.headers.authorization).toBeUndefined();
   });
+
+  test("a feed without a read link: read_url is null", async () => {
+    server.reply(201, { ...CREATED, read_url: null });
+    expect((await new Client({ url: server.url, feed: "inbox" }).post("# Hi")).read_url).toBeNull();
+  });
   test("the password goes as a bearer; a per-call feed overrides the default", async () => {
     await new Client({ url: server.url, feed: "inbox", password: "pw" }).post("x", { feed: "other" });
     expect(server.requests[0].path).toBe("/api/v1/feeds/other/notes");

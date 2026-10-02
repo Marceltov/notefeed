@@ -1,7 +1,7 @@
-import { mkdtemp, readdir, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { beforeEach, describe, expect, test } from "vitest";
+import { beforeEach, describe, expect, test, vi } from "vitest";
 import { createProtected } from "../feedlock";
 import { getFeed, getReadFeed } from "../index";
 import { deleteFeed, resetFeedsForTests, readIdOf } from "../feeds";
@@ -45,6 +45,16 @@ describe("POST /feeds/{feed}/images", () => {
     expect(body.url).not.toContain("pics");
     expect((await upload("pics", PNG)).status).toBe(201); // same bytes again
     expect(await readdir(join(process.env.DATA_DIR!, "pics", ".images"))).toEqual([body.file]);
+  });
+  test("a feed without a read link is 404, says why, and stores nothing", async () => {
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    await mkdir(join(process.env.DATA_DIR!, "nolink", ".readid"), { recursive: true }); // unreadable .readid
+    await createNote("nolink", "# x");
+    const res = await upload("nolink", PNG);
+    expect(res.status).toBe(404);
+    expect((await res.json()).error).toContain("no read link");
+    expect(await readdir(join(process.env.DATA_DIR!, "nolink"))).not.toContain(".images");
+    log.mockRestore();
   });
   test("a feed that does not exist is 404 and no directory is made", async () => {
     const res = await upload("ghost", PNG);

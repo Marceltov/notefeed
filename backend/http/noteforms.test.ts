@@ -15,7 +15,7 @@ beforeEach(async () => {
   delete process.env.NOTEFEED_RATE_LIMIT;
   resetFeedsForTests();
   resetRateLimitsForTests();
-  id = (await createNote("openfeed", "# Old")).id;
+  id = (await createNote("openfeed", "# Old")).note.id;
 });
 
 const form = (fields: Record<string, string>) => {
@@ -97,7 +97,7 @@ test("an unknown action is a 404", async () => {
 
 test("a protected feed needs its cookie", async () => {
   await createProtected("lockd", "pw");
-  const lid = (await createNote("lockd", "# Old")).id;
+  const lid = (await createNote("lockd", "# Old")).note.id;
   expect(loc(await send("lockd", lid, "edit", { markdown: "# New" }))).toBe(`/lockd/${lid}?error=auth`);
   expect((await getNote("lockd", lid))?.markdown).toBe("# Old");
   const cookie = `${feedCookieName("lockd")}=${await cookieValue("lockd")}`;

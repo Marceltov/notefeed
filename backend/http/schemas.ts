@@ -32,7 +32,7 @@ export const Created = z
     id: z.string().regex(NOTE_ID),
     url: z.url().describe("The note's page in the web UI"),
     feed_url: z.url().describe("The feed's page in the web UI"),
-    read_url: z.url().describe("The feed's read-only RSS link, safe to share"),
+    read_url: z.url().nullable().describe("The feed's read-only RSS link, safe to share; null only if the server can't read the feed's stored read id"),
   })
   .meta({ id: "Created" });
 export type Created = z.infer<typeof Created>;
@@ -79,7 +79,7 @@ export const FeedJson = z
     title: TITLE,
     description: DESCRIPTION,
     protected: z.boolean().describe("Whether the feed has its own password"),
-    read_url: z.url().nullable().describe("The feed's read-only RSS link; null while the feed has no notes"),
+    read_url: z.url().nullable().describe("The feed's read-only RSS link; null while the feed has no notes, or if the server can't read the feed's stored read id"),
     image_url: IMAGE_URL,
   })
   .meta({ id: "Feed" });

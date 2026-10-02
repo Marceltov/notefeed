@@ -267,9 +267,7 @@ const OPS: AnyOp[] = [
     },
     before: passwordAndFeed,
   }).handle(async ({ req, params }) => {
-    const file = await uploadImage(params.feed, clientIp(req.headers), () => readCapped(req, config.maxImageBytes()), feedAccess(req.headers, params.feed));
-    const readId = await readIdOf(params.feed);
-    if (!readId) throw new NotFoundError("no such feed"); // deleted since the write
+    const { file, readId } = await uploadImage(params.feed, clientIp(req.headers), () => readCapped(req, config.maxImageBytes()), feedAccess(req.headers, params.feed));
     const url = publicUrl(req.headers) + imagePath(readId, file);
     return { status: 201, body: { file, url, markdown: `![](${url})` } };
   }),

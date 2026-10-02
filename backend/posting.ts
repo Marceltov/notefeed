@@ -4,7 +4,7 @@ import { config } from "./config";
 import { FeedExistsError, FeedLimitError, ImageTooLargeError, InvalidBodyError, NotFoundError, NoteLimitError, RateLimitedError } from "./errors";
 import { type FeedAccess, checkFeedAccess, createProtected } from "./feedlock";
 import { type FeedSettings, checkSettings, getSettings, saveSettings } from "./feedsettings";
-import { assertFeed, deleteFeed as removeWholeFeed, feedCount, hasFeed } from "./feeds";
+import { assertFeed, deleteFeed as removeWholeFeed, feedCount, hasFeed, readIdOf } from "./feeds";
 import { knownImage, storeImage } from "./images";
 import { rateLimit } from "./limits";
 import { checkMarkdown, countNotes, createNote, removeNote, updateNote, type Note } from "./notes";
@@ -12,12 +12,13 @@ import { checkMarkdown, countNotes, createNote, removeNote, updateNote, type Not
 // `readMarkdown` runs only once the post is admitted, so a refused request never has its body read.
 // A password (header, or body `password`) is set only by the post that creates the feed.
 // `created`: this post created the feed protected, so its sender is the one who chose the password.
+// `readId`: the read id of the feed the note went into; null when that feed has no read link.
 export async function postNote(
   feed: string,
   ip: string,
   read: () => Promise<{ markdown: string; password?: string }>,
   access: FeedAccess,
-): Promise<{ note: Note; created: boolean }> {
+): Promise<{ note: Note; created: boolean; readId: string | null }> {
   assertFeed(feed);
   const proved = await checkFeedAccess(feed, access, ip);
   const wait = rateLimit(ip);
@@ -43,11 +44,10 @@ export async function postNote(
   // The sender decides how long read() takes, and the feed may have been created protected meanwhile:
   // a post that proved nothing above is checked again, with nothing to show.
   if (!proved && !created) await checkFeedAccess(feed, {}, ip);
-  // ponytail: checked, not locked. A protected creation can still land in the few microseconds between
-  // this check and the note's file, in two ways: it completes before writeNote's mkdir, or its rename()
-  // claims the directory writeNote just made while that is still empty. Either way this one note is then
-  // in the protected feed. A lock around creation, per feed, would close both.
-  return { note: await createNote(feed, markdown), created };
+  // ponytail: checked, not locked. A protected creation can still complete in the few microseconds between
+  // this check and createNote's ensureFeed, which then finds the feed and writes into it: this one note is
+  // then in the protected feed. A lock around creation, per feed, would close it.
+  return { ...(await createNote(feed, markdown)), created };
 }
 
 // Same gate as posting, minus the caps. An edit or delete targets an existing note, so its feed
@@ -76,9 +76,9 @@ export async function deleteNote(feed: string, id: string, ip: string, access: F
 
 // Settings and deletion of a whole feed: the same gate as posting, then the feed must exist. An open feed is
 // changed by anyone who knows its name, as it is posted to (ADR 0001); a protected one needs its password.
-export async function updateFeed(feed: string, ip: string, settings: unknown, access: FeedAccess): Promise<FeedSettings> {
+export async function updateFeed(feed: string, ip: string, read: () => Promise<unknown>, access: FeedAccess): Promise<FeedSettings> {
   await admit(feed, ip, access);
-  const given = checkSettings(typeof settings === "function" ? await settings() : settings); // a reader runs after admit: a refused request never has its body read
+  const given = checkSettings(await read()); // after admit: a refused request never has its body read
   if (!(await hasFeed(feed))) throw new NotFoundError("no such feed");
   const image = given.image ?? (await getSettings(feed)).image; // omitted: the title image stays
   if (image && !(await knownImage(feed, image))) throw new InvalidBodyError("image must be empty or the name of an image uploaded to this feed");
@@ -88,13 +88,16 @@ export async function updateFeed(feed: string, ip: string, settings: unknown, ac
 }
 
 // Uploading an image: the same gate as posting, and the feed must exist (it is created by its first note).
-// `read` runs once admitted and gives null for a body over the cap. Returns the stored file's name.
-export async function uploadImage(feed: string, ip: string, read: () => Promise<Uint8Array | null>, access: FeedAccess): Promise<string> {
+// `read` runs once admitted and gives null for a body over the cap. Returns the stored file's name and the feed's
+// read id, which its URL is built from; a feed without one (ADR 0010) can't have an image URL, so nothing is stored.
+export async function uploadImage(feed: string, ip: string, read: () => Promise<Uint8Array | null>, access: FeedAccess): Promise<{ file: string; readId: string }> {
   await admit(feed, ip, access);
   if (!(await hasFeed(feed))) throw new NotFoundError("no such feed");
+  const readId = await readIdOf(feed);
+  if (!readId) throw new NotFoundError("this feed has no read link, so an image of it has no URL");
   const bytes = await read();
   if (!bytes) throw new ImageTooLargeError();
-  return storeImage(feed, bytes);
+  return { file: await storeImage(feed, bytes), readId };
 }
 
 export async function deleteFeed(feed: string, ip: string, access: FeedAccess): Promise<void> {

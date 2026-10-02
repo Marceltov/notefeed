@@ -39,16 +39,16 @@ test("settings are saved and the feed page says so", async () => {
 });
 
 test("an invalid title goes back with the code", async () => {
-  expect(loc(await send(feedSettingsRoute, "openfeed", { title: "x".repeat(101), description: "" }))).toBe("/openfeed?error=invalid_body");
+  expect(loc(await send(feedSettingsRoute, "openfeed", { title: "x".repeat(101), description: "" }))).toBe("/openfeed?form=details&error=invalid_body");
 });
 
 test("a feed that doesn't exist cannot get settings", async () => {
-  expect(loc(await send(feedSettingsRoute, "nofeed", { title: "T", description: "" }))).toBe("/nofeed?error=not_found");
+  expect(loc(await send(feedSettingsRoute, "nofeed", { title: "T", description: "" }))).toBe("/nofeed?form=details&error=not_found");
 });
 
 test("delete needs the exact name and removes the feed", async () => {
-  expect(loc(await send(feedDeleteRoute, "openfeed", { confirm: "openfee" }))).toBe("/openfeed?error=invalid_request");
-  expect(loc(await send(feedDeleteRoute, "openfeed", {}))).toBe("/openfeed?error=invalid_request");
+  expect(loc(await send(feedDeleteRoute, "openfeed", { confirm: "openfee" }))).toBe("/openfeed?form=details&error=invalid_request");
+  expect(loc(await send(feedDeleteRoute, "openfeed", {}))).toBe("/openfeed?form=details&error=invalid_request");
   expect(await hasFeed("openfeed")).toBe(true);
   expect(loc(await send(feedDeleteRoute, "openfeed", { confirm: "openfeed" }))).toBe("/?deleted=openfeed");
   expect(await hasFeed("openfeed")).toBe(false);
@@ -60,8 +60,8 @@ test("deleting a feed that is already gone still lands on the notice (a double c
 });
 
 test.each([["another site", "https://evil.example"], ["no Origin", null]])("from %s: refused, nothing changed", async (_, origin) => {
-  expect(loc(await send(feedSettingsRoute, "openfeed", { title: "Hacked", description: "" }, origin))).toBe("/openfeed?error=auth");
-  expect(loc(await send(feedDeleteRoute, "openfeed", { confirm: "openfeed" }, origin))).toBe("/openfeed?error=auth");
+  expect(loc(await send(feedSettingsRoute, "openfeed", { title: "Hacked", description: "" }, origin))).toBe("/openfeed?form=details&error=auth");
+  expect(loc(await send(feedDeleteRoute, "openfeed", { confirm: "openfeed" }, origin))).toBe("/openfeed?form=details&error=auth");
   expect(await getSettings("openfeed")).toEqual({ title: "", description: "", image: "" });
   expect(await hasFeed("openfeed")).toBe(true);
 });
@@ -69,8 +69,8 @@ test.each([["another site", "https://evil.example"], ["no Origin", null]])("from
 test("a protected feed needs its cookie; deleting it clears the cookies", async () => {
   await createProtected("lockd", "pw");
   await createNote("lockd", "# Old");
-  expect(loc(await send(feedSettingsRoute, "lockd", { title: "T", description: "" }))).toBe("/lockd?error=auth");
-  expect(loc(await send(feedDeleteRoute, "lockd", { confirm: "lockd" }))).toBe("/lockd?error=auth");
+  expect(loc(await send(feedSettingsRoute, "lockd", { title: "T", description: "" }))).toBe("/lockd?form=details&error=auth");
+  expect(loc(await send(feedDeleteRoute, "lockd", { confirm: "lockd" }))).toBe("/lockd?form=details&error=auth");
   const cookie = `${feedCookieName("lockd")}=${await cookieValue("lockd")}`;
   expect(loc(await send(feedSettingsRoute, "lockd", { title: "T", description: "" }, "http://localhost:3000", cookie))).toBe("/lockd?saved=1");
   const res = await send(feedDeleteRoute, "lockd", { confirm: "lockd" }, "http://localhost:3000", cookie);

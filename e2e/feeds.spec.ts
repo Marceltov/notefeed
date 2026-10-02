@@ -38,6 +38,24 @@ test("title and description show on the feed page, the read-only view and in the
   expect(xml).toContain("Things I think about");
 });
 
+test("a refused title says why, in the settings section and not under the compose box", async ({ page }) => {
+  const name = feedName();
+  await post(page, name);
+  const details = page.getByRole("region", { name: "Feed details" });
+  const refusal = "The title or description is too long or has characters that aren't allowed.";
+  // With JavaScript: the API refuses a tab, and the form shows it.
+  await page.getByText("Feed settings", { exact: true }).click();
+  await page.getByLabel("Title").fill("a\tb");
+  await page.getByRole("button", { name: "Save" }).click();
+  await expect(details.getByRole("alert")).toHaveText(refusal);
+  // Without: where the plain forms' redirects land.
+  await page.goto(`/${name}?form=details&error=invalid_body`);
+  await expect(details.getByRole("alert")).toHaveText(refusal);
+  await expect(page.locator("#compose-error")).toBeEmpty();
+  await page.goto(`/${name}?form=details&error=invalid_request`);
+  await expect(details.getByRole("alert")).toHaveText("Type the feed's name to confirm.");
+});
+
 test("delete by typing the name lands on the home page; the feed and its read link are empty", async ({ page }) => {
   const name = feedName();
   await post(page, name);

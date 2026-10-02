@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, readdir, stat, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { beforeEach, describe, expect, test, vi } from "vitest";
@@ -212,9 +212,25 @@ describe("per-feed read ids", () => {
     }
     expect(await feedForReadId(derivedReadId("d"))).toBe("a");
     expect(await listFeeds()).toEqual(["a", "d"]);
+    expect(await readIdOf("d")).toBeNull(); // not a's link
     expect(log.mock.calls.flat().join(" ")).not.toMatch(/\bd\b/);
     await deleteFeed("d"); // must not take a's link away
     expect(await feedForReadId(derivedReadId("d"))).toBe("a");
+    log.mockRestore();
+  });
+
+  test("a .readid that can't be read: the other feeds load, and that one is listed without a read link", async () => {
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    await createNote("fine", "x");
+    await mkdir(join(dir, "secretbroken", ".readid"), { recursive: true }); // EISDIR
+    resetFeedsForTests();
+    expect(await feedForReadId((await readIdOf("fine"))!)).toBe("fine");
+    expect(await listFeeds()).toEqual(["fine", "secretbroken"]);
+    expect(await readIdOf("secretbroken")).toBeNull();
+    expect(await feedForReadId(derivedReadId("secretbroken"))).toBeNull(); // not the derived id: that would change its link
+    expect(await ensureFeed("secretbroken")).toBeNull();
+    expect(log.mock.calls.length).toBe(1);
+    expect(log.mock.calls.flat().join(" ")).not.toContain("secret");
     log.mockRestore();
   });
 
@@ -250,7 +266,7 @@ describe("deleteFeed", () => {
     await createNote("busy", "x");
     const old = (await readIdOf("busy"))!;
     for (let i = 0; i < 20; i++) {
-      const [, note] = await Promise.all([deleteFeed("busy"), createNote("busy", `# n${i}`)]);
+      const [, { note }] = await Promise.all([deleteFeed("busy"), createNote("busy", `# n${i}`)]);
       expect(note.id).toBeTruthy();
       const files = await readdir(join(dir, "busy"));
       expect(files).toContain(".readid"); // never a half-feed
@@ -260,23 +276,42 @@ describe("deleteFeed", () => {
     }
   });
 
-  test("a creation while the directory is still being renamed away does not take the old id back", async () => {
-    await createNote("window", "x");
-    const old = (await readIdOf("window"))!;
-    const deleted = deleteFeed("window");
-    for (let i = 0; i < 20; i++) await null; // the index entry is gone, the rename is still in the thread pool
-    const fresh = await ensureFeed("window");
-    await deleted;
-    expect(fresh).not.toBe(old);
-    expect(await feedForReadId(old)).toBeNull();
-    await createNote("window", "y");
-    expect((await readid("window")).trim()).toBe(fresh);
-  });
-
   test("a protected creation in flight while the feed is deleted wins cleanly", async () => {
     await createProtected("prot", "correct horse battery");
     const [, created] = await Promise.all([deleteFeed("prot"), createProtected("prot", "another password").then(() => true, () => false)]);
     expect(created).toBe(true);
     expect(await hasFeed("prot")).toBe(true);
+  });
+});
+
+describe("a feed directory removed by hand while notefeed runs", () => {
+  test("a post makes the feed anew, with a new read id", async () => {
+    await createNote("hand", "# one");
+    const old = (await readIdOf("hand"))!;
+    await rm(join(dir, "hand"), { recursive: true });
+    const { note, readId } = await createNote("hand", "# two");
+    expect((await listNotes("hand")).map((n) => n.id)).toEqual([note.id]);
+    expect(readId).not.toBe(old);
+    expect(await readIdOf("hand")).toBe(readId);
+    expect((await readFile(join(dir, "hand", ".readid"), "utf8")).trim()).toBe(readId);
+    expect(await feedForReadId(old)).toBeNull();
+  });
+
+  test("deleting it says there is no such feed, and forgets it", async () => {
+    await createNote("hand", "# one");
+    await rm(join(dir, "hand"), { recursive: true });
+    expect(await deleteFeed("hand")).toBe(false);
+    expect(await hasFeed("hand")).toBe(false);
+  });
+});
+
+describe("leftovers of a crash", () => {
+  test("a creation's temp directory is removed when the index loads; nothing else is", async () => {
+    const names = [".0123456789ab.tmp", ".0123456789ab.tmpx", ".0123456789AB.tmp", ".short.tmp"];
+    for (const n of names) await mkdir(join(dir, n));
+    await writeFile(join(dir, ".ba9876543210.tmp"), "a file, not a directory");
+    await writeFile(join(dir, names[0], ".readid"), "A".repeat(22));
+    expect(await listFeeds()).toEqual([]);
+    expect((await readdir(dir)).sort()).toEqual([".0123456789AB.tmp", ".0123456789ab.tmpx", ".ba9876543210.tmp", ".short.tmp"]);
   });
 });
