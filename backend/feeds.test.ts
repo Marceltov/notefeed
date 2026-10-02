@@ -1,9 +1,10 @@
 import { mkdir, mkdtemp, readFile, readdir, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { beforeEach, describe, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+import { ReservedFeedError } from "./errors";
 import { FEED_RE, deleteFeed, READ_ID_RE, RESERVED_FEEDS, checkFeed, derivedReadId, ensureFeed, feedCount, feedForReadId, hasFeed, listFeeds, readIdOf, resetFeedsForTests } from "./feeds";
-import { createProtected } from "./feedlock";
+import { createProtected, protectedFeed } from "./feedlock";
 import { createNote, listNotes } from "./notes";
 
 let dir: string;
@@ -314,4 +315,38 @@ describe("leftovers of a crash", () => {
     expect(await listFeeds()).toEqual([]);
     expect((await readdir(dir)).sort()).toEqual([".0123456789AB.tmp", ".0123456789ab.tmpx", ".ba9876543210.tmp", ".short.tmp"]);
   });
+});
+
+describe("held-back names", () => {
+  afterEach(() => { delete process.env.NOTEFEED_RESERVED_FEEDS; });
+  test("a configured name can't be created, a normal one can", async () => {
+    process.env.NOTEFEED_RESERVED_FEEDS = "jobs, extra";
+    for (const n of ["jobs", "extra"]) await expect(ensureFeed(n)).rejects.toBeInstanceOf(ReservedFeedError);
+    await expect(ensureFeed("mine")).resolves.toBeTruthy();
+  });
+});
+
+describe("reserved feeds with a password", () => {
+  afterEach(() => { delete process.env.NOTEFEED_RESERVED_PASSWORD; delete process.env.NOTEFEED_RESERVED_FEEDS; });
+  test("exist protected with their name as read id, also after a delete and a restart", async () => {
+    process.env.NOTEFEED_RESERVED_PASSWORD = "operator-pass-1";
+    process.env.NOTEFEED_RESERVED_FEEDS = "news";
+    expect(await hasFeed("news")).toBe(true);
+    expect(await readIdOf("news")).toBe("news");
+    expect(await protectedFeed("news")).toBe(true);
+    await deleteFeed("news");
+    resetFeedsForTests();
+    expect(await readIdOf("news")).toBe("news");
+  });
+  test("don't exist without it", async () => {
+    expect(await hasFeed("news")).toBe(false);
+  });
+});
+
+test("a reserved feed is found by its name as read id", async () => {
+  process.env.NOTEFEED_RESERVED_PASSWORD = "operator-pass-1";
+    process.env.NOTEFEED_RESERVED_FEEDS = "news";
+  expect(await feedForReadId("news")).toBe("news");
+  delete process.env.NOTEFEED_RESERVED_PASSWORD;
+  delete process.env.NOTEFEED_RESERVED_FEEDS;
 });

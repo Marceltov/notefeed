@@ -16,6 +16,16 @@ export const RESERVED_FEEDS: ReadonlySet<string> = new Set([
   "r", "api", "login", "logout", "mcp", "oauth", "n", "_next", "static", "robots.txt", "health",
 ]);
 
+// Names kept for the operator (announcements and the like), only those in NOTEFEED_RESERVED_FEEDS. Unlike RESERVED_FEEDS
+// they collide with no route, so they only stop a feed from being CREATED by a post: a feed that already has such
+// a name keeps working. With NOTEFEED_RESERVED_PASSWORD set, load() creates each one protected by that password
+// and with its own name as read id, so /r/news is the read link for good (announcements are public by intent: no
+// obfuscation, even if the feed is deleted and made again). Without the password they simply don't exist.
+const heldBack = () => config.reservedFeeds().filter((n) => checkFeed(n) === null);
+const isHeldBack = (name: string) => heldBack().includes(name);
+// A read id is 22 random characters, or the name of a reserved feed (its read id is its name, see load()).
+export const isReadId = (id: string) => READ_ID_RE.test(id) || isHeldBack(id);
+
 export function checkFeed(name: string): null | "invalid" | "reserved" {
   if (!FEED_RE.test(name)) return "invalid";
   return RESERVED_FEEDS.has(name) ? "reserved" : null;
@@ -94,7 +104,7 @@ async function idOnDisk(feed: string, strict = false): Promise<string | null> {
     return null;
   }
   if (id === null) return derivedReadId(feed);
-  if (READ_ID_RE.test(id)) return id;
+  if (isReadId(id)) return id;
   console.error("a feed's .readid is not a read id; using the derived read id");
   return derivedReadId(feed);
 }
@@ -105,6 +115,13 @@ async function load(dir: string): Promise<Index> {
   const idx: Index = { dir, byFeed: new Map(), byReadId: new Map() };
   await removeLeftovers();
   for (const n of (await listFeedDirs()).filter((n) => checkFeed(n) === null).sort()) register(idx, n, await idOnDisk(n));
+  const password = config.reservedPassword();
+  if (password) {
+    const { hashPassword } = await import("./feedlock"); // feedlock imports this file
+    for (const n of heldBack().filter((n) => !idx.byFeed.has(n))) {
+      if (!idx.byReadId.has(n) && (await createFeedDir(n, n, await hashPassword(password)))) register(idx, n, n);
+    }
+  }
   return idx;
 }
 
@@ -127,6 +144,7 @@ export async function ensureFeed(feed: string): Promise<string | null> {
   const idx = await feedIndex();
   const known = idx.byFeed.get(feed);
   if (known !== undefined) return known;
+  if (isHeldBack(feed)) throw new ReservedFeedError();
   const fresh = newReadId();
   if (await createFeedDir(feed, fresh)) register(idx, feed, fresh);
   else {
@@ -192,7 +210,7 @@ export async function hasFeed(feed: string): Promise<boolean> {
 
 // A Map lookup: its timing depends on the hash of the id, not on how much of it matches a real one.
 export async function feedForReadId(id: string): Promise<string | null> {
-  if (!READ_ID_RE.test(id)) return null;
+  if (!isReadId(id)) return null;
   return (await feedIndex()).byReadId.get(id) ?? null;
 }
 

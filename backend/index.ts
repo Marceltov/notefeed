@@ -3,7 +3,7 @@
 // the endpoint it would become if the backend moved out, so the cut would be here and nowhere else.
 import { config } from "./config";
 import { getSettings } from "./feedsettings";
-import { READ_ID_RE, checkFeed, feedForReadId, hasFeed, readIdOf } from "./feeds";
+import { isReadId, checkFeed, feedForReadId, hasFeed, readIdOf } from "./feeds";
 import { getNote, listNotes, type Note } from "./notes";
 import { imagePath } from "./urls";
 
@@ -49,7 +49,7 @@ export async function getFeedNote(feed: string, id: string): Promise<Note | null
 
 /** A feed by its read id: null for a malformed id; an unknown one is an empty feed, so ids can't be probed. */
 export async function getReadFeed(id: string): Promise<{ notes: Note[]; title: string; description: string; imageUrl: string | null } | null> {
-  if (!READ_ID_RE.test(id)) return null;
+  if (!isReadId(id)) return null;
   const feed = await feedForReadId(id);
   const { title, description, image } = feed ? await getSettings(feed) : { title: "", description: "", image: "" };
   return { notes: feed ? await listNotes(feed, PAGE) : [], title, description, imageUrl: image ? imagePath(id, image) : null };
