@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, useSyncExternalStore, type ClipboardEvent, type DragEvent } from "react";
+import { useRef, useState, useSyncExternalStore, type ClipboardEvent, type DragEvent, type ReactNode } from "react";
 import { ImagePlus } from "lucide-react";
 import { uploadImageFile } from "@/app/_lib/useApiForm";
 
@@ -10,7 +10,7 @@ const ACCEPT = "image/png,image/jpeg,image/gif,image/webp";
 // drag-and-drop each upload the files one after another and insert `![](url)` at the cursor. `images` is false
 // for a feed without a first note (nothing can be uploaded to it yet). The button only exists once hydrated,
 // so without JavaScript only the textarea renders.
-export function MarkdownInput({ id, name, label, value, onChange, feed, rows, placeholder, describedBy, className = "", images = true, onBusy }: {
+export function MarkdownInput({ id, name, label, value, onChange, feed, rows, placeholder, describedBy, className = "", images = true, onBusy, children }: {
   id: string;
   name: string;
   label: string;
@@ -23,6 +23,7 @@ export function MarkdownInput({ id, name, label, value, onChange, feed, rows, pl
   className?: string;
   images?: boolean;
   onBusy?: (busy: boolean) => void; // an upload is running: the parent holds back posting, so the image is not left out
+  children?: ReactNode; // more controls, rendered on the same row as the "Add image" button
 }) {
   const area = useRef<HTMLTextAreaElement>(null);
   const picker = useRef<HTMLInputElement>(null);
@@ -98,8 +99,10 @@ export function MarkdownInput({ id, name, label, value, onChange, feed, rows, pl
         aria-describedby={describedBy}
         className={`block w-full resize-y rounded-sm border border-rule bg-transparent p-3 text-ink focus:border-carbon focus:outline-none ${className}`}
       />
-      {hydrated && images && (
-        <div className="mt-2 text-sm">
+      {((hydrated && images) || children) && (
+        <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
+          {hydrated && images && (
+            <>
           <input
             ref={picker}
             type="file"
@@ -122,6 +125,9 @@ export function MarkdownInput({ id, name, label, value, onChange, feed, rows, pl
             <ImagePlus aria-hidden className="h-4 w-4" />
             {uploading ? "Uploading…" : "Add image"}
           </button>
+            </>
+          )}
+          {children}
         </div>
       )}
       {error && (
