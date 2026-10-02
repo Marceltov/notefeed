@@ -27,7 +27,7 @@ const MESSAGES: Record<ErrorCode, string> = {
 // undefined for no code; an unknown code still says something.
 export function errorMessage(code: unknown, retry?: unknown): string | undefined {
   if (typeof code !== "string" || code === "") return undefined;
-  const text = MESSAGES[code as ErrorCode] ?? "Something went wrong.";
+  const text = Object.hasOwn(MESSAGES, code) ? MESSAGES[code as ErrorCode] : "Something went wrong."; // not `in`/`??`: "constructor" is inherited
   return text.replace("{retry}", /^\d+$/.test(String(retry)) ? String(retry) : "a few");
 }
 

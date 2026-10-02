@@ -32,7 +32,7 @@ export const Created = z
     id: z.string().regex(NOTE_ID),
     url: z.url().describe("The note's page in the web UI"),
     feed_url: z.url().describe("The feed's page in the web UI"),
-    read_url: z.url().nullable().describe("The feed's read-only RSS link, safe to share; null only if the server can't read the feed's stored read id"),
+    read_url: z.url().nullable().describe("The feed's read-only RSS link, safe to share; null only if the server can't read the feed's stored read id, or if that id and the derived one both belong to other feeds"),
   })
   .meta({ id: "Created" });
 export type Created = z.infer<typeof Created>;

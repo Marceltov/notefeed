@@ -83,11 +83,13 @@ function register(idx: Index, feed: string, id: string | null): void {
 // The read id of a feed directory: its `.readid`, or the derived id when it has none (a legacy feed) or the
 // file holds something else (logged): that is the id the feed had before. null when the file can't be read:
 // the feed is listed without a read link, because the derived id would be a different link than the one it has.
-async function idOnDisk(feed: string): Promise<string | null> {
+// With `strict` a read error is thrown instead (a creation that lost a race has no business registering "no link").
+async function idOnDisk(feed: string, strict = false): Promise<string | null> {
   let id: string | null;
   try {
     id = await readReadId(feed);
   } catch (e) {
+    if (strict) throw e;
     console.error("a feed's .readid can't be read; the feed has no read link until the next start", (e as NodeJS.ErrnoException).code);
     return null;
   }
@@ -130,7 +132,7 @@ export async function ensureFeed(feed: string): Promise<string | null> {
   else {
     // Lost a race: use the winner's id, unless the winner (or a later creation) is registered by now. What
     // was read from disk may then be older than the entry.
-    const theirs = await idOnDisk(feed);
+    const theirs = await idOnDisk(feed, true);
     if (!idx.byFeed.has(feed)) register(idx, feed, theirs);
   }
   return idx.byFeed.get(feed) ?? null;
@@ -152,7 +154,9 @@ export async function createProtectedFeed(feed: string, hash: string): Promise<b
 // created under the name meanwhile has another id and stays. A rename that fails for another reason than a
 // missing directory throws, with the index and the disk as they were.
 // ponytail: no lock per feed. Two deletes and a creation of one name within the same few milliseconds can
-// leave the name listed without a directory until the next post or delete, which both put it right.
+// leave the name listed without a directory until the next post or delete, which both put it right. Worse:
+// the second delete was admitted against the old feed and renames the NEW feed's directory away, even if
+// that was created protected, so the creating post's note is lost or that post is a 500. A per-feed lock is the fix.
 export async function deleteFeed(feed: string): Promise<boolean> {
   const idx = await feedIndex();
   const id = idx.byFeed.get(feed);

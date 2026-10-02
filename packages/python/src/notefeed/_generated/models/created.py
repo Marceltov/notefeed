@@ -16,7 +16,7 @@ class Created:
         url (str): The note's page in the web UI
         feed_url (str): The feed's page in the web UI
         read_url (None | str): The feed's read-only RSS link, safe to share; null only if the server can't read the
-            feed's stored read id
+            feed's stored read id, or if that id and the derived one both belong to other feeds
     """
 
     id: str
