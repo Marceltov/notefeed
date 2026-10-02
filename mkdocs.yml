@@ -30,6 +30,7 @@ theme:
       toggle:
         icon: material/weather-sunny
         name: Switch to light mode
+  logo: assets/icon.svg
   favicon: assets/icon.svg
   features:
     - content.code.copy
