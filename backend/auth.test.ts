@@ -1,3 +1,4 @@
+import { createHmac } from "node:crypto";
 import { afterEach, beforeEach, expect, test } from "vitest";
 import { bearerOf, checkBearer, locked, login, sessionOk } from "./auth";
 import { AuthError, TooManyAttemptsError } from "./errors";
@@ -81,4 +82,21 @@ test("an empty NOTEFEED_PASSWORD counts as unlocked", () => {
   process.env.NOTEFEED_PASSWORD = "";
   expect(locked()).toBe(false);
   expect(thrown(() => login("", "ip"))).toBeInstanceOf(AuthError);
+});
+
+test("sign-in without a password locks the instance, and an unset password never matches", () => {
+  delete process.env.NOTEFEED_PASSWORD;
+  process.env.NOTEFEED_OIDC_ISSUER = "https://idp.example";
+  process.env.NOTEFEED_OIDC_CLIENT_ID = "id";
+  process.env.NOTEFEED_OIDC_CLIENT_SECRET = "secret";
+  process.env.NOTEFEED_OIDC_ALLOW = "*";
+  try {
+    expect(locked()).toBe(true);
+    expect(thrown(() => checkBearer("Bearer ", "ip"))).toBeInstanceOf(AuthError);
+    expect(thrown(() => login("", "ip"))).toBeInstanceOf(AuthError);
+    expect(sessionOk(createHmac("sha256", "").update("notefeed-session").digest("hex"))).toBe(false);
+  } finally {
+    for (const n of ["ISSUER", "CLIENT_ID", "CLIENT_SECRET", "ALLOW"]) delete process.env[`NOTEFEED_OIDC_${n}`];
+  }
+  expect(locked()).toBe(false);
 });

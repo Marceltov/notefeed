@@ -6,10 +6,12 @@ import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import { config } from "./config";
 import { AuthError, TooManyAttemptsError } from "./errors";
 import { authFailed, authWait } from "./limits";
+import { identityOn } from "./oidc/config";
 
 export const SESSION_COOKIE = "nf_session";
 
-export const locked = () => config.password() !== "";
+// Locked by a password, by sign-in, or both. Sign-in without a password is locked too: an unset password never matches.
+export const locked = () => config.password() !== "" || identityOn();
 
 // Hash both sides so lengths match and timingSafeEqual never throws.
 function safeEqual(a: string, b: string): boolean {
@@ -21,6 +23,7 @@ function safeEqual(a: string, b: string): boolean {
 export function checkPassword(candidate: string, ip: string): void {
   const wait = authWait(ip);
   if (wait !== null) throw new TooManyAttemptsError(wait);
+  if (config.password() === "") throw new AuthError();
   if (safeEqual(candidate, config.password())) return;
   authFailed(ip);
   throw new AuthError();
@@ -46,5 +49,5 @@ export function login(password: string, ip: string): string {
 
 export function sessionOk(cookie: string | undefined): boolean {
   if (!locked()) return true;
-  return cookie !== undefined && safeEqual(cookie, sessionValue());
+  return config.password() !== "" && cookie !== undefined && safeEqual(cookie, sessionValue());
 }
