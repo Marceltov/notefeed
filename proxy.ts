@@ -32,9 +32,13 @@ export function proxy(req: NextRequest) {
   // /login, /mcp, OAuth, and well-known paths are exempt from the lock because each checks credentials itself;
   // redirecting them to /login would turn a script's 401 into a success-looking 307.
   // Icons, the manifest and the share image are public too, so the login page and link previews have them.
+  // /privacy and /imprint are public so the footer links work before signing in (the imprint must be easy to reach,
+  // and the privacy page says what signing in stores).
   const exempt =
     pathname === "/login" ||
     pathname === "/mcp" ||
+    pathname === "/privacy" ||
+    pathname === "/imprint" ||
     /^\/(r|_next|api|oauth|\.well-known)\//.test(pathname) ||
     /^\/(icon\.svg|icon-[\w-]+\.png|apple-icon\.png|opengraph-image\.png|manifest\.webmanifest)$/.test(pathname);
   if (!locked() || exempt) return NextResponse.next();

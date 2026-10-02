@@ -131,6 +131,21 @@ test.each(["/mcp", "/oauth/authorize?x=1", "/oauth/token", "/.well-known/oauth-a
   expect(isNext(proxy(req(p)))).toBe(true);
 });
 
+const OIDC = { NOTEFEED_SECRET: "a".repeat(40), NOTEFEED_OIDC_ISSUER: "https://idp.example", NOTEFEED_OIDC_CLIENT_ID: "id", NOTEFEED_OIDC_CLIENT_SECRET: "s", NOTEFEED_OIDC_ALLOW: "*" };
+
+test.each(["password", "identity-only"])("locked (%s): /privacy and /imprint pass without a session, other pages still redirect", (mode) => {
+  if (mode === "password") process.env.NOTEFEED_PASSWORD = "pw";
+  else for (const [k, v] of Object.entries(OIDC)) vi.stubEnv(k, v);
+  for (const p of ["/privacy", "/imprint"]) {
+    const res = proxy(req(p));
+    expect(isNext(res)).toBe(true);
+    expect(res.status).toBe(200);
+  }
+  expect(proxy(req("/privacy/")).status).toBe(308); // slash strip still runs before the lock check
+  expect(proxy(req("/")).headers.get("location")).toBe("http://localhost:3000/login");
+  expect(proxy(req("/privacy/x")).status).toBe(307);
+});
+
 test("POST /mcp is not rewritten and passes (open instance)", () => {
   const res = proxy(req("/mcp", { method: "POST" }));
   expect(rewrite(res)).toBeNull();
