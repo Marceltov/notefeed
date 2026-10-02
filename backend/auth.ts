@@ -7,8 +7,11 @@ import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import { config } from "./config";
 import { AuthError, TooManyAttemptsError } from "./errors";
 import { authFailed, authWait } from "./limits";
+import { logger } from "./log";
 import { verify } from "./oauth/tokens";
 import { identityOn } from "./oidc/config";
+
+const log = logger("auth");
 
 export const SESSION_COOKIE = "nf_session";
 export const IDENTITY_COOKIE = "nf_identity";
@@ -38,7 +41,12 @@ export const bearerOf = (authorization: string | null): string => /^Bearer\s+(.+
 // `Authorization: Bearer <password>` on a locked instance; anything passes on an open one.
 export function checkBearer(authorization: string | null, ip: string): void {
   if (!locked()) return;
-  checkPassword(bearerOf(authorization), ip);
+  try {
+    checkPassword(bearerOf(authorization), ip);
+  } catch (e) {
+    if (e instanceof AuthError) log.debug("password bearer refused");
+    throw e;
+  }
 }
 
 const sessionValue = () => createHmac("sha256", config.password()).update("notefeed-session").digest("hex");
@@ -46,7 +54,12 @@ const sessionValue = () => createHmac("sha256", config.password()).update("notef
 // The login form: returns the session cookie's value. An open instance has no password to log in with.
 export function login(password: string, ip: string): string {
   if (!locked()) throw new AuthError();
-  checkPassword(password, ip);
+  try {
+    checkPassword(password, ip);
+  } catch (e) {
+    if (e instanceof AuthError) log.warn({ page: "login" }, "password login failed"); // not the too-many-attempts refusals
+    throw e;
+  }
   return sessionValue();
 }
 

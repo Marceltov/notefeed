@@ -102,3 +102,19 @@ export function logTo(write: (line: string) => void, level: string = "debug"): (
     setLevel(before.level);
   };
 }
+
+// For tests: what `run` logged, each line parsed and without its time.
+export async function logsOf(run: () => unknown, level: string = "debug"): Promise<Record<string, unknown>[]> {
+  const lines: string[] = [];
+  const restore = logTo((l) => void lines.push(l), level);
+  try {
+    await run();
+  } finally {
+    restore();
+  }
+  return lines.map((l) => {
+    const entry = JSON.parse(l);
+    delete entry.time;
+    return entry;
+  });
+}

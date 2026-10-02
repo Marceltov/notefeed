@@ -8,6 +8,7 @@ import { IDENTITY_COOKIE, safeEqual } from "../auth";
 import { AuthError } from "../errors";
 import { cookie, readFields, sameOrigin, seeOther } from "../http/request";
 import { authFailed, authWait, clientIp } from "../limits";
+import { logger } from "../log";
 import { checkAuthorize, issueCode } from "../oauth/routes";
 import { type Payloads, sign, TTL, verify } from "../oauth/tokens";
 import { publicUrl, safeNext } from "../urls";
@@ -122,6 +123,7 @@ export async function oidcCallbackRoute(req: Request): Promise<Response> {
     return failed(flight, "sign_in_failed", h);
   }
   log.info({ provider: flight!.provider }, "sign-in succeeded"); // which provider, never who
+  if (flight!.authorize) logger("oauth").info({ via: flight!.provider }, "authorization granted");
   const res = flight!.authorize
     ? issueCode(flight!.authorize, h, sender)
     : seeOther(safeNext(flight!.next), { "Set-Cookie": setCookie(h, IDENTITY_COOKIE, sign("identity", { sender }), TTL.identity) });

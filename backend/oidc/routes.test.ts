@@ -220,6 +220,10 @@ describe("callback", () => {
     expect(verify("code", loc.searchParams.get("code")!)!.sender).toBe("Ann");
     expect(setCookie(res, IDENTITY_COOKIE)).toBeUndefined();
     expect(setCookie(res, "nf_oidc")).toMatch(/Max-Age=0/);
+    expect(entries().map(({ component, msg, provider, via }) => ({ component, msg, provider, via }))).toEqual([
+      { component: "oidc", msg: "sign-in succeeded", provider: "default", via: undefined },
+      { component: "oauth", msg: "authorization granted", provider: undefined, via: "default" },
+    ]);
   });
 
   test("a failed MCP sign-in goes back to the authorize page", async () => {

@@ -14,9 +14,16 @@ function host(url: string): string {
   }
 }
 
+// The variables a provider still needs to be on (none when it is), by name: NOTEFEED_OIDC_[<NAME>_]ISSUER, ...
+export function missingVars(name: string): string[] {
+  const c = config.oidc(name);
+  const set = { ISSUER: c.issuer, CLIENT_ID: c.clientId, CLIENT_SECRET: c.clientSecret, ALLOW: c.allow.join(",") };
+  return Object.entries(set).flatMap(([k, v]) => (v === "" ? [`NOTEFEED_OIDC_${name ? `${name}_` : ""}${k}`] : []));
+}
+
 function provider(id: string, name: string): Provider | undefined {
   const { label, ...c } = config.oidc(name);
-  if (c.issuer === "" || c.clientId === "" || c.clientSecret === "" || c.allow.length === 0) return undefined;
+  if (missingVars(name).length) return undefined;
   return { id, label: label || host(c.issuer), ...c };
 }
 

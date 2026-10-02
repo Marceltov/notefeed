@@ -6,7 +6,7 @@ import { type FeedAccess, checkFeedAccess, createProtected } from "./feedlock";
 import { type FeedSettings, checkSettings, getStoredSettings, saveSettings } from "./feedsettings";
 import { assertFeed, deleteFeed as removeWholeFeed, feedCount, hasFeed, readIdOf } from "./feeds";
 import { knownImage, storeImage } from "./images";
-import { rateLimit } from "./limits";
+import { capReached, rateLimit } from "./limits";
 import { checkMarkdown, countNotes, createNote, removeNote, updateNote, type Note } from "./notes";
 
 // `readMarkdown` runs only once the post is admitted, so a refused request never has its body read.
@@ -29,8 +29,8 @@ export async function postNote(
   const maxFeeds = config.maxFeeds();
   const maxNotes = config.maxNotesPerFeed();
   const exists = await hasFeed(feed);
-  if (maxFeeds && !exists && (await feedCount()) >= maxFeeds) throw new FeedLimitError();
-  if (maxNotes && exists && (await countNotes(feed)) >= maxNotes) throw new NoteLimitError();
+  if (maxFeeds && !exists && (await feedCount()) >= maxFeeds) throw capReached("feed", new FeedLimitError());
+  if (maxNotes && exists && (await countNotes(feed)) >= maxNotes) throw capReached("note", new NoteLimitError());
 
   const { markdown, password: bodyPassword } = await read();
   checkMarkdown(markdown); // before createProtected: a refused note must not leave a protected, empty feed

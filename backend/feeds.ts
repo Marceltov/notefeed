@@ -5,6 +5,7 @@
 import { createHmac, randomBytes } from "node:crypto";
 import { config } from "./config";
 import { createFeedDir, deleteFeedDir, listFeedDirs, readReadId, removeLeftovers } from "./data/feeds";
+import { readHash } from "./data/password";
 import { loadOrCreateSecret, secretPath } from "./data/secret";
 import { InvalidFeedError, ReservedFeedError } from "./errors";
 import { logger } from "./log";
@@ -215,6 +216,19 @@ export async function hasFeed(feed: string): Promise<boolean> {
 export async function feedForReadId(id: string): Promise<string | null> {
   if (!isReadId(id)) return null;
   return (await feedIndex()).byReadId.get(id) ?? null;
+}
+
+// Reserved feeds load() did not make, because the name was already an ordinary feed: it stays open (no `.password`)
+// or keeps another read id than its name. For the startup log; nothing while NOTEFEED_RESERVED_PASSWORD is unset.
+export async function reservedFeedProblems(): Promise<{ feed: string; problem: "unprotected" | "read_id" }[]> {
+  if (!config.reservedPassword()) return [];
+  const idx = await feedIndex();
+  const found: { feed: string; problem: "unprotected" | "read_id" }[] = [];
+  for (const feed of heldBack().filter((n) => idx.byFeed.has(n))) {
+    if ((await readHash(feed)) === null) found.push({ feed, problem: "unprotected" });
+    else if (idx.byFeed.get(feed) !== feed) found.push({ feed, problem: "read_id" });
+  }
+  return found;
 }
 
 export const resetFeedsForTests = () => {

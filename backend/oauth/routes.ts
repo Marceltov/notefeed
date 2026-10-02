@@ -4,12 +4,15 @@
 // (./tokens), so there is nothing to store. An open instance has no password to key them with: 404.
 import { createHash } from "node:crypto";
 import { checkPassword, locked } from "../auth";
-import { NotefeedError, RateLimitedError } from "../errors";
+import { AuthError, NotefeedError, RateLimitedError } from "../errors";
 import { parseForm, readCapped, seeOther } from "../http/request";
 import { clientIp } from "../limits";
+import { logger } from "../log";
 import { identityOn } from "../oidc/config";
 import { mcpResource, publicUrl } from "../urls";
 import { cid, newJti, sign, spendOnce, TTL, verify } from "./tokens";
+
+const log = logger("oauth");
 
 const notFound = () => new Response("not found", { status: 404 });
 // Browser-based MCP clients call the metadata, register and token endpoints cross-origin. None of them
@@ -143,9 +146,11 @@ export async function authorizeRoute(req: Request): Promise<Response> {
     checkPassword(String(form?.get("password") ?? ""), clientIp(h));
   } catch (e) {
     if (!(e instanceof NotefeedError)) throw e;
+    if (e instanceof AuthError) logger("auth").warn({ page: "authorize" }, "password login failed");
     const retry = e instanceof RateLimitedError ? `&retry=${e.retryAfter}` : "";
     return seeOther(`/oauth/authorize?${new URLSearchParams(fields)}&error=${e.code}${retry}`);
   }
+  log.info({ via: "password" }, "authorization granted"); // never the client's self-chosen name
   return issueCode(fields, h);
 }
 
@@ -177,6 +182,11 @@ function issue(clientHash: string, aud: string, sender: string | undefined, unti
     { headers: noStore },
   );
 }
+
+const refusedRefresh = (reason: string) => {
+  log.warn({ reason }, "refresh refused");
+  return oauthError("invalid_grant");
+};
 
 // POST /oauth/token. Every check runs before the code or refresh token is spent, so a failed attempt
 // (a wrong verifier from someone who intercepted the code) can't burn the legitimate client's grant.
@@ -215,7 +225,8 @@ export async function tokenRoute(req: Request): Promise<Response> {
     if (r.cid !== cid(clientId)) return oauthError("invalid_grant");
     if (resource !== undefined && resource !== r.aud) return oauthError("invalid_grant");
     // A sign-in's chain ends with sign-in switched off or with the sign-in's lifetime, like a browser session.
-    if (r.sender !== undefined && !(identityOn() && r.until !== undefined && Date.now() <= r.until * 1000)) return oauthError("invalid_grant");
+    if (r.sender !== undefined && !identityOn()) return refusedRefresh("sign-in switched off");
+    if (r.sender !== undefined && !(r.until !== undefined && Date.now() <= r.until * 1000)) return refusedRefresh("sign-in past its lifetime");
     if (!spendOnce(r.jti, r.exp!)) return oauthError("invalid_grant");
     return issue(r.cid, r.aud, r.sender, r.until);
   }

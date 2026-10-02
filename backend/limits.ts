@@ -1,5 +1,7 @@
-// Per-IP rate limits for POST and for failed password attempts. In-memory, fixed one-minute windows.
+// Per-IP rate limits for POST and for failed password attempts. In-memory, fixed one-minute windows. Also the log
+// line for the caps (NOTEFEED_MAX_*).
 import { config } from "./config";
+import { logger } from "./log";
 import { processState } from "./state";
 
 const WINDOW = 60_000;
@@ -7,6 +9,13 @@ type Hits = Map<string, { start: number; count: number }>;
 // Separate maps, so no IP string (spoofable behind NOTEFEED_TRUST_PROXY) can reach the other bucket.
 const state = processState("limits", () => ({ posts: new Map() as Hits, failures: new Map() as Hits, lastPrune: -Infinity }));
 const { posts, failures } = state;
+const log = logger("limits");
+
+// A cap's error, logged on the way (without the feed's name).
+export function capReached<E>(kind: "feed" | "note" | "image", e: E): E {
+  log.warn({ kind }, "cap reached");
+  return e;
+}
 
 // Next 16 has no request.ip, and base-server only fills x-forwarded-for from the socket when the
 // client did not send one (`??=`), so the header is spoofable. Trust it only behind a proxy, and
@@ -28,7 +37,10 @@ function check(hits: Hits, key: string, now: number, count: boolean): number | n
   }
   const found = hits.get(key);
   const e = found && now - found.start < WINDOW ? found : undefined; // set() below replaces an expired one
-  if (e && e.count >= max) return Math.max(1, Math.ceil((e.start + WINDOW - now) / 1000));
+  if (e && e.count >= max) {
+    log.debug({ kind: hits === posts ? "post" : "password" }, "rate limit reached"); // never the IP
+    return Math.max(1, Math.ceil((e.start + WINDOW - now) / 1000));
+  }
   if (count) {
     if (e) e.count++;
     else hits.set(key, { start: now, count: 1 });
