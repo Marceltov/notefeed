@@ -1,5 +1,6 @@
-import { afterEach, beforeEach, describe, expect, test, type MockInstance, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { AuthError } from "../errors";
+import { logTo } from "../log";
 import type { Provider } from "./config";
 import { authorizeUrl, discover, exchange, resetDiscoveryForTests } from "./flow";
 
@@ -26,14 +27,27 @@ function issuer(o: { doc?: unknown; claims?: unknown; tokenStatus?: number } = {
   });
 }
 
-// Failures log through console.warn; kept out of the test output, and read back by logged().
-let warn: MockInstance<typeof console.warn>;
+// Log lines are captured (logTo) and read back by logged() as `oidc: <reason> key=value ...`, the warn lines only.
+let lines: string[];
+let restore: () => void;
+const entries = () => lines.map((l) => JSON.parse(l) as Record<string, unknown>);
+const logged = () =>
+  entries()
+    .filter((e) => e.level === "warn")
+    .map(({ component, msg, ...d }) => `${component}: ${msg}${Object.entries(d).flatMap(([k, v]) => (k === "level" || k === "time" ? [] : [` ${k}=${JSON.stringify(v)}`])).join("")}`);
+// From here on, every log write throws.
+const breakLog = () => {
+  restore();
+  restore = logTo(() => {
+    throw new Error("log down");
+  });
+};
 beforeEach(() => {
   resetDiscoveryForTests();
-  warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+  lines = [];
+  restore = logTo((l) => void lines.push(l));
 });
-afterEach(() => warn.mockRestore());
-const logged = () => warn.mock.calls.map((c) => String(c[0]));
+afterEach(() => restore());
 
 describe("discover", () => {
   test("reads the issuer's openid-configuration", async () => {
@@ -267,10 +281,8 @@ describe("failure logs", () => {
     expect(logged()).toEqual([`oidc: issuer does not match the discovery document ${D} issuer="${ISS}" document="object"`]);
   });
 
-  test("a console.warn that throws changes nothing", async () => {
-    warn.mockImplementation(() => {
-      throw new Error("log down");
-    });
+  test("a log output that throws changes nothing", async () => {
+    breakLog();
     await expect(discover(PROV, issuer({ doc: { ...META, issuer: "https://evil.example" } }))).rejects.toBeInstanceOf(AuthError);
     await expect(exchange(PROV, META, P, issuer({ tokenStatus: 400 }), NOW)).rejects.toBeInstanceOf(AuthError);
   });
@@ -285,13 +297,13 @@ describe("failure logs", () => {
       `oidc: issuer does not match the discovery document ${D} issuer="https://idp.example/app" document="https://other.example/y"`,
       `oidc: issuer is not an https URL ${D} issuer="(not a URL)"`,
     ]);
-    for (const s of ["pass", "token=abc", "frag"]) expect(logged().join("\n")).not.toContain(s);
+    for (const s of ["pass", "token=abc", "frag"]) expect(lines.join("\n")).not.toContain(s);
   });
 
   test("a sign-in that works logs nothing", async () => {
     const f = issuer();
     expect(await exchange(PROV, await discover(PROV, f), P, f, NOW)).toEqual({ sender: "Ann" });
-    expect(warn).not.toHaveBeenCalled();
+    expect(lines).toEqual([]);
   });
 
   test("no secret, code, verifier, nonce, address or name ever reaches the log", async () => {
@@ -299,7 +311,7 @@ describe("failure logs", () => {
     for (const c of claims) await exchange(PROV, META, P, issuer({ claims: c }), NOW).catch(() => {});
     await exchange({ ...PROV, allow: ["*"], senderClaim: ["nickname"] }, META, P, issuer(), NOW).catch(() => {});
     await exchange(PROV, META, P, issuer({ tokenStatus: 400 }), NOW).catch(() => {});
-    const all = logged().join("\n");
+    const all = lines.join("\n");
     expect(logged()).toHaveLength(6);
     for (const s of ["client-secret", "the-code", "the-verifier", "the-nonce", "ann@x.com", "bob@x.com", "Ann", "Bob", "c2ln"]) expect(all).not.toContain(s);
   });

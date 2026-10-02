@@ -7,7 +7,10 @@ import { config } from "./config";
 import { createFeedDir, deleteFeedDir, listFeedDirs, readReadId, removeLeftovers } from "./data/feeds";
 import { loadOrCreateSecret, secretPath } from "./data/secret";
 import { InvalidFeedError, ReservedFeedError } from "./errors";
+import { logger } from "./log";
 import { processState } from "./state";
+
+const log = logger("feeds");
 
 export const FEED_RE = /^[a-z0-9_-]{1,64}$/;
 export const READ_ID_RE = /^[A-Za-z0-9_-]{22}$/;
@@ -79,10 +82,10 @@ function unregister(idx: Index, feed: string): void {
 function register(idx: Index, feed: string, id: string | null): void {
   unregister(idx, feed);
   if (id !== null && idx.byReadId.has(id)) {
-    console.error("a feed's .readid is already another feed's read id (copied directory?); using the derived read id");
+    log.warn("a feed's .readid is already another feed's read id (copied directory?); using the derived read id");
     id = derivedReadId(feed);
     if (idx.byReadId.has(id)) {
-      console.error("a feed's derived read id is already another feed's read id; the feed has no read link");
+      log.warn("a feed's derived read id is already another feed's read id; the feed has no read link");
       id = null; // listed and countable, but not found by read id
     }
   }
@@ -100,12 +103,12 @@ async function idOnDisk(feed: string, strict = false): Promise<string | null> {
     id = await readReadId(feed);
   } catch (e) {
     if (strict) throw e;
-    console.error("a feed's .readid can't be read; the feed has no read link until the next start", (e as NodeJS.ErrnoException).code);
+    log.error({ err: e }, "a feed's .readid can't be read; the feed has no read link until the next start");
     return null;
   }
   if (id === null) return derivedReadId(feed);
   if (isReadId(id)) return id;
-  console.error("a feed's .readid is not a read id; using the derived read id");
+  log.warn("a feed's .readid is not a read id; using the derived read id");
   return derivedReadId(feed);
 }
 

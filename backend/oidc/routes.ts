@@ -13,7 +13,7 @@ import { type Payloads, sign, TTL, verify } from "../oauth/tokens";
 import { publicUrl, safeNext } from "../urls";
 import { identityOn, type Provider, providerById, providers } from "./config";
 import { authorizeUrl, discover, exchange } from "./flow";
-import { errorCode, fail, logFailure } from "./log";
+import { errorCode, fail, log, logFailure } from "./log";
 
 const FLIGHT_COOKIE = "nf_oidc";
 const notFound = () => new Response("not found", { status: 404 });
@@ -121,6 +121,7 @@ export async function oidcCallbackRoute(req: Request): Promise<Response> {
     authFailed(ip);
     return failed(flight, "sign_in_failed", h);
   }
+  log.info({ provider: flight!.provider }, "sign-in succeeded"); // which provider, never who
   const res = flight!.authorize
     ? issueCode(flight!.authorize, h, sender)
     : seeOther(safeNext(flight!.next), { "Set-Cookie": setCookie(h, IDENTITY_COOKIE, sign("identity", { sender }), TTL.identity) });

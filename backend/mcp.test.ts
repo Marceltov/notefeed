@@ -4,9 +4,19 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { readIdOf, resetFeedsForTests } from "./feeds";
 import { resetRateLimitsForTests } from "./limits";
+import { logTo } from "./log";
 import { createNote, getNote } from "./notes";
 import { mcpRoute } from "./mcp";
 import { sign } from "./oauth/tokens";
+
+// Log lines, captured per test.
+let logs: string[] = [];
+let restoreLog = () => {};
+beforeEach(() => {
+  logs = [];
+  restoreLog = logTo((l) => void logs.push(l));
+});
+afterEach(() => restoreLog());
 
 const V = "2026-07-28";
 const META = { "io.modelcontextprotocol/clientInfo": { name: "t", version: "0" }, "io.modelcontextprotocol/clientCapabilities": {} };
@@ -97,7 +107,6 @@ describe("tools", () => {
   });
 
   test("post_note to a feed without a read link answers read_url null", async () => {
-    vi.spyOn(console, "error").mockImplementation(() => {});
     await mkdir(join(dir, "nolink", ".readid"), { recursive: true }); // can't be read
     const r = await call("post_note", { feed: "nolink", markdown: "# Hi" });
     expect(r.isError).toBeFalsy();
@@ -198,14 +207,14 @@ describe("tools", () => {
   });
 
   test("an unexpected failure is logged, not shown", async () => {
-    const log = vi.spyOn(console, "error").mockImplementation(() => {});
     await writeFile(join(dir, "file"), "");
     process.env.DATA_DIR = join(dir, "file"); // a file where the data directory should be
     resetFeedsForTests();
     const r = await call("post_note", { feed: "a", markdown: "x" });
     expect(r.isError).toBe(true);
     expect(r.content[0].text).toBe("internal error");
-    expect(log).toHaveBeenCalledOnce();
+    expect(logs).toHaveLength(1);
+    expect(JSON.parse(logs[0])).toMatchObject({ level: "error", component: "mcp", msg: "tool failed", err: { type: "Error" } });
   });
 
   test("empty note and rate limit", async () => {

@@ -1,7 +1,17 @@
-import { afterEach, describe, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import * as z from "zod";
 import { RateLimitedError } from "../errors";
+import { logTo } from "../log";
 import { createDispatcher, op } from "./dispatch";
+
+// Log lines, captured per test.
+let logs: string[] = [];
+let restoreLog = () => {};
+beforeEach(() => {
+  logs = [];
+  restoreLog = logTo((l) => void logs.push(l));
+});
+afterEach(() => restoreLog());
 
 const Thing = z.object({ id: z.string(), limit: z.number() });
 const NotFound = { description: "Not found", schema: z.object({ error: z.string(), code: z.string().optional() }) };
@@ -98,11 +108,10 @@ describe("query", () => {
 
 describe("replies", () => {
   test("an undeclared status never leaves: logged, 500", async () => {
-    const log = vi.spyOn(console, "error").mockImplementation(() => {});
     const sneaky = { ...getThing, handle: async () => ({ status: 418 as 200, body: { id: "a", limit: 1 } }) };
     const res = await createDispatcher([sneaky], "/api/v1")(new Request("http://x/api/v1/things/a"), ["things", "a"]);
     expect(res.status).toBe(500);
-    expect(log).toHaveBeenCalled();
+    expect(logs.map((l) => JSON.parse(l))).toEqual([expect.objectContaining({ level: "error", component: "http", operation: "getThing", status: 418 })]);
   });
   test("a thrown NotefeedError becomes its status and body, with Retry-After", async () => {
     behave = async () => {
@@ -115,16 +124,14 @@ describe("replies", () => {
     expect(await res.json()).toEqual({ error: "rate limit exceeded", code: "rate_limited" });
   });
   test("a thrown error whose status the entry doesn't declare never leaves either: logged, 500", async () => {
-    const log = vi.spyOn(console, "error").mockImplementation(() => {});
     behave = async () => {
       throw new RateLimitedError(7); // 429, which getThing doesn't declare
     };
     const res = await call("things/a");
     expect(res.status).toBe(500);
-    expect(log).toHaveBeenCalled();
+    expect(logs).toHaveLength(1);
   });
   test("a thrown plain Error is a 500", async () => {
-    vi.spyOn(console, "error").mockImplementation(() => {});
     behave = async () => {
       throw new Error("x");
     };

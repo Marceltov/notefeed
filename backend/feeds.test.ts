@@ -1,11 +1,21 @@
 import { mkdir, mkdtemp, readFile, readdir, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { ReservedFeedError } from "./errors";
+import { logTo } from "./log";
 import { FEED_RE, deleteFeed, READ_ID_RE, RESERVED_FEEDS, checkFeed, derivedReadId, ensureFeed, feedCount, feedForReadId, hasFeed, listFeeds, readIdOf, resetFeedsForTests } from "./feeds";
 import { createProtected, protectedFeed } from "./feedlock";
 import { createNote, listNotes } from "./notes";
+
+// Log lines, captured per test.
+let logs: string[] = [];
+let restoreLog = () => {};
+beforeEach(() => {
+  logs = [];
+  restoreLog = logTo((l) => void logs.push(l));
+});
+afterEach(() => restoreLog());
 
 let dir: string;
 beforeEach(async () => {
@@ -190,7 +200,6 @@ describe("per-feed read ids", () => {
   });
 
   test("logs a junk or duplicate .readid without the feed name", async () => {
-    const log = vi.spyOn(console, "error").mockImplementation(() => {});
     await mkdir(join(dir, "secretjunk"));
     await writeFile(join(dir, "secretjunk", ".readid"), "junk");
     await mkdir(join(dir, "secretdup"));
@@ -198,15 +207,12 @@ describe("per-feed read ids", () => {
     await mkdir(join(dir, "secretdup2"));
     await writeFile(join(dir, "secretdup2", ".readid"), "A".repeat(22));
     await readIdOf("secretjunk");
-    const out = log.mock.calls.flat().join(" ");
-    const n = log.mock.calls.length;
-    log.mockRestore();
-    expect(n).toBe(2);
+    const out = logs.join(" ");
+    expect(logs.map((l) => JSON.parse(l).level)).toEqual(["warn", "warn"]);
     expect(out).not.toContain("secret");
   });
 
   test("a hand-made .readid equal to another feed's derived id: the first keeps the link, the other has none", async () => {
-    const log = vi.spyOn(console, "error").mockImplementation(() => {});
     for (const f of ["a", "d"]) {
       await mkdir(join(dir, f));
       await writeFile(join(dir, f, ".readid"), derivedReadId("d")); // d's own derived id, also a's stored one
@@ -214,14 +220,13 @@ describe("per-feed read ids", () => {
     expect(await feedForReadId(derivedReadId("d"))).toBe("a");
     expect(await listFeeds()).toEqual(["a", "d"]);
     expect(await readIdOf("d")).toBeNull(); // not a's link
-    expect(log.mock.calls.flat().join(" ")).not.toMatch(/\bd\b/);
+    expect(logs.map((l) => JSON.parse(l).msg).join(" ")).not.toMatch(/\bd\b/);
+    expect(logs.join(" ")).not.toContain('"d"');
     await deleteFeed("d"); // must not take a's link away
     expect(await feedForReadId(derivedReadId("d"))).toBe("a");
-    log.mockRestore();
   });
 
   test("a .readid that can't be read: the other feeds load, and that one is listed without a read link", async () => {
-    const log = vi.spyOn(console, "error").mockImplementation(() => {});
     await createNote("fine", "x");
     await mkdir(join(dir, "secretbroken", ".readid"), { recursive: true }); // EISDIR
     resetFeedsForTests();
@@ -230,9 +235,9 @@ describe("per-feed read ids", () => {
     expect(await readIdOf("secretbroken")).toBeNull();
     expect(await feedForReadId(derivedReadId("secretbroken"))).toBeNull(); // not the derived id: that would change its link
     expect(await ensureFeed("secretbroken")).toBeNull();
-    expect(log.mock.calls.length).toBe(1);
-    expect(log.mock.calls.flat().join(" ")).not.toContain("secret");
-    log.mockRestore();
+    expect(logs).toHaveLength(1);
+    expect(JSON.parse(logs[0])).toMatchObject({ level: "error", component: "feeds", err: { code: "EISDIR" } });
+    expect(logs.join(" ")).not.toContain("secret");
   });
 
   test(".readid is not a note and not a feed", async () => {

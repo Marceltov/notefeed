@@ -3,7 +3,10 @@
 // the dispatcher enforces the same at runtime for what types can't see (thrown errors, formats).
 import * as z from "zod";
 import { InvalidRequestError, NotFoundError } from "../errors";
+import { logger } from "../log";
 import { errorReply } from "./errors";
+
+const log = logger("http");
 
 // A response without a schema has no body (e.g. a 303); headers are documented, not enforced.
 export type ResponseSpec = {
@@ -82,7 +85,7 @@ function queryOf(req: Request): Record<string, string> {
 function send(entry: AnyOp, reply: AnyReply): Response {
   const declared = (entry.responses as Record<number, ResponseSpec>)[reply.status];
   if (!declared) {
-    console.error(`${entry.operationId} answered ${reply.status}, which it doesn't declare`);
+    log.error({ operation: entry.operationId, status: reply.status }, "an operation answered a status it doesn't declare");
     return Response.json({ error: "internal error" }, { status: 500 });
   }
   // Types can't see formats and patterns (or a thrown error's body); check them wherever it's cheap to fail.

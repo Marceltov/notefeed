@@ -1,40 +1,45 @@
-import { afterEach, beforeEach, expect, test, type MockInstance, vi } from "vitest";
+import { afterEach, beforeEach, expect, test } from "vitest";
+import { logTo } from "../log";
 import { logFailure } from "./log";
 
-let warn: MockInstance<typeof console.warn>;
+let lines: string[];
+let restore: () => void;
 beforeEach(() => {
-  warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+  lines = [];
+  restore = logTo((l) => void lines.push(l));
 });
-afterEach(() => warn.mockRestore());
-const line = () => {
-  expect(warn).toHaveBeenCalledTimes(1);
-  return String(warn.mock.calls[0][0]);
+afterEach(() => restore());
+const entry = () => {
+  expect(lines).toHaveLength(1);
+  const { time, ...rest } = JSON.parse(lines[0]);
+  expect(typeof time).toBe("string");
+  return rest;
 };
 
-test("one line: the reason, then each detail as key=value, strings quoted", () => {
+test("one warn line on the oidc logger: the reason as msg, each detail as a field", () => {
   logFailure("token request rejected", { provider: "default", status: 400, error: "invalid_grant" });
-  expect(line()).toBe('oidc: token request rejected provider="default" status=400 error="invalid_grant"');
+  expect(entry()).toEqual({ level: "warn", component: "oidc", msg: "token request rejected", provider: "default", status: 400, error: "invalid_grant" });
 });
 
 test("without detail, just the reason", () => {
   logFailure("state mismatch or missing sign-in cookie");
-  expect(line()).toBe("oidc: state mismatch or missing sign-in cookie");
+  expect(entry()).toEqual({ level: "warn", component: "oidc", msg: "state mismatch or missing sign-in cookie" });
 });
 
 test("a value can't break the line or fake another one", () => {
   logFailure("unknown provider", { provider: 'x"\n\roidc: forged \u2028\u0000\u001b[31m' });
-  const l = line();
-  expect(l).toBe('oidc: unknown provider provider="x\\"oidc: forged [31m"');
-  expect(l).not.toMatch(/\p{Cc}|\p{Zl}|\p{Zp}/u);
+  expect(lines[0].slice(0, -1)).not.toMatch(/[\n\r\u2028]/u);
+  expect(entry().provider).toBe('x"oidc: forged [31m');
 });
 
 test("each value is capped at 200 characters", () => {
   logFailure("unknown provider", { provider: "a".repeat(500) });
-  expect(line()).toBe(`oidc: unknown provider provider="${"a".repeat(200)}"`);
+  expect(entry().provider).toBe("a".repeat(200));
 });
 
-test("never throws, even when console.warn does", () => {
-  warn.mockImplementation(() => {
+test("never throws, even when the log output does", () => {
+  restore();
+  restore = logTo(() => {
     throw new Error("log down");
   });
   expect(() => logFailure("unknown provider", { provider: "x" })).not.toThrow();

@@ -1,17 +1,18 @@
-// Why a sign-in failed, for the operator: the browser only ever sees "Sign-in didn't work". One `oidc:` line per
-// failure, a fixed reason plus key=value detail. Callers pass only provider ids, issuer URLs, HTTP statuses and short
-// error codes: never a secret, code, token, state, nonce, verifier, cookie, address, name or other claim value.
+// Why a sign-in failed, for the operator: the browser only ever sees "Sign-in didn't work". One `warn` line on the
+// `oidc` logger per failure: msg is a fixed reason, the detail its fields. Callers pass only provider ids, issuer URLs,
+// HTTP statuses and short error codes: never a secret, code, token, state, nonce, verifier, cookie, address, name or
+// other claim value. The logger caps and cleans string values, so a value can't fake another line.
 import { AuthError } from "../errors";
+import { logger } from "../log";
 
 type Detail = Record<string, string | number>;
 
-// Quoted, without control, format or line-separator characters, so a value can't end the line or fake another one.
-const value = (v: string | number) => (typeof v === "number" ? String(v) : JSON.stringify(v.replace(/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/gu, "").slice(0, 200)));
+export const log = logger("oidc");
 
 // Never throws: a failing log must not change what the browser sees or what counts as a failed sign-in.
 export function logFailure(reason: string, detail: Detail = {}): void {
   try {
-    console.warn(`oidc: ${reason}${Object.entries(detail).map(([k, v]) => ` ${k}=${value(v)}`).join("")}`);
+    log.warn(detail, reason);
   } catch {}
 }
 

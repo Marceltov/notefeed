@@ -2,10 +2,11 @@ import { createHash } from "node:crypto";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, type MockInstance, test, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { IDENTITY_COOKIE, sessionOk } from "../auth";
 import { resetFeedsForTests } from "../feeds";
 import { resetRateLimitsForTests } from "../limits";
+import { logTo } from "../log";
 import { registerRoute } from "../oauth/routes";
 import { resetTokensForTests, sign, verify } from "../oauth/tokens";
 import { resetDiscoveryForTests } from "./flow";
@@ -51,16 +52,29 @@ beforeEach(async () => {
   resetRateLimitsForTests();
   resetTokensForTests();
   resetDiscoveryForTests();
-  warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+  lines = [];
+  restore = logTo((l) => void lines.push(l));
 });
 afterEach(() => {
   vi.unstubAllEnvs();
   vi.unstubAllGlobals();
-  warn.mockRestore();
+  restore();
 });
-// Failures log through console.warn; kept out of the test output, and read back by logged().
-let warn: MockInstance<typeof console.warn>;
-const logged = () => warn.mock.calls.map((c) => String(c[0]));
+// Log lines are captured (logTo) and read back by logged() as `oidc: <reason> key=value ...`, the warn lines only.
+let lines: string[];
+let restore: () => void;
+const entries = () => lines.map((l) => JSON.parse(l) as Record<string, unknown>);
+const logged = () =>
+  entries()
+    .filter((e) => e.level === "warn")
+    .map(({ component, msg, ...d }) => `${component}: ${msg}${Object.entries(d).flatMap(([k, v]) => (k === "level" || k === "time" ? [] : [` ${k}=${JSON.stringify(v)}`])).join("")}`);
+// From here on, every log write throws.
+const breakLog = () => {
+  restore();
+  restore = logTo(() => {
+    throw new Error("log down");
+  });
+};
 
 const get = (path: string, cookie?: string) => new Request(BASE + path, { headers: { ...H, ...(cookie ? { cookie } : {}) } });
 const setCookie = (res: Response, name: string) => res.headers.getSetCookie().find((c) => c.startsWith(`${name}=`));
@@ -268,7 +282,7 @@ describe("failure logs", () => {
     const s = await start("");
     failed(await call(s));
     expect(logged()).toEqual([line]);
-    for (const secret of ["client-secret", "the-code", s.state, s.cookie, lastNonce, "ann@x.com", "bob@x.com", "Bob"]) expect(logged().join("\n")).not.toContain(secret);
+    for (const secret of ["client-secret", "the-code", s.state, s.cookie, lastNonce, "ann@x.com", "bob@x.com", "Bob"]) expect(lines.join("\n")).not.toContain(secret);
   });
 
   test("an unreachable provider at the start is logged", async () => {
@@ -299,10 +313,8 @@ describe("failure logs", () => {
     }
   });
 
-  test("a console.warn that throws changes nothing the browser sees, and the failure still counts", async () => {
-    warn.mockImplementation(() => {
-      throw new Error("log down");
-    });
+  test("a log output that throws changes nothing the browser sees, and the failure still counts", async () => {
+    breakLog();
     vi.stubEnv("NOTEFEED_RATE_LIMIT", "1");
     const s = await start("");
     failed(await callback(`code=c&state=${s.state}x`, s.cookie));
@@ -312,10 +324,11 @@ describe("failure logs", () => {
     expect((await oidcStartRoute(get("/api/oidc/start"))).headers.get("location")).toBe("/login?error=sign_in_failed");
   });
 
-  test("a sign-in that works logs nothing", async () => {
+  test("a sign-in that works logs one info line naming the provider, never who signed in", async () => {
     const s = await start("");
     expect(setCookie(await callback(`code=c&state=${s.state}`, s.cookie), IDENTITY_COOKIE)).toBeDefined();
-    expect(warn).not.toHaveBeenCalled();
+    expect(entries()).toEqual([{ level: "info", time: expect.any(String), component: "oidc", msg: "sign-in succeeded", provider: "default" }]);
+    for (const s of ["Ann", "ann@x.com"]) expect(lines.join("\n")).not.toContain(s);
   });
 });
 
