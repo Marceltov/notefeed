@@ -15,7 +15,7 @@ export type Payloads = {
   access: { aud: string; sender?: string };
   refresh: { cid: string; aud: string; jti: string; sender?: string; until?: number };
   identity: { sender: string }; // the nf_identity session cookie
-  oidc: { state: string; nonce: string; verifier: string; next?: string; authorize?: Record<string, string> }; // a sign-in in flight
+  oidc: { state: string; nonce: string; verifier: string; provider: string; next?: string; authorize?: Record<string, string> }; // a sign-in in flight, through `provider` (its id)
 };
 export const TTL = { code: 300, access: 3600, refresh: 2592000, identity: 604800, oidc: 600 } as const;
 

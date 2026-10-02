@@ -2,7 +2,7 @@
 // backend/ (enforced in eslint.config.mjs). Calls are in-process today. Each query below is shaped like
 // the endpoint it would become if the backend moved out, so the cut would be here and nowhere else.
 import { config } from "./config";
-import { identityOn } from "./oidc/config";
+import { identityOn, providers } from "./oidc/config";
 import { forReaders, getSettings } from "./feedsettings";
 import { isReadId, checkFeed, feedForReadId, hasFeed, readIdOf } from "./feeds";
 import { getNote, listNotes, type Note } from "./notes";
@@ -28,15 +28,8 @@ export { authServerRoute, authorizeRoute, checkAuthorize, metadataPreflight, pro
 
 export const instanceTitle = config.title;
 
-/** The sign-in provider's name for the button: the issuer's host; empty while identity is off. */
-export function providerName(): string {
-  if (!identityOn()) return "";
-  try {
-    return new URL(config.oidc().issuer).host;
-  } catch {
-    return "";
-  }
-}
+/** The sign-in providers for the buttons, in order: id (for /api/oidc/start?provider=) and label; empty while identity is off. */
+export const signInProviders = (): { id: string; label: string }[] => providers().map(({ id, label }) => ({ id, label }));
 
 /** Whether the instance password is set (sign-in alone can lock an instance too). */
 export const passwordSet = () => config.password() !== "";

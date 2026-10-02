@@ -31,14 +31,21 @@ export const config = {
   // body only up to that, so a larger image would arrive cut. Images per feed: 0 or below, no cap.
   maxImageBytes: () => Math.min(positive("NOTEFEED_MAX_IMAGE_BYTES", 5242880), 10485760),
   maxImagesPerFeed: () => Math.max(0, int("NOTEFEED_MAX_IMAGES_PER_FEED", 0)),
-  // Optional OIDC sign-in (see oidc/config.ts): issuer, client credentials, and who may sign in
-  // (comma-separated addresses, @domain entries or *; lowercased).
-  oidc: () => ({
-    issuer: env("NOTEFEED_OIDC_ISSUER"),
-    clientId: env("NOTEFEED_OIDC_CLIENT_ID"),
-    clientSecret: env("NOTEFEED_OIDC_CLIENT_SECRET"),
-    allow: env("NOTEFEED_OIDC_ALLOW").split(",").map((n) => n.trim().toLowerCase()).filter(Boolean),
-    // id_token claims tried in order for the sender (case-sensitive); not part of "identity is on".
-    senderClaim: ((l) => (l.length ? l : ["name", "email"]))(env("NOTEFEED_OIDC_SENDER_CLAIM").split(",").map((n) => n.trim()).filter(Boolean)),
-  }),
+  // Optional OIDC sign-in (see oidc/config.ts): one provider per set of variables. `name` "" is the unprefixed
+  // set (NOTEFEED_OIDC_ISSUER, ...); any other is NOTEFEED_OIDC_<name>_ISSUER, ... Issuer, client credentials, who may
+  // sign in (comma-separated addresses, @domain entries or *; lowercased), and the button's label.
+  oidc: (name = "") => {
+    const v = (k: string) => env(`NOTEFEED_OIDC_${name ? `${name}_` : ""}${k}`);
+    return {
+      issuer: v("ISSUER"),
+      clientId: v("CLIENT_ID"),
+      clientSecret: v("CLIENT_SECRET"),
+      allow: v("ALLOW").split(",").map((n) => n.trim().toLowerCase()).filter(Boolean),
+      // id_token claims tried in order for the sender (case-sensitive); not part of "the provider is on".
+      senderClaim: ((l) => (l.length ? l : ["name", "email"]))(v("SENDER_CLAIM").split(",").map((n) => n.trim()).filter(Boolean)),
+      label: v("LABEL").trim(),
+    };
+  },
+  // The names of the named providers: every NOTEFEED_OIDC_<NAME>_ISSUER that is set (the unprefixed ISSUER can't match).
+  oidcNames: () => Object.keys(process.env).flatMap((k) => /^NOTEFEED_OIDC_([A-Z0-9]+(?:_[A-Z0-9]+)*)_ISSUER$/.exec(k)?.[1] ?? []),
 };

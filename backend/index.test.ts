@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { beforeEach, expect, test } from "vitest";
 import { cookieValue, createProtected } from "./feedlock";
 import { readIdOf, resetFeedsForTests } from "./feeds";
-import { feedUnlocked, getFeed, getFeedNote, getReadFeed, getReadNote, identitySender, passwordSet, providerName } from "./index";
+import { feedUnlocked, getFeed, getFeedNote, getReadFeed, getReadNote, identitySender, passwordSet, signInProviders } from "./index";
 import { sign } from "./oauth/tokens";
 import { createNote, removeNote } from "./notes";
 import { saveSettings } from "./feedsettings";
@@ -44,13 +44,26 @@ test("feedUnlocked: open without a password, unlocked only by this feed's cookie
   expect(await feedUnlocked("a", (await cookieValue("a"))!)).toBe("unlocked");
 });
 
-test("providerName is the issuer's host while identity is on, else empty; passwordSet follows the password", () => {
-  const vars = { NOTEFEED_OIDC_ISSUER: "https://auth.example.com/realm/x", NOTEFEED_OIDC_CLIENT_ID: "id", NOTEFEED_OIDC_CLIENT_SECRET: "s", NOTEFEED_OIDC_ALLOW: "*" };
-  expect(providerName()).toBe("");
+test("signInProviders lists each provider's id and label in order, empty while identity is off; passwordSet follows the password", () => {
+  const vars = {
+    NOTEFEED_OIDC_ISSUER: "https://auth.example.com/realm/x",
+    NOTEFEED_OIDC_CLIENT_ID: "id",
+    NOTEFEED_OIDC_CLIENT_SECRET: "s",
+    NOTEFEED_OIDC_ALLOW: "*",
+    NOTEFEED_OIDC_MY_IDP_ISSUER: "https://idp.example",
+    NOTEFEED_OIDC_MY_IDP_CLIENT_ID: "id",
+    NOTEFEED_OIDC_MY_IDP_CLIENT_SECRET: "s",
+    NOTEFEED_OIDC_MY_IDP_ALLOW: "*",
+    NOTEFEED_OIDC_MY_IDP_LABEL: "My IdP",
+  };
+  expect(signInProviders()).toEqual([]);
   Object.assign(process.env, vars);
   process.env.NOTEFEED_PASSWORD = "";
   try {
-    expect(providerName()).toBe("auth.example.com");
+    expect(signInProviders()).toEqual([
+      { id: "default", label: "auth.example.com" },
+      { id: "my_idp", label: "My IdP" },
+    ]);
     expect(passwordSet()).toBe(false);
     process.env.NOTEFEED_PASSWORD = "x";
     expect(passwordSet()).toBe(true);
@@ -58,7 +71,7 @@ test("providerName is the issuer's host while identity is on, else empty; passwo
     for (const k of Object.keys(vars)) delete process.env[k];
     delete process.env.NOTEFEED_PASSWORD;
   }
-  expect(providerName()).toBe("");
+  expect(signInProviders()).toEqual([]);
 });
 
 test("read pages hide the sender when the feed says so; getFeed never does", async () => {

@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { SENDER_NOTICE, errorMessage } from "@/app/_lib/messages";
-import { identityOn, locked, passwordSet, providerName, safeNext } from "@/backend";
+import { identityOn, locked, passwordSet, signInProviders, safeNext } from "@/backend";
 
 export const dynamic = "force-dynamic";
 
@@ -17,7 +17,7 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
             href={`/api/oidc/start?next=${encodeURIComponent(safeNext(next))}`}
             className="inline-block rounded-sm bg-carbon px-4 py-1.5 font-bold text-on-carbon"
           >
-            Sign in with {providerName()}
+            Sign in with {signInProviders()[0]?.label ?? ""}
           </a>
           <p className="mt-2 text-sm text-muted">{SENDER_NOTICE}</p>
         </div>

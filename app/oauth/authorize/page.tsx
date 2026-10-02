@@ -1,7 +1,7 @@
 import { headers } from "next/headers";
 import { notFound, redirect } from "next/navigation";
 import { SENDER_NOTICE, errorMessage } from "@/app/_lib/messages";
-import { checkAuthorize, identityOn, locked, passwordSet, providerName } from "@/backend";
+import { checkAuthorize, identityOn, locked, passwordSet, signInProviders } from "@/backend";
 
 export const dynamic = "force-dynamic";
 
@@ -34,7 +34,7 @@ export default async function AuthorizePage({ searchParams }: PageProps<"/oauth/
             <input key={name} type="hidden" name={name} value={value} />
           ))}
           <button type="submit" className="rounded-sm bg-carbon px-4 py-1.5 font-bold text-on-carbon">
-            Sign in with {providerName()}
+            Sign in with {signInProviders()[0]?.label ?? ""}
           </button>
           <p className="mt-2 text-sm text-muted">{SENDER_NOTICE}</p>
         </form>

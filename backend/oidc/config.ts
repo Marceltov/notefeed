@@ -1,16 +1,39 @@
-// Optional OIDC sign-in: on only when issuer, client id, client secret and a non-empty allow-list are all set.
+// Optional OIDC sign-in, through one or more providers. The unprefixed NOTEFEED_OIDC_* variables are the provider
+// "default"; each NOTEFEED_OIDC_<NAME>_* set is another, with id NAME lowercased (DEFAULT is reserved for the
+// unprefixed set). A provider is on only when issuer, client id, client secret and a non-empty allow-list are all set.
 // Must not import auth.ts (auth.ts imports this).
 import { config } from "../config";
 
-export function identityOn(): boolean {
-  const { issuer, clientId, clientSecret, allow } = config.oidc();
-  return issuer !== "" && clientId !== "" && clientSecret !== "" && allow.length > 0;
+export type Provider = { id: string; label: string; issuer: string; clientId: string; clientSecret: string; allow: string[]; senderClaim: string[] };
+
+function host(url: string): string {
+  try {
+    return new URL(url).host;
+  } catch {
+    return "";
+  }
 }
+
+function provider(id: string, name: string): Provider | undefined {
+  const { label, ...c } = config.oidc(name);
+  if (c.issuer === "" || c.clientId === "" || c.clientSecret === "" || c.allow.length === 0) return undefined;
+  return { id, label: label || host(c.issuer), ...c };
+}
+
+// The ones that are on: default first, then the named ones by id (a stable button order).
+export function providers(): Provider[] {
+  const named = config.oidcNames().filter((n) => n !== "DEFAULT").map((n) => [n.toLowerCase(), n]).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+  return [["default", ""], ...named].flatMap(([id, name]) => provider(id, name) ?? []);
+}
+
+export const providerById = (id: string): Provider | undefined => providers().find((p) => p.id === id);
+
+export const identityOn = (): boolean => providers().length > 0;
 
 // `*` lets anyone the provider signs in through, even without an email claim; every other entry
 // (address or @domain) needs a verified email.
-export function allowed(c: { email?: string; email_verified?: boolean }): boolean {
-  const { allow } = config.oidc();
+export function allowed(provider: Pick<Provider, "allow">, c: { email?: string; email_verified?: boolean }): boolean {
+  const { allow } = provider;
   if (allow.includes("*")) return true;
   if (c.email_verified !== true || !c.email) return false;
   const email = c.email.toLowerCase();
