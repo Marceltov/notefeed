@@ -1,5 +1,6 @@
-import { beforeEach, describe, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { AuthError } from "../errors";
+import { logTo } from "../log";
 import type { Provider } from "./config";
 import { authorizeUrl, discover, exchange, resetDiscoveryForTests } from "./flow";
 
@@ -26,7 +27,27 @@ function issuer(o: { doc?: unknown; claims?: unknown; tokenStatus?: number } = {
   });
 }
 
-beforeEach(() => resetDiscoveryForTests());
+// Log lines are captured (logTo) and read back by logged() as `oidc: <reason> key=value ...`, the warn lines only.
+let lines: string[];
+let restore: () => void;
+const entries = () => lines.map((l) => JSON.parse(l) as Record<string, unknown>);
+const logged = () =>
+  entries()
+    .filter((e) => e.level === "warn")
+    .map(({ component, msg, ...d }) => `${component}: ${msg}${Object.entries(d).flatMap(([k, v]) => (k === "level" || k === "time" ? [] : [` ${k}=${JSON.stringify(v)}`])).join("")}`);
+// From here on, every log write throws.
+const breakLog = () => {
+  restore();
+  restore = logTo(() => {
+    throw new Error("log down");
+  });
+};
+beforeEach(() => {
+  resetDiscoveryForTests();
+  lines = [];
+  restore = logTo((l) => void lines.push(l));
+});
+afterEach(() => restore());
 
 describe("discover", () => {
   test("reads the issuer's openid-configuration", async () => {
@@ -66,12 +87,32 @@ describe("discover", () => {
 
   test.each([
     ["an issuer mismatch", { ...META, issuer: "https://evil.example" }],
-    ["an issuer differing only by a slash", { ...META, issuer: `${ISS}/` }],
+    ["an issuer on another host", { ...META, issuer: "https://other.example/app" }],
+    ["an issuer with another path", { ...META, issuer: `${ISS}/x` }],
+    ["an issuer with another scheme", { ...META, issuer: "http://idp.example/app" }],
+    ["an issuer with two trailing slashes", { ...META, issuer: `${ISS}//` }],
     ["no token endpoint", { ...META, token_endpoint: undefined }],
     ["an endpoint that isn't a URL", { ...META, authorization_endpoint: "nope" }],
     ["not an object", "x"],
   ])("refuses %s", async (_, doc) => {
     await expect(discover(PROV, issuer({ doc }))).rejects.toBeInstanceOf(AuthError);
+  });
+
+  test.each([
+    ["without a slash, the document with one", ISS, `${ISS}/`],
+    ["with a slash, the document without one", `${ISS}/`, ISS],
+  ])("the issuer configured %s matches", async (_, configured, inDoc) => {
+    const f = issuer({ doc: { ...META, issuer: inDoc } });
+    const meta = await discover(at(configured), f);
+    expect(f).toHaveBeenCalledWith(`${ISS}/.well-known/openid-configuration`, expect.anything());
+    for (const iss of [ISS, `${ISS}/`]) expect(await exchange(at(configured), meta, P, issuer({ claims: { ...GOOD, iss } }), NOW)).toEqual({ sender: "Ann" });
+  });
+
+  test("an issuer with and without a trailing slash share one cache entry", async () => {
+    const f = issuer();
+    await discover(PROV, f, NOW);
+    await discover(at(`${ISS}/`), f, NOW);
+    expect(f).toHaveBeenCalledTimes(1);
   });
 
   test("a plain http issuer is refused before anything is fetched", async () => {
@@ -165,6 +206,10 @@ describe("exchange", () => {
 
   test.each([
     ["wrong iss", { ...GOOD, iss: "https://evil.example" }],
+    ["iss on another host", { ...GOOD, iss: "https://other.example/app" }],
+    ["iss with another path", { ...GOOD, iss: `${ISS}/x` }],
+    ["iss with another scheme", { ...GOOD, iss: "http://idp.example/app" }],
+    ["iss with two trailing slashes", { ...GOOD, iss: `${ISS}//` }],
     ["wrong aud", { ...GOOD, aud: "other" }],
     ["aud array without the client id", { ...GOOD, aud: ["other"] }],
     ["several audiences and no azp", { ...GOOD, aud: ["id", "other"] }],
@@ -190,5 +235,84 @@ describe("exchange", () => {
     for (const body of [{}, { id_token: 5 }, { id_token: "a.b" }, { id_token: "a.!!.c" }])
       await expect(exchange(PROV, META, P, vi.fn(async () => Response.json(body)), NOW)).rejects.toBeInstanceOf(AuthError);
     await expect(exchange(PROV, META, P, vi.fn(async () => Promise.reject(new TypeError("fetch failed"))), NOW)).rejects.toBeInstanceOf(AuthError);
+  });
+});
+
+describe("failure logs", () => {
+  const netError = (code?: string) => vi.fn(async () => Promise.reject(Object.assign(new TypeError("fetch failed"), code ? { cause: { code } } : {})));
+  const D = 'provider="default"';
+  test.each<[string, () => Promise<unknown>, string]>([
+    ["a plain http issuer", () => discover(at("http://idp.example/app"), issuer()), `oidc: issuer is not an https URL ${D} issuer="http://idp.example/app"`],
+    ["an unknown host", () => discover(PROV, netError("ENOTFOUND")), `oidc: discovery failed ${D} error="ENOTFOUND"`],
+    ["a network error without a code", () => discover(PROV, netError()), `oidc: discovery failed ${D} error="TypeError"`],
+    ["a non-200 discovery", () => discover(PROV, vi.fn(async () => new Response("down", { status: 503 }))), `oidc: discovery failed ${D} status=503`],
+    ["a discovery document that isn't JSON", () => discover(PROV, vi.fn(async () => new Response("<html>"))), `oidc: discovery failed ${D} status=200 error="not a JSON object"`],
+    ["another issuer in the document", () => discover(PROV, issuer({ doc: { ...META, issuer: "https://evil.example" } })), `oidc: issuer does not match the discovery document ${D} issuer="${ISS}" document="https://evil.example"`],
+    ["a plain http token endpoint", () => discover(PROV, issuer({ doc: { ...META, token_endpoint: "http://idp.example/token" } })), `oidc: discovery endpoint is not https ${D} endpoint="token_endpoint"`],
+    ["a missing authorize endpoint", () => discover(PROV, issuer({ doc: { ...META, authorization_endpoint: undefined } })), `oidc: discovery endpoint is not https ${D} endpoint="authorization_endpoint"`],
+    ["a token request refused", () => exchange(PROV, META, P, issuer({ tokenStatus: 400 }), NOW), `oidc: token request rejected ${D} status=400 error="invalid_grant"`],
+    ["a token request unreachable", () => exchange(PROV, META, P, netError("ECONNREFUSED"), NOW), `oidc: token request rejected ${D} error="ECONNREFUSED"`],
+    ["no id_token", () => exchange(PROV, META, P, vi.fn(async () => Response.json({ access_token: "at" })), NOW), `oidc: token response has no id_token ${D}`],
+    ["a malformed id_token", () => exchange(PROV, META, P, vi.fn(async () => Response.json({ id_token: "a.b" })), NOW), `oidc: id_token invalid ${D} check="malformed"`],
+    ["an id_token payload that isn't an object", () => exchange(PROV, META, P, issuer({ claims: "x" }), NOW), `oidc: id_token invalid ${D} check="malformed"`],
+    ["a wrong iss", () => exchange(PROV, META, P, issuer({ claims: { ...GOOD, iss: "https://evil.example" } }), NOW), `oidc: id_token invalid ${D} check="iss"`],
+    ["a wrong aud", () => exchange(PROV, META, P, issuer({ claims: { ...GOOD, aud: "other" } }), NOW), `oidc: id_token invalid ${D} check="aud"`],
+    ["several audiences and no azp", () => exchange(PROV, META, P, issuer({ claims: { ...GOOD, aud: ["id", "other"] } }), NOW), `oidc: id_token invalid ${D} check="azp"`],
+    ["an expired id_token", () => exchange(PROV, META, P, issuer({ claims: { ...GOOD, exp: NOW / 1000 - 1 } }), NOW), `oidc: id_token invalid ${D} check="exp"`],
+    ["a wrong nonce", () => exchange(PROV, META, P, issuer({ claims: { ...GOOD, nonce: "other" } }), NOW), `oidc: id_token invalid ${D} check="nonce"`],
+    ["someone off the allow-list", () => exchange(PROV, META, P, issuer({ claims: { ...GOOD, email: "bob@x.com", name: "Bob" } }), NOW), `oidc: person not on the allow-list ${D}`],
+    ["an unverified address", () => exchange(PROV, META, P, issuer({ claims: { ...GOOD, email_verified: false } }), NOW), `oidc: address needs a verified email ${D}`],
+    ["no address", () => exchange(PROV, META, P, issuer({ claims: { ...GOOD, email: undefined } }), NOW), `oidc: address needs a verified email ${D}`],
+    ["no sender claim", () => exchange({ ...PROV, allow: ["*"] }, META, P, issuer({ claims: { ...GOOD, name: undefined, email: undefined } }), NOW), `oidc: no sender claim in the id_token ${D} claims="name,email"`],
+  ])("%s logs one line saying why", async (_, run, line) => {
+    await expect(run()).rejects.toBeInstanceOf(AuthError);
+    expect(logged()).toEqual([line]);
+  });
+
+  test("the token endpoint's error_description and an error that isn't a short code are left out", async () => {
+    const answer = (body: unknown) => vi.fn(async () => Response.json(body, { status: 401 }));
+    await expect(exchange(PROV, META, P, answer({ error: "invalid_client", error_description: "client-secret is wrong for ann@x.com" }), NOW)).rejects.toBeInstanceOf(AuthError);
+    await expect(exchange(PROV, META, P, answer({ error: "bad client\noidc: forged" }), NOW)).rejects.toBeInstanceOf(AuthError);
+    expect(logged()).toEqual([`oidc: token request rejected ${D} status=401 error="invalid_client"`, `oidc: token request rejected ${D} status=401`]);
+  });
+
+  test("a document issuer that can't be turned into a string is refused like any mismatch", async () => {
+    await expect(discover(PROV, issuer({ doc: { ...META, issuer: { toString: 1 } } }))).rejects.toBeInstanceOf(AuthError);
+    expect(logged()).toEqual([`oidc: issuer does not match the discovery document ${D} issuer="${ISS}" document="object"`]);
+  });
+
+  test("a log output that throws changes nothing", async () => {
+    breakLog();
+    await expect(discover(PROV, issuer({ doc: { ...META, issuer: "https://evil.example" } }))).rejects.toBeInstanceOf(AuthError);
+    await expect(exchange(PROV, META, P, issuer({ tokenStatus: 400 }), NOW)).rejects.toBeInstanceOf(AuthError);
+  });
+
+  test("an issuer is logged without userinfo, query or fragment", async () => {
+    const bad = "http://user:pass@idp.example/x?token=abc#frag";
+    await expect(discover(at(bad), issuer())).rejects.toBeInstanceOf(AuthError);
+    await expect(discover(at("https://user:pass@idp.example/app?token=abc"), vi.fn(async () => Response.json({ ...META, issuer: "https://u:pass@other.example/y?token=abc" })))).rejects.toBeInstanceOf(AuthError);
+    await expect(discover(at("not a url"), issuer())).rejects.toBeInstanceOf(AuthError);
+    expect(logged()).toEqual([
+      `oidc: issuer is not an https URL ${D} issuer="http://idp.example/x"`,
+      `oidc: issuer does not match the discovery document ${D} issuer="https://idp.example/app" document="https://other.example/y"`,
+      `oidc: issuer is not an https URL ${D} issuer="(not a URL)"`,
+    ]);
+    for (const s of ["pass", "token=abc", "frag"]) expect(lines.join("\n")).not.toContain(s);
+  });
+
+  test("a sign-in that works logs nothing", async () => {
+    const f = issuer();
+    expect(await exchange(PROV, await discover(PROV, f), P, f, NOW)).toEqual({ sender: "Ann" });
+    expect(lines).toEqual([]);
+  });
+
+  test("no secret, code, verifier, nonce, address or name ever reaches the log", async () => {
+    const claims = [{ ...GOOD, email: "bob@x.com", name: "Bob" }, { ...GOOD, email_verified: false }, { ...GOOD, nonce: "other" }, { ...GOOD, iss: "https://evil.example" }];
+    for (const c of claims) await exchange(PROV, META, P, issuer({ claims: c }), NOW).catch(() => {});
+    await exchange({ ...PROV, allow: ["*"], senderClaim: ["nickname"] }, META, P, issuer(), NOW).catch(() => {});
+    await exchange(PROV, META, P, issuer({ tokenStatus: 400 }), NOW).catch(() => {});
+    const all = lines.join("\n");
+    expect(logged()).toHaveLength(6);
+    for (const s of ["client-secret", "the-code", "the-verifier", "the-nonce", "ann@x.com", "bob@x.com", "Ann", "Bob", "c2ln"]) expect(all).not.toContain(s);
   });
 });

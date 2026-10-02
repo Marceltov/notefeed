@@ -4,6 +4,7 @@ import { config } from "./config";
 import { countImages, hasImage, readImageFile, writeImage } from "./data/images";
 import { isErrno } from "./data/fs";
 import { ImageLimitError, NotFoundError, UnsupportedTypeError } from "./errors";
+import { capReached } from "./limits";
 
 export const IMAGE_FILE_RE = /^[0-9a-f]{32}\.(png|jpg|gif|webp)$/;
 export type ImageType = "png" | "jpg" | "gif" | "webp";
@@ -32,7 +33,7 @@ export async function storeImage(feed: string, bytes: Uint8Array): Promise<strin
   const name = imageName(bytes, type);
   const max = config.maxImagesPerFeed();
   // ponytail: checked, not locked; concurrent uploads can overshoot the cap by a few.
-  if (max && !(await hasImage(feed, name)) && (await countImages(feed)) >= max) throw new ImageLimitError();
+  if (max && !(await hasImage(feed, name)) && (await countImages(feed)) >= max) throw capReached("image", new ImageLimitError());
   try {
     await writeImage(feed, name, bytes);
   } catch (e) {

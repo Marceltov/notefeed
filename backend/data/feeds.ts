@@ -2,7 +2,10 @@
 import { randomBytes } from "node:crypto";
 import { mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { logger } from "../log";
 import { feedDir, isErrno, orMissing, root } from "./fs";
+
+const log = logger("feeds");
 
 // Directory names only. Dirent.isDirectory() is false for symlinks, so a link can't pull files
 // from outside DATA_DIR into a feed.
@@ -55,7 +58,7 @@ export async function deleteFeedDir(feed: string): Promise<boolean> {
     throw e;
   }
   // The feed is gone either way; a failure here leaves a leftover the next start removes.
-  await rm(/*turbopackIgnore: true*/ gone, { recursive: true, force: true }).catch((e) => console.error("could not remove a deleted feed's files; they go at the next start", e));
+  await rm(/*turbopackIgnore: true*/ gone, { recursive: true, force: true }).catch((err) => log.warn({ err }, "could not remove a deleted feed's files; they go at the next start"));
   return true;
 }
 
@@ -67,7 +70,7 @@ export async function removeLeftovers(): Promise<void> {
   for (const e of entries) {
     if (!e.isDirectory() || !LEFTOVER_RE.test(e.name)) continue;
     await rm(/*turbopackIgnore: true*/ join(root(), e.name), { recursive: true, force: true }).catch((err) =>
-      console.error("could not remove a leftover directory; will retry at the next start", (err as NodeJS.ErrnoException).code),
+      log.warn({ err }, "could not remove a leftover directory; will retry at the next start"),
     );
   }
 }

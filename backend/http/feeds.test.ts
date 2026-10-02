@@ -1,7 +1,7 @@
 import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { beforeEach, describe, expect, test, vi } from "vitest";
+import { beforeEach, describe, expect, test } from "vitest";
 import { readIdOf, resetFeedsForTests } from "../feeds";
 import { resetRateLimitsForTests } from "../limits";
 import { createNote } from "../notes";
@@ -284,13 +284,11 @@ describe("a feed whose directory was removed by hand while notefeed runs", () =>
 
 describe("a feed without a read link (its .readid can't be read)", () => {
   test("a post answers 201 with read_url null, and so does the feed", async () => {
-    const log = vi.spyOn(console, "error").mockImplementation(() => {});
     await mkdir(join(dir, "nolink", ".readid"), { recursive: true });
     const res = await post("nolink", "# Hi");
     expect(res.status).toBe(201);
     expect((await res.json()).read_url).toBeNull();
     expect((await (await call("GET", "/feeds/nolink")).json()).read_url).toBeNull();
-    log.mockRestore();
   });
 });
 

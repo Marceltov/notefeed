@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { IDENTITY_COOKIE, sessionOk } from "../auth";
 import { resetFeedsForTests } from "../feeds";
 import { resetRateLimitsForTests } from "../limits";
+import { logTo } from "../log";
 import { registerRoute } from "../oauth/routes";
 import { resetTokensForTests, sign, verify } from "../oauth/tokens";
 import { resetDiscoveryForTests } from "./flow";
@@ -24,7 +25,7 @@ let lastNonce = "";
 const b64 = (v: unknown) => Buffer.from(JSON.stringify(v)).toString("base64url");
 // Each stub issuer and the client id it issues id_tokens to.
 const CLIENTS: Record<string, string> = { [ISS]: "id", "https://alpha.example": "alpha-id", "https://beta.example": "beta-id" };
-const fetchStub = vi.fn<typeof fetch>(async (url) => {
+const stubImpl: typeof fetch = async (url) => {
   for (const [iss, aud] of Object.entries(CLIENTS)) {
     if (String(url) === `${iss}/.well-known/openid-configuration`) return Response.json({ issuer: iss, authorization_endpoint: `${iss}/authorize`, token_endpoint: `${iss}/token` });
     if (String(url) === `${iss}/token`) {
@@ -33,7 +34,8 @@ const fetchStub = vi.fn<typeof fetch>(async (url) => {
     }
   }
   return new Response("not found", { status: 404 });
-});
+};
+const fetchStub = vi.fn<typeof fetch>(stubImpl);
 
 beforeEach(async () => {
   vi.stubEnv("DATA_DIR", await mkdtemp(join(tmpdir(), "notefeed-oidc-")));
@@ -50,11 +52,29 @@ beforeEach(async () => {
   resetRateLimitsForTests();
   resetTokensForTests();
   resetDiscoveryForTests();
+  lines = [];
+  restore = logTo((l) => void lines.push(l));
 });
 afterEach(() => {
   vi.unstubAllEnvs();
   vi.unstubAllGlobals();
+  restore();
 });
+// Log lines are captured (logTo) and read back by logged() as `oidc: <reason> key=value ...`, the warn lines only.
+let lines: string[];
+let restore: () => void;
+const entries = () => lines.map((l) => JSON.parse(l) as Record<string, unknown>);
+const logged = () =>
+  entries()
+    .filter((e) => e.level === "warn")
+    .map(({ component, msg, ...d }) => `${component}: ${msg}${Object.entries(d).flatMap(([k, v]) => (k === "level" || k === "time" ? [] : [` ${k}=${JSON.stringify(v)}`])).join("")}`);
+// From here on, every log write throws.
+const breakLog = () => {
+  restore();
+  restore = logTo(() => {
+    throw new Error("log down");
+  });
+};
 
 const get = (path: string, cookie?: string) => new Request(BASE + path, { headers: { ...H, ...(cookie ? { cookie } : {}) } });
 const setCookie = (res: Response, name: string) => res.headers.getSetCookie().find((c) => c.startsWith(`${name}=`));
@@ -200,6 +220,10 @@ describe("callback", () => {
     expect(verify("code", loc.searchParams.get("code")!)!.sender).toBe("Ann");
     expect(setCookie(res, IDENTITY_COOKIE)).toBeUndefined();
     expect(setCookie(res, "nf_oidc")).toMatch(/Max-Age=0/);
+    expect(entries().map(({ component, msg, provider, via }) => ({ component, msg, provider, via }))).toEqual([
+      { component: "oidc", msg: "sign-in succeeded", provider: "default", via: undefined },
+      { component: "oauth", msg: "authorization granted", provider: undefined, via: "default" },
+    ]);
   });
 
   test("a failed MCP sign-in goes back to the authorize page", async () => {
@@ -250,6 +274,68 @@ describe("callback", () => {
   });
 });
 
+describe("failure logs", () => {
+  test.each([
+    ["a wrong state", (s: { state: string; cookie: string }) => callback(`code=the-code&state=${s.state}x`, s.cookie), "oidc: state mismatch or missing sign-in cookie"],
+    ["no cookie", (s: { state: string; cookie: string }) => callback(`code=the-code&state=${s.state}`), "oidc: state mismatch or missing sign-in cookie"],
+    ["no code", (s: { state: string; cookie: string }) => callback(`state=${s.state}`, s.cookie), "oidc: no code in the callback"],
+    ["a denial", (s: { state: string; cookie: string }) => callback(`error=access_denied&error_description=ann%40x.com+said+no&state=${s.state}`, s.cookie), 'oidc: provider denied the sign-in error="access_denied"'],
+    ["a denial whose error isn't a short code", (s: { state: string; cookie: string }) => callback(`error=no%0Aoidc%3A+forged&state=${s.state}`, s.cookie), "oidc: provider denied the sign-in"],
+    ["someone off the allow-list", (s: { state: string; cookie: string }) => ((person = { name: "Bob", email: "bob@x.com", email_verified: true }), callback(`code=the-code&state=${s.state}`, s.cookie)), 'oidc: person not on the allow-list provider="default"'],
+  ])("%s logs one line saying why, and the browser sees only the plain failure", async (_, call, line) => {
+    const s = await start("");
+    failed(await call(s));
+    expect(logged()).toEqual([line]);
+    for (const secret of ["client-secret", "the-code", s.state, s.cookie, lastNonce, "ann@x.com", "bob@x.com", "Bob"]) expect(lines.join("\n")).not.toContain(secret);
+  });
+
+  test("an unreachable provider at the start is logged", async () => {
+    fetchStub.mockImplementationOnce(async () => Promise.reject(Object.assign(new TypeError("fetch failed"), { cause: { code: "ENOTFOUND" } })));
+    expect((await oidcStartRoute(get("/api/oidc/start"))).headers.get("location")).toBe("/login?error=sign_in_failed");
+    expect(logged()).toEqual(['oidc: discovery failed provider="default" error="ENOTFOUND"']);
+  });
+
+  test("an unknown provider id that isn't id-shaped is not echoed", async () => {
+    for (const id of ["Evil\nfake", "a b", "x".repeat(65), "ALPHA"]) {
+      const res = await oidcStartRoute(get(`/api/oidc/start?provider=${encodeURIComponent(id)}`));
+      expect(res.headers.get("location")).toBe("/login?error=sign_in_failed");
+    }
+    expect(logged()).toEqual(Array(4).fill("oidc: unknown provider"));
+  });
+
+  test("a discovery issuer that can't be turned into a string still gives the plain failure", async () => {
+    fetchStub.mockImplementation(async () => Response.json({ ...META, issuer: { toString: 1 } }));
+    vi.stubEnv("NOTEFEED_RATE_LIMIT", "1");
+    try {
+      expect((await oidcStartRoute(get("/api/oidc/start"))).headers.get("location")).toBe("/login?error=sign_in_failed");
+      const cookie = sign("oidc", { state: "st", nonce: "no", verifier: "v", next: "/", provider: "default" });
+      failed(await callback("code=c&state=st", cookie));
+      expect((await callback("code=c&state=st", cookie)).headers.get("location")).toMatch(/^\/login\?error=too_many_attempts/);
+    } finally {
+      fetchStub.mockReset();
+      fetchStub.mockImplementation(stubImpl);
+    }
+  });
+
+  test("a log output that throws changes nothing the browser sees, and the failure still counts", async () => {
+    breakLog();
+    vi.stubEnv("NOTEFEED_RATE_LIMIT", "1");
+    const s = await start("");
+    failed(await callback(`code=c&state=${s.state}x`, s.cookie));
+    expect((await callback(`code=c&state=${s.state}`, s.cookie)).headers.get("location")).toMatch(/^\/login\?error=too_many_attempts/);
+    resetDiscoveryForTests();
+    fetchStub.mockImplementationOnce(async () => Promise.reject(new TypeError("fetch failed")));
+    expect((await oidcStartRoute(get("/api/oidc/start"))).headers.get("location")).toBe("/login?error=sign_in_failed");
+  });
+
+  test("a sign-in that works logs one info line naming the provider, never who signed in", async () => {
+    const s = await start("");
+    expect(setCookie(await callback(`code=c&state=${s.state}`, s.cookie), IDENTITY_COOKIE)).toBeDefined();
+    expect(entries()).toEqual([{ level: "info", time: expect.any(String), component: "oidc", msg: "sign-in succeeded", provider: "default" }]);
+    for (const s of ["Ann", "ann@x.com"]) expect(lines.join("\n")).not.toContain(s);
+  });
+});
+
 describe("several providers", () => {
   beforeEach(() => {
     const set = (name: string, v: Record<string, string>) => Object.entries(v).forEach(([k, val]) => vi.stubEnv(`NOTEFEED_OIDC_${name}_${k}`, val));
@@ -273,6 +359,7 @@ describe("several providers", () => {
   test.each(["next=/feed", "provider=&next=/feed", "provider=gamma&next=/feed", "provider=ALPHA&next=/feed", "provider=Default&next=/feed"])("%j is refused before anything is fetched", async (q) => {
     const res = await oidcStartRoute(get(`/api/oidc/start?${q}`));
     expect(res.status).toBe(303);
+    expect(logged()).toEqual([q.includes("gamma") ? 'oidc: unknown provider provider="gamma"' : "oidc: unknown provider"]);
     expect(res.headers.get("location")).toBe("/login?error=sign_in_failed&next=%2Ffeed");
     expect(res.headers.getSetCookie()).toEqual([]);
     expect(fetchStub).not.toHaveBeenCalled();
@@ -351,6 +438,7 @@ describe("several providers", () => {
     fetchStub.mockClear();
     failed(await callback(`code=c&state=${s.state}`, s.cookie));
     expect(fetchStub).not.toHaveBeenCalled();
+    expect(logged()).toEqual(['oidc: provider no longer configured provider="alpha"']);
     vi.stubEnv("NOTEFEED_OIDC_ALPHA_ALLOW", "ann@x.com");
     expect((await callback(`code=c&state=${s.state}`, s.cookie)).headers.get("location")).toMatch(/^\/login\?error=too_many_attempts/);
   });

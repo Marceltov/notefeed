@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { IDENTITY_COOKIE, SESSION_COOKIE, login } from "../auth";
 import { hasFeed, readIdOf, resetFeedsForTests } from "../feeds";
 import { resetRateLimitsForTests } from "../limits";
+import { logsOf } from "../log";
 import { cookieValue, feedCookieName, protectedFeed } from "../feedlock";
 import { getNote } from "../notes";
 import { sign } from "../oauth/tokens";
@@ -309,7 +310,8 @@ test("locked: a 401 doesn't use up a posting slot, only the failed-password budg
 test("NOTEFEED_MAX_FEEDS=1: second new feed 507, first feed still accepts", async () => {
   process.env.NOTEFEED_MAX_FEEDS = "1";
   expect((await post("a", {}, "one")).status).toBe(201);
-  const res = await post("b", {}, "two");
+  let res = new Response();
+  expect(await logsOf(async () => (res = await post("b", {}, "two")))).toEqual([{ level: "warn", component: "limits", msg: "cap reached", kind: "feed" }]);
   expect(res.status).toBe(507);
   expect(await res.json()).toEqual({ error: "feed limit reached", code: "feed_limit" });
   expect((await post("c", {}, "one")).status).toBe(201);
@@ -319,7 +321,8 @@ test("NOTEFEED_MAX_NOTES_PER_FEED=2: third note 507, other feeds unaffected", as
   process.env.NOTEFEED_MAX_NOTES_PER_FEED = "2";
   expect((await post("a", {}, "one")).status).toBe(201);
   expect((await post("b", {}, "one")).status).toBe(201);
-  const res = await post("c", {}, "one");
+  let res = new Response();
+  expect(await logsOf(async () => (res = await post("c", {}, "one")))).toEqual([{ level: "warn", component: "limits", msg: "cap reached", kind: "note" }]);
   expect(res.status).toBe(507);
   expect(await res.json()).toEqual({ error: "note limit reached", code: "note_limit" });
   expect((await post("d", {}, "two")).status).toBe(201);

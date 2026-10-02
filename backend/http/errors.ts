@@ -16,6 +16,9 @@ import {
   ReservedFeedError,
   UnsupportedTypeError,
 } from "../errors";
+import { logger } from "../log";
+
+const log = logger("http");
 
 const STATUS: [new (...args: never[]) => NotefeedError, number][] = [
   [InvalidFeedError, 400],
@@ -40,7 +43,7 @@ export type ErrorReply = { status: number; body: { error: string; code?: ErrorCo
 // Anything that isn't a NotefeedError is a bug or a disk failure: logged, and a bare 500.
 export function errorReply(e: unknown): ErrorReply {
   if (!(e instanceof NotefeedError)) {
-    console.error("request failed", e);
+    log.error({ err: e }, "request failed");
     return { status: 500, body: { error: "internal error" } };
   }
   const headers = e instanceof RateLimitedError ? { "Retry-After": String(e.retryAfter) } : undefined;

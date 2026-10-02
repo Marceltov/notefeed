@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { resetFeedsForTests } from "../feeds";
 import { resetRateLimitsForTests } from "../limits";
+import { logsOf } from "../log";
 import { mcpRoute } from "../mcp";
 import { authServerRoute, authorizeRoute, checkAuthorize, issueCode, metadataPreflight, protectedResourceRoute, registerPreflight, registerRoute, tokenRoute } from "./routes";
 import { TTL, cid, resetTokensForTests, verify } from "./tokens";
@@ -148,7 +149,9 @@ describe("flow", () => {
     const c = await signedInCode();
     const { refresh_token } = await (await exchange(c)).json();
     vi.unstubAllEnvs();
-    expect((await (await token({ grant_type: "refresh_token", refresh_token, client_id: c.id })).json()).error).toBe("invalid_grant");
+    let res = new Response();
+    expect(await logsOf(async () => (res = await token({ grant_type: "refresh_token", refresh_token, client_id: c.id })))).toEqual([{ level: "warn", component: "oauth", msg: "refresh refused", reason: "sign-in switched off" }]);
+    expect((await res.json()).error).toBe("invalid_grant");
   });
 
   test("a sign-in's refresh chain ends with the sign-in lifetime", async () => {
@@ -156,7 +159,9 @@ describe("flow", () => {
     const c = await signedInCode();
     const { refresh_token } = await (await exchange(c)).json();
     vi.spyOn(Date, "now").mockReturnValue(Date.now() + (TTL.identity + 2) * 1000);
-    expect((await (await token({ grant_type: "refresh_token", refresh_token, client_id: c.id })).json()).error).toBe("invalid_grant");
+    let res = new Response();
+    expect(await logsOf(async () => (res = await token({ grant_type: "refresh_token", refresh_token, client_id: c.id })))).toEqual([{ level: "warn", component: "oauth", msg: "refresh refused", reason: "sign-in past its lifetime" }]);
+    expect((await res.json()).error).toBe("invalid_grant");
   });
 
   test("a password login's refresh has no limit but its own", async () => {
@@ -298,10 +303,19 @@ describe("register", () => {
 });
 
 describe("login", () => {
+  test("a granted authorization logs how, never the client's name", async () => {
+    const id = (await (await register({ client_name: "Secret Client", redirect_uris: [CB] })).json()).client_id;
+    const p = authParams(id, pkce().challenge);
+    expect(await logsOf(() => authorizeRoute(form("/api/oauth/authorize", { ...Object.fromEntries(p), password: "pw" })))).toEqual([{ level: "info", component: "oauth", msg: "authorization granted", via: "password" }]);
+  });
+
   test("a wrong password goes back to the page and counts as a failed attempt", async () => {
     process.env.NOTEFEED_RATE_LIMIT = "1";
     const p = authParams(await clientId(), pkce().challenge);
-    const res = await authorizeRoute(form("/api/oauth/authorize", { ...Object.fromEntries(p), password: "nope" }));
+    let res = new Response();
+    expect(await logsOf(async () => (res = await authorizeRoute(form("/api/oauth/authorize", { ...Object.fromEntries(p), password: "nope" }))), "info")).toEqual([
+      { level: "warn", component: "auth", msg: "password login failed", page: "authorize" },
+    ]);
     expect(res.status).toBe(303);
     expect(res.headers.get("location")).toBe(`/oauth/authorize?${p}&error=auth`);
     const next = await authorizeRoute(form("/api/oauth/authorize", { ...Object.fromEntries(p), password: "pw" }));

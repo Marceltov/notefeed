@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, expect, test } from "vitest";
-import { authAttempt, authFailed, authWait, clientIp, rateLimit, resetRateLimitsForTests } from "./limits";
+import { authAttempt, authFailed, authWait, capReached, clientIp, rateLimit, resetRateLimitsForTests } from "./limits";
+import { logsOf } from "./log";
 
 beforeEach(() => {
   resetRateLimitsForTests();
@@ -91,4 +92,21 @@ test("with the limit off, authAttempt always allows", () => {
   process.env.NOTEFEED_RATE_LIMIT = "0";
   for (let i = 0; i < 5; i++) (authAttempt("a", 1) as () => void)();
   expect(authAttempt("a", 1)).toBeTypeOf("function");
+});
+
+test("a limit reached is a debug line with its kind, never the IP", async () => {
+  const logs = await logsOf(() => {
+    for (let i = 0; i < 4; i++) rateLimit("203.0.113.9", 0);
+    for (let i = 0; i < 3; i++) authFailed("203.0.113.9", 0);
+    authWait("203.0.113.9", 0);
+  });
+  expect(logs).toEqual([
+    { level: "debug", component: "limits", msg: "rate limit reached", kind: "post" },
+    { level: "debug", component: "limits", msg: "rate limit reached", kind: "password" },
+  ]);
+});
+
+test("capReached logs a warning with the kind and hands the error on", async () => {
+  const e = new Error("x");
+  expect(await logsOf(() => expect(capReached("note", e)).toBe(e))).toEqual([{ level: "warn", component: "limits", msg: "cap reached", kind: "note" }]);
 });

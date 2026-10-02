@@ -8,6 +8,9 @@ function int(name: string, fallback: number): number {
   return raw === "" || !Number.isFinite(Number(raw)) ? fallback : Number(raw);
 }
 
+export const LOG_LEVELS = ["error", "warn", "info", "debug", "silent"] as const;
+export type LogLevel = (typeof LOG_LEVELS)[number];
+
 const positive = (name: string, fallback: number) => (int(name, fallback) > 0 ? int(name, fallback) : fallback);
 
 export const config = {
@@ -31,6 +34,8 @@ export const config = {
   // body only up to that, so a larger image would arrive cut. Images per feed: 0 or below, no cap.
   maxImageBytes: () => Math.min(positive("NOTEFEED_MAX_IMAGE_BYTES", 5242880), 10485760),
   maxImagesPerFeed: () => Math.max(0, int("NOTEFEED_MAX_IMAGES_PER_FEED", 0)),
+  // Unset, empty or not a level → info (the startup line warns about the last).
+  logLevel: (): LogLevel => ((l) => (LOG_LEVELS as readonly string[]).includes(l) ? (l as LogLevel) : "info")(env("NOTEFEED_LOG_LEVEL").trim().toLowerCase()),
   // Optional OIDC sign-in (see oidc/config.ts): one provider per set of variables. `name` "" is the unprefixed
   // set (NOTEFEED_OIDC_ISSUER, ...); any other is NOTEFEED_OIDC_<name>_ISSUER, ... Issuer, client credentials, who may
   // sign in (comma-separated addresses, @domain entries or *; lowercased), and the button's label.

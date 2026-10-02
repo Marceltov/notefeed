@@ -9,11 +9,13 @@ import { assertFeed, FEED_RE, hasFeed } from "./feeds";
 import { feedJson } from "./http/api";
 import { sender } from "./http/request";
 import { clientIp } from "./limits";
+import { logger } from "./log";
 import { getNote, listNotes, type Note } from "./notes";
 import { verify } from "./oauth/tokens";
 import { deleteFeed, deleteNote, editNote, postNote, updateFeed, uploadImage } from "./posting";
 import { feedPath, imagePath, mcpResource, publicUrl, rssPath } from "./urls";
 
+const log = logger("mcp");
 const SECRET_NOTE = "The feed name works like a password: anyone who knows it can read and post. Don't repeat it in replies.";
 
 const feed = z.string().regex(FEED_RE);
@@ -33,7 +35,7 @@ function guard<A, R>(f: (args: A) => Promise<R>) {
       return await f(args);
     } catch (e) {
       if (e instanceof NotefeedError) return { isError: true as const, content: [{ type: "text" as const, text: e.message }] };
-      console.error("mcp tool failed", e);
+      log.error({ err: e }, "tool failed");
       return { isError: true as const, content: [{ type: "text" as const, text: "internal error" }] };
     }
   };

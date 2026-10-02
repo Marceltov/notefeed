@@ -5,9 +5,13 @@
 import { createHmac, randomBytes } from "node:crypto";
 import { config } from "./config";
 import { createFeedDir, deleteFeedDir, listFeedDirs, readReadId, removeLeftovers } from "./data/feeds";
+import { readHash } from "./data/password";
 import { loadOrCreateSecret, secretPath } from "./data/secret";
 import { InvalidFeedError, ReservedFeedError } from "./errors";
+import { logger } from "./log";
 import { processState } from "./state";
+
+const log = logger("feeds");
 
 export const FEED_RE = /^[a-z0-9_-]{1,64}$/;
 export const READ_ID_RE = /^[A-Za-z0-9_-]{22}$/;
@@ -79,10 +83,10 @@ function unregister(idx: Index, feed: string): void {
 function register(idx: Index, feed: string, id: string | null): void {
   unregister(idx, feed);
   if (id !== null && idx.byReadId.has(id)) {
-    console.error("a feed's .readid is already another feed's read id (copied directory?); using the derived read id");
+    log.warn("a feed's .readid is already another feed's read id (copied directory?); using the derived read id");
     id = derivedReadId(feed);
     if (idx.byReadId.has(id)) {
-      console.error("a feed's derived read id is already another feed's read id; the feed has no read link");
+      log.warn("a feed's derived read id is already another feed's read id; the feed has no read link");
       id = null; // listed and countable, but not found by read id
     }
   }
@@ -100,12 +104,12 @@ async function idOnDisk(feed: string, strict = false): Promise<string | null> {
     id = await readReadId(feed);
   } catch (e) {
     if (strict) throw e;
-    console.error("a feed's .readid can't be read; the feed has no read link until the next start", (e as NodeJS.ErrnoException).code);
+    log.error({ err: e }, "a feed's .readid can't be read; the feed has no read link until the next start");
     return null;
   }
   if (id === null) return derivedReadId(feed);
   if (isReadId(id)) return id;
-  console.error("a feed's .readid is not a read id; using the derived read id");
+  log.warn("a feed's .readid is not a read id; using the derived read id");
   return derivedReadId(feed);
 }
 
@@ -212,6 +216,19 @@ export async function hasFeed(feed: string): Promise<boolean> {
 export async function feedForReadId(id: string): Promise<string | null> {
   if (!isReadId(id)) return null;
   return (await feedIndex()).byReadId.get(id) ?? null;
+}
+
+// Reserved feeds load() did not make, because the name was already an ordinary feed: it stays open (no `.password`)
+// or keeps another read id than its name. For the startup log; nothing while NOTEFEED_RESERVED_PASSWORD is unset.
+export async function reservedFeedProblems(): Promise<{ feed: string; problem: "unprotected" | "read_id" }[]> {
+  if (!config.reservedPassword()) return [];
+  const idx = await feedIndex();
+  const found: { feed: string; problem: "unprotected" | "read_id" }[] = [];
+  for (const feed of heldBack().filter((n) => idx.byFeed.has(n))) {
+    if ((await readHash(feed)) === null) found.push({ feed, problem: "unprotected" });
+    else if (idx.byFeed.get(feed) !== feed) found.push({ feed, problem: "read_id" });
+  }
+  return found;
 }
 
 export const resetFeedsForTests = () => {

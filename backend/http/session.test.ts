@@ -3,6 +3,7 @@ import { AuthError } from "../errors";
 import { IDENTITY_COOKIE, SESSION_COOKIE, sessionOk } from "../auth";
 import { resetFeedsForTests } from "../feeds";
 import { resetRateLimitsForTests } from "../limits";
+import { logsOf } from "../log";
 import { sign } from "../oauth/tokens";
 import { authorize, sender } from "./request";
 import { loginRoute, logoutRoute } from "./session";
@@ -56,6 +57,27 @@ test("too many wrong passwords: the wait, even for the right one", async () => {
   process.env.NOTEFEED_RATE_LIMIT = "2";
   for (let i = 0; i < 2; i++) await login({ password: "nope" });
   expect((await login({ password: "pw" })).headers.get("location")).toMatch(/^\/login\?error=too_many_attempts&retry=\d+&next=%2F$/);
+});
+
+test("a wrong password logs a warning without password or address; the too-many-attempts refusal is only a debug line", async () => {
+  process.env.NOTEFEED_RATE_LIMIT = "1";
+  process.env.NOTEFEED_TRUST_PROXY = "1";
+  const logs = await logsOf(async () => {
+    await login({ password: "nope-secret" });
+    await login({ password: "pw" });
+  });
+  delete process.env.NOTEFEED_TRUST_PROXY;
+  expect(logs).toEqual([
+    { level: "warn", component: "auth", msg: "password login failed", page: "login" },
+    { level: "debug", component: "limits", msg: "rate limit reached", kind: "password" },
+  ]);
+  expect(JSON.stringify(logs)).not.toMatch(/nope-secret|127\.0\.0\.1|direct/);
+});
+
+test("a wrong password bearer is a debug line", async () => {
+  const h = new Headers({ host: "localhost:3000", authorization: "Bearer nope-secret" });
+  expect(await logsOf(() => expect(() => authorize(h, "ip")).toThrow(AuthError))).toEqual([{ level: "debug", component: "auth", msg: "password bearer refused" }]);
+  expect(await logsOf(() => expect(() => authorize(h, "ip")).toThrow(AuthError), "info")).toEqual([]);
 });
 
 test("an oversized body is a failed login, not a crash", async () => {
