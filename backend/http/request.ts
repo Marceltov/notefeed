@@ -1,8 +1,11 @@
 // Reading requests, for the handlers in backend/http.
-import { NotefeedError, RateLimitedError } from "../errors";
+import { AuthError, NotefeedError, RateLimitedError } from "../errors";
 import { SESSION_COOKIE, checkBearer, locked, sessionOk } from "../auth";
 import { type FeedAccess, feedCookieName } from "../feedlock";
+import { assertFeed } from "../feeds";
+import { clientIp } from "../limits";
 import { publicUrl } from "../urls";
+import { errorResponse } from "./errors";
 
 // Reads at most `max` bytes; null (and the stream cancelled) as soon as the body is larger.
 // Content-Length can be absent (chunked) or wrong, so it is never trusted for the cap.
@@ -62,11 +65,12 @@ export function seeOther(location: string, headers: HeadersInit = {}): Response 
   return new Response(null, { status: 303, headers: h });
 }
 
-// A refused form post goes back to `page` with ?error=<code>[&retry=n]; anything but a domain error is a bug.
+// A refused form post goes back to `page` (which may have a query) with error=<code>[&retry=n]; anything but
+// a domain error is a bug.
 export function errorRedirect(page: string, e: unknown): Response {
   if (!(e instanceof NotefeedError)) throw e;
   const retry = e instanceof RateLimitedError ? `&retry=${e.retryAfter}` : "";
-  return seeOther(`${page}?error=${e.code}${retry}`);
+  return seeOther(`${page}${page.includes("?") ? "&" : "?"}error=${e.code}${retry}`);
 }
 
 // Scripts send the bearer password. The web UI sends the session cookie instead, accepted only from
@@ -84,4 +88,24 @@ export function feedAccess(h: Headers, feed: string): FeedAccess {
   const password = h.get("x-feed-password") || undefined;
   const cookieOk = password === undefined && sameOrigin(h);
   return { password, cookie: cookieOk ? cookie(h, feedCookieName(feed)) : undefined };
+}
+
+// One of the web UI's plain forms for changing a feed or a note. Runs `act` once the post is known to come from
+// this instance's own page by someone who may use the instance; a refusal goes back to `page`. `onGone` answers
+// when the thing is already deleted (a double click): the goal is met.
+export async function formPost(req: Request, feed: string, page: string, act: (h: Headers, ip: string) => Promise<Response>, onGone?: () => Response): Promise<Response> {
+  const h = req.headers;
+  try {
+    assertFeed(feed); // before anything touches the disk
+    // Only this instance's own pages may send these: another site's form must not change anything with a visitor's cookies.
+    if (!sameOrigin(h)) throw new AuthError();
+    const ip = clientIp(h);
+    authorize(h, ip);
+    return await act(h, ip);
+  } catch (e) {
+    if (!(e instanceof NotefeedError)) throw e;
+    if (["invalid_feed", "reserved_feed"].includes(e.code)) return errorResponse(e);
+    if (e.code === "not_found" && onGone) return onGone();
+    return errorRedirect(page, e);
+  }
 }

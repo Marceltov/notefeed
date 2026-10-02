@@ -8,8 +8,9 @@ type Result = { data?: unknown; error?: { code?: string }; response?: Response }
 
 // The enhanced-form logic shared by the compose box and the edit and delete forms: `run` submits through a
 // generated client call, `done` runs on success (or on status `doneOn`); a 401 goes to the feed page, which shows
-// its unlock form (or proxy.ts sends a missing instance login on to /login); other refusals become `error`.
-export function useApiForm(page: string, initialError?: string) {
+// its unlock form (or proxy.ts sends a missing instance login on to /login); other refusals become `error`,
+// worded by `message`.
+export function useApiForm(page: string, initialError?: string, message = errorMessage) {
   const router = useRouter();
   const [error, setError] = useState(initialError);
   const [pending, setPending] = useState(false);
@@ -23,7 +24,7 @@ export function useApiForm(page: string, initialError?: string) {
       if (!response) throw new Error("no response"); // the client returns a network failure instead of throwing it
       if (response.ok || response.status === doneOn) return done(result);
       if (response.status === 401) return router.push(page);
-      setError(errorMessage(error?.code ?? "unknown", response.headers.get("retry-after")));
+      setError(message(error?.code ?? "unknown", response.headers.get("retry-after")));
     } catch {
       setError("Could not reach notefeed. Check your connection and try again.");
     }

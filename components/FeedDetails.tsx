@@ -2,6 +2,7 @@
 
 import { useState, useSyncExternalStore, type FormEvent } from "react";
 import { deleteFeed, updateFeed } from "@/app/_lib/api";
+import { feedDetailsErrorMessage } from "@/app/_lib/messages";
 import { useApiForm } from "@/app/_lib/useApiForm";
 
 const input = "w-full rounded-sm border border-rule bg-transparent px-3 py-1.5 focus:border-carbon focus:outline-none";
@@ -9,10 +10,10 @@ const summary = "cursor-pointer select-none text-muted hover:text-ink";
 
 // A feed's title and description, and deleting it: plain forms to POST /<feed>/settings and /delete. With
 // JavaScript they go through the generated API client and show refusals inline; without, the browser follows
-// the 303 (the feed page says "Saved.", or the home page "Feed deleted.").
-export function FeedDetails({ feed, title: savedTitle, description: savedDescription }: { feed: string; title: string; description: string }) {
+// the 303 (the feed page says "Saved." or shows the refusal as `error`, or the home page says "Feed deleted.").
+export function FeedDetails({ feed, title: savedTitle, description: savedDescription, error: initialError }: { feed: string; title: string; description: string; error?: string }) {
   const page = `/${feed}`;
-  const { run, error, setError, pending, setPending, router } = useApiForm(page);
+  const { run, error, setError, pending, setPending, router } = useApiForm(page, initialError, feedDetailsErrorMessage);
   const [title, setTitle] = useState(savedTitle);
   const [description, setDescription] = useState(savedDescription);
   const [confirm, setConfirm] = useState("");
