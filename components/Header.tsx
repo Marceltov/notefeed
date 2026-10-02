@@ -14,7 +14,11 @@ export async function Header({ feed, rss, image }: { feed?: string; rss?: string
         <img src={image} alt="" className="h-10 w-auto max-w-24 shrink-0 self-center rounded-sm object-contain" />
       )}
       <p className="mr-auto min-w-0 break-all text-xl font-bold tracking-tight">
-        <Link href="/">notefeed</Link>
+        <Link href="/" className="inline-flex items-center gap-2">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/icon.svg" alt="" className="h-7 w-7" />
+          notefeed
+        </Link>
         {feed && (
           <>
             <span className="text-muted"> / </span>
