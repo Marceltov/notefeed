@@ -1,4 +1,5 @@
 import { oidcStartRoute } from "@/backend";
 
-// The login and MCP authorize pages link here to sign in through the OIDC provider.
+// GET: the login page's link (?next=). POST: the MCP authorize page's form, same-origin only.
 export const GET = oidcStartRoute;
+export const POST = oidcStartRoute;

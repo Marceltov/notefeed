@@ -2,6 +2,7 @@
 // exchange with the id_token's claims checked. Every failure is an AuthError; the routes word it.
 import { config } from "../config";
 import { AuthError } from "../errors";
+import { redirectUriOk } from "../oauth/routes";
 import { processState } from "../state";
 import { allowed, senderFrom } from "./config";
 
@@ -22,13 +23,13 @@ async function getJson(fetchFn: Fetch, url: string, init: RequestInit): Promise<
   throw new AuthError();
 }
 
-const isUrl = (v: unknown): v is string => typeof v === "string" && URL.canParse(v);
-
 export async function discover(issuer: string, fetchFn: Fetch = fetch, now = Date.now()): Promise<Meta> {
   if (cache.meta && cache.issuer === issuer && now - cache.at < HOUR) return cache.meta;
+  // TLS to the provider is what lets exchange skip the id_token's signature: https, or plain http on loopback only.
+  if (!redirectUriOk(issuer)) throw new AuthError();
   const doc = await getJson(fetchFn, `${issuer.replace(/\/$/, "")}/.well-known/openid-configuration`, { headers: { accept: "application/json" } });
   // Exact, as OIDC Discovery 4.3 requires: a document naming another issuer is not this provider's.
-  if (doc.issuer !== issuer || !isUrl(doc.authorization_endpoint) || !isUrl(doc.token_endpoint)) throw new AuthError();
+  if (doc.issuer !== issuer || !redirectUriOk(doc.authorization_endpoint) || !redirectUriOk(doc.token_endpoint)) throw new AuthError();
   const meta = { issuer, authorization_endpoint: doc.authorization_endpoint, token_endpoint: doc.token_endpoint };
   Object.assign(cache, { issuer, at: now, meta });
   return meta;

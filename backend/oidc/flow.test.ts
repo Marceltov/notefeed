@@ -67,6 +67,23 @@ describe("discover", () => {
     await expect(discover(ISS, issuer({ doc }))).rejects.toBeInstanceOf(AuthError);
   });
 
+  test("a plain http issuer is refused before anything is fetched", async () => {
+    const f = issuer();
+    await expect(discover("http://idp.example/app", f)).rejects.toBeInstanceOf(AuthError);
+    expect(f).not.toHaveBeenCalled();
+  });
+
+  test.each(["token_endpoint", "authorization_endpoint"])("a plain http %s is refused", async (k) => {
+    await expect(discover(ISS, issuer({ doc: { ...META, [k]: "http://idp.example/x" } }))).rejects.toBeInstanceOf(AuthError);
+  });
+
+  test("plain http is fine on loopback", async () => {
+    const local = { issuer: "http://localhost:9000/app", authorization_endpoint: "http://localhost:9000/authorize", token_endpoint: "http://127.0.0.1:9000/token" };
+    const f = vi.fn<typeof fetch>(async () => Response.json(local));
+    expect(await discover(local.issuer, f)).toEqual(local);
+    expect(f).toHaveBeenCalledWith("http://localhost:9000/app/.well-known/openid-configuration", expect.anything());
+  });
+
   test("an unreachable provider or a non-200 refuses", async () => {
     await expect(discover(ISS, vi.fn(async () => Promise.reject(new TypeError("fetch failed"))))).rejects.toBeInstanceOf(AuthError);
     await expect(discover(ISS, vi.fn(async () => new Response("down", { status: 503 })))).rejects.toBeInstanceOf(AuthError);

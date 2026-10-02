@@ -6,7 +6,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { IDENTITY_COOKIE, safeEqual } from "../auth";
 import { config } from "../config";
 import { AuthError } from "../errors";
-import { cookie, seeOther } from "../http/request";
+import { cookie, readFields, sameOrigin, seeOther } from "../http/request";
 import { authFailed, authWait, clientIp } from "../limits";
 import { checkAuthorize, issueCode } from "../oauth/routes";
 import { type Payloads, sign, TTL, verify } from "../oauth/tokens";
@@ -35,22 +35,34 @@ function failed(from: { next?: string; authorize?: Record<string, string> } | nu
   return seeOther(page, { "Set-Cookie": flightCookie(h, "", 0) });
 }
 
-// The MCP authorize page passes its request on (client_id present): only checkAuthorize's fields are kept.
-function authorizeFields(params: URLSearchParams, h: Headers): Record<string, string> | Response | undefined {
-  if (!params.has("client_id")) return undefined;
+// Any of these on the GET means an MCP authorize request, which must come as the POST.
+const MCP_FIELDS = ["client_id", "redirect_uri", "response_type", "code_challenge", "code_challenge_method", "state", "resource"];
+
+// GET: the login page's plain link (?next=). POST: the MCP authorize page's form, from this instance's own pages
+// only. There is no other consent step, so a cross-site navigation must never get a code issued for a client the
+// person never saw (open registration lets anyone register one); only checkAuthorize's fields are kept.
+async function startRequest(req: Request): Promise<{ next: string; authorize?: Record<string, string> } | Response> {
+  const h = req.headers;
+  if (req.method !== "POST") {
+    const params = new URL(req.url).searchParams;
+    if (MCP_FIELDS.some((k) => params.has(k))) return new Response("An MCP sign-in starts from the authorize page's form.", { status: 400 });
+    return { next: safeNext(params.get("next")) };
+  }
+  if (!sameOrigin(h)) return new Response("forbidden", { status: 403 });
+  const params = new URLSearchParams();
+  for (const [k, v] of (await readFields(req, 16 * 1024)) ?? []) if (typeof v === "string") params.append(k, v);
   const checked = checkAuthorize(params, h);
   if (checked.kind === "redirect") return seeOther(checked.location);
   if (checked.kind === "error") return new Response(checked.message, { status: 400 });
-  return checked.fields;
+  return { next: "/", authorize: checked.fields };
 }
 
 export async function oidcStartRoute(req: Request): Promise<Response> {
   if (!identityOn()) return notFound();
   const h = req.headers;
-  const params = new URL(req.url).searchParams;
-  const authorize = authorizeFields(params, h);
-  if (authorize instanceof Response) return authorize;
-  const next = safeNext(params.get("next"));
+  const start = await startRequest(req);
+  if (start instanceof Response) return start;
+  const { next, authorize } = start;
   let meta;
   try {
     meta = await discover(config.oidc().issuer);

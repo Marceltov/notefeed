@@ -51,7 +51,8 @@ export function authServerRoute(req: Request): Response {
 }
 
 // https anywhere, plain http only on loopback (native and CLI clients). No fragment, even an empty one.
-function redirectUriOk(u: unknown): u is string {
+// Also the rule for the OIDC provider's issuer and endpoints (oidc/flow.ts).
+export function redirectUriOk(u: unknown): u is string {
   if (typeof u !== "string" || u.length > 512 || u.includes("#") || !URL.canParse(u)) return false;
   const { protocol, hostname } = new URL(u);
   return protocol === "https:" || (protocol === "http:" && (hostname === "localhost" || hostname === "127.0.0.1"));

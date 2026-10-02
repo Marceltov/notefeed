@@ -56,12 +56,27 @@ const get = (path: string, cookie?: string) => new Request(BASE + path, { header
 const setCookie = (res: Response, name: string) => res.headers.getSetCookie().find((c) => c.startsWith(`${name}=`));
 const valueOf = (c: string | undefined) => c?.slice(c.indexOf("=") + 1).split(";")[0];
 
-async function start(query = "next=/feed") {
-  const res = await oidcStartRoute(get(`/api/oidc/start?${query}`));
+// A string is the web GET's query; fields are the MCP authorize page's POST (from `origin`).
+const postStart = (fields: Record<string, string>, origin: string | null = BASE) =>
+  oidcStartRoute(
+    new Request(`${BASE}/api/oidc/start`, {
+      method: "POST",
+      headers: { ...H, "content-type": "application/x-www-form-urlencoded", ...(origin ? { origin } : {}) },
+      body: new URLSearchParams(fields),
+    }),
+  );
+async function start(query: string | Record<string, string> = "next=/feed") {
+  const res = await (typeof query === "string" ? oidcStartRoute(get(`/api/oidc/start?${query}`)) : postStart(query));
   const cookie = valueOf(setCookie(res, "nf_oidc"))!;
   const loc = res.headers.get("location") ? new URL(res.headers.get("location")!) : null;
   if (loc) lastNonce = loc.searchParams.get("nonce") ?? "";
   return { res, loc, cookie, state: loc?.searchParams.get("state") ?? "" };
+}
+// A registered client's checked authorize fields.
+async function mcpFields(extra: Record<string, string> = {}): Promise<Record<string, string>> {
+  const reg = await registerRoute(new Request(`${BASE}/oauth/register`, { method: "POST", headers: { ...H, "content-type": "application/json" }, body: JSON.stringify({ redirect_uris: [CB] }) }));
+  const client_id = (await reg.json()).client_id;
+  return { response_type: "code", client_id, redirect_uri: CB, code_challenge: CHALLENGE, code_challenge_method: "S256", ...extra };
 }
 const callback = (query: string, cookie?: string) => oidcCallbackRoute(get(`/api/oidc/callback?${query}`, cookie && `nf_oidc=${cookie}`));
 const failed = (res: Response) => {
@@ -112,19 +127,33 @@ describe("start", () => {
     expect(verify("oidc", (await start(q)).cookie)!.next).toBe("/");
   });
 
-  test("an MCP authorize request keeps only the checked fields", async () => {
-    const reg = await registerRoute(new Request(`${BASE}/oauth/register`, { method: "POST", headers: { ...H, "content-type": "application/json" }, body: JSON.stringify({ redirect_uris: [CB] }) }));
-    const client_id = (await reg.json()).client_id;
-    const fields = { response_type: "code", client_id, redirect_uri: CB, code_challenge: CHALLENGE, code_challenge_method: "S256", state: "s1" };
-    const { cookie } = await start(new URLSearchParams({ ...fields, extra: "x", next: "/feed" }).toString());
+  test("a same-origin MCP POST keeps only the checked fields and goes to the provider", async () => {
+    const fields = await mcpFields({ state: "s1" });
+    const { res, loc, cookie } = await start({ ...fields, extra: "x", next: "/feed" });
+    expect(res.status).toBe(303);
+    expect(loc!.origin + loc!.pathname).toBe(META.authorization_endpoint);
     expect(verify("oidc", cookie)!.authorize).toEqual(fields);
   });
 
-  test("an MCP request that doesn't check out never reaches the provider", async () => {
-    const bad = await oidcStartRoute(get(`/api/oidc/start?client_id=forged&redirect_uri=${encodeURIComponent(CB)}`));
-    expect(bad.status).toBe(400);
-    expect(setCookie(bad, "nf_oidc")).toBeUndefined();
+  const refused = (res: Response, status: number) => {
+    expect(res.status).toBe(status);
+    expect(res.headers.get("location")).toBeNull();
+    expect(setCookie(res, "nf_oidc")).toBeUndefined();
     expect(fetchStub).not.toHaveBeenCalled();
+  };
+
+  test.each([["another site", "https://evil.example"], ["no Origin", null]])("an MCP POST from %s never reaches the provider", async (_, origin) => {
+    refused(await postStart(await mcpFields(), origin), 403);
+  });
+
+  test("a GET carrying MCP authorize fields is refused, even valid ones", async () => {
+    refused(await oidcStartRoute(get(`/api/oidc/start?${new URLSearchParams(await mcpFields())}`)), 400);
+    for (const k of ["client_id", "redirect_uri", "code_challenge", "response_type", "state"]) refused(await oidcStartRoute(get(`/api/oidc/start?${k}=x`)), 400);
+  });
+
+  test("an MCP POST that doesn't check out never reaches the provider", async () => {
+    refused(await postStart({ client_id: "forged", redirect_uri: CB }), 400);
+    refused(await postStart({}), 400);
   });
 
   test("an unreachable provider is a plain error", async () => {
@@ -159,9 +188,7 @@ describe("callback", () => {
   });
 
   test("an MCP sign-in goes back to the client with a code carrying the sender", async () => {
-    const reg = await registerRoute(new Request(`${BASE}/oauth/register`, { method: "POST", headers: { ...H, "content-type": "application/json" }, body: JSON.stringify({ redirect_uris: [CB] }) }));
-    const client_id = (await reg.json()).client_id;
-    const s = await start(new URLSearchParams({ response_type: "code", client_id, redirect_uri: CB, code_challenge: CHALLENGE, code_challenge_method: "S256", state: "s1" }).toString());
+    const s = await start(await mcpFields({ state: "s1" }));
     const res = await callback(`code=c&state=${s.state}`, s.cookie);
     const loc = new URL(res.headers.get("location")!);
     expect(loc.origin + loc.pathname).toBe(CB);
@@ -172,10 +199,8 @@ describe("callback", () => {
   });
 
   test("a failed MCP sign-in goes back to the authorize page", async () => {
-    const reg = await registerRoute(new Request(`${BASE}/oauth/register`, { method: "POST", headers: { ...H, "content-type": "application/json" }, body: JSON.stringify({ redirect_uris: [CB] }) }));
-    const client_id = (await reg.json()).client_id;
-    const fields = { response_type: "code", client_id, redirect_uri: CB, code_challenge: CHALLENGE, code_challenge_method: "S256" };
-    const s = await start(new URLSearchParams(fields).toString());
+    const fields = await mcpFields();
+    const s = await start(fields);
     const res = await callback(`error=access_denied&state=${s.state}`, s.cookie);
     expect(res.headers.get("location")).toBe(`/oauth/authorize?${new URLSearchParams(fields)}&error=sign_in_failed`);
   });
