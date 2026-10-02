@@ -5,7 +5,7 @@ import * as z from "zod";
 import { config } from "../config";
 import { InvalidBodyError, NotFoundError } from "../errors";
 import { changePassword, checkFeedAccess, protectedFeed, removePassword } from "../feedlock";
-import { READ_ID_RE, assertFeed, feedForReadId, hasFeed, readIdOf } from "../feeds";
+import { isReadId, assertFeed, feedForReadId, hasFeed, readIdOf } from "../feeds";
 import { getSettings } from "../feedsettings";
 import { clientIp } from "../limits";
 import { MAX_BYTES, countNotes, getNote, listNotes, type Note } from "../notes";
@@ -424,7 +424,7 @@ const OPS: AnyOp[] = [
       404: err("Malformed read id"),
     },
   }).handle(async ({ req, params }) => {
-    if (!READ_ID_RE.test(params.readId)) throw new NotFoundError("malformed read id");
+    if (!isReadId(params.readId)) throw new NotFoundError("malformed read id");
     const feed = await feedForReadId(params.readId);
     const { title, description, image } = feed ? await getSettings(feed) : { title: "", description: "", image: "" };
     return { status: 200, body: { title, description, image_url: image ? publicUrl(req.headers) + imagePath(params.readId, image) : null } };
@@ -447,7 +447,7 @@ const OPS: AnyOp[] = [
       404: err("Malformed read id"),
     },
   }).handle(async ({ req, params, query }) => {
-    if (!READ_ID_RE.test(params.readId)) throw new NotFoundError("malformed read id");
+    if (!isReadId(params.readId)) throw new NotFoundError("malformed read id");
     const feed = await feedForReadId(params.readId);
     const notes = (l: number, b?: string) => (feed ? listNotes(feed, l, b) : Promise.resolve([]));
     return page(notes, query, publicUrl(req.headers) + readPath(params.readId));

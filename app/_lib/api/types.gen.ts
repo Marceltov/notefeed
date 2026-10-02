@@ -744,7 +744,7 @@ export type GetReadFeedData = {
     body?: never;
     path: {
         /**
-         * The feed's read id, from its read link. Read-only; never reveals the name.
+         * The feed's read id, from its read link: 22 random characters, or the feed's own name for a reserved feed. Read-only; never reveals the name of any other feed.
          */
         readId: string;
     };
@@ -774,7 +774,7 @@ export type ListReadNotesData = {
     body?: never;
     path: {
         /**
-         * The feed's read id, from its read link. Read-only; never reveals the name.
+         * The feed's read id, from its read link: 22 random characters, or the feed's own name for a reserved feed. Read-only; never reveals the name of any other feed.
          */
         readId: string;
     };
@@ -817,7 +817,7 @@ export type GetReadNoteData = {
     body?: never;
     path: {
         /**
-         * The feed's read id, from its read link. Read-only; never reveals the name.
+         * The feed's read id, from its read link: 22 random characters, or the feed's own name for a reserved feed. Read-only; never reveals the name of any other feed.
          */
         readId: string;
         /**

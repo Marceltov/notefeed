@@ -1322,10 +1322,10 @@
             "name": "readId",
             "in": "path",
             "required": true,
-            "description": "The feed's read id, from its read link. Read-only; never reveals the name.",
+            "description": "The feed's read id, from its read link: 22 random characters, or the feed's own name for a reserved feed. Read-only; never reveals the name of any other feed.",
             "schema": {
               "type": "string",
-              "pattern": "^[A-Za-z0-9_-]{22}$"
+              "pattern": "^[A-Za-z0-9_-]{1,64}$"
             }
           }
         ],
@@ -1367,10 +1367,10 @@
             "name": "readId",
             "in": "path",
             "required": true,
-            "description": "The feed's read id, from its read link. Read-only; never reveals the name.",
+            "description": "The feed's read id, from its read link: 22 random characters, or the feed's own name for a reserved feed. Read-only; never reveals the name of any other feed.",
             "schema": {
               "type": "string",
-              "pattern": "^[A-Za-z0-9_-]{22}$"
+              "pattern": "^[A-Za-z0-9_-]{1,64}$"
             }
           },
           {
@@ -1444,10 +1444,10 @@
             "name": "readId",
             "in": "path",
             "required": true,
-            "description": "The feed's read id, from its read link. Read-only; never reveals the name.",
+            "description": "The feed's read id, from its read link: 22 random characters, or the feed's own name for a reserved feed. Read-only; never reveals the name of any other feed.",
             "schema": {
               "type": "string",
-              "pattern": "^[A-Za-z0-9_-]{22}$"
+              "pattern": "^[A-Za-z0-9_-]{1,64}$"
             }
           },
           {

@@ -3,7 +3,7 @@
 import * as z from "zod";
 import { ERROR_CODES } from "../../shared/errors";
 import { PASSWORD_RULE } from "../../shared/password";
-import { FEED_RE, READ_ID_RE } from "../feeds";
+import { FEED_RE } from "../feeds";
 import { IMAGE_FILE_RE } from "../images";
 
 export const NOTE_ID = /^\d{8}T\d{6}Z-[a-z0-9-]+$/;
@@ -98,7 +98,7 @@ export const ImageBody = z.string().meta({ format: "binary" }).describe("The ima
 export const COMPONENTS = [NoteJson, NoteList, Created, ImageUploaded, ErrorJson, PostJson, PostForm, PasswordJson, FeedSettingsJson, FeedJson, ReadFeedJson];
 
 export const FeedParam = z.string().regex(FEED_RE).describe("The feed's name. It is the write key: anyone who knows it can post.");
-export const ReadIdParam = z.string().regex(READ_ID_RE).describe("The feed's read id, from its read link. Read-only; never reveals the name.");
+export const ReadIdParam = z.string().regex(/^[A-Za-z0-9_-]{1,64}$/).describe("The feed's read id, from its read link: 22 random characters, or the feed's own name for a reserved feed. Read-only; never reveals the name of any other feed.");
 export const NoteIdParam = z.string().regex(NOTE_ID).describe("The note's id");
 
 export const PageQuery = z.object({

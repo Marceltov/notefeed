@@ -22,6 +22,10 @@ export const config = {
   rateLimit: () => int("NOTEFEED_RATE_LIMIT", 60),
   // 0 or below: no cap.
   maxFeeds: () => Math.max(0, int("NOTEFEED_MAX_FEEDS", 0)),
+  // Comma-separated feed names nobody may create, on top of the built-in list (see feeds.ts).
+  reservedFeeds: () => env("NOTEFEED_RESERVED_FEEDS").split(",").map((n) => n.trim()).filter(Boolean),
+  // Password of the reserved feeds, which exist only while this is set (see feeds.ts).
+  reservedPassword: () => env("NOTEFEED_RESERVED_PASSWORD"),
   maxNotesPerFeed: () => Math.max(0, int("NOTEFEED_MAX_NOTES_PER_FEED", 0)),
   // Bytes per uploaded image; 0 or below means the default, and nothing above 10 MiB: Next's proxy buffers a request
   // body only up to that, so a larger image would arrive cut. Images per feed: 0 or below, no cap.
