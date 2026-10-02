@@ -60,18 +60,18 @@ test("a title image shows in the header and the read-only view, and can be remov
   await choose(page, "Choose image", PNG);
   await expect(page.getByRole("status")).toHaveText("Saved.");
   await expect(page.getByLabel("Title", { exact: true })).toHaveValue("Typed, not saved");
-  const header = page.locator("header img");
+  const header = page.locator("header img:not([src=\"/icon.svg\"])");
   await expect(header).toBeVisible();
   expect(await header.evaluate((i: HTMLImageElement) => i.naturalWidth)).toBeGreaterThan(0);
   await page.getByRole("link", { name: "Open read-only view" }).click();
-  await expect(page.locator("header img")).toBeVisible();
+  await expect(page.locator("header img:not([src=\"/icon.svg\"])")).toBeVisible();
   await page.goBack();
   await page.getByText("Feed settings", { exact: true }).click();
   await page.getByRole("button", { name: "Remove image" }).click();
   await expect(page.getByRole("status")).toHaveText("Saved.");
-  await expect(page.locator("header img")).toHaveCount(0);
+  await expect(page.locator("header img:not([src=\"/icon.svg\"])")).toHaveCount(0);
   await page.getByRole("link", { name: "Open read-only view" }).click();
-  await expect(page.locator("header img")).toHaveCount(0);
+  await expect(page.locator("header img:not([src=\"/icon.svg\"])")).toHaveCount(0);
 });
 
 test("a text file chosen as an image is refused", async ({ page }) => {

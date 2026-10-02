@@ -9,8 +9,8 @@ environment:
   PUBLIC_URL: https://notes.example.com   # links don't follow the client's Host header
   NOTEFEED_TRUST_PROXY: "1"               # rate limits per client, not one shared bucket
   # NOTEFEED_PASSWORD: ${NOTEFEED_PASSWORD}
-  # NOTEFEED_MAX_FEEDS: 100               # on an open instance
-  # NOTEFEED_MAX_NOTES_PER_FEED: 1000
+  # NOTEFEED_RESERVED_FEEDS: news,announcements   # operator-only feeds, see Configuration
+  # NOTEFEED_RESERVED_PASSWORD: ${NOTEFEED_RESERVED_PASSWORD}
 ```
 
 ## Caddy
