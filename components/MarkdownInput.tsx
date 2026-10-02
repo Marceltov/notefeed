@@ -9,7 +9,7 @@ const ACCEPT = "image/png,image/jpeg,image/gif,image/webp";
 // drag-and-drop each upload the files one after another and insert `![](url)` at the cursor. `images` is false
 // for a feed without a first note (nothing can be uploaded to it yet). The button only exists once hydrated,
 // so without JavaScript only the textarea renders.
-export function MarkdownInput({ id, name, label, value, onChange, feed, rows, placeholder, describedBy, className = "", images = true }: {
+export function MarkdownInput({ id, name, label, value, onChange, feed, rows, placeholder, describedBy, className = "", images = true, onBusy }: {
   id: string;
   name: string;
   label: string;
@@ -21,6 +21,7 @@ export function MarkdownInput({ id, name, label, value, onChange, feed, rows, pl
   describedBy?: string;
   className?: string;
   images?: boolean;
+  onBusy?: (busy: boolean) => void; // an upload is running: the parent holds back posting, so the image is not left out
 }) {
   const area = useRef<HTMLTextAreaElement>(null);
   const picker = useRef<HTMLInputElement>(null);
@@ -47,6 +48,7 @@ export function MarkdownInput({ id, name, label, value, onChange, feed, rows, pl
   async function upload(files: File[]) {
     setError(undefined);
     setUploading(true);
+    onBusy?.(true);
     for (const file of files) {
       const result = await uploadImageFile(feed, file);
       if ("error" in result) {
@@ -56,12 +58,13 @@ export function MarkdownInput({ id, name, label, value, onChange, feed, rows, pl
       insert(`![](${result.url})`);
     }
     setUploading(false);
+    onBusy?.(false);
   }
 
   const imageFiles = (list: FileList | null) => Array.from(list ?? []).filter((f) => f.type.startsWith("image/"));
   const paste = (e: ClipboardEvent) => {
     const files = imageFiles(e.clipboardData.files);
-    if (!images || !files.length) return;
+    if (!images || !files.length || e.clipboardData.types.includes("text/plain")) return; // copied cells and text carry a picture too: paste the text
     e.preventDefault();
     upload(files);
   };
@@ -84,9 +87,10 @@ export function MarkdownInput({ id, name, label, value, onChange, feed, rows, pl
         value={value}
         onChange={(e) => onChange(e.target.value)}
         onKeyDown={(e) => {
-          if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) e.currentTarget.form?.requestSubmit();
+          if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && !uploading) e.currentTarget.form?.requestSubmit();
         }}
         onPaste={paste}
+        onDragOver={(e) => images && e.dataTransfer.types.includes("Files") && e.preventDefault()} // a text control accepts file drops in Chromium only otherwise
         onDrop={drop}
         rows={rows}
         placeholder={placeholder}

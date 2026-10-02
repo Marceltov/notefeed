@@ -30,7 +30,7 @@ export function FeedDetails({ feed, title: savedTitle, description: savedDescrip
       router.replace(`${page}?saved=1`);
       router.refresh();
     });
-  // The title image saves on its own, with the saved title and description (not unsaved edits in the form).
+  // The title image saves on its own, with the title and description as they stand in the form.
   async function choose(file: File) {
     setError(undefined);
     setPending(true);
@@ -38,7 +38,7 @@ export function FeedDetails({ feed, title: savedTitle, description: savedDescrip
     if ("error" in up) {
       setError(up.error);
       setPending(false);
-    } else save(undefined, { title: savedTitle, description: savedDescription, image: up.file });
+    } else save(undefined, { title, description, image: up.file });
   }
   const remove = (e: FormEvent) => run(e, () => deleteFeed(opts()), () => router.replace("/?deleted=" + feed), 404); // already gone: the goal is met
 
@@ -85,7 +85,7 @@ export function FeedDetails({ feed, title: savedTitle, description: savedDescrip
               <button
                 type="button"
                 disabled={pending}
-                onClick={() => save(undefined, { title: savedTitle, description: savedDescription, image: "" })}
+                onClick={() => save(undefined, { title, description, image: "" })}
                 className="ml-2 rounded-sm border border-rule px-3 py-1 text-muted disabled:opacity-60"
               >
                 Remove image

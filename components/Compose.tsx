@@ -17,6 +17,7 @@ export function Compose({ feed, action, error: initialError, isNew, exists = tru
   const { run, error, pending, router } = useApiForm(action, initialError);
   const [text, setText] = useState("");
   const [password, setPassword] = useState("");
+  const [busy, setBusy] = useState(false); // an image is uploading
   const filename = `${idStamp(new Date())}-${slugify(extractTitle(text))}.md`;
 
   const submit = (e: FormEvent) =>
@@ -35,6 +36,7 @@ export function Compose({ feed, action, error: initialError, isNew, exists = tru
         placeholder="# Write a note in markdown"
         describedBy="compose-hint compose-error"
         images={exists}
+        onBusy={setBusy}
       />
       <div className="mt-2 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-2">
         <p id="compose-hint" className="min-w-0 break-all text-sm text-muted">
@@ -46,7 +48,7 @@ export function Compose({ feed, action, error: initialError, isNew, exists = tru
         </p>
         <button
           type="submit"
-          disabled={pending}
+          disabled={pending || busy}
           className="rounded-sm bg-carbon px-4 py-1.5 font-bold text-on-carbon disabled:opacity-60"
         >
           {pending ? "Posting…" : "Post note"}

@@ -9,7 +9,7 @@ data/
 ├── .secret                                  # signs cookies and tokens, and is behind older feeds' read links; back it up
 ├── homelab-7f3k2q9x4m8wz/
 │   ├── .readid                              # the feed's read id (feeds created since feed deletion was added; older ones have none)
-│   ├── .feed.json                           # title and description, if set
+│   ├── .feed.json                           # title, description and title image, if set
 │   ├── .password                            # only on a protected feed
 │   ├── .images/                             # uploaded images, only once one was uploaded
 │   │   └── 3b1f0c9d5a7e42c8b6d1e0f4a9c27d58.png

@@ -14,6 +14,7 @@ export function NoteActions({ feed, id, markdown, error: initialError }: { feed:
   const page = `/${feed}`;
   const { run, error, setError, pending, setPending, router } = useApiForm(page, initialError);
   const [text, setText] = useState(markdown);
+  const [busy, setBusy] = useState(false); // an image is uploading
   const [editing, setEditing] = useState(!!initialError);
   const base = `${page}/${id}`;
 
@@ -43,8 +44,9 @@ export function NoteActions({ feed, id, markdown, error: initialError }: { feed:
             rows={10}
             describedBy="note-actions-error"
             className="font-mono"
+            onBusy={setBusy}
           />
-          <button type="submit" disabled={pending} className="mt-2 rounded-sm bg-carbon px-4 py-1.5 font-bold text-on-carbon disabled:opacity-60">
+          <button type="submit" disabled={pending || busy} className="mt-2 rounded-sm bg-carbon px-4 py-1.5 font-bold text-on-carbon disabled:opacity-60">
             {pending ? "Saving…" : "Save"}
           </button>
         </form>

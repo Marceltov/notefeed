@@ -98,7 +98,7 @@ In the browser, the compose box and the note editor have an [Add image](web-ui.m
 
 A feed can have a **title** (at most 100 characters) and a **description** (at most 500), both on one line. The title is shown as a heading on the feed page, where the feed's name stays in the page header, and both show in the read-only view and in the RSS feed (see [Read links and RSS](feed.md#title-and-description)). The feed's name stays as it is: you can't rename a feed. A feed has neither until you set them.
 
-`GET /api/v1/feeds/<feed>` answers with the feed's `name`, `title`, `description`, `image_url`, `protected` and `read_url`. `read_url` is `null` while the feed has no notes, and for [a feed without a read link](operations.md#a-feed-without-a-read-link), and `image_url` is `null` while the feed has no title image, and for a feed without a read link. `PUT` on the same URL replaces the title and the description, both at once, and answers with the feed; an empty string clears one. Surrounding spaces are trimmed, and control characters, including a line break, are refused.
+`GET /api/v1/feeds/<feed>` answers with the feed's `name`, `title`, `description`, `image_url`, `protected` and `read_url`. `read_url` is `null` while the feed has no notes, and for [a feed without a read link](operations.md#a-feed-without-a-read-link), and `image_url` is `null` while the feed has no title image (or its file was removed by hand), while the feed has no notes, and for a feed without a read link. `PUT` on the same URL replaces the title and the description, both at once, and answers with the feed; an empty string clears one. Surrounding spaces are trimmed, and control characters, including a line break, are refused.
 
 ```sh
 curl -X PUT -H "Content-Type: application/json" \

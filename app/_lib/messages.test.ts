@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { errorMessage, feedDetailsErrorMessage, feedErrorMessage, noteErrorMessage } from "./messages";
+import { errorMessage, feedDetailsErrorMessage, feedErrorMessage, imageErrorMessage, noteErrorMessage } from "./messages";
 
 test("an inherited property name in the URL is an unknown code, not a crash", () => {
   for (const fn of [errorMessage, noteErrorMessage, feedErrorMessage, feedDetailsErrorMessage])
@@ -9,4 +9,9 @@ test("an inherited property name in the URL is an unknown code, not a crash", ()
 test("known codes keep their wording", () => {
   expect(errorMessage("not_found")).toBe("Not found.");
   expect(errorMessage("rate_limited", "7")).toBe("Too many requests, try again in 7 seconds.");
+});
+
+test("an image upload to a feed that can't take one is worded neutrally", () => {
+  expect(imageErrorMessage("not_found")).toBe("Images can't be added to this feed yet.");
+  expect(noteErrorMessage("not_found")).not.toContain("images");
 });

@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { expect, test, type Page } from "@playwright/test";
 
 const PNG = "e2e/fixtures/pixel.png";
@@ -55,8 +56,10 @@ test("a title image shows in the header and the read-only view, and can be remov
   const name = feedName();
   await post(page, name, "# Titled");
   await page.getByText("Feed settings", { exact: true }).click();
+  await page.getByLabel("Title", { exact: true }).fill("Typed, not saved"); // choosing an image keeps what is typed
   await choose(page, "Choose image", PNG);
   await expect(page.getByRole("status")).toHaveText("Saved.");
+  await expect(page.getByLabel("Title", { exact: true })).toHaveValue("Typed, not saved");
   const header = page.locator("header img");
   await expect(header).toBeVisible();
   expect(await header.evaluate((i: HTMLImageElement) => i.naturalWidth)).toBeGreaterThan(0);
@@ -76,4 +79,52 @@ test("a text file chosen as an image is refused", async ({ page }) => {
   await choose(page, "Add image", { name: "a.png", mimeType: "image/png", buffer: Buffer.from("not an image") });
   await expect(page.getByRole("alert").filter({ hasText: "Only PNG, JPEG, GIF and WebP" })).toBeVisible();
   await expect(page.getByLabel("Note in markdown")).toHaveValue("");
+});
+
+// A paste event as a browser makes it: a clipboard holding the fixture PNG, and `text` when given.
+async function paste(page: Page, text?: string) {
+  const png = readFileSync(PNG).toString("base64");
+  await page.getByLabel("Note in markdown").evaluate(
+    (ta, { png, text }) => {
+      const data = new DataTransfer();
+      data.items.add(new File([Uint8Array.from(atob(png), (c) => c.charCodeAt(0))], "clip.png", { type: "image/png" }));
+      if (text) data.setData("text/plain", text);
+      ta.dispatchEvent(new ClipboardEvent("paste", { clipboardData: data, bubbles: true, cancelable: true }));
+    },
+    { png, text },
+  );
+}
+
+test("pasting an image uploads it and inserts its markdown", async ({ page }) => {
+  await post(page, feedName(), "# Pasting");
+  await paste(page);
+  await expect(page.getByLabel("Note in markdown")).toHaveValue(SRC);
+});
+
+test("pasting a clipboard that also holds text uploads nothing", async ({ page }) => {
+  await post(page, feedName(), "# Pasting text");
+  const uploads: string[] = [];
+  page.on("request", (r) => r.url().includes("/images") && uploads.push(r.url()));
+  await paste(page, "copied cells");
+  await page.waitForTimeout(500);
+  expect(uploads).toEqual([]);
+  await expect(page.getByLabel("Note in markdown")).toHaveValue("");
+});
+
+test("posting is held back while an image uploads", async ({ page }) => {
+  await post(page, feedName(), "# Busy");
+  let release!: () => void;
+  const gate = new Promise<void>((r) => (release = r));
+  await page.route("**/images", async (route) => {
+    await gate;
+    await route.continue();
+  });
+  await page.getByLabel("Note in markdown").fill("# Waits for its image");
+  await paste(page);
+  await expect(page.getByRole("button", { name: "Post note" })).toBeDisabled();
+  await page.getByLabel("Note in markdown").press("Control+Enter");
+  release();
+  await expect(page.getByLabel("Note in markdown")).toHaveValue(SRC);
+  await expect(page.getByRole("link", { name: "Waits for its image" })).toHaveCount(0); // nothing was posted without the image
+  await expect(page.getByRole("button", { name: "Post note" })).toBeEnabled();
 });

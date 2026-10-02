@@ -11,7 +11,7 @@ export async function Header({ feed, rss, image }: { feed?: string; rss?: string
       {image && (
         // The feed's title image: decorative (the name is next to it), served by our own route.
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={image} alt="" loading="lazy" className="h-10 w-auto max-w-24 shrink-0 self-center rounded-sm object-contain" />
+        <img src={image} alt="" className="h-10 w-auto max-w-24 shrink-0 self-center rounded-sm object-contain" />
       )}
       <p className="mr-auto min-w-0 break-all text-xl font-bold tracking-tight">
         <Link href="/">notefeed</Link>

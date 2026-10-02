@@ -26,7 +26,7 @@ Once the feed has notes, **Post from a script** expands to a ready-to-copy `curl
 
 The compose box has an **Add image** button. Choose a PNG, JPEG, GIF or WebP file, or paste an image into the box, or drop one on it. notefeed uploads it to the feed and inserts `![](url)` at the cursor. Post the note and the image shows in it. The note editor has the same button, with paste and drop.
 
-This needs JavaScript. Without it the box is still a plain text box, and you can use an image by its URL: upload it with the [API](posting.md#images) or `notefeed image`, then write `![](url)` yourself. A feed has no **Add image** button until its first note exists, because an image is uploaded to an existing feed. If the upload is refused (not an image, too large, too many requests), the page says why and nothing is inserted.
+This needs JavaScript. Without it the box is still a plain text box, and you can use an image by its URL: upload it with the [API](posting.md#images) or `notefeed image`, then write `![](url)` yourself. A feed has no **Add image** button until its first note exists, because an image is uploaded to an existing feed. If the upload is refused (not an image, too large, too many requests), the page says why and nothing is inserted. Images are uploaded as they are, so a photo keeps its EXIF data, including where it was taken, and anyone with the read link can download it: remove it with a tool such as `exiftool` first (see [operations](operations.md)).
 
 Images in notes load lazily and are never wider than the note. They are as public as the [read link](#the-read-link): see [Images](posting.md#images).
 
@@ -52,7 +52,7 @@ Anyone who can open the feed can edit and delete its notes. On a feed with [its 
 
 On the feed page, a **Feed settings** section has a **Title** and a **Description** and a **Save** button. The title is shown as a heading at the top of the feed page and in the browser tab, with the description below it; the feed's name stays in the page header. Both also show in the [read-only view](#the-read-only-view) and are the RSS feed's title and description, so anyone with the read link sees them. Leave a field empty to clear it. The feed's name never changes.
 
-The **Title image** control has a **Choose image** button, which uploads an image and saves it as the feed's title image at once, and a **Remove image** button. The title image shows in the page header and in the read-only view, and is the RSS feed's channel image. Like the title, it is public to anyone with the read link. Choosing an image needs JavaScript.
+The **Title image** control has a **Choose image** button, which uploads an image and saves it as the feed's title image at once, and a **Remove image** button. Either one saves what is typed in the title and description too. The title image shows in the page header and in the read-only view, and is the RSS feed's channel image. Like the title, it is public to anyone with the read link. Choosing and removing an image need JavaScript.
 
 Below it, **Delete feed** removes the feed with all its notes, its settings, its password and its read link, for good. You confirm by typing the feed's name, exactly. Afterwards you land on the start page, and the name can be used again. A new feed with that name gets a different read link, and the old link stays empty.
 
