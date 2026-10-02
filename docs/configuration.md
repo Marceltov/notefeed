@@ -17,6 +17,8 @@ notefeed is configured with environment variables. With Compose, set them under 
 | `NOTEFEED_SECRET` | random, kept in `DATA_DIR/.secret` | The server secret, at least 32 characters (`openssl rand -hex 32`); notefeed refuses a shorter one, or a `.secret` file shorter than 32 bytes. It signs the unlock cookies of [protected feeds](posting.md#a-feed-with-its-own-password) and the [OAuth](#oauth) tokens of MCP clients, and the [read links](feed.md) of feeds created before feed deletion was added are derived from it. Changing it locks unlocked browsers again, signs MCP clients out and changes the read link of each of those older feeds; feeds created since have a stored read id and keep theirs. |
 | `NOTEFEED_TITLE` | `notefeed` | Title of the RSS feed and of the read-only view, for a feed that has no title of its own. |
 | `NOTEFEED_OIDC_ISSUER`, `NOTEFEED_OIDC_CLIENT_ID`, `NOTEFEED_OIDC_CLIENT_SECRET`, `NOTEFEED_OIDC_ALLOW` | none: sign-in off | Optional sign-in through your OpenID Connect provider, so notes carry a verified sender. On only when all four are set; needs `PUBLIC_URL` and `NOTEFEED_SECRET`. See [Sign-in and sender](identity.md). |
+| `NOTEFEED_OIDC_LABEL` | the issuer's host | Optional. The text after **Sign in with** on the button for this provider. |
+| `NOTEFEED_OIDC_<NAME>_ISSUER`, `_CLIENT_ID`, `_CLIENT_SECRET`, `_ALLOW`, `_SENDER_CLAIM`, `_LABEL` | none | Optional further providers, each with a name of your choosing in `<NAME>` (capitals, digits, underscores). Nothing is predefined. See [Several providers](identity.md#several-providers). |
 | `NOTEFEED_OIDC_SENDER_CLAIM` | `name,email` | Optional. Comma-separated id_token claims tried in order for the sender shown on notes and stored in the note file, so pick one that is fine to publish (`sub` is opaque, `email` exposes an address). Not needed to turn sign-in on. See [Sign-in and sender](identity.md). |
 | `DATA_DIR` | `/data` | Folder holding the feeds, one subfolder each. |
 | `TZ` | `UTC` | Time zone for the times shown in the web UI, e.g. `Europe/Berlin`. |
@@ -46,7 +48,7 @@ There is one password for the whole instance. Changing it logs out every browser
 
 ## Sign-in
 
-Optional, and off unless all four `NOTEFEED_OIDC_*` variables are set: notefeed stays private by default and stores nothing about a person. With them set, people sign in through your OpenID Connect provider and their notes carry a sender. Setup, what is stored and how to hide it are on [Sign-in and sender](identity.md). Sign-in alone locks the instance to signed-in people, and changing the password signs everyone out.
+Optional, and off unless all four `NOTEFEED_OIDC_*` variables are set: notefeed stays private by default and stores nothing about a person. With them set, people sign in through your OpenID Connect provider and their notes carry a sender. You can configure several providers at once, see [Several providers](identity.md#several-providers). Setup, what is stored and how to hide it are on [Sign-in and sender](identity.md). Sign-in alone locks the instance to signed-in people, and changing the password signs everyone out.
 
 ## Feed passwords
 
