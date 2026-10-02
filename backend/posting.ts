@@ -83,8 +83,8 @@ export async function updateFeed(feed: string, ip: string, read: () => Promise<u
   if (!(await hasFeed(feed))) throw new NotFoundError("no such feed");
   // Only a given image is checked; an omitted one stays as stored, even if its file has been removed by hand.
   if (given.image && !(await knownImage(feed, given.image))) throw new InvalidBodyError("image must be empty or the name of an image uploaded to this feed");
-  const image = given.image ?? (await getStoredSettings(feed)).image;
-  const checked = { ...given, image };
+  const stored = await getStoredSettings(feed);
+  const checked = { ...given, image: given.image ?? stored.image, showSender: given.showSender ?? stored.showSender };
   await saveSettings(feed, checked);
   return checked;
 }

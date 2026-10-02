@@ -35,7 +35,7 @@ describe("settings", () => {
     const res = await put("mine", { title: "My <feed> & ]]> 🎉", description: "About <b>it</b> & more" });
     expect(res.status).toBe(200);
     const rid = (await readIdOf("mine"))!;
-    const want = { name: "mine", title: "My <feed> & ]]> 🎉", description: "About <b>it</b> & more", protected: false, read_url: `${BASE}/r/${rid}/feed.xml`, image_url: null };
+    const want = { name: "mine", title: "My <feed> & ]]> 🎉", description: "About <b>it</b> & more", protected: false, read_url: `${BASE}/r/${rid}/feed.xml`, image_url: null, show_sender: true };
     expect(await res.json()).toEqual(want);
     expect(await (await call("GET", "/feeds/mine")).json()).toEqual(want);
     expect(await (await call("GET", `/read/${rid}`)).json()).toEqual({ title: want.title, description: want.description, image_url: null });
@@ -43,6 +43,15 @@ describe("settings", () => {
     expect(xml).toContain("<title>My &lt;feed&gt; &amp; ]]&gt; 🎉</title>");
     expect(xml).toContain("<description>About &lt;b&gt;it&lt;/b&gt; &amp; more</description>");
     expect(xml).not.toContain("mine");
+  });
+
+  test("show_sender: stored, returned, kept when omitted, non-boolean is a 400", async () => {
+    await createNote("mine", "# Hi");
+    expect((await (await put("mine", { title: "", description: "", show_sender: false })).json()).show_sender).toBe(false);
+    expect((await (await call("GET", "/feeds/mine")).json()).show_sender).toBe(false);
+    expect((await (await put("mine", { title: "T", description: "" })).json()).show_sender).toBe(false);
+    expect((await put("mine", { title: "", description: "", show_sender: "no" })).status).toBe(400);
+    expect((await (await put("mine", { title: "", description: "", show_sender: true })).json()).show_sender).toBe(true);
   });
 
   test("the channel falls back to the default title, and the description to the title", async () => {
@@ -56,7 +65,7 @@ describe("settings", () => {
   test("a feed with no notes has no read_url; settings default to empty", async () => {
     await createNote("mine", "x");
     await (await import("../notes")).removeNote("mine", (await (await call("GET", "/feeds/mine/notes")).json()).notes[0].id);
-    expect(await (await call("GET", "/feeds/mine")).json()).toEqual({ name: "mine", title: "", description: "", protected: false, read_url: null, image_url: null });
+    expect(await (await call("GET", "/feeds/mine")).json()).toEqual({ name: "mine", title: "", description: "", protected: false, read_url: null, image_url: null, show_sender: true });
   });
 
   test("whitespace is trimmed", async () => {

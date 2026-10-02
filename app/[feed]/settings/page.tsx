@@ -9,7 +9,7 @@ import { FeedDetails } from "@/components/FeedDetails";
 import { FeedSettings } from "@/components/FeedSettings";
 import { Header } from "@/components/Header";
 import { heading } from "@/components/styles";
-import { checkFeed, feedCookieName, feedPath, feedUnlocked, getFeed, publicUrl, readPath, rssPath } from "@/backend";
+import { checkFeed, feedCookieName, feedPath, feedUnlocked, getFeed, identityOn, publicUrl, readPath, rssPath } from "@/backend";
 
 export const dynamic = "force-dynamic";
 
@@ -39,12 +39,14 @@ export default async function SettingsPage({ params, searchParams }: PageProps<"
         </p>
       )}
       <FeedDetails
-        key={`${title}\n${description}\n${data.image}`}
+        key={`${title}\n${description}\n${data.image}\n${data.showSender}`}
         feed={feed}
         title={title}
         description={description}
         image={data.image}
         imageUrl={data.imageUrl}
+        showSender={data.showSender}
+        identity={identityOn()}
         error={detailsError ? feedDetailsErrorMessage(error, retry) : undefined}
       >
         <section aria-labelledby="sharing" className="text-sm">

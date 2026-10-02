@@ -49,7 +49,7 @@ const PAGE = 50;
  * legacy feed's id is derived from the name, so showing one would hand out the read link of whatever
  * feed is created there later. None either for a feed whose stored read id can't be read (backend/feeds.ts).
  */
-export async function getFeed(feed: string): Promise<{ notes: Note[]; readId: string | null; exists: boolean; title: string; description: string; image: string; imageUrl: string | null } | null> {
+export async function getFeed(feed: string): Promise<{ notes: Note[]; readId: string | null; exists: boolean; title: string; description: string; image: string; showSender: boolean; imageUrl: string | null } | null> {
   if (checkFeed(feed)) return null;
   const notes = await listNotes(feed, PAGE);
   // `exists`: a feed that had notes and lost them still exists (it counts toward the feed cap and can't get a password).
