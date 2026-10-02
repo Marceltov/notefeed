@@ -10,7 +10,7 @@ notefeed has an [MCP](https://modelcontextprotocol.io) endpoint, so AI assistant
 | `edit_note` | Replaces a note's markdown; its id stays. Takes `feed`, `id` and `markdown`, and returns the note. |
 | `delete_note` | Permanently deletes a note. Takes `feed` and `id`, and returns `{ "deleted": true }`. It is marked as destructive, so clients can ask you before running it. |
 | `get_feed` | Takes `feed`, and returns its title, description, title image URL, whether it is protected, and its read link. |
-| `update_feed` | Replaces a feed's title, description and title image. Takes `feed`, `title`, `description` and optionally `image`, and returns the feed. |
+| `update_feed` | Replaces a feed's title, description and title image, and optionally renames it. Takes `feed`, `title`, `description` and optionally `image`, `name` (a new name) and `read_id` (a new read id, empty for a random one), and returns the feed under its new name. The old name and read id answer 404 for good. |
 | `delete_feed` | Permanently deletes a feed with all its notes, settings, password and read link. Takes `feed`, and returns `{ "deleted": true }`. It is marked as destructive. |
 | `upload_image` | Uploads a PNG, JPEG, GIF or WebP image to an existing feed. Takes `feed` and `data` (the image's bytes, base64), and returns `file`, `url` and `markdown` (`![](url)`, to put in a note). The same [rules as the API](posting.md#images): size limit, rate limit, public URL. `update_feed` takes the returned `file` as `image` to make it the feed's title image. |
 

@@ -73,6 +73,13 @@ export class FeedExistsError extends NotefeedError {
   }
 }
 
+/** A feed's new name or read id belongs to another feed, was retired, or is held back. */
+export class NameTakenError extends NotefeedError {
+  constructor(what: "name" | "read id") {
+    super("taken", `that ${what} is not available`);
+  }
+}
+
 export class EmptyNoteError extends NotefeedError {
   constructor() {
     super("empty_note", "note is empty");

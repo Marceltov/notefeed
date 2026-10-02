@@ -14,12 +14,14 @@ const secondary = "inline-flex items-center gap-1.5 rounded-sm border border-rul
 // `children` (the sharing and password sections) sit between the two, so deleting stays last. With
 // JavaScript they go through the generated API client and show refusals inline; without, the browser follows
 // the 303 (the feed page says "Saved." or shows the refusal as `error`, or the home page says "Feed deleted.").
-export function FeedDetails({ feed, title: savedTitle, description: savedDescription, image, imageUrl, showSender: savedShowSender, identity, error: initialError, children }: { children?: ReactNode; feed: string; title: string; description: string; image: string; imageUrl: string | null; showSender: boolean; identity: boolean; error?: string }) {
+export function FeedDetails({ feed, title: savedTitle, description: savedDescription, image, imageUrl, showSender: savedShowSender, identity, readId: savedReadId, customIds, error: initialError, children }: { children?: ReactNode; feed: string; title: string; description: string; image: string; imageUrl: string | null; showSender: boolean; identity: boolean; readId: string | null; customIds: boolean; error?: string }) {
   const page = `/${feed}/settings`;
   const { run, error, setError, pending, setPending, router } = useApiForm(page, initialError, feedDetailsErrorMessage);
   const [title, setTitle] = useState(savedTitle);
   const [description, setDescription] = useState(savedDescription);
   const [showSender, setShowSender] = useState(savedShowSender);
+  const [name, setName] = useState(feed);
+  const [readId, setReadId] = useState(savedReadId ?? "");
   const [confirm, setConfirm] = useState("");
   // False while rendering on the server, true once hydrated: without JavaScript the delete button stays enabled
   // and the server checks the name.
@@ -27,13 +29,18 @@ export function FeedDetails({ feed, title: savedTitle, description: savedDescrip
   const opts = () => ({ baseUrl: window.location.origin, path: { feed } }); // in handlers only: no window while rendering on the server
 
   const picker = useRef<HTMLInputElement>(null);
-  const save = (e: FormEvent | undefined, body: { title: string; description: string; image?: string; show_sender?: boolean } = { title, description, ...(identity && { show_sender: showSender }) }) =>
-    run(e, () => updateFeed({ ...opts(), body }), () => {
+  // The name and read id are sent only when they changed (a new read id from the button: "" asks for a random one).
+  const save = (e: FormEvent | undefined, body: { title: string; description: string; image?: string; show_sender?: boolean; name?: string; read_id?: string } = { title, description, ...(identity && { show_sender: showSender }) }) => {
+    const generate = (e?.nativeEvent as SubmitEvent | undefined)?.submitter?.getAttribute("name") === "generate_read_id";
+    const addresses = { ...(customIds && name !== feed && { name }), ...(generate ? { read_id: "" } : customIds && savedReadId !== null && readId !== savedReadId && { read_id: readId }) };
+    return run(e, () => updateFeed({ ...opts(), body: { ...body, ...(e && addresses) } }), ({ data }) => {
       setError(undefined);
       setPending(false);
-      router.replace(`${page}?saved=1`);
+      const now = `/${data?.name ?? feed}/settings`; // a renamed feed's page is under its new name; its unlock cookie is for the old one
+      router.replace(`${now}?saved=1`);
       router.refresh();
     });
+  };
   // The title image saves on its own, with the title and description as they stand in the form.
   async function choose(file: File) {
     setError(undefined);
@@ -62,6 +69,46 @@ export function FeedDetails({ feed, title: savedTitle, description: savedDescrip
             Description
           </label>
           <input id="feed-description" name="description" maxLength={500} value={description} onChange={(e) => setDescription(e.target.value)} className={`${input} mb-2`} />
+          {customIds && (
+            <>
+              <label htmlFor="feed-name" className="mb-1 block text-muted">
+                Name (what you post to)
+              </label>
+              <input id="feed-name" name="name" maxLength={64} pattern="[a-z0-9_\-]{1,64}" title="1 to 64 characters: a–z, 0–9, - and _" autoComplete="off" value={name} onChange={(e) => setName(e.target.value)} className={`${input} mb-2 font-mono`} />
+            </>
+          )}
+          {savedReadId !== null && (
+            <>
+              <label htmlFor="feed-read-id" className="mb-1 block text-muted">
+                Read link id
+              </label>
+              <div className="mb-2 flex gap-2">
+                <input
+                  id="feed-read-id"
+                  name="read_id"
+                  maxLength={64}
+                  pattern="[a-z0-9_\-]{3,64}|[A-Za-z0-9_\-]{22}"
+                  title="3 to 64 characters: a–z, 0–9, - and _"
+                  autoComplete="off"
+                  readOnly={!customIds}
+                  value={readId}
+                  onChange={(e) => setReadId(e.target.value)}
+                  className={`${input} font-mono`}
+                />
+                <button type="submit" name="generate_read_id" value="1" formNoValidate disabled={pending} className={`${secondary} shrink-0`}>
+                  Generate a random one
+                </button>
+              </div>
+            </>
+          )}
+          {(customIds || savedReadId !== null) && (
+            <p className="mb-3 text-muted">
+              The read link id is what the read-only link and the RSS feed contain{customIds && ", the feed name is what you post to"}. A short, readable one can be guessed:
+              anyone who guesses the read link id can read the notes{customIds && ", and anyone who guesses the name can read and post to an open feed"}. Protect the feed with a
+              password if that matters. Changing either breaks the old links for good (they answer 404), including the images in notes that use the old read link; browsers
+              signed in with the password have to sign in again.
+            </p>
+          )}
           {identity && (
             <label className="mb-3 flex items-center gap-2">
               <input type="hidden" name="show_sender_present" value="1" />

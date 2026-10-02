@@ -45,6 +45,46 @@ describe("settings", () => {
     expect(xml).not.toContain("mine");
   });
 
+  test("name and read_id: the feed is answered under its new name, the old ones are 404 for good", async () => {
+    await createNote("mine", "# Hi");
+    const old = (await readIdOf("mine"))!;
+    const res = await put("mine", { title: "T", description: "", name: "renamed", read_id: "my-read-id" });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ name: "renamed", read_url: `${BASE}/r/my-read-id/feed.xml` });
+    expect((await call("GET", "/feeds/renamed")).status).toBe(200);
+    expect((await call("GET", "/feeds/mine")).status).toBe(404);
+    expect((await call("GET", "/feeds/mine/notes")).status).toBe(404);
+    expect((await post("mine", "# Again")).status).toBe(404); // not created again
+    expect((await call("GET", `/read/${old}`)).status).toBe(404);
+    expect((await call("GET", `/read/${old}/notes`)).status).toBe(404);
+    expect((await rssRoute(new Request(`${BASE}/r/${old}/feed.xml`), old)).status).toBe(404);
+    expect((await call("GET", "/read/my-read-id/notes")).status).toBe(200);
+  });
+
+  test("a taken name or read id is a 409, an invalid one a 400, a reserved feed's a 400", async () => {
+    await createNote("a", "# A");
+    await createNote("b", "# B");
+    expect((await put("a", { title: "", description: "", name: "b" })).status).toBe(409);
+    await put("b", { title: "", description: "", read_id: "taken-id" });
+    expect((await put("a", { title: "", description: "", read_id: "taken-id" })).status).toBe(409);
+    expect((await put("a", { title: "", description: "", name: "Not Valid" })).status).toBe(400);
+    expect((await put("a", { title: "", description: "", read_id: "ab" })).status).toBe(400);
+    expect((await put("a", { title: "", description: "", name: 5 })).status).toBe(400);
+    expect((await (await put("a", { title: "", description: "", name: "b" })).json()).code).toBe("taken");
+  });
+
+  test("an empty read_id gives a random one; NOTEFEED_ALLOW_CUSTOM_IDS=0 refuses chosen ones", async () => {
+    await createNote("mine", "# Hi");
+    const old = await readIdOf("mine");
+    expect((await put("mine", { title: "", description: "", read_id: "" })).status).toBe(200);
+    expect(await readIdOf("mine")).not.toBe(old);
+    process.env.NOTEFEED_ALLOW_CUSTOM_IDS = "0";
+    expect((await put("mine", { title: "", description: "", read_id: "chosen" })).status).toBe(400);
+    expect((await put("mine", { title: "", description: "", name: "chosen" })).status).toBe(400);
+    expect((await put("mine", { title: "", description: "", read_id: "" })).status).toBe(200);
+    delete process.env.NOTEFEED_ALLOW_CUSTOM_IDS;
+  });
+
   test("show_sender: stored, returned, kept when omitted, non-boolean is a 400", async () => {
     await createNote("mine", "# Hi");
     expect((await (await put("mine", { title: "", description: "", show_sender: false })).json()).show_sender).toBe(false);
@@ -158,7 +198,7 @@ describe("settings", () => {
 
   test("an unknown read id has empty settings, a malformed one is 404", async () => {
     expect(await (await call("GET", `/read/${"A".repeat(22)}`)).json()).toEqual({ title: "", description: "", image_url: null });
-    expect((await call("GET", "/read/short")).status).toBe(404);
+    expect((await call("GET", "/read/ab")).status).toBe(404);
   });
 
   test("a corrupt .feed.json reads as empty", async () => {

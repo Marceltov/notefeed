@@ -77,6 +77,7 @@ _BY_CODE: dict[str, type[NotefeedError]] = {
     "invalid_body": InvalidRequestError,
     "invalid_request": InvalidRequestError,
     "feed_exists": InvalidRequestError,
+    "taken": InvalidRequestError,
     "unsupported_type": InvalidRequestError,
 }
 
@@ -185,10 +186,23 @@ class Client:
         return self._parse(Feed, self._call(kwargs))
 
     def update_feed(
-        self, title: str, description: str, feed: str | None = None, feed_password: str | None = None, image: str | None = None
+        self,
+        title: str,
+        description: str,
+        feed: str | None = None,
+        feed_password: str | None = None,
+        image: str | None = None,
+        name: str | None = None,
+        read_id: str | None = None,
     ) -> Feed:
-        """Replace the feed's title and description (both; an empty string clears one). `image` sets the title image (a file name from upload_image), "" clears it, None keeps it. The feed must already exist. Same options as post()."""
-        settings = FeedSettings(title=title, description=description, image=UNSET if image is None else image)
+        """Replace the feed's title and description (both; an empty string clears one). `image` sets the title image (a file name from upload_image), "" clears it, None keeps it. `name` renames the feed and `read_id` gives it another read link ("" for a random one), None keeps either: the old name and read id answer 404 for good, and the result is the feed under its new name (the client's own default feed is not changed). The feed must already exist. Same options as post()."""
+        settings = FeedSettings(
+            title=title,
+            description=description,
+            image=UNSET if image is None else image,
+            name=UNSET if name is None else name,
+            read_id=UNSET if read_id is None else read_id,
+        )
         kwargs = update_feed._get_kwargs(feed=self._feed_for(feed), body=settings, x_feed_password=self._fp(feed_password))
         return self._parse(Feed, self._call(kwargs))
 

@@ -5,7 +5,7 @@ import * as z from "zod";
 import { config } from "../config";
 import { InvalidBodyError, NotFoundError } from "../errors";
 import { changePassword, checkFeedAccess, protectedFeed, removePassword } from "../feedlock";
-import { isReadId, assertFeed, feedForReadId, hasFeed, readIdOf } from "../feeds";
+import { isReadId, assertLive, feedForReadId, hasFeed, isRetired, readIdOf } from "../feeds";
 import { forReaders, getSettings } from "../feedsettings";
 import { clientIp } from "../limits";
 import { MAX_BYTES, countNotes, getNote, listNotes, type Note } from "../notes";
@@ -48,12 +48,12 @@ const UNAUTHORIZED = err("The instance has a password, or the feed has its own, 
 // For the Feeds reads: the password first (a locked instance tells strangers nothing else), then the name.
 // postNote does its own, because a browser form gets a redirect to the login page instead of a 401.
 // The feed's own password comes after both: the instance lock is always checked first.
-function passwordAndFeed({ req, params }: { req: Request; params: Record<string, string> }) {
+async function passwordAndFeed({ req, params }: { req: Request; params: Record<string, string> }) {
   authorize(req.headers, clientIp(req.headers));
-  assertFeed(params.feed);
+  await assertLive(params.feed); // a retired name answers 404, as no feed
 }
 async function passwordFeedAndFeedPassword(input: { req: Request; params: Record<string, string> }) {
-  passwordAndFeed(input);
+  await passwordAndFeed(input);
   await checkFeedAccess(input.params.feed, feedAccess(input.req.headers, input.params.feed), clientIp(input.req.headers));
 }
 
@@ -127,6 +127,7 @@ const OPS: AnyOp[] = [
       },
       400: err("Invalid or reserved feed name; empty note; bad JSON, form or UTF-8; a new password that is not printable ASCII; invalid tags"),
       401: UNAUTHORIZED,
+      404: err("A name that was changed away (it answers like no feed, and is never created again)"),
       409: err("A password was sent for a feed that already exists without one: it can't be claimed"),
       413: err(`Body over ${MAX_BYTES} bytes`),
       415: err("Unsupported content type"),
@@ -150,6 +151,7 @@ const OPS: AnyOp[] = [
       200: { description: "A page of notes", schema: NoteList },
       400: err("Invalid or reserved feed name, or a bad `limit` / `before`"),
       401: UNAUTHORIZED,
+      404: err("A name that was changed away (it answers like no feed, and is never created again)"),
       429: { ...err("Too many wrong passwords from this client"), headers: RETRY },
     },
     before: passwordFeedAndFeedPassword,
@@ -309,6 +311,8 @@ const OPS: AnyOp[] = [
     description:
       "Replaces both the title (at most 100 characters) and the description (at most 500); surrounding whitespace is trimmed and control characters are refused. " +
       "`show_sender` (default true) shows who posted each note to readers; omitted leaves it as it is. `image` is the file name `uploadImage` returned for this feed (title image), empty to remove it, or omitted to leave it as it is; any other value is a 400. " +
+      "`name` renames the feed and `read_id` gives it another read link (empty for a random one); the old name and the old read id are retired and answer 404 from then on, and the response is the feed under its new name. " +
+      "Both are capabilities on an open feed, so a short readable one is guessable: protect the feed with a password if that matters. An instance can turn chosen names and read ids off (NOTEFEED_ALLOW_CUSTOM_IDS=0): then only an empty `read_id` is accepted. " +
       "Needs the feed's password if it has one, and counts against the post rate limit. Only on a feed that exists: it is created by its first note. Read links can't change settings.",
     tags: ["Feeds"],
     password: true,
@@ -317,9 +321,10 @@ const OPS: AnyOp[] = [
     body: { "application/json": FeedSettingsJson },
     responses: {
       200: { description: "The feed as it is now", schema: FeedJson },
-      400: err("Invalid or reserved feed name, bad JSON, or a title or description that is too long or has control characters"),
+      400: err("Invalid or reserved feed name, bad JSON, a title or description that is too long or has control characters, an invalid new name or read id, a reserved feed's name or read id, or custom ones turned off"),
       401: UNAUTHORIZED,
       404: err("No such feed"),
+      409: err("The new name or read id belongs to another feed, was used before, or is held back"),
       429: { ...err("Too many posts, edits and deletes, or wrong passwords, from this client"), headers: RETRY },
     },
     before: passwordAndFeed,
@@ -329,13 +334,13 @@ const OPS: AnyOp[] = [
       try {
         const j = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes ?? new Uint8Array()));
         // The API's snake_case name; checkSettings reads the stored one.
-        return j && typeof j === "object" && !Array.isArray(j) ? { ...j, showSender: j.show_sender } : j;
+        return j && typeof j === "object" && !Array.isArray(j) ? { ...j, showSender: j.show_sender, readId: j.read_id } : j;
       } catch {
         throw new InvalidBodyError('JSON needs "title" and "description" strings');
       }
     };
-    await updateFeed(params.feed, clientIp(req.headers), read, feedAccess(req.headers, params.feed));
-    return { status: 200, body: await feedJson(params.feed, req.headers) };
+    const { name } = await updateFeed(params.feed, clientIp(req.headers), read, feedAccess(req.headers, params.feed));
+    return { status: 200, body: await feedJson(name, req.headers) };
   }),
 
   op({
@@ -379,6 +384,7 @@ const OPS: AnyOp[] = [
       204: { description: "Changed; the old password and unlock cookies stop working" },
       400: err(`Invalid or reserved feed name, bad JSON, or a new password that is not ${PASSWORD_RULE}`),
       401: UNAUTHORIZED,
+      404: err("A name that was changed away (it answers like no feed, and is never created again)"),
       409: err("The feed has no password"),
       429: { ...err("Too many wrong passwords from this client"), headers: RETRY },
     },
@@ -408,6 +414,7 @@ const OPS: AnyOp[] = [
       204: { description: "Removed" },
       400: err("Invalid or reserved feed name"),
       401: UNAUTHORIZED,
+      404: err("A name that was changed away (it answers like no feed, and is never created again)"),
       409: err("The feed has no password"),
       429: { ...err("Too many wrong passwords from this client"), headers: RETRY },
     },
@@ -432,7 +439,7 @@ const OPS: AnyOp[] = [
       404: err("Malformed read id"),
     },
   }).handle(async ({ req, params }) => {
-    if (!isReadId(params.readId)) throw new NotFoundError("malformed read id");
+    if (!isReadId(params.readId) || (await isRetired("id", params.readId))) throw new NotFoundError("no such read id");
     const feed = await feedForReadId(params.readId);
     const { title, description, image } = feed ? await getSettings(feed) : { title: "", description: "", image: "" };
     return { status: 200, body: { title, description, image_url: image ? publicUrl(req.headers) + imagePath(params.readId, image) : null } };
@@ -455,7 +462,7 @@ const OPS: AnyOp[] = [
       404: err("Malformed read id"),
     },
   }).handle(async ({ req, params, query }) => {
-    if (!isReadId(params.readId)) throw new NotFoundError("malformed read id");
+    if (!isReadId(params.readId) || (await isRetired("id", params.readId))) throw new NotFoundError("no such read id");
     const feed = await feedForReadId(params.readId);
     const settings = feed ? await getSettings(feed) : null;
     const notes = async (l: number, b?: string, t?: string) => (feed && settings ? forReaders(await listNotes(feed, l, b, t), settings) : []);

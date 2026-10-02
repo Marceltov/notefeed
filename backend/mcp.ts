@@ -5,7 +5,7 @@ import { bearerOf, checkBearer, locked } from "./auth";
 import { config } from "./config";
 import { AuthError, NotefeedError, NotFoundError, TooManyAttemptsError } from "./errors";
 import { checkFeedAccess } from "./feedlock";
-import { assertFeed, FEED_RE, hasFeed } from "./feeds";
+import { assertLive, FEED_RE, hasFeed } from "./feeds";
 import { feedJson } from "./http/api";
 import { sender } from "./http/request";
 import { clientIp } from "./limits";
@@ -47,7 +47,7 @@ function server(h: Headers): McpServer {
   const summary = (feed: string, n: Note) => ({ id: n.id, title: n.title, created_at: n.createdAt.toISOString(), url: `${base}${feedPath(feed)}/${n.id}`, ...(n.sender !== undefined && { sender: n.sender }), tags: n.tags });
   // A reserved name must not reach the filesystem lookup, so it is checked first.
   const checkAccess = async (feed: string, password?: string) => {
-    assertFeed(feed);
+    await assertLive(feed);
     await checkFeedAccess(feed, { password }, clientIp(h));
   };
   const s = new McpServer({ name: "notefeed", version: "1.0.0" });
@@ -146,14 +146,14 @@ function server(h: Headers): McpServer {
   s.registerTool(
     "update_feed",
     {
-      description: `Replace a feed's title (at most 100 characters) and description (at most 500), both one line; an empty title shows the feed's name. image is the file name upload_image returned for this feed (the title image), empty to remove it, left out to keep it. The feed must exist. ${PROTECTED} ${SECRET_NOTE}`,
-      inputSchema: z.object({ feed, title: z.string(), description: z.string(), image: z.string().optional(), password }),
+      description: `Replace a feed's title (at most 100 characters) and description (at most 500), both one line; an empty title shows the feed's name. image is the file name upload_image returned for this feed (the title image), empty to remove it, left out to keep it. name renames the feed and read_id gives it another read link (empty for a random one); the old ones are retired and answer 404 for good, and the result is the feed under its new name. Both are capabilities on an open feed, so a short readable one is guessable. The feed must exist. ${PROTECTED} ${SECRET_NOTE}`,
+      inputSchema: z.object({ feed, title: z.string(), description: z.string(), image: z.string().optional(), name: z.string().optional(), read_id: z.string().optional(), password }),
       outputSchema: FeedOut,
       annotations: { destructiveHint: true, idempotentHint: true },
     },
-    guard(async ({ feed, title, description, image, password }) => {
-      await updateFeed(feed, clientIp(h), async () => ({ title, description, image }), { password });
-      return ok(await feedJson(feed, h));
+    guard(async ({ feed, title, description, image, name, read_id, password }) => {
+      const updated = await updateFeed(feed, clientIp(h), async () => ({ title, description, image, name, readId: read_id }), { password });
+      return ok(await feedJson(updated.name, h));
     }),
   );
 

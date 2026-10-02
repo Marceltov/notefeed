@@ -4,17 +4,18 @@
 // their name (HMAC with the server secret), so no existing read link changes.
 import { createHmac, randomBytes } from "node:crypto";
 import { config } from "./config";
-import { createFeedDir, deleteFeedDir, listFeedDirs, readReadId, removeLeftovers } from "./data/feeds";
+import { appendRetired, createFeedDir, deleteFeedDir, listFeedDirs, readReadId, readRetired, removeLeftovers, renameFeedDir, writeReadId } from "./data/feeds";
 import { readHash } from "./data/password";
 import { loadOrCreateSecret, secretPath } from "./data/secret";
-import { InvalidFeedError, ReservedFeedError } from "./errors";
+import { InvalidBodyError, InvalidFeedError, NameTakenError, NotFoundError, ReservedFeedError } from "./errors";
 import { logger } from "./log";
 import { processState } from "./state";
 
 const log = logger("feeds");
 
 export const FEED_RE = /^[a-z0-9_-]{1,64}$/;
-export const READ_ID_RE = /^[A-Za-z0-9_-]{22}$/;
+export const READ_ID_RE = /^[A-Za-z0-9_-]{3,64}$/; // random ones are 22 characters
+export const CUSTOM_READ_ID_RE = /^[a-z0-9_-]{3,64}$/; // the ones people choose
 // Names that collide with routes. "robots.txt" can't match FEED_RE; listed anyway.
 export const RESERVED_FEEDS: ReadonlySet<string> = new Set([
   "r", "api", "login", "logout", "mcp", "oauth", "n", "_next", "static", "robots.txt", "health",
@@ -26,8 +27,8 @@ export const RESERVED_FEEDS: ReadonlySet<string> = new Set([
 // and with its own name as read id, so /r/news is the read link for good (announcements are public by intent: no
 // obfuscation, even if the feed is deleted and made again). Without the password they simply don't exist.
 const heldBack = () => config.reservedFeeds().filter((n) => checkFeed(n) === null);
-const isHeldBack = (name: string) => heldBack().includes(name);
-// A read id is 22 random characters, or the name of a reserved feed (its read id is its name, see load()).
+export const isHeldBack = (name: string) => heldBack().includes(name);
+// A read id is 3 to 64 characters (22 random ones, or a chosen one), or the name of a reserved feed (its read id is its name, see load()).
 export const isReadId = (id: string) => READ_ID_RE.test(id) || isHeldBack(id);
 
 export function checkFeed(name: string): null | "invalid" | "reserved" {
@@ -42,7 +43,8 @@ export function assertFeed(name: string): void {
 }
 
 // `byFeed` holds null for a feed without a read link (its `.readid` can't be read, or its id belongs to another feed).
-type Index = { dir: string; byReadId: Map<string, string>; byFeed: Map<string, string | null> };
+// `retired`: names and read ids that were changed away (`name:<x>`, `id:<x>`); they are never given out again.
+type Index = { dir: string; byReadId: Map<string, string>; byFeed: Map<string, string | null>; retired: Set<string> };
 const state = processState("feeds", () => ({}) as { secret?: Buffer; index?: Promise<Index> });
 
 // A short key makes read ids computable offline. Fail loudly instead of regenerating the key,
@@ -116,7 +118,7 @@ async function idOnDisk(feed: string, strict = false): Promise<string | null> {
 // One file at a time (a read per feed under Promise.all runs out of file descriptors with many feeds);
 // sorted, so which of two feeds sharing an id keeps it is the same on every start.
 async function load(dir: string): Promise<Index> {
-  const idx: Index = { dir, byFeed: new Map(), byReadId: new Map() };
+  const idx: Index = { dir, byFeed: new Map(), byReadId: new Map(), retired: new Set(await readRetired()) };
   await removeLeftovers();
   for (const n of (await listFeedDirs()).filter((n) => checkFeed(n) === null).sort()) register(idx, n, await idOnDisk(n));
   const password = config.reservedPassword();
@@ -149,6 +151,7 @@ export async function ensureFeed(feed: string): Promise<string | null> {
   const known = idx.byFeed.get(feed);
   if (known !== undefined) return known;
   if (isHeldBack(feed)) throw new ReservedFeedError();
+  if (idx.retired.has(`name:${feed}`)) throw new NotFoundError("no such feed");
   const fresh = newReadId();
   if (await createFeedDir(feed, fresh)) register(idx, feed, fresh);
   else {
@@ -193,6 +196,66 @@ export async function deleteFeed(feed: string): Promise<boolean> {
 export async function forgetFeed(feed: string, id: string | null): Promise<void> {
   const idx = await feedIndex();
   if (idx.byFeed.get(feed) === id) unregister(idx, feed);
+}
+
+// A feed's name or read id that was changed away: nothing is served or created under it any more (404).
+export async function isRetired(kind: "name" | "id", value: string): Promise<boolean> {
+  return (await feedIndex()).retired.has(`${kind}:${value}`);
+}
+
+// A retired name answers like no feed at all, but never makes one: for reading, posting and the API.
+export async function assertLive(feed: string): Promise<void> {
+  assertFeed(feed);
+  if (await isRetired("name", feed)) throw new NotFoundError("no such feed");
+}
+
+const retire = async (idx: Index, entry: string) => {
+  await appendRetired(entry);
+  idx.retired.add(entry);
+};
+
+// Gives a feed another name: the directory moves, so notes, images, settings and password go with it, and
+// the read id stays. The old name is retired. The unlock cookie is per name, so browsers are signed out.
+// A legacy feed's id was derived from its name: it is written down first, or it would change with the name.
+// ponytail: no lock per feed (like deleteFeed); two renames of one feed at once, the second finds no directory (404).
+// The old name is retired after the move, so a crash between the two leaves it free to be taken.
+export async function renameFeed(feed: string, to: string): Promise<void> {
+  assertFeed(to);
+  if (isHeldBack(to)) throw new ReservedFeedError();
+  const idx = await feedIndex();
+  const id = idx.byFeed.get(feed);
+  if (id === undefined) throw new NotFoundError("no such feed");
+  if (idx.byFeed.has(to) || idx.retired.has(`name:${to}`)) throw new NameTakenError("name");
+  if (id !== null) await writeReadId(feed, id);
+  try {
+    if (!(await renameFeedDir(feed, to))) throw new NameTakenError("name");
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code === "ENOENT") throw new NotFoundError("no such feed");
+    throw e;
+  }
+  idx.byFeed.delete(feed);
+  idx.byFeed.set(to, id);
+  if (id !== null && idx.byReadId.get(id) === feed) idx.byReadId.set(id, to);
+  await retire(idx, `name:${feed}`);
+}
+
+// Gives a feed a new read id: `wanted` (checked here), or a random one when null. The old id is retired.
+export async function setReadId(feed: string, wanted: string | null): Promise<string> {
+  const idx = await feedIndex();
+  const old = idx.byFeed.get(feed);
+  if (old === undefined) throw new NotFoundError("no such feed");
+  if (wanted !== null) {
+    if (wanted === old) return old;
+    if (!CUSTOM_READ_ID_RE.test(wanted)) throw new InvalidBodyError("read_id must be 3 to 64 characters: a-z, 0-9, - and _");
+    if (idx.byReadId.has(wanted) || idx.retired.has(`id:${wanted}`) || isHeldBack(wanted)) throw new NameTakenError("read id");
+  }
+  const id = wanted ?? newReadId();
+  await writeReadId(feed, id);
+  if (old !== null && idx.byReadId.get(old) === feed) idx.byReadId.delete(old);
+  idx.byFeed.set(feed, id);
+  idx.byReadId.set(id, feed);
+  if (old !== null) await retire(idx, `id:${old}`);
+  return id;
 }
 
 /** null for a feed that doesn't exist, and for one without a read link (see the index). */

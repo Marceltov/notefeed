@@ -83,7 +83,7 @@ describe("feedForReadId", () => {
     await createNote("alpha", "x");
     expect(await feedForReadId((await readIdOf("alpha"))!)).toBe("alpha");
     expect(await feedForReadId("A".repeat(22))).toBeNull();
-    expect(await feedForReadId("short")).toBeNull();
+    expect(await feedForReadId("ab")).toBeNull();
   });
 
   test("finds feeds that were on disk before the index was built", async () => {
@@ -148,7 +148,7 @@ describe("per-feed read ids", () => {
 
   test("a junk .readid falls back to the derived id", async () => {
     await mkdir(join(dir, "bad"));
-    await writeFile(join(dir, "bad", ".readid"), "junk");
+    await writeFile(join(dir, "bad", ".readid"), "ab");
     expect(await readIdOf("bad")).toBe(derivedReadId("bad"));
   });
 
@@ -201,7 +201,7 @@ describe("per-feed read ids", () => {
 
   test("logs a junk or duplicate .readid without the feed name", async () => {
     await mkdir(join(dir, "secretjunk"));
-    await writeFile(join(dir, "secretjunk", ".readid"), "junk");
+    await writeFile(join(dir, "secretjunk", ".readid"), "ab");
     await mkdir(join(dir, "secretdup"));
     await writeFile(join(dir, "secretdup", ".readid"), "A".repeat(22));
     await mkdir(join(dir, "secretdup2"));

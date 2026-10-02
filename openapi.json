@@ -145,6 +145,16 @@
               }
             }
           },
+          "404": {
+            "description": "A name that was changed away (it answers like no feed, and is never created again)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
           "409": {
             "description": "A password was sent for a feed that already exists without one: it can't be claimed",
             "content": {
@@ -293,6 +303,16 @@
           },
           "401": {
             "description": "The instance has a password, or the feed has its own, and it is missing or wrong",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "A name that was changed away (it answers like no feed, and is never created again)",
             "content": {
               "application/json": {
                 "schema": {
@@ -947,7 +967,7 @@
       "put": {
         "operationId": "updateFeed",
         "summary": "Change a feed's settings",
-        "description": "Replaces both the title (at most 100 characters) and the description (at most 500); surrounding whitespace is trimmed and control characters are refused. `show_sender` (default true) shows who posted each note to readers; omitted leaves it as it is. `image` is the file name `uploadImage` returned for this feed (title image), empty to remove it, or omitted to leave it as it is; any other value is a 400. Needs the feed's password if it has one, and counts against the post rate limit. Only on a feed that exists: it is created by its first note. Read links can't change settings.",
+        "description": "Replaces both the title (at most 100 characters) and the description (at most 500); surrounding whitespace is trimmed and control characters are refused. `show_sender` (default true) shows who posted each note to readers; omitted leaves it as it is. `image` is the file name `uploadImage` returned for this feed (title image), empty to remove it, or omitted to leave it as it is; any other value is a 400. `name` renames the feed and `read_id` gives it another read link (empty for a random one); the old name and the old read id are retired and answer 404 from then on, and the response is the feed under its new name. Both are capabilities on an open feed, so a short readable one is guessable: protect the feed with a password if that matters. An instance can turn chosen names and read ids off (NOTEFEED_ALLOW_CUSTOM_IDS=0): then only an empty `read_id` is accepted. Needs the feed's password if it has one, and counts against the post rate limit. Only on a feed that exists: it is created by its first note. Read links can't change settings.",
         "tags": [
           "Feeds"
         ],
@@ -1000,7 +1020,7 @@
             }
           },
           "400": {
-            "description": "Invalid or reserved feed name, bad JSON, or a title or description that is too long or has control characters",
+            "description": "Invalid or reserved feed name, bad JSON, a title or description that is too long or has control characters, an invalid new name or read id, a reserved feed's name or read id, or custom ones turned off",
             "content": {
               "application/json": {
                 "schema": {
@@ -1021,6 +1041,16 @@
           },
           "404": {
             "description": "No such feed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The new name or read id belongs to another feed, was used before, or is held back",
             "content": {
               "application/json": {
                 "schema": {
@@ -1207,6 +1237,16 @@
               }
             }
           },
+          "404": {
+            "description": "A name that was changed away (it answers like no feed, and is never created again)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
           "409": {
             "description": "The feed has no password",
             "content": {
@@ -1295,6 +1335,16 @@
               }
             }
           },
+          "404": {
+            "description": "A name that was changed away (it answers like no feed, and is never created again)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
           "409": {
             "description": "The feed has no password",
             "content": {
@@ -1340,7 +1390,7 @@
             "name": "readId",
             "in": "path",
             "required": true,
-            "description": "The feed's read id, from its read link: 22 random characters, or the feed's own name for a reserved feed. Read-only; never reveals the name of any other feed.",
+            "description": "The feed's read id, from its read link: 22 random characters, one the feed's owner chose, or the feed's own name for a reserved feed. Read-only; never reveals the name of any other feed.",
             "schema": {
               "type": "string",
               "pattern": "^[A-Za-z0-9_-]{1,64}$"
@@ -1385,7 +1435,7 @@
             "name": "readId",
             "in": "path",
             "required": true,
-            "description": "The feed's read id, from its read link: 22 random characters, or the feed's own name for a reserved feed. Read-only; never reveals the name of any other feed.",
+            "description": "The feed's read id, from its read link: 22 random characters, one the feed's owner chose, or the feed's own name for a reserved feed. Read-only; never reveals the name of any other feed.",
             "schema": {
               "type": "string",
               "pattern": "^[A-Za-z0-9_-]{1,64}$"
@@ -1471,7 +1521,7 @@
             "name": "readId",
             "in": "path",
             "required": true,
-            "description": "The feed's read id, from its read link: 22 random characters, or the feed's own name for a reserved feed. Read-only; never reveals the name of any other feed.",
+            "description": "The feed's read id, from its read link: 22 random characters, one the feed's owner chose, or the feed's own name for a reserved feed. Read-only; never reveals the name of any other feed.",
             "schema": {
               "type": "string",
               "pattern": "^[A-Za-z0-9_-]{1,64}$"
@@ -1706,7 +1756,8 @@
               "invalid_body",
               "invalid_request",
               "not_found",
-              "feed_exists"
+              "feed_exists",
+              "taken"
             ]
           }
         },
@@ -1792,6 +1843,14 @@
           "show_sender": {
             "description": "Whether readers (RSS, the read API and pages) see who posted each note; omitted leaves it as it is, a new feed starts with true",
             "type": "boolean"
+          },
+          "name": {
+            "description": "A new name for the feed (a-z, 0-9, - and _, at most 64 characters), which is also its write key. Everything stays, the old name stops working (404, for good) and browsers unlocked with the password are signed out. Omitted leaves it as it is; reserved feeds can't be renamed",
+            "type": "string"
+          },
+          "read_id": {
+            "description": "A new read id (3 to 64 characters: a-z, 0-9, - and _), empty for a random one. The old read link stops working (404, for good), and so do image URLs in notes that contain it. Omitted leaves it as it is; reserved feeds keep theirs",
+            "type": "string"
           }
         },
         "required": [

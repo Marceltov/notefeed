@@ -61,6 +61,7 @@ const BY_CODE: Partial<Record<ErrorCode, typeof NotefeedError>> = {
   invalid_body: InvalidRequestError,
   invalid_request: InvalidRequestError,
   feed_exists: InvalidRequestError,
+  taken: InvalidRequestError,
   unsupported_type: InvalidRequestError,
 };
 
@@ -132,10 +133,16 @@ export class Client {
     return this.call(getFeed({ client: this.api, path: { feed }, ...this.opts(options.feedPassword) }));
   }
 
-  /** Replace the feed's title and description (both; an empty string clears one), and set (`image`: a file name from uploadImage) or clear (`""`) the title image; leave `image` out to keep it. The feed must already exist. Same options as post(). */
+  /** Replace the feed's title and description (both; an empty string clears one), and set (`image`: a file name from uploadImage) or clear (`""`) the title image; leave `image` out to keep it. `name` renames the feed and `read_id` gives it another read link (`""` for a random one): the old name and read id answer 404 for good, and the result is the feed under its new name (the client's own default feed is not changed). The feed must already exist. Same options as post(). */
   async updateFeed(settings: FeedSettings, options: { feed?: string; feedPassword?: string } = {}): Promise<Feed> {
     const feed = this.feedFor(options.feed);
-    const body = { title: settings.title, description: settings.description, ...(settings.image === undefined ? {} : { image: settings.image }) };
+    const body = {
+      title: settings.title,
+      description: settings.description,
+      ...(settings.image === undefined ? {} : { image: settings.image }),
+      ...(settings.name === undefined ? {} : { name: settings.name }),
+      ...(settings.read_id === undefined ? {} : { read_id: settings.read_id }),
+    };
     return this.call(updateFeed({ client: this.api, path: { feed }, body, ...this.opts(options.feedPassword) }));
   }
 

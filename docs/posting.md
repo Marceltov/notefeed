@@ -115,7 +115,7 @@ In the browser, the compose box and the note editor have an [Add image](web-ui.m
 
 ## Feed settings and deleting a feed
 
-A feed can have a **title** (at most 100 characters) and a **description** (at most 500), both on one line. The title is shown as a heading on the feed page, where the feed's name stays in the page header, and both show in the read-only view and in the RSS feed (see [Read links and RSS](feed.md#title-and-description)). The feed's name stays as it is: you can't rename a feed. A feed has neither until you set them.
+A feed can have a **title** (at most 100 characters) and a **description** (at most 500), both on one line. The title is shown as a heading on the feed page, where the feed's name stays in the page header, and both show in the read-only view and in the RSS feed (see [Read links and RSS](feed.md#title-and-description)). The feed's name stays as it is unless you [rename it](#renaming-a-feed-and-choosing-its-read-id). A feed has neither until you set them.
 
 `GET /api/v1/feeds/<feed>` answers with the feed's `name`, `title`, `description`, `show_sender`, `image_url`, `protected` and `read_url`. `read_url` is `null` while the feed has no notes, and for [a feed without a read link](operations.md#a-feed-without-a-read-link), and `image_url` is `null` while the feed has no title image (or its file was removed by hand), while the feed has no notes, and for a feed without a read link. `PUT` on the same URL replaces the title and the description, both at once, and answers with the feed; an empty string clears one. Surrounding spaces are trimmed, and control characters, including a line break, are refused.
 
@@ -128,6 +128,21 @@ curl -X PUT -H "Content-Type: application/json" \
 `show_sender` (a boolean, on by default) matters only when [sign-in](identity.md) is on: set to `false` in the `PUT` body, it leaves the sender out of the public read view, the RSS feed and the public read API. Leaving it out keeps the current value.
 
 The feed's **title image** is an image [uploaded to this feed](#images). Add `"image": "<file>"` to the body, with the `file` the upload returned, to show it in the page header, the read-only view and as the RSS channel image. `"image": ""` removes it, and leaving `image` out keeps the one the feed has. A name that is not an existing image of this feed is a `400`. The title image is public, like the title.
+
+### Renaming a feed and choosing its read id
+
+A feed has two addresses, both random unless you choose: its **name** (what you post to, `/<feed>`) and its **read id** (the 22 random characters in `/r/<read id>` and the RSS link). Add `"name": "<new name>"` and/or `"read_id": "<new read id>"` to the `PUT` body to change them; the answer is the feed under its new name. The name follows the usual rule (a–z, 0–9, `-` and `_`, at most 64 characters), a read id is 3 to 64 of the same characters. `"read_id": ""` asks for a new random one. Leaving a field out, or sending the current value, changes nothing.
+
+```sh
+curl -X PUT -H "Content-Type: application/json" \
+  -d '{"title": "Homelab", "description": "", "name": "homelab", "read_id": "homelab-news"}' \
+  https://notes.example.com/api/v1/feeds/homelab-7f3k2q9x4m8wz
+```
+
+- **A short, readable name or read id can be guessed.** On an open feed the name is the key to read and post, and the read id the key to read: anyone who guesses it has that access. Give the feed [a password](#a-feed-with-its-own-password) if a readable name matters.
+- **The old ones are retired.** After a change the old name, the old read link, its RSS link and the image URLs under it answer `404`, for good: they are never given to another feed, and posting to the old name does not create a feed. Images embedded in notes with the old read link stop loading. They are kept in `DATA_DIR/.retired`, one `name:<name>` or `id:<read id>` per line; the operator can free one by deleting its line and restarting.
+- **What moves:** a rename keeps the notes, images, settings, password and read id; browsers that had unlocked the feed have to unlock it again (the web UI's settings page does that for the browser that renamed it).
+- **Who may, and where it stops:** the same as for the other settings. A [reserved feed](configuration.md) keeps its name and read id (`400`). A name or read id that is another feed's, was retired, or is held back is a `409` (`taken`); an invalid one a `400`. An operator can switch choosing off with `NOTEFEED_ALLOW_CUSTOM_IDS=0`: then only `"read_id": ""` is accepted and a chosen name or read id is a `400`.
 
 `DELETE` removes the feed for good and answers `204` with no body: every note, every uploaded image, the title and description, the password and the read link. There is no undo and no trash:
 
@@ -142,7 +157,7 @@ What to know:
 - **The name is free again,** at once. A feed created under it later is a new feed with a new read link; the old read link stays empty for good, and the old feed's password and settings are gone. A post that was already on its way when the feed was deleted creates such a new feed.
 - **Settings are public to readers.** Anyone with the read link sees the title and description, through `GET /api/v1/read/<read id>` too, which needs no password. Anyone who has the feed's name and its password reads them with `GET /api/v1/feeds/<feed>`.
 - **Limits:** `PUT` and `DELETE` count toward the same per-client [rate limit](configuration.md#rate-limits-and-caps) as posts. The `PUT` body is limited to 8 KB. A refused `PUT` leaves the settings as they were.
-- **Errors:** `400` for an invalid or reserved name, or a body that isn't JSON with string `title` and `description` (and `image`, if present), or a title or description that is too long or has control characters; `401` when a password is missing or wrong (before it says anything about the feed); `404` when the feed doesn't exist; `429` over the limit.
+- **Errors:** `400` for an invalid or reserved name, or a body that isn't JSON with string `title` and `description` (and `image`, `name` and `read_id`, if present), or a title or description that is too long or has control characters, or an invalid new `name` or `read_id`; `401` when a password is missing or wrong (before it says anything about the feed); `404` when the feed doesn't exist; `409` when the new name or read id is not available; `429` over the limit.
 
 In the browser the same two things are in the feed page's [Feed settings and Delete feed sections](web-ui.md#feed-settings-and-deleting-a-feed).
 

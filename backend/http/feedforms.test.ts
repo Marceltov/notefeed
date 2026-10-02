@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { beforeEach, expect, test } from "vitest";
 import { cookieValue, createProtected, feedCookieName } from "../feedlock";
-import { hasFeed, resetFeedsForTests } from "../feeds";
+import { hasFeed, readIdOf, resetFeedsForTests } from "../feeds";
 import { getSettings } from "../feedsettings";
 import { resetRateLimitsForTests } from "../limits";
 import { createNote } from "../notes";
@@ -95,4 +95,32 @@ test("show_sender: the checkbox counts only when its marker is sent", async () =
   expect((await getSettings("openfeed")).showSender).toBe(true);
   await send(feedSettingsRoute, "openfeed", base);
   expect((await getSettings("openfeed")).showSender).toBe(true);
+});
+
+test("a renamed feed lands on its new settings page; sending the current name and read id back changes nothing", async () => {
+  const rid = (await readIdOf("openfeed"))!;
+  expect(loc(await send(feedSettingsRoute, "openfeed", { title: "", description: "", name: "openfeed", read_id: rid }))).toBe("/openfeed/settings?saved=1");
+  expect(await readIdOf("openfeed")).toBe(rid);
+  expect(loc(await send(feedSettingsRoute, "openfeed", { title: "", description: "", name: "moved", read_id: "readable" }))).toBe("/moved/settings?saved=1");
+  expect(await hasFeed("openfeed")).toBe(false);
+  expect(await readIdOf("moved")).toBe("readable");
+  expect(loc(await send(feedSettingsRoute, "moved", { title: "", description: "", generate_read_id: "1" }))).toBe("/moved/settings?saved=1");
+  expect(await readIdOf("moved")).not.toBe("readable");
+});
+
+test("renaming a protected feed clears the old unlock cookies and sets the new one", async () => {
+  await createProtected("lockd", "pw");
+  await createNote("lockd", "# Hi");
+  const cookie = `${feedCookieName("lockd")}=${await cookieValue("lockd")}`;
+  const res = await send(feedSettingsRoute, "lockd", { title: "", description: "", name: "unlocked" }, undefined, cookie);
+  expect(loc(res)).toBe("/unlocked/settings?saved=1");
+  const set = res.headers.getSetCookie();
+  expect(set.some((c) => c.startsWith("nf_feed_lockd=;"))).toBe(true);
+  const fresh = await cookieValue("unlocked");
+  expect(set.some((c) => c.startsWith(`nf_feed_unlocked=${fresh};`))).toBe(true);
+});
+
+test("a taken name goes back with the code", async () => {
+  await createNote("other", "# O");
+  expect(loc(await send(feedSettingsRoute, "openfeed", { title: "", description: "", name: "other" }))).toBe("/openfeed/settings?form=details&error=taken");
 });

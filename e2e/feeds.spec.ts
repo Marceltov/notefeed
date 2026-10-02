@@ -42,7 +42,7 @@ test("title and description show on the feed page, the read-only view and in the
 test("a refused title says why, on the settings page", async ({ page }) => {
   const name = feedName();
   await post(page, name);
-  const refusal = "The title or description is too long or has characters that aren't allowed.";
+  const refusal = "The title, description, name or read link has characters that aren't allowed or is too long, or this instance doesn't let you choose them.";
   // With JavaScript: the API refuses a tab, and the form shows it.
   await page.getByRole("link", { name: "Settings" }).click();
   await page.getByLabel("Title").fill("a\tb");
@@ -127,4 +127,25 @@ test("without JavaScript, settings and delete still work", async ({ browser, bas
   await page.getByRole("button", { name: "Delete feed" }).click();
   await expect(page).toHaveURL(/\/\?deleted=/);
   await expect(page.getByRole("status")).toHaveText("Feed deleted.");
+});
+
+test("a feed can be renamed and given a read id of its own; the old links answer 404", async ({ page, request }) => {
+  const name = feedName();
+  const renamed = `${name}-renamed`;
+  const readId = `read-${name}`;
+  await post(page, name);
+  await page.getByRole("link", { name: "Settings" }).click();
+  const oldReadUrl = await page.locator("code", { hasText: "/r/" }).innerText();
+  await page.getByLabel("Name (what you post to)").fill(renamed);
+  await page.getByLabel("Read link id").fill(readId);
+  await page.getByRole("button", { name: "Save" }).click();
+  await expect(page).toHaveURL(new RegExp(`/${renamed}/settings\\?saved=1$`));
+  await expect(page.locator("code", { hasText: `/r/${readId}/feed.xml` })).toBeVisible();
+  await expect((await request.get(`/${name}`)).status()).toBe(404);
+  await expect((await request.get(oldReadUrl.replace(/^https?:\/\/[^/]+/, ""))).status()).toBe(404);
+  await expect((await request.get(`/r/${readId}/feed.xml`)).status()).toBe(200);
+  await expect((await request.post(`/${name}`, { data: "# New" , headers: { "content-type": "text/markdown" } })).status()).toBe(404); // not created again
+  await page.getByRole("button", { name: "Generate a random one" }).click();
+  await expect(page.getByRole("status")).toHaveText("Saved.");
+  await expect(page.getByLabel("Read link id")).not.toHaveValue(readId);
 });

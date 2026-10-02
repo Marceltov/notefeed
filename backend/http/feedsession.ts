@@ -2,7 +2,7 @@
 // Always answers with a redirect back to the feed page (unlock, lock) or the settings page (change, remove); the cookie is the feed's unlock cookie.
 import { AuthError, InvalidRequestError, NotefeedError } from "../errors";
 import { changePassword, feedCookieName, protectedFeed, removePassword, unlock } from "../feedlock";
-import { assertFeed } from "../feeds";
+import { assertLive } from "../feeds";
 import { clientIp } from "../limits";
 import { API_PREFIX, feedPath, publicUrl, settingsPath } from "../urls";
 import { errorResponse } from "./errors";
@@ -28,7 +28,7 @@ export async function feedAccessRoute(req: Request, feed: string): Promise<Respo
   const clear = () => feedCookies(h, feed, "", 0);
   let back = page; // where a refusal goes: the form it came from
   try {
-    assertFeed(feed); // before anything touches the disk
+    await assertLive(feed); // before anything touches the disk
     const bytes = await readCapped(req, 4096);
     const form = bytes ? await parseForm(bytes, h).catch(() => null) : null;
     const field = (name: string) => String(form?.get(name) ?? "");

@@ -4,7 +4,7 @@
 import { config } from "./config";
 import { identityOn, providers } from "./oidc/config";
 import { forReaders, getSettings } from "./feedsettings";
-import { isReadId, checkFeed, feedForReadId, hasFeed, readIdOf } from "./feeds";
+import { isReadId, isRetired, checkFeed, feedForReadId, hasFeed, readIdOf } from "./feeds";
 import { countNotes, getNote, listNotes, type Note } from "./notes";
 import { imagePath } from "./urls";
 
@@ -33,6 +33,8 @@ export const signInProviders = (): { id: string; label: string }[] => providers(
 
 /** Whether the instance password is set (sign-in alone can lock an instance too). */
 export const passwordSet = () => config.password() !== "";
+/** Whether a feed's owner may choose its name and read id (NOTEFEED_ALLOW_CUSTOM_IDS). */
+export const customIdsOn = config.allowCustomIds;
 
 const PAGE = 50;
 
@@ -43,7 +45,7 @@ const PAGE = 50;
  * feed is created there later. None either for a feed whose stored read id can't be read (backend/feeds.ts).
  */
 export async function getFeed(feed: string, tag?: string): Promise<{ notes: Note[]; readId: string | null; exists: boolean; title: string; description: string; image: string; showSender: boolean; imageUrl: string | null } | null> {
-  if (checkFeed(feed)) return null;
+  if (checkFeed(feed) || (await isRetired("name", feed))) return null;
   const notes = await listNotes(feed, PAGE, undefined, tag);
   // `exists`: a feed that had notes and lost them still exists (it counts toward the feed cap and can't get a password).
   const readId = (await countNotes(feed)) ? await readIdOf(feed) : null; // not notes.length: a tag filter can show none of a feed's notes
@@ -58,7 +60,7 @@ export async function getFeedNote(feed: string, id: string): Promise<Note | null
 
 /** A feed by its read id: null for a malformed id; an unknown one is an empty feed, so ids can't be probed. */
 export async function getReadFeed(id: string, tag?: string): Promise<{ notes: Note[]; title: string; description: string; imageUrl: string | null } | null> {
-  if (!isReadId(id)) return null;
+  if (!isReadId(id) || (await isRetired("id", id))) return null;
   const feed = await feedForReadId(id);
   const settings = feed ? await getSettings(feed) : { title: "", description: "", image: "", showSender: true };
   const { title, description, image } = settings;

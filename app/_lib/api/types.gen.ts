@@ -85,7 +85,7 @@ export type Error = {
     /**
      * Stable machine-readable code; absent only on a 500
      */
-    code?: 'invalid_feed' | 'reserved_feed' | 'auth' | 'rate_limited' | 'too_many_attempts' | 'feed_limit' | 'note_limit' | 'image_limit' | 'empty_note' | 'too_large' | 'unsupported_type' | 'invalid_body' | 'invalid_request' | 'not_found' | 'feed_exists';
+    code?: 'invalid_feed' | 'reserved_feed' | 'auth' | 'rate_limited' | 'too_many_attempts' | 'feed_limit' | 'note_limit' | 'image_limit' | 'empty_note' | 'too_large' | 'unsupported_type' | 'invalid_body' | 'invalid_request' | 'not_found' | 'feed_exists' | 'taken';
 };
 
 export type PostJson = {
@@ -136,6 +136,14 @@ export type FeedSettings = {
      * Whether readers (RSS, the read API and pages) see who posted each note; omitted leaves it as it is, a new feed starts with true
      */
     show_sender?: boolean;
+    /**
+     * A new name for the feed (a-z, 0-9, - and _, at most 64 characters), which is also its write key. Everything stays, the old name stops working (404, for good) and browsers unlocked with the password are signed out. Omitted leaves it as it is; reserved feeds can't be renamed
+     */
+    name?: string;
+    /**
+     * A new read id (3 to 64 characters: a-z, 0-9, - and _), empty for a random one. The old read link stops working (404, for good), and so do image URLs in notes that contain it. Omitted leaves it as it is; reserved feeds keep theirs
+     */
+    read_id?: string;
 };
 
 export type Feed = {
@@ -225,6 +233,10 @@ export type ListNotesErrors = {
      */
     401: Error;
     /**
+     * A name that was changed away (it answers like no feed, and is never created again)
+     */
+    404: Error;
+    /**
      * Too many wrong passwords from this client
      */
     429: Error;
@@ -272,6 +284,10 @@ export type PostNoteErrors = {
      * The instance has a password, or the feed has its own, and it is missing or wrong
      */
     401: Error;
+    /**
+     * A name that was changed away (it answers like no feed, and is never created again)
+     */
+    404: Error;
     /**
      * A password was sent for a feed that already exists without one: it can't be claimed
      */
@@ -648,7 +664,7 @@ export type UpdateFeedData = {
 
 export type UpdateFeedErrors = {
     /**
-     * Invalid or reserved feed name, bad JSON, or a title or description that is too long or has control characters
+     * Invalid or reserved feed name, bad JSON, a title or description that is too long or has control characters, an invalid new name or read id, a reserved feed's name or read id, or custom ones turned off
      */
     400: Error;
     /**
@@ -659,6 +675,10 @@ export type UpdateFeedErrors = {
      * No such feed
      */
     404: Error;
+    /**
+     * The new name or read id belongs to another feed, was used before, or is held back
+     */
+    409: Error;
     /**
      * Too many posts, edits and deletes, or wrong passwords, from this client
      */
@@ -703,6 +723,10 @@ export type RemoveFeedPasswordErrors = {
      * The instance has a password, or the feed has its own, and it is missing or wrong
      */
     401: Error;
+    /**
+     * A name that was changed away (it answers like no feed, and is never created again)
+     */
+    404: Error;
     /**
      * The feed has no password
      */
@@ -752,6 +776,10 @@ export type ChangeFeedPasswordErrors = {
      */
     401: Error;
     /**
+     * A name that was changed away (it answers like no feed, and is never created again)
+     */
+    404: Error;
+    /**
      * The feed has no password
      */
     409: Error;
@@ -776,7 +804,7 @@ export type GetReadFeedData = {
     body?: never;
     path: {
         /**
-         * The feed's read id, from its read link: 22 random characters, or the feed's own name for a reserved feed. Read-only; never reveals the name of any other feed.
+         * The feed's read id, from its read link: 22 random characters, one the feed's owner chose, or the feed's own name for a reserved feed. Read-only; never reveals the name of any other feed.
          */
         readId: string;
     };
@@ -806,7 +834,7 @@ export type ListReadNotesData = {
     body?: never;
     path: {
         /**
-         * The feed's read id, from its read link: 22 random characters, or the feed's own name for a reserved feed. Read-only; never reveals the name of any other feed.
+         * The feed's read id, from its read link: 22 random characters, one the feed's owner chose, or the feed's own name for a reserved feed. Read-only; never reveals the name of any other feed.
          */
         readId: string;
     };
@@ -853,7 +881,7 @@ export type GetReadNoteData = {
     body?: never;
     path: {
         /**
-         * The feed's read id, from its read link: 22 random characters, or the feed's own name for a reserved feed. Read-only; never reveals the name of any other feed.
+         * The feed's read id, from its read link: 22 random characters, one the feed's owner chose, or the feed's own name for a reserved feed. Read-only; never reveals the name of any other feed.
          */
         readId: string;
         /**

@@ -26,6 +26,7 @@ const MESSAGES: Record<ErrorCode | "sign_in_failed", string> = {
   invalid_request: "Something went wrong.",
   not_found: "Not found.",
   feed_exists: "This feed already exists, so it can't be given a password.",
+  taken: "That name or read id is not available.",
   sign_in_failed: "Sign-in didn't work. Try again.",
 };
 
@@ -45,7 +46,7 @@ export function feedErrorMessage(code: unknown, retry?: unknown): string | undef
 
 // The same, for the feed's settings and delete forms, which send a title and a description or the typed name.
 export function feedDetailsErrorMessage(code: unknown, retry?: unknown): string | undefined {
-  if (code === "invalid_body") return "The title or description is too long or has characters that aren't allowed.";
+  if (code === "invalid_body") return "The title, description, name or read link has characters that aren't allowed or is too long, or this instance doesn't let you choose them.";
   if (code === "invalid_request") return "Type the feed's name to confirm.";
   return noteErrorMessage(code, retry);
 }

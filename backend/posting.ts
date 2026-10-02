@@ -4,7 +4,7 @@ import { config } from "./config";
 import { FeedExistsError, FeedLimitError, ImageTooLargeError, InvalidBodyError, NotFoundError, NoteLimitError, RateLimitedError } from "./errors";
 import { type FeedAccess, checkFeedAccess, createProtected } from "./feedlock";
 import { type FeedSettings, checkSettings, getStoredSettings, saveSettings } from "./feedsettings";
-import { assertFeed, deleteFeed as removeWholeFeed, feedCount, hasFeed, readIdOf } from "./feeds";
+import { assertFeed, assertLive, deleteFeed as removeWholeFeed, feedCount, hasFeed, isHeldBack, readIdOf, renameFeed, setReadId } from "./feeds";
 import { knownImage, storeImage } from "./images";
 import { capReached, rateLimit } from "./limits";
 import { checkTags } from "./tags";
@@ -21,7 +21,7 @@ export async function postNote(
   access: FeedAccess,
   sender?: string, // verified by the caller (identity cookie or OAuth token), never taken from a request body
 ): Promise<{ note: Note; created: boolean; readId: string | null }> {
-  assertFeed(feed);
+  await assertLive(feed);
   const proved = await checkFeedAccess(feed, access, ip);
   const wait = rateLimit(ip);
   if (wait !== null) throw new RateLimitedError(wait);
@@ -57,7 +57,7 @@ export async function postNote(
 // already exists, and the feed's protection can only be changed by a request that proved the password:
 // no second access check after `read()`, unlike postNote.
 async function admit(feed: string, ip: string, access: FeedAccess): Promise<void> {
-  assertFeed(feed);
+  await assertLive(feed);
   await checkFeedAccess(feed, access, ip);
   const wait = rateLimit(ip);
   if (wait !== null) throw new RateLimitedError(wait);
@@ -79,16 +79,28 @@ export async function deleteNote(feed: string, id: string, ip: string, access: F
 
 // Settings and deletion of a whole feed: the same gate as posting, then the feed must exist. An open feed is
 // changed by anyone who knows its name, as it is posted to (ADR 0001); a protected one needs its password.
-export async function updateFeed(feed: string, ip: string, read: () => Promise<unknown>, access: FeedAccess): Promise<FeedSettings> {
+// The result holds the feed's name as it is now: `name` renames it and `readId` replaces its read link ("" = a random
+// one); the old ones are retired and answer 404 from then on. Reserved feeds keep both. With NOTEFEED_ALLOW_CUSTOM_IDS=0
+// only a random read id may be asked for.
+export async function updateFeed(feed: string, ip: string, read: () => Promise<unknown>, access: FeedAccess): Promise<FeedSettings & { name: string }> {
   await admit(feed, ip, access);
   const given = checkSettings(await read()); // after admit: a refused request never has its body read
   if (!(await hasFeed(feed))) throw new NotFoundError("no such feed");
   // Only a given image is checked; an omitted one stays as stored, even if its file has been removed by hand.
   if (given.image && !(await knownImage(feed, given.image))) throw new InvalidBodyError("image must be empty or the name of an image uploaded to this feed");
   const stored = await getStoredSettings(feed);
-  const checked = { ...given, image: given.image ?? stored.image, showSender: given.showSender ?? stored.showSender };
+  const { name, readId, ...rest } = given;
+  const rename = name !== undefined && name !== "" && name !== feed;
+  const newId = readId === undefined || readId === (await readIdOf(feed)) ? undefined : readId; // the page sends the current one back: no change
+  if ((rename || newId !== undefined) && isHeldBack(feed)) throw new InvalidBodyError("a reserved feed keeps its name and read id");
+  if ((rename || newId) && !config.allowCustomIds()) throw new InvalidBodyError("this instance does not allow choosing names or read ids");
+  if (rename) assertFeed(name); // before anything is written
+  const checked = { ...rest, image: rest.image ?? stored.image, showSender: rest.showSender ?? stored.showSender };
   await saveSettings(feed, checked);
-  return checked;
+  // Settings first: they move with the directory.
+  if (newId !== undefined) await setReadId(feed, newId === "" ? null : newId);
+  if (rename) await renameFeed(feed, name);
+  return { ...checked, name: rename ? name : feed };
 }
 
 // Uploading an image: the same gate as posting, and the feed must exist (it is created by its first note).

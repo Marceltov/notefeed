@@ -1,6 +1,6 @@
 // A feed on disk is a directory `<DATA_DIR>/<feed>/`.
 import { randomBytes } from "node:crypto";
-import { mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { logger } from "../log";
 import { feedDir, isErrno, orMissing, root } from "./fs";
@@ -74,3 +74,24 @@ export async function removeLeftovers(): Promise<void> {
     );
   }
 }
+
+export const writeReadId = (feed: string, id: string) => writeFile(/*turbopackIgnore: true*/ readIdFile(feed), id);
+
+// Moves a feed's directory to another name: false when something is there already. rename() would take an
+// EMPTY directory, so the caller has checked the index first; a non-empty one fails with ENOTEMPTY.
+export async function renameFeedDir(from: string, to: string): Promise<boolean> {
+  try {
+    await rename(/*turbopackIgnore: true*/ feedDir(from), feedDir(to));
+    return true;
+  } catch (e) {
+    if (isErrno(e, "ENOTEMPTY") || isErrno(e, "EEXIST")) return false;
+    throw e;
+  }
+}
+
+// Retired names and read ids, one `name:<x>` or `id:<x>` per line in DATA_DIR/.retired (not a directory, so
+// never a feed). The operator can free one by deleting its line and restarting.
+const retiredFile = () => join(root(), ".retired");
+export const readRetired = async (): Promise<string[]> =>
+  ((await orMissing(readFile(/*turbopackIgnore: true*/ retiredFile(), "utf8"), "")) ?? "").split("\n").filter(Boolean);
+export const appendRetired = (entry: string) => appendFile(/*turbopackIgnore: true*/ retiredFile(), entry + "\n");

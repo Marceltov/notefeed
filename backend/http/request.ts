@@ -2,7 +2,7 @@
 import { AuthError, NotefeedError, RateLimitedError } from "../errors";
 import { IDENTITY_COOKIE, SESSION_COOKIE, bearerOf, checkBearer, identitySender, locked, sessionOk } from "../auth";
 import { type FeedAccess, feedCookieName } from "../feedlock";
-import { assertFeed } from "../feeds";
+import { assertLive } from "../feeds";
 import { clientIp } from "../limits";
 import { identityOn } from "../oidc/config";
 import { verify } from "../oauth/tokens";
@@ -101,7 +101,7 @@ export function feedAccess(h: Headers, feed: string): FeedAccess {
 export async function formPost(req: Request, feed: string, page: string, act: (h: Headers, ip: string) => Promise<Response>, onGone?: () => Response): Promise<Response> {
   const h = req.headers;
   try {
-    assertFeed(feed); // before anything touches the disk
+    await assertLive(feed); // before anything touches the disk
     // Only this instance's own pages may send these: another site's form must not change anything with a visitor's cookies.
     if (!sameOrigin(h)) throw new AuthError();
     const ip = clientIp(h);

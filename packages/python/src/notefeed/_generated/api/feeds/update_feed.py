@@ -60,6 +60,11 @@ def _parse_response(
 
         return response_404
 
+    if response.status_code == 409:
+        response_409 = Error.from_dict(response.json())
+
+        return response_409
+
     if response.status_code == 429:
         response_429 = Error.from_dict(response.json())
 
@@ -95,8 +100,13 @@ def sync_detailed(
     whitespace is trimmed and control characters are refused. `show_sender` (default true) shows who
     posted each note to readers; omitted leaves it as it is. `image` is the file name `uploadImage`
     returned for this feed (title image), empty to remove it, or omitted to leave it as it is; any other
-    value is a 400. Needs the feed's password if it has one, and counts against the post rate limit.
-    Only on a feed that exists: it is created by its first note. Read links can't change settings.
+    value is a 400. `name` renames the feed and `read_id` gives it another read link (empty for a random
+    one); the old name and the old read id are retired and answer 404 from then on, and the response is
+    the feed under its new name. Both are capabilities on an open feed, so a short readable one is
+    guessable: protect the feed with a password if that matters. An instance can turn chosen names and
+    read ids off (NOTEFEED_ALLOW_CUSTOM_IDS=0): then only an empty `read_id` is accepted. Needs the
+    feed's password if it has one, and counts against the post rate limit. Only on a feed that exists:
+    it is created by its first note. Read links can't change settings.
 
     Args:
         feed (str):
@@ -137,8 +147,13 @@ def sync(
     whitespace is trimmed and control characters are refused. `show_sender` (default true) shows who
     posted each note to readers; omitted leaves it as it is. `image` is the file name `uploadImage`
     returned for this feed (title image), empty to remove it, or omitted to leave it as it is; any other
-    value is a 400. Needs the feed's password if it has one, and counts against the post rate limit.
-    Only on a feed that exists: it is created by its first note. Read links can't change settings.
+    value is a 400. `name` renames the feed and `read_id` gives it another read link (empty for a random
+    one); the old name and the old read id are retired and answer 404 from then on, and the response is
+    the feed under its new name. Both are capabilities on an open feed, so a short readable one is
+    guessable: protect the feed with a password if that matters. An instance can turn chosen names and
+    read ids off (NOTEFEED_ALLOW_CUSTOM_IDS=0): then only an empty `read_id` is accepted. Needs the
+    feed's password if it has one, and counts against the post rate limit. Only on a feed that exists:
+    it is created by its first note. Read links can't change settings.
 
     Args:
         feed (str):
@@ -174,8 +189,13 @@ async def asyncio_detailed(
     whitespace is trimmed and control characters are refused. `show_sender` (default true) shows who
     posted each note to readers; omitted leaves it as it is. `image` is the file name `uploadImage`
     returned for this feed (title image), empty to remove it, or omitted to leave it as it is; any other
-    value is a 400. Needs the feed's password if it has one, and counts against the post rate limit.
-    Only on a feed that exists: it is created by its first note. Read links can't change settings.
+    value is a 400. `name` renames the feed and `read_id` gives it another read link (empty for a random
+    one); the old name and the old read id are retired and answer 404 from then on, and the response is
+    the feed under its new name. Both are capabilities on an open feed, so a short readable one is
+    guessable: protect the feed with a password if that matters. An instance can turn chosen names and
+    read ids off (NOTEFEED_ALLOW_CUSTOM_IDS=0): then only an empty `read_id` is accepted. Needs the
+    feed's password if it has one, and counts against the post rate limit. Only on a feed that exists:
+    it is created by its first note. Read links can't change settings.
 
     Args:
         feed (str):
@@ -214,8 +234,13 @@ async def asyncio(
     whitespace is trimmed and control characters are refused. `show_sender` (default true) shows who
     posted each note to readers; omitted leaves it as it is. `image` is the file name `uploadImage`
     returned for this feed (title image), empty to remove it, or omitted to leave it as it is; any other
-    value is a 400. Needs the feed's password if it has one, and counts against the post rate limit.
-    Only on a feed that exists: it is created by its first note. Read links can't change settings.
+    value is a 400. `name` renames the feed and `read_id` gives it another read link (empty for a random
+    one); the old name and the old read id are retired and answer 404 from then on, and the response is
+    the feed under its new name. Both are capabilities on an open feed, so a short readable one is
+    guessable: protect the feed with a password if that matters. An instance can turn chosen names and
+    read ids off (NOTEFEED_ALLOW_CUSTOM_IDS=0): then only an empty `read_id` is accepted. Needs the
+    feed's password if it has one, and counts against the post rate limit. Only on a feed that exists:
+    it is created by its first note. Read links can't change settings.
 
     Args:
         feed (str):
