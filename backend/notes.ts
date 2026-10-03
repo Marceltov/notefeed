@@ -111,9 +111,9 @@ export async function createImageNote(
   return { note: new ImageNote({ id, ext, meta, createdAt: stampOf(id)!, size: bytes.length }), readId };
 }
 
-async function noteIds(feed: string, kind?: Note["kind"]): Promise<string[]> {
+async function noteIds(feed: string, typeName?: string): Promise<string[]> {
   if (checkFeed(feed)) return [];
-  return (await listNoteFiles(feed)).filter((e) => { const type = typeForExt(e.ext); return type && (kind === undefined || type.kind === kind) && isValidId(e.id); }).map((e) => e.id);
+  return (await listNoteFiles(feed)).filter((e) => { const type = typeForExt(e.ext); return type && (typeName === undefined || type.name === typeName) && isValidId(e.id); }).map((e) => e.id);
 }
 
 // Newest first, ties by id. An id with a time is placed without reading anything; the others are looked up.
@@ -126,8 +126,8 @@ async function newestFirst(feed: string, ids: string[]): Promise<string[]> {
 
 // `before` (a note id) pages backwards: the notes after it in that order. A `before` that is gone ends the list.
 // `tag`: only notes carrying it; the files are read newest first until `limit` match.
-export async function listNotes(feed: string, limit = 50, before?: string, tag?: string, kind?: Note["kind"]): Promise<Note[]> {
-  let ids = await newestFirst(feed, await noteIds(feed, kind));
+export async function listNotes(feed: string, limit = 50, before?: string, tag?: string, typeName?: string): Promise<Note[]> {
+  let ids = await newestFirst(feed, await noteIds(feed, typeName));
   if (before !== undefined) ids = ids.slice(ids.indexOf(before) + 1 || ids.length);
   const read = async (page: string[]) => (await Promise.all(page.map((id) => getNote(feed, id)))).filter((n) => n !== null); // null: deleted between readdir and read
   if (tag === undefined) return read(ids.slice(0, limit));
@@ -139,8 +139,8 @@ export async function listNotes(feed: string, limit = 50, before?: string, tag?:
   return found.slice(0, limit);
 }
 
-export async function countNotes(feed: string, kind?: Note["kind"]): Promise<number> {
-  return (await noteIds(feed, kind)).length;
+export async function countNotes(feed: string, typeName?: string): Promise<number> {
+  return (await noteIds(feed, typeName)).length;
 }
 
 /** Whether `file` (`<id>.<ext>`) is an image note of this feed: the check before a title image points at it. */

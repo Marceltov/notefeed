@@ -200,7 +200,7 @@ describe("sender", () => {
     expect(await readFile(join(dir, `${note.id}.md`), "utf8")).toBe("# Hi");
     expect(JSON.parse(await readFile(join(dir, `.${note.id}.md.json`), "utf8"))).toEqual({ sender: "Ann" });
     const got = await getNote("test", note.id);
-    expect(got?.markdown).toBe("# Hi");
+    expect(got?.content).toBe("# Hi");
     expect(got?.sender).toBe("Ann");
     expect(got?.title).toBe("Hi");
   });
@@ -209,7 +209,7 @@ describe("sender", () => {
     const u = await updateNote("test", note.id, { markdown: "# New" });
     expect(u?.sender).toBe("Ann");
     expect((await getNote("test", note.id))?.sender).toBe("Ann");
-    expect((await getNote("test", note.id))?.markdown).toBe("# New");
+    expect((await getNote("test", note.id))?.content).toBe("# New");
   });
   test.each(["a\u2028b", "a\u2029b", "a\rb"])("sender %j survives create, get and update", async (sender) => {
     const { note } = await createNote("test", "# Hi", undefined, sender);
@@ -249,7 +249,7 @@ describe("sender", () => {
     const { note } = await createNote("test", "# One");
     await writeFile(join(dir, "20260101T000000Z-hand.md"), "# Hand");
     const all = await listNotes("test");
-    expect(all.map((n) => n.markdown).sort()).toEqual(["# Hand", "# One"]);
+    expect(all.map((n) => n.content).sort()).toEqual(["# Hand", "# One"]);
     expect(all.every((n) => n.sender === undefined)).toBe(true);
     expect(note.sender).toBeUndefined();
   });
@@ -265,7 +265,7 @@ describe("getNote", () => {
   test("reads an existing note", async () => {
     const { note: created } = await createNote("test", "# Hi\nthere");
     const note = await getNote("test", created.id);
-    expect(note?.markdown).toBe("# Hi\nthere");
+    expect(note?.content).toBe("# Hi\nthere");
     expect(note?.title).toBe("Hi");
   });
 });
@@ -276,7 +276,7 @@ describe("updateNote and removeNote", () => {
     const { note: n } = await createNote("test", "# Old", now);
     const u = await updateNote("test", n.id, { markdown: "# New\nbody" });
     expect(u).toMatchObject({ id: n.id, title: "New", markdown: "# New\nbody", createdAt: now, tags: [] });
-    expect((await getNote("test", n.id))?.markdown).toBe("# New\nbody");
+    expect((await getNote("test", n.id))?.content).toBe("# New\nbody");
   });
   test("a missing note is null and creates no file", async () => {
     await createNote("test", "# Old", now);
@@ -312,4 +312,15 @@ test("editing a note whose feed was deleted meanwhile is no such note, not a cra
   const p = updateNote("gone", n.id, { markdown: "# b" }); // stat has passed by the time the directory goes
   await deleteFeed("gone");
   expect(await p).toBeNull();
+});
+
+describe("type and content", () => {
+  test("a markdown note has the type text/markdown and its text as content; an image note has its media type and no content", async () => {
+    const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1]);
+    const { note: md } = await createNote("test", "# Hi\nbody");
+    const { note: img } = await createImageNote("test", png, {});
+    expect([md.type, md.content]).toEqual(["text/markdown", "# Hi\nbody"]);
+    expect([img.type, img.content]).toEqual(["image/png", undefined]);
+    expect((await getNote("test", img.id))?.type).toBe("image/png");
+  });
 });

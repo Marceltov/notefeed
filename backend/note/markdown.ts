@@ -4,7 +4,6 @@ import type { Meta } from "../data/notes";
 import { Note, type NoteInit } from "./note";
 
 export class MarkdownNote extends Note {
-  readonly kind = "markdown";
   readonly markdown: string;
 
   constructor(init: NoteInit, markdown: string) {
@@ -12,6 +11,9 @@ export class MarkdownNote extends Note {
     this.markdown = markdown;
   }
 
+  get content(): string {
+    return this.markdown;
+  }
   get title(): string {
     return this.meta.title ?? extractTitle(this.markdown);
   }

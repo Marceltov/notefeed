@@ -62,7 +62,7 @@ export function NoteList({ notes, base, imageBase, posted }: { notes: Note[]; ba
               {time(n.createdAt)}
             </time>
             <div className="min-w-0">
-              {n.kind === "image" ? (
+              {n.type.startsWith("image/") ? (
                 <>
                   {n.title && (
                     <Link href={`${base}/${n.id}`} className="font-bold hover:text-carbon hover:underline">
@@ -80,9 +80,9 @@ export function NoteList({ notes, base, imageBase, posted }: { notes: Note[]; ba
               )}
               {n.sender && <span className="ml-2 text-sm text-muted">by {n.sender}</span>}
               <Tags tags={n.tags} base={base} />
-              {bodyAfterTitle(n.markdown) && (
+              {bodyAfterTitle(n.content ?? "") && (
                 <div className="mt-1">
-                  <NoteView markdown={bodyAfterTitle(n.markdown)} imageBase={imageBase} />
+                  <NoteView markdown={bodyAfterTitle(n.content ?? "")} imageBase={imageBase} />
                 </div>
               )}
             </div>
@@ -103,13 +103,13 @@ export function NoteArticle({ note, back, imageBase }: { note: Note; back: strin
         {note.sender && <span className="text-sm text-muted"> by {note.sender}</span>}
         <Tags tags={note.tags} base={back} />
         <div className="mt-2">
-          {note.kind === "image" ? (
+          {note.type.startsWith("image/") ? (
             <>
               {note.title && <h1 className="mb-2 text-xl font-bold">{note.title}</h1>}
               <Picture note={note} imageBase={imageBase} className="max-w-full rounded-sm" />
             </>
           ) : (
-            <NoteView markdown={note.markdown} imageBase={imageBase} />
+            <NoteView markdown={(note.content ?? "")} imageBase={imageBase} />
           )}
         </div>
       </article>

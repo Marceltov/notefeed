@@ -161,6 +161,6 @@ describe("images follow the read id without editing a note", () => {
     expect((await fileRoute("moved", file)).status).toBe(200);
     expect((await fileRoute(old, file)).status).toBe(404);
     expect((await getFeed("blog"))!.imageUrl).toBe(`/r/moved/${file}`);
-    expect((await getFeed("blog"))!.notes.map((n) => n.markdown)).toContain(note);
+    expect((await getFeed("blog"))!.notes.map((n) => n.content)).toContain(note);
   });
 });

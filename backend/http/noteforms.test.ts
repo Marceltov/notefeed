@@ -49,7 +49,7 @@ test("edit replaces the text and goes to the note", async () => {
   const res = await send("openfeed", id, "edit", { markdown: "# New" });
   expect(res.status).toBe(303);
   expect(loc(res)).toBe(`/openfeed/${id}?edited=1`);
-  expect((await getNote("openfeed", id))?.markdown).toBe("# New");
+  expect((await getNote("openfeed", id))?.content).toBe("# New");
 });
 
 test("delete removes the note and goes to the feed", async () => {
@@ -62,7 +62,7 @@ test("delete removes the note and goes to the feed", async () => {
 test.each([["another site", "https://evil.example"], ["no Origin", null]])("from %s: refused, nothing changed", async (_, origin) => {
   expect(loc(await send("openfeed", id, "edit", { markdown: "# Hacked" }, origin))).toBe(`/openfeed/${id}?error=auth`);
   expect(loc(await send("openfeed", id, "delete", {}, origin))).toBe(`/openfeed/${id}?error=auth`);
-  expect((await getNote("openfeed", id))?.markdown).toBe("# Old");
+  expect((await getNote("openfeed", id))?.content).toBe("# Old");
 });
 
 test("refusals go back to the note with the code", async () => {
@@ -79,13 +79,13 @@ test("rate limited: the wait is passed on", async () => {
 test("a note near the limit in non-ASCII text saves", async () => {
   const markdown = "# " + "あ".repeat(33_000); // about 99 KB of UTF-8, 3x that urlencoded
   expect(loc(await send("openfeed", id, "edit", { markdown }))).toBe(`/openfeed/${id}?edited=1`);
-  expect((await getNote("openfeed", id))?.markdown).toBe(markdown);
+  expect((await getNote("openfeed", id))?.content).toBe(markdown);
 });
 
 test("a urlencoded edit body is refused, the note untouched", async () => {
   const res = await send("openfeed", id, "edit", {}, undefined, undefined, "markdown=%23+Raw", "application/x-www-form-urlencoded");
   expect(loc(res)).toBe(`/openfeed/${id}?error=invalid_body`);
-  expect((await getNote("openfeed", id))?.markdown).toBe("# Old");
+  expect((await getNote("openfeed", id))?.content).toBe("# Old");
 });
 
 test("deleting a note that is already gone still lands on the feed (a double click)", async () => {
@@ -101,7 +101,7 @@ test("a protected feed needs its cookie", async () => {
   await createProtected("lockd", "pw");
   const lid = (await createNote("lockd", "# Old")).note.id;
   expect(loc(await send("lockd", lid, "edit", { markdown: "# New" }))).toBe(`/lockd/${lid}?error=auth`);
-  expect((await getNote("lockd", lid))?.markdown).toBe("# Old");
+  expect((await getNote("lockd", lid))?.content).toBe("# Old");
   const cookie = `${feedCookieName("lockd")}=${await cookieValue("lockd")}`;
   expect(loc(await send("lockd", lid, "edit", { markdown: "# New" }, "http://localhost:3000", cookie))).toBe(`/lockd/${lid}?edited=1`);
   expect(loc(await send("lockd", lid, "delete", {}, "http://localhost:3000", cookie))).toBe(`/lockd?deleted=${lid}`);
@@ -118,7 +118,7 @@ test("identity on: the edit form works with a signed-in cookie, not without one,
   const cookie = `${IDENTITY_COOKIE}=${sign("identity", { sender: "Ann" })}`;
   expect(loc(await send("openfeed", id, "edit", { markdown: "# New" }, undefined, cookie))).toBe(`/openfeed/${id}?edited=1`);
   const note = (await getNote("openfeed", id))!;
-  expect(note.markdown).toBe("# New");
+  expect(note.content).toBe("# New");
   expect(note.sender).toBeUndefined(); // an edit never adds a sender
 });
 afterEach(() => vi.unstubAllEnvs());

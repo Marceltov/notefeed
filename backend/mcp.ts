@@ -94,7 +94,7 @@ function server(h: Headers): McpServer {
       await checkAccess(feed, password);
       const note = await getNote(feed, id);
       if (!note) throw new NotFoundError("no such note");
-      return ok({ ...summary(feed, note), markdown: note.markdown });
+      return ok({ ...summary(feed, note), markdown: note.content ?? "" });
     }),
   );
 
@@ -108,7 +108,7 @@ function server(h: Headers): McpServer {
     },
     guard(async ({ feed, id, markdown, title, password }) => {
       const note = await editNote(feed, id, clientIp(h), async () => ({ markdown, title }), { password });
-      return ok({ ...summary(feed, note), markdown: note.markdown });
+      return ok({ ...summary(feed, note), markdown: note.content ?? "" });
     }),
   );
 

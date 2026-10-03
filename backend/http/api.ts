@@ -64,11 +64,11 @@ async function passwordFeedAndFeedPassword(input: { req: Request; params: Record
 // Wire form of a note; `base` is the absolute URL its page lives under, `files` the one its files are served under
 // (the feed's read link; null while the feed has none).
 const noteJson = (n: Note, base: string, files: string | null): NoteJson => ({
-  kind: n.kind as NoteJson["kind"],
+  kind: n.type.startsWith("image/") ? "image" : "markdown", // T4 replaces kind by type
   file: n.file,
   id: n.id,
   title: n.title,
-  markdown: n.markdown,
+  markdown: n.content ?? "",
   created_at: n.createdAt.toISOString(),
   url: `${base}/${n.id}`,
   file_url: files && files + n.file,

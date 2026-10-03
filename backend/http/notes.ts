@@ -147,7 +147,7 @@ export async function handlePostNote(req: Request, feed: string, imageOnly = fal
         url: `${base}${feedPath(feed)}/${note.id}`,
         feed_url: base + feedPath(feed),
         read_url: readId && base + rssPath(readId),
-        ...(note.kind !== "markdown" && { file: note.file, file_url: readId ? base + imagePath(readId, note.file) : null }),
+        ...(note.type !== "text/markdown" && { file: note.file, file_url: readId ? base + imagePath(readId, note.file) : null }),
       },
       headers: unlocked,
     };

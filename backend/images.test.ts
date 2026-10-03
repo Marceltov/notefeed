@@ -70,8 +70,8 @@ describe("createImageNote", () => {
     const { note } = await createImageNote("pics", PNG, { alt: "a cat" }, new Date("2026-01-02T00:00:00Z"));
     const got = await getNote("pics", note.id);
     expect(got).toBeInstanceOf(ImageNote);
-    expect(got).toMatchObject({ kind: "image", alt: "a cat", title: "", file: note.file });
-    expect((await listNotes("pics")).map((n) => n.kind)).toEqual(["image", "markdown"]);
+    expect(got).toMatchObject({ type: "image/png", alt: "a cat", title: "", file: note.file });
+    expect((await listNotes("pics")).map((n) => n.type)).toEqual(["image/png", "text/markdown"]);
     expect((await createImageNote("pics", PNG, { title: "T" })).note.title).toBe("T");
   });
   test("hasImageNote is true for an image note's file only", async () => {
