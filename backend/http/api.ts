@@ -14,8 +14,8 @@ import { TAG_RULE } from "../tags";
 import { API_PREFIX, feedPath, imagePath, publicUrl, readPath, rssPath } from "../urls";
 import { MEDIA_TYPES } from "../note/media";
 import { createDispatcher, op, type AnyOp, type ResponseSpec } from "./dispatch";
-import { deleteFeed, deleteNote, editNote, updateFeed } from "../posting";
-import { handlePostNote, readEdit } from "./notes";
+import { deleteFeed, deleteNote, editContent, editMeta, updateFeed } from "../posting";
+import { handlePostNote, readContent, readMetaPatch } from "./notes";
 import { authorize, feedAccess, readCapped } from "./request";
 import {
   COMPONENTS,
@@ -27,8 +27,7 @@ import {
   FeedPasswordHeader,
   FeedSettingsJson,
   FileBody,
-  EditForm,
-  EditJson,
+  MetaJson,
   NoteAltHeader,
   NoteNameHeader,
   NoteTitleHeader,
@@ -64,18 +63,18 @@ async function passwordFeedAndFeedPassword(input: { req: Request; params: Record
 // Wire form of a note; `base` is the absolute URL its page lives under, `files` the one its files are served under
 // (the feed's read link; null while the feed has none).
 const noteJson = (n: Note, base: string, files: string | null): NoteJson => ({
-  kind: n.type.startsWith("image/") ? "image" : "markdown", // T4 replaces kind by type
-  file: n.file,
   id: n.id,
-  title: n.title,
-  markdown: n.content ?? "",
-  created_at: n.createdAt.toISOString(),
-  url: `${base}/${n.id}`,
+  type: n.type,
+  file: n.file,
   file_url: files && files + n.file,
   size: n.size,
-  ...(n.sender !== undefined && { sender: n.sender }),
+  title: n.title,
+  ...(n.content !== undefined && { content: n.content }),
   ...(n.alt !== undefined && { alt: n.alt }),
   ...("name" in n && typeof n.name === "string" && { name: n.name }),
+  created_at: n.createdAt.toISOString(),
+  url: `${base}/${n.id}`,
+  ...(n.sender !== undefined && { sender: n.sender }),
   tags: n.tags,
 });
 
@@ -199,36 +198,56 @@ const OPS: AnyOp[] = [
     method: "PUT",
     path: `${API_PREFIX}/feeds/{feed}/notes/{id}`,
     operationId: "editNote",
-    summary: "Edit a note",
+    summary: "Replace a note's content",
     description:
-      "Changes the note: its markdown (only for a markdown note), its title (empty removes it: a markdown note's title follows its text again), its alt text (image notes). " +
-      "Its id and creation time stay. A raw text body is the new markdown. At least one of the three is needed. " +
-      "Needs the feed's password if it has one, and counts against the post rate limit. Read links can't edit. " +
-      `The body is at most ${MAX_BYTES} bytes and UTF-8.`,
+      "The body is the new file, with the same rules as posting: a `Content-Type` that is one of the accepted types, a body that is what it declares. " +
+      "A note keeps its type, so the type must be the note's own (`415` otherwise). Id, creation time and metadata stay: " +
+      "the title of a markdown note without one set follows the new text. Change the title or alt text with `PATCH`. " +
+      "Needs the feed's password if it has one, and counts against the post rate limit. Read links can't edit.",
     tags: ["Feeds"],
     password: true,
     params: { feed: FeedParam, id: NoteIdParam },
     headers: { "X-Feed-Password": FeedPasswordHeader },
-    body: {
-      "text/markdown": z.string(),
-      "text/plain": z.string(),
-      "application/x-www-form-urlencoded": z.string(),
-      "application/json": EditJson,
-      "multipart/form-data": EditForm,
-    },
+    body: Object.fromEntries(MEDIA_TYPES.map((m) => [m.mediaType, FileBody])),
     responses: {
       200: { description: "The note as it is now", schema: NoteJson },
-      400: err("Invalid or reserved feed name; empty note; bad JSON, form or UTF-8"),
+      400: err("Invalid or reserved feed name; a blank note"),
       401: UNAUTHORIZED,
       404: err("No such note"),
-      413: err(`Body over ${MAX_BYTES} bytes`),
-      415: err("Unsupported content type"),
+      413: err(`Markdown over ${MAX_BYTES} bytes, or an image over NOTEFEED_MAX_IMAGE_BYTES`),
+      415: err("Content-Type missing, not accepted or not the note's own type, or the body is not what it declares"),
       429: { ...err("Too many posts, edits and deletes, or wrong passwords, from this client"), headers: RETRY },
     },
     before: passwordAndFeed,
   }).handle(async ({ req, params }) => {
-    const ip = clientIp(req.headers);
-    const note = await editNote(params.feed, params.id, ip, () => readEdit(req), feedAccess(req.headers, params.feed));
+    const note = await editContent(params.feed, params.id, clientIp(req.headers), () => readContent(req), feedAccess(req.headers, params.feed));
+    return { status: 200, body: noteJson(note, publicUrl(req.headers) + feedPath(params.feed), await filesOf(params.feed, req.headers)) };
+  }),
+
+  op({
+    method: "PATCH",
+    path: `${API_PREFIX}/feeds/{feed}/notes/{id}`,
+    operationId: "patchNote",
+    summary: "Change a note's title or alt text",
+    description:
+      "Sets the note's title and/or alt text (alt only for images). An empty string removes one: a markdown note's title follows its text again. " +
+      "At least one is needed. Needs the feed's password if it has one, and counts against the post rate limit. Read links can't change notes.",
+    tags: ["Feeds"],
+    password: true,
+    params: { feed: FeedParam, id: NoteIdParam },
+    headers: { "X-Feed-Password": FeedPasswordHeader },
+    body: { "application/json": MetaJson },
+    responses: {
+      200: { description: "The note as it is now", schema: NoteJson },
+      400: err("Invalid or reserved feed name; nothing to change; a bad title or alt text; alt for a note that has none; bad JSON"),
+      401: UNAUTHORIZED,
+      404: err("No such note"),
+      415: err("Content-Type is not application/json"),
+      429: { ...err("Too many posts, edits and deletes, or wrong passwords, from this client"), headers: RETRY },
+    },
+    before: passwordAndFeed,
+  }).handle(async ({ req, params }) => {
+    const note = await editMeta(params.feed, params.id, clientIp(req.headers), () => readMetaPatch(req), feedAccess(req.headers, params.feed));
     return { status: 200, body: noteJson(note, publicUrl(req.headers) + feedPath(params.feed), await filesOf(params.feed, req.headers)) };
   }),
 

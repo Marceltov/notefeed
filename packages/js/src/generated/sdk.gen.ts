@@ -2,7 +2,7 @@
 
 import { client } from './client.gen.js';
 import type { Client, ClientMeta, Options as Options2, RequestResult, TDataShape } from './client/index.js';
-import type { ChangeFeedPasswordData, ChangeFeedPasswordErrors, ChangeFeedPasswordResponses, DeleteFeedData, DeleteFeedErrors, DeleteFeedResponses, DeleteNoteData, DeleteNoteErrors, DeleteNoteResponses, EditNoteData, EditNoteErrors, EditNoteResponses, GetFeedData, GetFeedErrors, GetFeedResponses, GetNoteData, GetNoteErrors, GetNoteResponses, GetOpenApiData, GetOpenApiResponses, GetReadFeedData, GetReadFeedErrors, GetReadFeedResponses, GetReadNoteData, GetReadNoteErrors, GetReadNoteResponses, ListNotesData, ListNotesErrors, ListNotesResponses, ListReadNotesData, ListReadNotesErrors, ListReadNotesResponses, PostNoteData, PostNoteErrors, PostNoteResponses, RemoveFeedPasswordData, RemoveFeedPasswordErrors, RemoveFeedPasswordResponses, UpdateFeedData, UpdateFeedErrors, UpdateFeedResponses } from './types.gen.js';
+import type { ChangeFeedPasswordData, ChangeFeedPasswordErrors, ChangeFeedPasswordResponses, DeleteFeedData, DeleteFeedErrors, DeleteFeedResponses, DeleteNoteData, DeleteNoteErrors, DeleteNoteResponses, EditNoteData, EditNoteErrors, EditNoteResponses, GetFeedData, GetFeedErrors, GetFeedResponses, GetNoteData, GetNoteErrors, GetNoteResponses, GetOpenApiData, GetOpenApiResponses, GetReadFeedData, GetReadFeedErrors, GetReadFeedResponses, GetReadNoteData, GetReadNoteErrors, GetReadNoteResponses, ListNotesData, ListNotesErrors, ListNotesResponses, ListReadNotesData, ListReadNotesErrors, ListReadNotesResponses, PatchNoteData, PatchNoteErrors, PatchNoteResponses, PostNoteData, PostNoteErrors, PostNoteResponses, RemoveFeedPasswordData, RemoveFeedPasswordErrors, RemoveFeedPasswordResponses, UpdateFeedData, UpdateFeedErrors, UpdateFeedResponses } from './types.gen.js';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -66,16 +66,32 @@ export const getNote = <ThrowOnError extends boolean = false>(options: Options<G
 });
 
 /**
- * Edit a note
+ * Change a note's title or alt text
  *
- * Changes the note: its markdown (only for a markdown note), its title (empty removes it: a markdown note's title follows its text again), its alt text (image notes). Its id and creation time stay. A raw text body is the new markdown. At least one of the three is needed. Needs the feed's password if it has one, and counts against the post rate limit. Read links can't edit. The body is at most 102400 bytes and UTF-8.
+ * Sets the note's title and/or alt text (alt only for images). An empty string removes one: a markdown note's title follows its text again. At least one is needed. Needs the feed's password if it has one, and counts against the post rate limit. Read links can't change notes.
  */
-export const editNote = <ThrowOnError extends boolean = false>(options: Options<EditNoteData, ThrowOnError>): RequestResult<EditNoteResponses, EditNoteErrors, ThrowOnError> => (options.client ?? client).put<EditNoteResponses, EditNoteErrors, ThrowOnError>({
+export const patchNote = <ThrowOnError extends boolean = false>(options: Options<PatchNoteData, ThrowOnError>): RequestResult<PatchNoteResponses, PatchNoteErrors, ThrowOnError> => (options.client ?? client).patch<PatchNoteResponses, PatchNoteErrors, ThrowOnError>({
     security: [{ scheme: 'bearer', type: 'http' }],
     url: '/api/v1/feeds/{feed}/notes/{id}',
     ...options,
     headers: {
         'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Replace a note's content
+ *
+ * The body is the new file, with the same rules as posting: a `Content-Type` that is one of the accepted types, a body that is what it declares. A note keeps its type, so the type must be the note's own (`415` otherwise). Id, creation time and metadata stay: the title of a markdown note without one set follows the new text. Change the title or alt text with `PATCH`. Needs the feed's password if it has one, and counts against the post rate limit. Read links can't edit.
+ */
+export const editNote = <ThrowOnError extends boolean = false>(options: Options<EditNoteData, ThrowOnError>): RequestResult<EditNoteResponses, EditNoteErrors, ThrowOnError> => (options.client ?? client).put<EditNoteResponses, EditNoteErrors, ThrowOnError>({
+    bodySerializer: null,
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/api/v1/feeds/{feed}/notes/{id}',
+    ...options,
+    headers: {
+        'Content-Type': 'text/markdown',
         ...options.headers
     }
 });

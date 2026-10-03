@@ -6,9 +6,9 @@ import httpx
 
 from ... import errors
 from ...client import AuthenticatedClient, Client
-from ...models.edit_json import EditJson
 from ...models.error import Error
 from ...models.note import Note
+from ...models.note_meta import NoteMeta
 from ...types import UNSET, Response, Unset
 
 
@@ -16,7 +16,7 @@ def _get_kwargs(
     feed: str,
     id: str,
     *,
-    body: EditJson,
+    body: NoteMeta,
     x_feed_password: str | Unset = UNSET,
 ) -> dict[str, Any]:
     headers: dict[str, Any] = {}
@@ -24,7 +24,7 @@ def _get_kwargs(
         headers["X-Feed-Password"] = x_feed_password
 
     _kwargs: dict[str, Any] = {
-        "method": "put",
+        "method": "patch",
         "url": "/api/v1/feeds/{feed}/notes/{id}".format(
             feed=quote(str(feed), safe=""),
             id=quote(str(id), safe=""),
@@ -62,11 +62,6 @@ def _parse_response(
 
         return response_404
 
-    if response.status_code == 413:
-        response_413 = Error.from_dict(response.json())
-
-        return response_413
-
     if response.status_code == 415:
         response_415 = Error.from_dict(response.json())
 
@@ -99,22 +94,20 @@ def sync_detailed(
     id: str,
     *,
     client: AuthenticatedClient,
-    body: EditJson,
+    body: NoteMeta,
     x_feed_password: str | Unset = UNSET,
 ) -> Response[Error | Note]:
-    """Edit a note
+    """Change a note's title or alt text
 
-     Changes the note: its markdown (only for a markdown note), its title (empty removes it: a markdown
-    note's title follows its text again), its alt text (image notes). Its id and creation time stay. A
-    raw text body is the new markdown. At least one of the three is needed. Needs the feed's password if
-    it has one, and counts against the post rate limit. Read links can't edit. The body is at most
-    102400 bytes and UTF-8.
+     Sets the note's title and/or alt text (alt only for images). An empty string removes one: a markdown
+    note's title follows its text again. At least one is needed. Needs the feed's password if it has
+    one, and counts against the post rate limit. Read links can't change notes.
 
     Args:
         feed (str):
         id (str):
         x_feed_password (str | Unset):
-        body (EditJson):
+        body (NoteMeta):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -143,22 +136,20 @@ def sync(
     id: str,
     *,
     client: AuthenticatedClient,
-    body: EditJson,
+    body: NoteMeta,
     x_feed_password: str | Unset = UNSET,
 ) -> Error | Note | None:
-    """Edit a note
+    """Change a note's title or alt text
 
-     Changes the note: its markdown (only for a markdown note), its title (empty removes it: a markdown
-    note's title follows its text again), its alt text (image notes). Its id and creation time stay. A
-    raw text body is the new markdown. At least one of the three is needed. Needs the feed's password if
-    it has one, and counts against the post rate limit. Read links can't edit. The body is at most
-    102400 bytes and UTF-8.
+     Sets the note's title and/or alt text (alt only for images). An empty string removes one: a markdown
+    note's title follows its text again. At least one is needed. Needs the feed's password if it has
+    one, and counts against the post rate limit. Read links can't change notes.
 
     Args:
         feed (str):
         id (str):
         x_feed_password (str | Unset):
-        body (EditJson):
+        body (NoteMeta):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -182,22 +173,20 @@ async def asyncio_detailed(
     id: str,
     *,
     client: AuthenticatedClient,
-    body: EditJson,
+    body: NoteMeta,
     x_feed_password: str | Unset = UNSET,
 ) -> Response[Error | Note]:
-    """Edit a note
+    """Change a note's title or alt text
 
-     Changes the note: its markdown (only for a markdown note), its title (empty removes it: a markdown
-    note's title follows its text again), its alt text (image notes). Its id and creation time stay. A
-    raw text body is the new markdown. At least one of the three is needed. Needs the feed's password if
-    it has one, and counts against the post rate limit. Read links can't edit. The body is at most
-    102400 bytes and UTF-8.
+     Sets the note's title and/or alt text (alt only for images). An empty string removes one: a markdown
+    note's title follows its text again. At least one is needed. Needs the feed's password if it has
+    one, and counts against the post rate limit. Read links can't change notes.
 
     Args:
         feed (str):
         id (str):
         x_feed_password (str | Unset):
-        body (EditJson):
+        body (NoteMeta):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -224,22 +213,20 @@ async def asyncio(
     id: str,
     *,
     client: AuthenticatedClient,
-    body: EditJson,
+    body: NoteMeta,
     x_feed_password: str | Unset = UNSET,
 ) -> Error | Note | None:
-    """Edit a note
+    """Change a note's title or alt text
 
-     Changes the note: its markdown (only for a markdown note), its title (empty removes it: a markdown
-    note's title follows its text again), its alt text (image notes). Its id and creation time stay. A
-    raw text body is the new markdown. At least one of the three is needed. Needs the feed's password if
-    it has one, and counts against the post rate limit. Read links can't edit. The body is at most
-    102400 bytes and UTF-8.
+     Sets the note's title and/or alt text (alt only for images). An empty string removes one: a markdown
+    note's title follows its text again. At least one is needed. Needs the feed's password if it has
+    one, and counts against the post rate limit. Read links can't change notes.
 
     Args:
         feed (str):
         id (str):
         x_feed_password (str | Unset):
-        body (EditJson):
+        body (NoteMeta):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.

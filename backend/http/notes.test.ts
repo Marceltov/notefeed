@@ -9,7 +9,7 @@ import { logsOf } from "../log";
 import { cookieValue, feedCookieName, protectedFeed } from "../feedlock";
 import { getNote } from "../notes";
 import { sign } from "../oauth/tokens";
-import { editNote, postNote } from "../posting";
+import { editContent, postNote } from "../posting";
 import { dispatch } from "./api";
 
 // POST /<feed> as proxy.ts hands it on: through the dispatcher.
@@ -408,10 +408,10 @@ test("a same-origin post that creates a protected feed leaves this browser unloc
   expect(script.headers.get("set-cookie")).toBeNull();
 });
 
-test("postNote stores a verified sender, and editNote keeps it", async () => {
+test("postNote stores a verified sender, and editContent keeps it", async () => {
   const { note } = await postNote("test", "1.1.1.1", async () => ({ body: new TextEncoder().encode("# Hi"), mediaType: "text/markdown" }), {}, "Ann");
   expect((await getNote("test", note.id))!.sender).toBe("Ann");
-  const edited = await editNote("test", note.id, "1.1.1.1", async () => ({ markdown: "# Ho" }), {});
+  const edited = await editContent("test", note.id, "1.1.1.1", async () => ({ body: new TextEncoder().encode("# Ho"), mediaType: "text/markdown" }), {});
   expect(edited.sender).toBe("Ann");
   expect((await getNote("test", note.id))!.sender).toBe("Ann");
 });

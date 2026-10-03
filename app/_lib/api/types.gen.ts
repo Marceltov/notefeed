@@ -6,41 +6,41 @@ export type ClientOptions = {
 
 export type Note = {
     /**
-     * What the note is: a markdown text, or a picture (then `markdown` is empty and the picture is the file `file`)
-     */
-    kind: 'markdown' | 'image';
-    /**
-     * The note's file name, `<id>.<extension>`; served under the feed's read id, like the picture of an image note
-     */
-    file: string;
-    /**
      * The note's id: a UTC time to the second plus a random UUID for notes made here; any name without a dot for a file placed by hand
      */
     id: string;
     /**
-     * The title set for the note, else the first heading or the first non-empty line of a markdown note; may be empty (an image without one)
+     * The media type of the note's file: `text/markdown`, `image/png`, `image/jpeg`, `image/gif` or `image/webp`
      */
-    title: string;
+    type: string;
     /**
-     * Alternative text of an image note
+     * The note's file name, `<id>.<extension>`
      */
-    alt?: string | null;
+    file: string;
     /**
-     * The file name an image was posted with
+     * Where the note's file is served, absolute, under the feed's read id (public like the read link); null while the feed has no read link
      */
-    name?: string | null;
+    file_url: string | null;
     /**
-     * The size of the note's content in bytes
+     * The size of the note's file in bytes
      */
     size: number;
     /**
-     * Where the note's file is served, absolute, under the feed's read id; null while the feed has no read link
+     * The title set for the note, else the first heading or the first non-empty line of a markdown note, else the picture's alt text; may be empty
      */
-    file_url?: string | null;
+    title: string;
     /**
-     * The note, byte-for-byte as posted
+     * The note's text, byte-for-byte as posted: for a text type (markdown) only; absent for a picture
      */
-    markdown: string;
+    content?: string;
+    /**
+     * Alternative text of an image note, when it has one
+     */
+    alt?: string;
+    /**
+     * The file name an image was posted with, when it came with one
+     */
+    name?: string;
     /**
      * When the note was posted (UTC)
      */
@@ -105,11 +105,7 @@ export type Error = {
     code?: 'invalid_feed' | 'reserved_feed' | 'auth' | 'rate_limited' | 'too_many_attempts' | 'feed_limit' | 'note_limit' | 'image_limit' | 'empty_note' | 'too_large' | 'unsupported_type' | 'invalid_body' | 'invalid_request' | 'not_found' | 'feed_exists' | 'taken';
 };
 
-export type EditJson = {
-    /**
-     * The new text; only for a markdown note
-     */
-    markdown?: string;
+export type NoteMeta = {
     /**
      * The note's title, at most 100 characters, one line; empty or left out means the title is taken from the text (a markdown note) or there is none (an image)
      */
@@ -119,8 +115,6 @@ export type EditJson = {
      */
     alt?: string;
 };
-
-export type EditForm = EditJson;
 
 export type PasswordJson = {
     /**
@@ -442,8 +436,67 @@ export type GetNoteResponses = {
 
 export type GetNoteResponse = GetNoteResponses[keyof GetNoteResponses];
 
+export type PatchNoteData = {
+    body: NoteMeta;
+    headers?: {
+        /**
+         * The feed's own password, when it has one: to post, list or get, and (as the current password) to change or remove it. On the `POST` that creates a feed it sets the feed's password; on a `POST` to an existing feed that has none it answers 409. An empty value is the same as no header, so a `POST` with an empty one creates an open feed.
+         */
+        'X-Feed-Password'?: string;
+    };
+    path: {
+        /**
+         * The feed's name. It is the write key: anyone who knows it can post.
+         */
+        feed: string;
+        /**
+         * The note's id
+         */
+        id: string;
+    };
+    query?: never;
+    url: '/api/v1/feeds/{feed}/notes/{id}';
+};
+
+export type PatchNoteErrors = {
+    /**
+     * Invalid or reserved feed name; nothing to change; a bad title or alt text; alt for a note that has none; bad JSON
+     */
+    400: Error;
+    /**
+     * The instance has a password, or the feed has its own, and it is missing or wrong
+     */
+    401: Error;
+    /**
+     * No such note
+     */
+    404: Error;
+    /**
+     * Content-Type is not application/json
+     */
+    415: Error;
+    /**
+     * Too many posts, edits and deletes, or wrong passwords, from this client
+     */
+    429: Error;
+};
+
+export type PatchNoteError = PatchNoteErrors[keyof PatchNoteErrors];
+
+export type PatchNoteResponses = {
+    /**
+     * The note as it is now
+     */
+    200: Note;
+};
+
+export type PatchNoteResponse = PatchNoteResponses[keyof PatchNoteResponses];
+
 export type EditNoteData = {
-    body: EditJson;
+    /**
+     * The note, a file: its bytes, of the type `Content-Type` declares
+     */
+    body: Blob | File;
     headers?: {
         /**
          * The feed's own password, when it has one: to post, list or get, and (as the current password) to change or remove it. On the `POST` that creates a feed it sets the feed's password; on a `POST` to an existing feed that has none it answers 409. An empty value is the same as no header, so a `POST` with an empty one creates an open feed.
@@ -466,7 +519,7 @@ export type EditNoteData = {
 
 export type EditNoteErrors = {
     /**
-     * Invalid or reserved feed name; empty note; bad JSON, form or UTF-8
+     * Invalid or reserved feed name; a blank note
      */
     400: Error;
     /**
@@ -478,11 +531,11 @@ export type EditNoteErrors = {
      */
     404: Error;
     /**
-     * Body over 102400 bytes
+     * Markdown over 102400 bytes, or an image over NOTEFEED_MAX_IMAGE_BYTES
      */
     413: Error;
     /**
-     * Unsupported content type
+     * Content-Type missing, not accepted or not the note's own type, or the body is not what it declares
      */
     415: Error;
     /**

@@ -3,7 +3,7 @@ import { McpServer, createMcpHandler, type AuthInfo } from "@modelcontextprotoco
 import * as z from "zod";
 import { bearerOf, checkBearer, locked } from "./auth";
 import { config } from "./config";
-import { AuthError, ImageTooLargeError, NotefeedError, NotFoundError, TooManyAttemptsError, UnsupportedTypeError } from "./errors";
+import { AuthError, ImageTooLargeError, InvalidBodyError, NotefeedError, NotFoundError, TooManyAttemptsError, UnsupportedTypeError } from "./errors";
 import { checkFeedAccess } from "./feedlock";
 import { assertFeed, FEED_RE, hasFeed } from "./feeds";
 import { feedJson } from "./http/api";
@@ -15,7 +15,7 @@ import { logger } from "./log";
 import { getNote, listNotes, type Note } from "./notes";
 import { verify } from "./oauth/tokens";
 import { TAG_RULE } from "./tags";
-import { deleteFeed, deleteNote, editNote, postNote, updateFeed } from "./posting";
+import { deleteFeed, deleteNote, editContent, editMeta, postNote, updateFeed } from "./posting";
 import { feedPath, imagePath, mcpResource, publicUrl, rssPath } from "./urls";
 
 const log = logger("mcp");
@@ -109,8 +109,10 @@ function server(h: Headers): McpServer {
       annotations: { destructiveHint: true, idempotentHint: true },
     },
     guard(async ({ feed, id, markdown, title, password }) => {
-      const note = await editNote(feed, id, clientIp(h), async () => ({ markdown, title }), { password });
-      return ok({ ...summary(feed, note), markdown: note.content ?? "" });
+      if (markdown === undefined && title === undefined) throw new InvalidBodyError("nothing to change: send markdown, title or both");
+      let note = markdown === undefined ? undefined : await editContent(feed, id, clientIp(h), async () => ({ body: new TextEncoder().encode(markdown), mediaType: "text/markdown" }), { password });
+      if (title !== undefined) note = await editMeta(feed, id, clientIp(h), async () => ({ title }), { password });
+      return ok({ ...summary(feed, note!), markdown: note!.content ?? "" });
     }),
   );
 

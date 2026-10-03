@@ -5,17 +5,14 @@ import { config } from "../config";
 import { ImageTooLargeError, InvalidBodyError, NoteTooLargeError, UnsupportedTypeError } from "../errors";
 import { cookieValue } from "../feedlock";
 import { clientIp } from "../limits";
-import { MAX_BYTES, type NoteEdit } from "../notes";
+import { MAX_BYTES } from "../notes";
 import { postNote, type PostInput } from "../posting";
 import { parseMediaType } from "../note/types";
 import { tagsFromHeader } from "../tags";
 import { feedPath, imagePath, publicUrl, rssPath } from "../urls";
 import { feedCookies } from "./feedsession";
-import { authorize, feedAccess, mediaType, parseForm, readCapped, sameOrigin, sender } from "./request";
-import { type Created, EditJson } from "./schemas";
-
-// curl --data-binary sends x-www-form-urlencoded by default; treat it (and no type) as raw markdown.
-const TEXT_TYPES = ["", "text/markdown", "text/plain", "application/x-www-form-urlencoded"];
+import { authorize, feedAccess, mediaType, readCapped, sameOrigin, sender } from "./request";
+import { type Created, MetaJson } from "./schemas";
 
 // What the POST answers: the created note.
 type PostReply = { status: 201; body: Created; headers?: HeadersInit };
@@ -43,35 +40,25 @@ export async function readPost(req: Request): Promise<PostInput> {
 
 const fileName = (v: string | null) => decodeHeaderValue(v ?? "").replace(/[\x00-\x1f\x7f/\\]/g, "").trim().slice(0, 200) || undefined;
 
-// What an edit carries: markdown, a title, an alt text; at least one (updateNote checks). A raw text body is the markdown.
-export async function readEdit(req: Request): Promise<NoteEdit> {
-  const type = mediaType(req.headers);
-  const isJson = type === "application/json";
-  const isForm = type === "multipart/form-data";
-  if (!isJson && !isForm && !TEXT_TYPES.includes(type)) throw new UnsupportedTypeError();
+// The file of a PUT: the same body and Content-Type rules as a post (the note's own type is checked against it later).
+export async function readContent(req: Request): Promise<{ body: Uint8Array; mediaType: string }> {
+  const { body, mediaType } = await readPost(req);
+  return { body, mediaType };
+}
+
+// The JSON of a PATCH: a title and/or an alt text.
+export async function readMetaPatch(req: Request): Promise<{ title?: string; alt?: string }> {
+  if (mediaType(req.headers) !== "application/json") throw new UnsupportedTypeError("send Content-Type: application/json");
   const bytes = await readCapped(req, MAX_BYTES);
   if (!bytes) throw new NoteTooLargeError();
-  if (isForm) {
-    const data = await parseForm(bytes, req.headers).catch(() => null);
-    if (!data) throw new InvalidBodyError("invalid form");
-    const text = (k: string) => (typeof data.get(k) === "string" ? (data.get(k) as string) : undefined);
-    return { markdown: text("markdown"), title: text("title"), alt: text("alt") };
-  }
-  let text: string;
-  try {
-    text = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(bytes);
-  } catch {
-    throw new InvalidBodyError("body must be UTF-8");
-  }
-  if (!isJson) return { markdown: text };
   let json: unknown;
   try {
-    json = JSON.parse(text);
+    json = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
   } catch {
     throw new InvalidBodyError("invalid JSON");
   }
-  const parsed = EditJson.safeParse(json);
-  if (!parsed.success) throw new InvalidBodyError('JSON needs "markdown", "title" or "alt" strings');
+  const parsed = MetaJson.safeParse(json);
+  if (!parsed.success) throw new InvalidBodyError('JSON may carry "title" and "alt" strings');
   return parsed.data;
 }
 

@@ -464,8 +464,8 @@
       },
       "put": {
         "operationId": "editNote",
-        "summary": "Edit a note",
-        "description": "Changes the note: its markdown (only for a markdown note), its title (empty removes it: a markdown note's title follows its text again), its alt text (image notes). Its id and creation time stay. A raw text body is the new markdown. At least one of the three is needed. Needs the feed's password if it has one, and counts against the post rate limit. Read links can't edit. The body is at most 102400 bytes and UTF-8.",
+        "summary": "Replace a note's content",
+        "description": "The body is the new file, with the same rules as posting: a `Content-Type` that is one of the accepted types, a body that is what it declares. A note keeps its type, so the type must be the note's own (`415` otherwise). Id, creation time and metadata stay: the title of a markdown note without one set follows the new text. Change the title or alt text with `PATCH`. Needs the feed's password if it has one, and counts against the post rate limit. Read links can't edit.",
         "tags": [
           "Feeds"
         ],
@@ -511,27 +511,37 @@
           "content": {
             "text/markdown": {
               "schema": {
-                "type": "string"
+                "type": "string",
+                "format": "binary",
+                "description": "The note, a file: its bytes, of the type `Content-Type` declares"
               }
             },
-            "text/plain": {
+            "image/png": {
               "schema": {
-                "type": "string"
+                "type": "string",
+                "format": "binary",
+                "description": "The note, a file: its bytes, of the type `Content-Type` declares"
               }
             },
-            "application/x-www-form-urlencoded": {
+            "image/jpeg": {
               "schema": {
-                "type": "string"
+                "type": "string",
+                "format": "binary",
+                "description": "The note, a file: its bytes, of the type `Content-Type` declares"
               }
             },
-            "application/json": {
+            "image/gif": {
               "schema": {
-                "$ref": "#/components/schemas/EditJson"
+                "type": "string",
+                "format": "binary",
+                "description": "The note, a file: its bytes, of the type `Content-Type` declares"
               }
             },
-            "multipart/form-data": {
+            "image/webp": {
               "schema": {
-                "$ref": "#/components/schemas/EditForm"
+                "type": "string",
+                "format": "binary",
+                "description": "The note, a file: its bytes, of the type `Content-Type` declares"
               }
             }
           }
@@ -548,7 +558,7 @@
             }
           },
           "400": {
-            "description": "Invalid or reserved feed name; empty note; bad JSON, form or UTF-8",
+            "description": "Invalid or reserved feed name; a blank note",
             "content": {
               "application/json": {
                 "schema": {
@@ -578,7 +588,7 @@
             }
           },
           "413": {
-            "description": "Body over 102400 bytes",
+            "description": "Markdown over 102400 bytes, or an image over NOTEFEED_MAX_IMAGE_BYTES",
             "content": {
               "application/json": {
                 "schema": {
@@ -588,7 +598,132 @@
             }
           },
           "415": {
-            "description": "Unsupported content type",
+            "description": "Content-Type missing, not accepted or not the note's own type, or the body is not what it declares",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many posts, edits and deletes, or wrong passwords, from this client",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before trying again",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "operationId": "patchNote",
+        "summary": "Change a note's title or alt text",
+        "description": "Sets the note's title and/or alt text (alt only for images). An empty string removes one: a markdown note's title follows its text again. At least one is needed. Needs the feed's password if it has one, and counts against the post rate limit. Read links can't change notes.",
+        "tags": [
+          "Feeds"
+        ],
+        "security": [
+          {},
+          {
+            "password": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "feed",
+            "in": "path",
+            "required": true,
+            "description": "The feed's name. It is the write key: anyone who knows it can post.",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9_-]{1,64}$"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "The note's id",
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{1,128}$"
+            }
+          },
+          {
+            "name": "X-Feed-Password",
+            "in": "header",
+            "required": false,
+            "description": "The feed's own password, when it has one: to post, list or get, and (as the current password) to change or remove it. On the `POST` that creates a feed it sets the feed's password; on a `POST` to an existing feed that has none it answers 409. An empty value is the same as no header, so a `POST` with an empty one creates an open feed.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NoteMeta"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The note as it is now",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Note"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid or reserved feed name; nothing to change; a bad title or alt text; alt for a note that has none; bad JSON",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The instance has a password, or the feed has its own, and it is missing or wrong",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such note",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Content-Type is not application/json",
             "content": {
               "application/json": {
                 "schema": {
@@ -1423,49 +1558,20 @@
       "Note": {
         "type": "object",
         "properties": {
-          "kind": {
-            "type": "string",
-            "enum": [
-              "markdown",
-              "image"
-            ],
-            "description": "What the note is: a markdown text, or a picture (then `markdown` is empty and the picture is the file `file`)"
-          },
-          "file": {
-            "type": "string",
-            "description": "The note's file name, `<id>.<extension>`; served under the feed's read id, like the picture of an image note"
-          },
           "id": {
             "type": "string",
             "pattern": "^[A-Za-z0-9_-]{1,128}$",
             "description": "The note's id: a UTC time to the second plus a random UUID for notes made here; any name without a dot for a file placed by hand"
           },
-          "title": {
+          "type": {
             "type": "string",
-            "description": "The title set for the note, else the first heading or the first non-empty line of a markdown note; may be empty (an image without one)"
+            "description": "The media type of the note's file: `text/markdown`, `image/png`, `image/jpeg`, `image/gif` or `image/webp`"
           },
-          "alt": {
-            "description": "Alternative text of an image note",
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "name": {
-            "description": "The file name an image was posted with",
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "size": {
-            "type": "integer",
-            "minimum": -9007199254740991,
-            "maximum": 9007199254740991,
-            "description": "The size of the note's content in bytes"
+          "file": {
+            "type": "string",
+            "description": "The note's file name, `<id>.<extension>`"
           },
           "file_url": {
-            "description": "Where the note's file is served, absolute, under the feed's read id; null while the feed has no read link",
             "anyOf": [
               {
                 "type": "string",
@@ -1474,11 +1580,30 @@
               {
                 "type": "null"
               }
-            ]
+            ],
+            "description": "Where the note's file is served, absolute, under the feed's read id (public like the read link); null while the feed has no read link"
           },
-          "markdown": {
+          "size": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991,
+            "description": "The size of the note's file in bytes"
+          },
+          "title": {
             "type": "string",
-            "description": "The note, byte-for-byte as posted"
+            "description": "The title set for the note, else the first heading or the first non-empty line of a markdown note, else the picture's alt text; may be empty"
+          },
+          "content": {
+            "description": "The note's text, byte-for-byte as posted: for a text type (markdown) only; absent for a picture",
+            "type": "string"
+          },
+          "alt": {
+            "description": "Alternative text of an image note, when it has one",
+            "type": "string"
+          },
+          "name": {
+            "description": "The file name an image was posted with, when it came with one",
+            "type": "string"
           },
           "created_at": {
             "type": "string",
@@ -1507,12 +1632,12 @@
           }
         },
         "required": [
-          "kind",
-          "file",
           "id",
-          "title",
+          "type",
+          "file",
+          "file_url",
           "size",
-          "markdown",
+          "title",
           "created_at",
           "url",
           "tags"
@@ -1634,13 +1759,9 @@
         ],
         "additionalProperties": false
       },
-      "EditJson": {
+      "NoteMeta": {
         "type": "object",
         "properties": {
-          "markdown": {
-            "description": "The new text; only for a markdown note",
-            "type": "string"
-          },
           "title": {
             "type": "string",
             "description": "The note's title, at most 100 characters, one line; empty or left out means the title is taken from the text (a markdown note) or there is none (an image)"
@@ -1651,9 +1772,6 @@
           }
         },
         "additionalProperties": false
-      },
-      "EditForm": {
-        "$ref": "#/components/schemas/EditJson"
       },
       "PasswordJson": {
         "type": "object",

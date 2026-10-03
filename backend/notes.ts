@@ -9,7 +9,7 @@ import { sniffImage } from "./images";
 import { ImageNote } from "./note/image";
 import { checkMarkdown, MarkdownNote } from "./note/markdown";
 import { Note } from "./note/note";
-import { typeForExt, type NoteType } from "./note/types";
+import { parseMediaType, typeForExt, type NoteType } from "./note/types";
 
 export { checkMarkdown, MAX_BYTES } from "./note/markdown";
 export { ImageNote, MarkdownNote, Note };
@@ -160,24 +160,34 @@ export async function getNote(feed: string, id: string): Promise<Note | null> {
   return stored && type ? type.read({ id, ext: stored.ext, meta: stored.meta, createdAt: createdAt(id, stored.meta, stored.mtime), size: stored.size }, stored.content) : null;
 }
 
-/** What an edit may change; at least one field. `markdown` only for a markdown note. "" removes a title or alt. */
-export type NoteEdit = { markdown?: string; title?: string; alt?: string };
+/**
+ * Replaces a note's content with `body`, declared as `mediaType`. A note keeps its type, so the declared type must be the note's own
+ * (UnsupportedTypeError otherwise); the body gets the checks a new note gets. Id, date and metadata stay. null: invalid feed or id, or no
+ * such note.
+ */
+export async function replaceContent(feed: string, id: string, body: Uint8Array, mediaType: string): Promise<Note | null> {
+  const parsed = parseMediaType(mediaType);
+  if (!parsed) throw new UnsupportedTypeError();
+  if (!parsed.type.verify(body, parsed.ext)) throw new UnsupportedTypeError(`the body is not ${parsed.mediaType}`);
+  parsed.type.checkBody(body);
+  if (checkFeed(feed) || !isValidId(id)) return null;
+  const note = await getNote(feed, id);
+  if (!note) return null;
+  if (note.type !== parsed.mediaType) throw new UnsupportedTypeError(`this note is ${note.type}: send that Content-Type`);
+  return (await replaceNote(feed, id, body)) ? getNote(feed, id) : null;
+}
 
-// The id never changes, so neither does createdAt. null: invalid feed or id, or no such note. A refusal (blank or big markdown,
-// a bad title, markdown for an image, alt for a text, nothing to change) throws and changes nothing.
-export async function updateNote(feed: string, id: string, edit: NoteEdit): Promise<Note | null> {
-  if (edit.markdown === undefined && edit.title === undefined && edit.alt === undefined) throw new InvalidBodyError("nothing to change: send markdown, title or alt");
-  if (edit.markdown !== undefined) checkMarkdown(edit.markdown);
+/** Sets the title and/or alt text of a note; "" removes one. At least one is needed; alt only for types that have it. null: no such note. */
+export async function changeMeta(feed: string, id: string, edit: { title?: string; alt?: string }): Promise<Note | null> {
+  if (edit.title === undefined && edit.alt === undefined) throw new InvalidBodyError("nothing to change: send title or alt");
   const title = checkLine("title", edit.title, MAX_NOTE_TITLE);
   const alt = checkLine("alt", edit.alt, MAX_ALT);
   if (checkFeed(feed) || !isValidId(id)) return null;
   const note = await getNote(feed, id);
   if (!note) return null;
-  if (edit.markdown !== undefined && !(note instanceof MarkdownNote)) throw new InvalidBodyError("an image note has no markdown to replace");
-  if (alt !== undefined && !(note instanceof ImageNote)) throw new InvalidBodyError("alt is for image notes");
-  if (edit.markdown !== undefined && !(await replaceNote(feed, id, edit.markdown))) return null;
-  if ((title !== undefined || alt !== undefined) && !(await updateMeta(feed, id, { ...(title !== undefined && { title }), ...(alt !== undefined && { alt }) }))) return null;
-  return getNote(feed, id);
+  if (alt !== undefined && !typeForExt(note.ext)?.hasAlt) throw new InvalidBodyError("alt is for image notes");
+  const patch = { ...(title !== undefined && { title }), ...(alt !== undefined && { alt }) };
+  return (await updateMeta(feed, id, patch)) ? getNote(feed, id) : null;
 }
 
 export async function removeNote(feed: string, id: string): Promise<boolean> {

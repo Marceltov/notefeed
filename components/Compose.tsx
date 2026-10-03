@@ -58,7 +58,7 @@ export function Compose({ feed, action, error: initialError, isNew, sender }: { 
   }
 
   return (
-    <form method="post" action={action} encType="multipart/form-data" onSubmit={submit} className="mb-12">
+    <form onSubmit={submit} className="mb-12">
       <MarkdownInput
         id="markdown"
         name="markdown"

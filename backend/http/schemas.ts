@@ -11,15 +11,15 @@ export const MAX_LIMIT = 100;
 
 export const NoteJson = z
   .object({
-    kind: z.enum(["markdown", "image"]).describe("What the note is: a markdown text, or a picture (then `markdown` is empty and the picture is the file `file`)"),
-    file: z.string().describe("The note's file name, `<id>.<extension>`; served under the feed's read id, like the picture of an image note"),
     id: z.string().regex(NOTE_ID).describe("The note's id: a UTC time to the second plus a random UUID for notes made here; any name without a dot for a file placed by hand"),
-    title: z.string().describe("The title set for the note, else the first heading or the first non-empty line of a markdown note; may be empty (an image without one)"),
-    alt: z.string().nullable().optional().describe("Alternative text of an image note"),
-    name: z.string().nullable().optional().describe("The file name an image was posted with"),
-    size: z.number().int().describe("The size of the note's content in bytes"),
-    file_url: z.url().nullable().optional().describe("Where the note's file is served, absolute, under the feed's read id; null while the feed has no read link"),
-    markdown: z.string().describe("The note, byte-for-byte as posted"),
+    type: z.string().describe("The media type of the note's file: `text/markdown`, `image/png`, `image/jpeg`, `image/gif` or `image/webp`"),
+    file: z.string().describe("The note's file name, `<id>.<extension>`"),
+    file_url: z.url().nullable().describe("Where the note's file is served, absolute, under the feed's read id (public like the read link); null while the feed has no read link"),
+    size: z.number().int().describe("The size of the note's file in bytes"),
+    title: z.string().describe("The title set for the note, else the first heading or the first non-empty line of a markdown note, else the picture's alt text; may be empty"),
+    content: z.string().optional().describe("The note's text, byte-for-byte as posted: for a text type (markdown) only; absent for a picture"),
+    alt: z.string().optional().describe("Alternative text of an image note, when it has one"),
+    name: z.string().optional().describe("The file name an image was posted with, when it came with one"),
     created_at: z.iso.datetime().describe("When the note was posted (UTC)"),
     url: z.url().describe("The note's page in the web UI"),
     sender: z.string().nullable().optional().describe("Verified sign-in name of the poster; absent when the note was posted without a sign-in"),
@@ -56,10 +56,7 @@ export const ErrorJson = z
 
 const NoteTitle = z.string().describe("The note's title, at most 100 characters, one line; empty or left out means the title is taken from the text (a markdown note) or there is none (an image)");
 const NoteAlt = z.string().describe("Alternative text of an image note, at most 500 characters, one line");
-export const EditJson = z
-  .object({ markdown: z.string().optional().describe("The new text; only for a markdown note"), title: NoteTitle.optional(), alt: NoteAlt.optional() })
-  .meta({ id: "EditJson" });
-export const EditForm = EditJson.meta({ id: "EditForm" });
+export const MetaJson = z.object({ title: NoteTitle.optional(), alt: NoteAlt.optional() }).meta({ id: "NoteMeta" });
 export const PasswordJson = z.object({ password: z.string().describe(`The new password: ${PASSWORD_RULE}`) }).meta({ id: "PasswordJson" });
 
 export const FeedPasswordHeader = z
@@ -112,7 +109,7 @@ export const ReadFeedJson = z.object({ title: TITLE, description: DESCRIPTION, i
 // A raw request body, not JSON.
 export const FileBody = z.string().meta({ format: "binary" }).describe("The note, a file: its bytes, of the type `Content-Type` declares");
 
-export const COMPONENTS = [NoteJson, NoteList, Created, ErrorJson, EditJson, EditForm, PasswordJson, FeedSettingsJson, FeedJson, ReadFeedJson];
+export const COMPONENTS = [NoteJson, NoteList, Created, ErrorJson, MetaJson, PasswordJson, FeedSettingsJson, FeedJson, ReadFeedJson];
 
 export const FeedParam = z.string().regex(FEED_RE).describe("The feed's name. It is the write key: anyone who knows it can post.");
 export const ReadIdParam = z.string().regex(/^[A-Za-z0-9_-]{1,64}$/).describe("The feed's read id, from its read link: 22 random characters, one the feed's owner chose, or the feed's own name for a reserved feed. Read-only; never reveals the name of any other feed.");

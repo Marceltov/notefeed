@@ -20,7 +20,6 @@ export { dispatch } from "./http/api";
 export { feedCookieName, feedUnlocked } from "./feedlock";
 export { feedDeleteRoute, feedSettingsRoute } from "./http/feedforms";
 export { feedAccessRoute } from "./http/feedsession";
-export { noteFormRoute } from "./http/noteforms";
 export { loginRoute, logoutRoute } from "./http/session";
 export { fileRoute } from "./http/files";
 export { rssRoute } from "./http/rss";

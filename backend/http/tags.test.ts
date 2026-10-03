@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, test } from "vitest";
 import { resetFeedsForTests, readIdOf } from "../feeds";
 import { resetRateLimitsForTests } from "../limits";
 import { getNote } from "../notes";
-import { editNote } from "../posting";
+import { editContent } from "../posting";
 import { checkTags, tagsFromHeader } from "../tags";
 import { dispatch } from "./api";
 import { rssRoute } from "./rss";
@@ -71,7 +71,7 @@ describe("posting tags", () => {
   });
   test("an edit keeps the tags", async () => {
     const { id } = await (await json(["keep"])).json();
-    await editNote("t", id, "1.2.3.4", async () => ({ markdown: "# Changed" }), {});
+    await editContent("t", id, "1.2.3.4", async () => ({ body: new TextEncoder().encode("# Changed"), mediaType: "text/markdown" }), {});
     expect((await getNote("t", id))!.tags).toEqual(["keep"]);
   });
 });

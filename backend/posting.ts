@@ -8,7 +8,7 @@ import { assertFeed, deleteFeed as removeWholeFeed, feedCount, hasFeed, isHeldBa
 import { capReached, rateLimit } from "./limits";
 import { parseMediaType } from "./note/types";
 import { checkTags } from "./tags";
-import { checkLine, countNotes, createNoteOf, hasImageNote, MAX_ALT, MAX_NOTE_TITLE, removeNote, updateNote, type Note, type NoteEdit } from "./notes";
+import { checkLine, countNotes, createNoteOf, hasImageNote, MAX_ALT, MAX_NOTE_TITLE, removeNote, replaceContent, changeMeta, type Note } from "./notes";
 
 // What a post carries: the file (`body`) and the type the poster declared for it (`mediaType`, a Content-Type), with the optional
 // metadata (`name` is the file name it came with) and, for the post that creates the feed, a password and a read id.
@@ -79,9 +79,18 @@ async function admit(feed: string, ip: string, access: FeedAccess): Promise<void
   if (wait !== null) throw new RateLimitedError(wait);
 }
 
-export async function editNote(feed: string, id: string, ip: string, read: () => Promise<NoteEdit>, access: FeedAccess): Promise<Note> {
+// Replacing a note's content, and changing its title or alt text: the same gate as posting, minus the caps.
+export async function editContent(feed: string, id: string, ip: string, read: () => Promise<{ body: Uint8Array; mediaType: string }>, access: FeedAccess): Promise<Note> {
   await admit(feed, ip, access);
-  const note = await updateNote(feed, id, await read());
+  const { body, mediaType } = await read();
+  const note = await replaceContent(feed, id, body, mediaType);
+  if (!note) throw new NotFoundError("no such note");
+  return note;
+}
+
+export async function editMeta(feed: string, id: string, ip: string, read: () => Promise<{ title?: string; alt?: string }>, access: FeedAccess): Promise<Note> {
+  await admit(feed, ip, access);
+  const note = await changeMeta(feed, id, await read());
   if (!note) throw new NotFoundError("no such note");
   return note;
 }
