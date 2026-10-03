@@ -14,6 +14,7 @@ import { parseMediaType } from "./note/types";
 import { logger } from "./log";
 import { checkLine, getNote, listNotes, MAX_NOTE_TITLE, type Note } from "./notes";
 import { verify } from "./oauth/tokens";
+import { ATTACHMENT_NAME, placeImages } from "../shared/links";
 import { TAG_RULE } from "./tags";
 import { deleteFeed, deleteNote, editContent, editMeta, postNote, updateFeed } from "./posting";
 import { feedPath, imagePath, mcpResource, publicUrl, rssPath } from "./urls";
@@ -54,17 +55,57 @@ function server(h: Headers): McpServer {
   };
   const s = new McpServer({ name: "notefeed", version: "1.0.0" });
 
+  // One file as a note: the type must be accepted and the bytes must be what it says (postNote checks that); a picture is size-limited.
+  const postBytes = async (feed: string, f: { type: string; data: string; title?: string; alt?: string; name?: string; tags?: string[] }, password: string | undefined, readId?: string) => {
+    const parsed = parseMediaType(f.type);
+    if (!parsed) throw new UnsupportedTypeError();
+    const body = Buffer.from(f.data, "base64");
+    if (parsed.type.name === "image" && body.length > config.maxImageBytes()) throw new ImageTooLargeError();
+    return postNote(feed, clientIp(h), async () => ({ body, mediaType: parsed.mediaType, title: f.title, alt: f.alt, name: f.name, tags: f.tags, readId }), { password }, sender(h));
+  };
+  const fileUrl = (readId: string | null, file: string) => (readId ? base + imagePath(readId, file) : "");
+
   s.registerTool(
     "post_note",
     {
-      description: `Post a markdown note to a feed; the feed is created by its first note; a password given then protects the feed for good, and is refused on a feed that already exists. ${PROTECTED} ${SECRET_NOTE}`,
-      inputSchema: z.object({ feed, markdown: z.string(), title: z.string().optional().describe("The note's title (at most 100 characters, one line); left out, it is taken from the text"), password, tags: z.array(z.string()).optional().describe(`Labels for the note, e.g. ["ci","deploy"]: ${TAG_RULE}. Not verified; readers see them.`), read_id: z.string().optional().describe("Only when this post creates the feed: its read id (3 to 64 characters of a-z, 0-9, - and _), random when left out. A short readable one is guessable. Fails if taken.") }),
-      outputSchema: z.object({ id: z.string(), url: z.string(), feed_url: z.string(), read_url: z.string().nullable() }),
+      description: `Post a markdown note to a feed; the feed is created by its first note; a password given then protects the feed for good, and is refused on a feed that already exists. attachments are pictures posted first, as notes of their own: write ![](name) in the markdown where one goes (an attachment the text never refers to is added at the end); if one fails, the ones before it stay posted and the text is not. ${PROTECTED} ${SECRET_NOTE}`,
+      inputSchema: z.object({
+        feed,
+        markdown: z.string(),
+        title: z.string().optional().describe("The note's title (at most 100 characters, one line); left out, it is taken from the text"),
+        password,
+        tags: z.array(z.string()).optional().describe(`Labels for the note, e.g. ["ci","deploy"]: ${TAG_RULE}. Not verified; readers see them.`),
+        read_id: z.string().optional().describe("Only when this post creates the feed: its read id (3 to 64 characters of a-z, 0-9, - and _), random when left out. A short readable one is guessable. Fails if taken."),
+        attachments: z
+          .array(z.object({ name: z.string().regex(ATTACHMENT_NAME).describe("What the markdown calls it: ![](name). Letters, digits, . _ - only; unique"), type: z.string().describe(`The picture's media type: ${ACCEPTED_TYPES}`), data: z.string().describe("The picture's bytes, base64"), alt: z.string().optional().describe("Alternative text (at most 500 characters, one line)") }))
+          .optional(),
+      }),
+      outputSchema: z.object({ id: z.string(), url: z.string(), feed_url: z.string(), read_url: z.string().nullable(), attachments: z.array(z.object({ id: z.string(), file: z.string(), url: z.string() })) }),
     },
-    guard(async ({ feed, markdown, title, password, tags, read_id }) => {
-      const { note, readId } = await postNote(feed, clientIp(h), async () => ({ body: new TextEncoder().encode(markdown), mediaType: "text/markdown", title, tags, readId: read_id }), { password }, sender(h));
+    guard(async ({ feed, markdown, title, password, tags, read_id, attachments = [] }) => {
+      // Everything that can be checked without the feed, before the first note is posted.
+      const names = new Set<string>();
+      for (const a of attachments) {
+        if (names.has(a.name)) throw new InvalidBodyError(`attachment "${a.name}" is given twice`);
+        names.add(a.name);
+        if (parseMediaType(a.type)?.type.name !== "image") throw new UnsupportedTypeError(`attachment "${a.name}" must be a picture`);
+      }
+      const posted: { id: string; file: string; url: string }[] = [];
+      const sent = new Map<string, string>();
+      for (const a of attachments) {
+        try {
+          const { note, readId } = await postBytes(feed, { ...a, tags }, password, read_id);
+          posted.push({ id: note.id, file: note.file, url: fileUrl(readId, note.file) });
+          sent.set(a.name, note.file);
+        } catch (e) {
+          if (e instanceof NotefeedError) e.message = `attachment "${a.name}": ${e.message}${posted.length ? ` (already posted: ${posted.map((p) => p.file).join(", ")})` : ""}`;
+          throw e;
+        }
+      }
+      const text = new TextEncoder().encode(placeImages(markdown, sent));
+      const { note, readId } = await postNote(feed, clientIp(h), async () => ({ body: text, mediaType: "text/markdown", title, tags, readId: read_id }), { password }, sender(h));
       const feedUrl = base + feedPath(feed);
-      return ok({ id: note.id, url: `${feedUrl}/${note.id}`, feed_url: feedUrl, read_url: readId && base + rssPath(readId) });
+      return ok({ id: note.id, url: `${feedUrl}/${note.id}`, feed_url: feedUrl, read_url: readId && base + rssPath(readId), attachments: posted });
     }),
   );
 
@@ -192,12 +233,8 @@ function server(h: Headers): McpServer {
       outputSchema: z.object({ id: z.string(), file: z.string(), url: z.string() }),
     },
     guard(async ({ feed, type, data, title, alt, name, password }) => {
-      const parsed = parseMediaType(type);
-      if (!parsed) throw new UnsupportedTypeError();
-      const body = Buffer.from(data, "base64");
-      if (parsed.type.name === "image" && body.length > config.maxImageBytes()) throw new ImageTooLargeError();
-      const { note, readId } = await postNote(feed, clientIp(h), async () => ({ body, mediaType: parsed.mediaType, title, alt, name }), { password }, sender(h));
-      return ok({ id: note.id, file: note.file, url: readId ? base + imagePath(readId, note.file) : "" });
+      const { note, readId } = await postBytes(feed, { type, data, title, alt, name }, password);
+      return ok({ id: note.id, file: note.file, url: fileUrl(readId, note.file) });
     }),
   );
   return s;
