@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 import { renderFeed } from "./rss";
-import { mdNote } from "./note/testing";
+import { imgNote, mdNote } from "./note/testing";
 
 const notes = [
   mdNote({ id: "20260929T140512Z-a-b", markdown: "# A & <B>\ncode: a]]>b ]]> end", createdAt: new Date("2026-09-29T14:05:12Z"), tags: ["env:prod", "a&b"] }),
@@ -56,4 +56,30 @@ test("a sender becomes an escaped dc:creator and declares the namespace; none, n
   expect(out.match(/<dc:creator>/g)).toHaveLength(1);
   expect(out).toContain("<dc:creator>A &amp; &lt;B&gt;</dc:creator>");
   expect(xml).not.toContain("dc");
+});
+
+const photoOpts = { title: "t", description: "t", baseUrl: "https://x.test", readId: "AbCdEfGhIjKlMnOpQrSt_-" };
+
+test("an image note is an item with an enclosure, no description, and its id as title", () => {
+  const out = renderFeed([imgNote({ id: "20260930T100000Z-pic", ext: "jpg", size: 2048, createdAt: new Date("2026-09-30T10:00:00Z") })], photoOpts);
+  expect(out).toContain("<title>20260930T100000Z-pic</title>");
+  expect(out).toContain('<enclosure url="https://x.test/r/AbCdEfGhIjKlMnOpQrSt_-/20260930T100000Z-pic.jpg" length="2048" type="image/jpeg"/>');
+  expect(out).toContain("<link>https://x.test/r/AbCdEfGhIjKlMnOpQrSt_-/20260930T100000Z-pic</link>"); // the note page, not the file
+  expect(out.split("<item>")[1]).not.toContain("<description>"); // the channel has one
+  expect(out).toContain("<pubDate>Wed, 30 Sep 2026 10:00:00 GMT</pubDate>");
+});
+
+test("a sidecar title is the item's title, for an image and for markdown; tags and sender still show", () => {
+  const out = renderFeed(
+    [imgNote({ id: "i1", title: "A <cat>", sender: "Ann", tags: ["pets"] }), mdNote({ id: "m1", markdown: "# Derived", title: "Set" })],
+    photoOpts,
+  );
+  expect(out).toContain("<title>A &lt;cat&gt;</title>");
+  expect(out).toContain("<title>Set</title>");
+  expect(out).toContain("<dc:creator>Ann</dc:creator>");
+  expect(out).toContain("<category>pets</category>");
+});
+
+test("a markdown item has no enclosure", () => {
+  expect(renderFeed([mdNote({ id: "m1", markdown: "x" })], photoOpts)).not.toContain("<enclosure");
 });

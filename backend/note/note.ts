@@ -2,6 +2,9 @@
 // subclass and one line in backend/note/types.ts; what is the same for all of them lives here.
 import type { Meta } from "../data/notes";
 
+/** What a note adds to its RSS item: raw markdown as the description, or a file as the enclosure (RSS 2.0 allows one per item). */
+export type RssContent = { description?: string; enclosure?: { url: string; length: number; type: string } };
+
 export type NoteInit = { id: string; ext: string; meta: Meta; createdAt: Date; size: number };
 
 export abstract class Note {
@@ -36,6 +39,8 @@ export abstract class Note {
   /** The text of the note; empty for a kind that has none. */
   abstract readonly markdown: string;
   abstract get title(): string;
+  /** `base` is the read link the feed's files are served under (no trailing slash). */
+  abstract rssContent(base: string): RssContent;
   /** The same note with other metadata. */
   abstract withMeta(meta: Meta): Note;
 
