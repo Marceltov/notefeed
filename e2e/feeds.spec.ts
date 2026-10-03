@@ -12,7 +12,7 @@ async function post(page: Page, name: string, markdown = "# A note", password?: 
 
 async function setDetails(page: Page, title: string, description: string) {
   await page.getByRole("link", { name: "Settings" }).click();
-  await page.getByLabel("Title").fill(title);
+  await page.getByLabel("Title", { exact: true }).fill(title);
   await page.getByLabel("Description").fill(description);
   await page.getByRole("button", { name: "Save" }).click();
   await expect(page.getByRole("status")).toHaveText("Saved.");
@@ -30,6 +30,7 @@ test("title and description show on the feed page, the read-only view and in the
   await expect(page).toHaveTitle(/My ideas/);
 
   await page.getByRole("link", { name: "Open read-only view" }).click();
+  await expect(page).toHaveURL(/\/r\/[^/]+$/); // the feed page has the same heading: wait for the read-only one
   await expect(page.getByRole("heading", { name: "My ideas" })).toBeVisible();
   await expect(page.getByText("Things I think about")).toBeVisible();
   await expect(page.getByText(name)).toHaveCount(0);
@@ -45,7 +46,7 @@ test("a refused title says why, on the settings page", async ({ page }) => {
   const refusal = "The title, description or read id is too long or too short, or has characters that aren't allowed.";
   // With JavaScript: the API refuses a tab, and the form shows it.
   await page.getByRole("link", { name: "Settings" }).click();
-  await page.getByLabel("Title").fill("a\tb");
+  await page.getByLabel("Title", { exact: true }).fill("a\tb");
   await page.getByRole("button", { name: "Save" }).click();
   await expect(page.getByRole("alert").filter({ hasText: refusal })).toBeVisible();
   // Without: where the plain forms' redirects land.
@@ -115,7 +116,7 @@ test("without JavaScript, settings and delete still work", async ({ browser, bas
   await page.getByLabel("Note in markdown").fill("# Plain note");
   await page.getByRole("button", { name: "Post note" }).click();
   await page.getByRole("link", { name: "Settings" }).click();
-  await page.getByLabel("Title").fill("Plain title");
+  await page.getByLabel("Title", { exact: true }).fill("Plain title");
   await page.getByRole("button", { name: "Save" }).click();
   await expect(page).toHaveURL(/\/settings\?saved=1$/);
   await expect(page.getByRole("status")).toHaveText("Saved.");

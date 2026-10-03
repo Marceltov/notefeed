@@ -2,6 +2,7 @@ import { mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { beforeEach, describe, expect, test } from "vitest";
+import { encodeHeaderValue } from "../../shared/headers";
 import { readIdOf, resetFeedsForTests } from "../feeds";
 import { resetRateLimitsForTests } from "../limits";
 import { API_PREFIX, dispatch } from "./api";
@@ -141,5 +142,19 @@ describe("POST /feeds/{feed}/images: the typed way to post a picture", () => {
   });
   test("the bytes decide: HTML sent as image/png is 415", async () => {
     expect((await postTo("image/png", {}, "<html></html>")).status).toBe(415);
+  });
+});
+
+describe("non-ASCII text in image headers", () => {
+  test("title, alt and name arrive as the UTF-8 they were sent as (curl, or a client that encodes them)", async () => {
+    const res = await postImage({ "x-note-title": encodeHeaderValue("Café 日本語"), "x-note-alt": encodeHeaderValue("Größe"), "x-note-name": encodeHeaderValue("Größe.png") });
+    const note = await getNote((await res.json()).id);
+    expect(note).toMatchObject({ title: "Café 日本語", alt: "Größe", name: "Größe.png" });
+  });
+  test("the same through the typed /images endpoint and for a markdown note's title header", async () => {
+    const img = await call("POST", "/feeds/f/images", { body: PNG, headers: { "content-type": "image/png", "x-note-title": encodeHeaderValue("Ünï") } });
+    expect((await getNote((await img.json()).id)).title).toBe("Ünï");
+    const md = await call("POST", "/feeds/f/notes", { body: "x", headers: { "content-type": "text/plain", "x-note-title": encodeHeaderValue("Ünï") } });
+    expect((await getNote((await md.json()).id)).title).toBe("Ünï");
   });
 });

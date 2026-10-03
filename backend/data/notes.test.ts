@@ -98,3 +98,14 @@ describe("replaceNote and deleteNoteFile", () => {
     expect(await deleteNoteFile("f", id)).toBe(false);
   });
 });
+
+describe("readNote and the size of a note", () => {
+  test("gives the size from the file system and reads the bytes only when asked", async () => {
+    const id = await writeNote("f", "a", "png", new Uint8Array(1000), {});
+    const full = await readNote("f", id);
+    expect([full?.size, full?.content.length]).toEqual([1000, 1000]);
+    const lean = await readNote("f", id, () => false);
+    expect([lean?.size, lean?.content.length]).toEqual([1000, 0]);
+    expect((await readNote("f", id, (ext) => ext === "md"))?.content.length).toBe(0);
+  });
+});

@@ -77,15 +77,18 @@ export async function listNoteFiles(feed: string): Promise<{ id: string; ext: st
   });
 }
 
-export async function readNote(feed: string, id: string): Promise<{ ext: string; content: Buffer; meta: Meta; mtime: Date } | null> {
+// `withContent` says for an extension whether the bytes are wanted: a picture is only listed, so reading it whole would cost its size
+// for nothing; `content` is then empty and `size` (from the file system) is still right.
+export async function readNote(feed: string, id: string, withContent: (ext: string) => boolean = () => true): Promise<{ ext: string; content: Buffer; size: number; meta: Meta; mtime: Date } | null> {
   const entry = (await listNoteFiles(feed)).find((e) => e.id === id);
   if (!entry) return null;
   const path = file(feed, id, entry.ext);
-  const content = await orMissing(readFile(/*turbopackIgnore: true*/ path), null);
+  const info = await orMissing(stat(/*turbopackIgnore: true*/ path), null);
+  if (!info) return null;
+  const content = withContent(entry.ext) ? await orMissing(readFile(/*turbopackIgnore: true*/ path), null) : Buffer.alloc(0);
   if (content === null) return null;
-  const mtime = (await orMissing(stat(/*turbopackIgnore: true*/ path), null))?.mtime ?? new Date(0);
   const raw = await orMissing(readFile(/*turbopackIgnore: true*/ sidecar(feed, id, entry.ext), "utf8"), "{}");
-  return { ext: entry.ext, content, meta: parseMeta(raw), mtime };
+  return { ext: entry.ext, content, size: info.size, meta: parseMeta(raw), mtime: info.mtime };
 }
 
 // A file of the feed by its name (`<stem>.<ext>`, no dot at the start): the bytes of a regular file, null for anything else. A
@@ -119,7 +122,7 @@ export async function replaceNote(feed: string, id: string, content: string | Ui
 // Changes some fields of an existing note's metadata: a string or list sets one, null (or an empty value) removes it. The sidecar is
 // replaced atomically (temp file, then rename) and removed when nothing is left. False when there is no such note.
 export async function updateMeta(feed: string, id: string, patch: { [K in keyof Meta]?: Meta[K] | null }): Promise<boolean> {
-  const note = await readNote(feed, id);
+  const note = await readNote(feed, id, () => false);
   if (!note) return false;
   const merged: Record<string, unknown> = { ...note.meta };
   for (const [k, v] of Object.entries(patch)) {

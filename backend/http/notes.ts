@@ -1,5 +1,6 @@
 // POST /api/v1/feeds/<feed>/notes, also POST /<feed> (proxy.ts rewrites it): the only way to post a
 // note, for scripts, the client packages and the web UI's compose box alike.
+import { decodeHeaderValue } from "../../shared/headers";
 import { config } from "../config";
 import { AuthError, ImageTooLargeError, InvalidBodyError, NoteTooLargeError, UnsupportedTypeError } from "../errors";
 import { cookieValue } from "../feedlock";
@@ -31,7 +32,7 @@ const withReadId = ({ read_id, ...rest }: { markdown: string; password?: string;
 // few bytes of it; an image has NOTEFEED_MAX_IMAGE_BYTES.
 export async function readPost(req: Request, imageOnly = false): Promise<PostInput> {
   const post = await readBody(req, imageOnly);
-  const header = (name: string) => req.headers.get(name)?.trim() || undefined; // an empty header is none
+  const header = (name: string) => decodeHeaderValue(req.headers.get(name) ?? "").trim() || undefined; // an empty header is none
   return { ...post, tags: post.tags ?? tagsFromHeader(req.headers.get("x-note-tags")), title: post.title ?? header("x-note-title"), alt: post.alt ?? header("x-note-alt") };
 }
 
@@ -79,7 +80,7 @@ async function readBody(req: Request, imageOnly: boolean): Promise<PostInput> {
 
   const bytes = await readCapped(req, isImage || isForm ? config.maxImageBytes() : MAX_BYTES);
   if (!bytes) throw isImage ? new ImageTooLargeError() : new NoteTooLargeError();
-  if (isImage) return { image: bytes, name: fileName(req.headers.get("x-note-name")) };
+  if (isImage) return { image: bytes, name: fileName(decodeHeaderValue(req.headers.get("x-note-name") ?? "")) };
 
   if (isForm) {
     // A repeated `tags` field is a list (Object.fromEntries would keep only the last), and each value may itself be

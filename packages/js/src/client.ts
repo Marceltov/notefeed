@@ -69,6 +69,10 @@ const FEED_RE = /^[a-z0-9_-]{1,64}$/; // same rule as the server; reserved names
 
 type Result<T> = { data?: T; error?: unknown; response?: Response };
 
+// A header holds bytes, and fetch refuses a character above U+00FF: text that may not be ASCII goes as its UTF-8 bytes written as
+// latin1 characters, which is what the server reads back.
+const headerValue = (text: string): string => Array.from(new TextEncoder().encode(text), (b) => String.fromCharCode(b)).join("");
+
 export class Client {
   readonly url: string;
   readonly feed: string | null;
@@ -115,9 +119,9 @@ export class Client {
       ...this.opts(options.feedPassword).headers,
       "Content-Type": "application/octet-stream",
       ...(options.tags?.length && { "X-Note-Tags": options.tags.join(",") }),
-      ...(options.title && { "X-Note-Title": options.title }),
-      ...(options.alt && { "X-Note-Alt": options.alt }),
-      ...(options.name && { "X-Note-Name": options.name }),
+      ...(options.title && { "X-Note-Title": headerValue(options.title) }),
+      ...(options.alt && { "X-Note-Alt": headerValue(options.alt) }),
+      ...(options.name && { "X-Note-Name": headerValue(options.name) }),
     };
     return this.call(uploadImage({ client: this.api, path: { feed }, body, signal: AbortSignal.timeout(this.timeoutMs), headers }));
   }

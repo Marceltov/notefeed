@@ -90,6 +90,14 @@ def test_upload_image_sends_tags_title_alt_and_name_as_headers(server):
     assert (h["X-Note-Tags"], h["X-Note-Title"], h["X-Note-Alt"], h["X-Note-Name"]) == ("a,b", "Cat", "a cat", "cat.png")
 
 
+def test_upload_image_sends_non_ascii_title_alt_and_name_as_utf8_bytes(server):
+    server.reply(201, UPLOADED)
+    Client(server.url, "inbox").upload_image(b"x", title="Café 日本語", alt="Größe", name="Größe.png")
+    h = server.requests[0]["headers"]
+    utf8 = lambda v: v.encode("latin-1").decode("utf-8")  # how a server reads the header bytes
+    assert (utf8(h["X-Note-Title"]), utf8(h["X-Note-Alt"]), utf8(h["X-Note-Name"])) == ("Café 日本語", "Größe", "Größe.png")
+
+
 def test_tags_go_in_the_json_body_and_tag_in_the_list_query(server):
     Client(server.url, "inbox").post("x", tags=["ci", "deploy"])
     Client(server.url, "inbox").post("x")

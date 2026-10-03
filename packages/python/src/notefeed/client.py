@@ -98,6 +98,11 @@ def _check_feed(feed: str) -> str:
     return feed
 
 
+def _header_value(text: str) -> Any:
+    """A header holds bytes: text that may not be ASCII goes as its UTF-8 bytes, which the server reads back (httpx takes bytes values)."""
+    return text.encode("utf-8")
+
+
 class Client:
     """A notefeed server. The feed set here is the default for every call; each call can override it.
 
@@ -187,9 +192,9 @@ class Client:
             body=File(payload=data),
             x_feed_password=self._fp(feed_password),
             x_note_tags=",".join(tags) if tags else UNSET,
-            x_note_title=title or UNSET,
-            x_note_alt=alt or UNSET,
-            x_note_name=name or UNSET,
+            x_note_title=_header_value(title) if title else UNSET,
+            x_note_alt=_header_value(alt) if alt else UNSET,
+            x_note_name=_header_value(name) if name else UNSET,
         )
         return self._parse(Created, self._call(kwargs))
 

@@ -152,9 +152,9 @@ export async function hasImageNote(feed: string, file: string): Promise<boolean>
 
 export async function getNote(feed: string, id: string): Promise<Note | null> {
   if (checkFeed(feed) || !isValidId(id)) return null;
-  const stored = await readNote(feed, id);
+  const stored = await readNote(feed, id, (ext) => typeForExt(ext)?.needsContent ?? false);
   const type = stored && typeForExt(stored.ext);
-  return stored && type ? type.read({ id, ext: stored.ext, meta: stored.meta, createdAt: createdAt(id, stored.meta, stored.mtime), size: stored.content.length }, stored.content) : null;
+  return stored && type ? type.read({ id, ext: stored.ext, meta: stored.meta, createdAt: createdAt(id, stored.meta, stored.mtime), size: stored.size }, stored.content) : null;
 }
 
 /** What an edit may change; at least one field. `markdown` only for a markdown note. "" removes a title or alt. */

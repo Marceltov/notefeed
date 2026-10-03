@@ -12,11 +12,11 @@ export function usePendingImages(feed: string) {
   const sent = useRef(new Map<string, { id: string; file: string }>()); // by Pending.key
   const last = useRef<string | undefined>(undefined);
 
-  /** Posts the files not yet sent, in order, and stops at the first refusal. Returns its message, or undefined when all are sent. `password` is for the post that creates a protected feed. */
-  async function flush(password?: string): Promise<string | undefined> {
+  /** Posts the files not yet sent, in order, and stops at the first refusal. Returns its message, or undefined when all are sent. `password` is for the post that creates a protected feed, `meta` (a title, tags) goes on every picture. */
+  async function flush(password?: string, meta?: { title?: string; tags?: string[] }): Promise<string | undefined> {
     for (const p of pending) {
       if (sent.current.has(p.key)) continue;
-      const result = await uploadImageFile(feed, p.file, password);
+      const result = await uploadImageFile(feed, p.file, password, meta);
       if ("error" in result) return result.error;
       sent.current.set(p.key, { id: result.id, file: result.file });
       last.current = result.id;

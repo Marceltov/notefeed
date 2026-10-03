@@ -28,13 +28,15 @@ export function Compose({ feed, action, error: initialError, isNew, sender }: { 
   async function submit(e: FormEvent) {
     e.preventDefault();
     setPending(true);
-    const refused = await images.flush(password); // the first one of these creates the feed, with its password
+    // Pictures alone make no text note, so what was typed as its title and tags goes on the pictures instead of being lost.
+    const picturesOnly = onlyReferences(text, images.pending.map((p) => p.token));
+    const refused = await images.flush(password, picturesOnly ? { title: title.trim(), tags: tagList } : undefined); // the first one of these creates the feed, with its password
     if (refused) {
       setError(refused);
       return setPending(false);
     }
     const posted = images.lastId();
-    if (posted && onlyReferences(text, images.pending.map((p) => p.token))) return router.push(`${action}?posted=${posted}`); // only pictures: no note of text
+    if (posted && picturesOnly) return router.push(`${action}?posted=${posted}`); // only pictures: no note of text
     // The page remounts this box empty.
     run(undefined, () => postNote({ baseUrl: window.location.origin, path: { feed }, body: { markdown: images.apply(text), ...(title.trim() && { title: title.trim() }), ...(password && { password }), ...(tagList.length && { tags: tagList }) } }), ({ data }) => router.push(`${action}?posted=${data?.id}`));
   }

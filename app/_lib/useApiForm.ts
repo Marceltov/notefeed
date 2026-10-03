@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { uploadImage } from "@/app/_lib/api";
+import { encodeHeaderValue } from "@/shared/headers";
 import { errorMessage, imageErrorMessage } from "@/app/_lib/messages";
 
 type Result = { data?: unknown; error?: { code?: string }; response?: Response };
@@ -36,15 +37,20 @@ export function useApiForm(page: string, initialError?: string, message = errorM
 }
 
 // Posts one image to the feed as a note of its own (the generated client; the server decides the format by the bytes) and returns the
-// note's id and file name, or the refusal's message. `password` is only for the post that creates a protected feed. Shared by the
+// note's id and file name, or the refusal's message. `password` is only for the post that creates a protected feed; `meta` is a title and tags to put on the picture. Shared by the
 // markdown boxes and the title image.
-export async function uploadImageFile(feed: string, file: File, password?: string): Promise<{ id: string; file: string; url: string } | { error: string }> {
+export async function uploadImageFile(feed: string, file: File, password?: string, meta: { title?: string; tags?: string[] } = {}): Promise<{ id: string; file: string; url: string } | { error: string }> {
   try {
     const { data, error, response } = await uploadImage({
       baseUrl: window.location.origin,
       path: { feed },
       body: file,
-      headers: { "Content-Type": file.type || "application/octet-stream", ...(password && { "X-Feed-Password": password }) },
+      headers: {
+        "Content-Type": file.type || "application/octet-stream",
+        ...(password && { "X-Feed-Password": password }),
+        ...(meta.title && { "X-Note-Title": encodeHeaderValue(meta.title) }),
+        ...(meta.tags?.length && { "X-Note-Tags": meta.tags.join(",") }),
+      },
     });
     if (!response) throw new Error("no response");
     if (response.ok && data?.file) return { id: data.id, file: data.file, url: data.file_url ?? "" };

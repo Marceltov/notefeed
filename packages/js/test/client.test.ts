@@ -202,6 +202,13 @@ describe("images", () => {
     expect(server.requests[0].headers).toMatchObject({ "x-note-tags": "a,b", "x-note-title": "Cat", "x-note-alt": "a cat", "x-note-name": "cat.png" });
     for (const h of ["x-note-tags", "x-note-title", "x-note-alt", "x-note-name"]) expect(server.requests[1].headers[h]).toBeUndefined();
   });
+  test("a title, alt text or name that is not ASCII goes as its UTF-8 bytes, which fetch can send", async () => {
+    server.reply(201, UPLOADED);
+    await new Client({ url: server.url, feed: "inbox" }).uploadImage(bytes, { title: "Café 日本語", alt: "Größe", name: "Größe.png" });
+    const h = server.requests[0].headers;
+    const utf8 = (v: string | string[] | undefined) => Buffer.from(String(v), "latin1").toString("utf8"); // how a server reads the header bytes
+    expect([utf8(h["x-note-title"]), utf8(h["x-note-alt"]), utf8(h["x-note-name"])]).toEqual(["Café 日本語", "Größe", "Größe.png"]);
+  });
   test("a Blob works, and a per-call feed and feedPassword win", async () => {
     server.reply(201, UPLOADED);
     await new Client({ url: server.url, feed: "inbox", feedPassword: "fp" }).uploadImage(new Blob([bytes], { type: "image/png" }), { feed: "other", feedPassword: "o" });

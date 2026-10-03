@@ -59,6 +59,7 @@ test("dropped images wait in the box; removing one takes its reference out; post
   await expect(page.locator("ol > li")).toHaveCount(2);
   await expect(page.locator("ol > li img")).toHaveCount(2);
   await page.getByRole("link", { name: "Open read-only view" }).click();
+  await expect(page).toHaveURL(/\/r\/[^/]+$/);
   await expect(page.locator("ol > li img")).toHaveCount(2);
   await loaded(page.locator("ol > li img")).toBeGreaterThan(0);
 });
@@ -182,13 +183,14 @@ test("a title image shows in the header and the read-only view, and can be remov
   await expect(header).toBeVisible();
   expect(await header.evaluate((i: HTMLImageElement) => i.naturalWidth)).toBeGreaterThan(0);
   await page.getByRole("link", { name: "Open read-only view" }).click();
+  await expect(page).toHaveURL(/\/r\/[^/]+$/);
   await expect(page.locator("header img:not([src=\"/icon.svg\"])")).toBeVisible();
-  await page.goBack();
-  await page.getByRole("link", { name: "Settings" }).click();
+  await page.goto(`/${name}/settings`); // not goBack: where it lands depends on timing
   await page.getByRole("button", { name: "Remove image" }).click();
   await expect(page.getByRole("status")).toHaveText("Saved.");
   await expect(page.locator("header img:not([src=\"/icon.svg\"])")).toHaveCount(0);
   await page.getByRole("link", { name: "Open read-only view" }).click();
+  await expect(page).toHaveURL(/\/r\/[^/]+$/);
   await expect(page.locator("header img:not([src=\"/icon.svg\"])")).toHaveCount(0);
 });
 
@@ -236,4 +238,17 @@ test("the title image can be picked from the feed's images, and goes when its no
   await page.getByRole("button", { name: "Delete note" }).click();
   await expect(page).toHaveURL(new RegExp(`/${name}\\?deleted=`));
   await expect(page.locator("header img:not([src=\"/icon.svg\"])")).toHaveCount(0);
+});
+
+test("a title and tags typed with only pictures go on the pictures, accents included", async ({ page }) => {
+  const name = feedName();
+  await page.goto(`/${name}`);
+  await choose(page, "Add image", PNG);
+  await page.getByLabel("Title (optional, otherwise taken from the text)").fill("Café 日本語");
+  await page.getByLabel("Tags (optional, separated by commas)").fill("pets, cats");
+  await page.getByRole("button", { name: "Post note" }).click();
+  await expect(page.getByRole("link", { name: "Café 日本語" }).first()).toBeVisible(); // the title, and the picture named by it
+  await expect(page.getByRole("link", { name: "pets" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "cats" })).toBeVisible();
+  await expect(page.locator("ol > li")).toHaveCount(1); // no text note
 });
