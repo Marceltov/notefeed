@@ -2,7 +2,7 @@
 // entry in NOTE_TYPES.
 import { IMAGE_EXTS, sniffImage } from "../images";
 import { ImageNote } from "./image";
-import { MarkdownNote } from "./markdown";
+import { checkMarkdown, MarkdownNote } from "./markdown";
 import { parseMedia } from "./media";
 import type { Note, NoteInit } from "./note";
 
@@ -14,6 +14,10 @@ export type NoteType = {
   exts: readonly string[];
   /** Whether a body is what was declared for `ext`: an image has its format's signature, markdown is valid UTF-8. */
   verify(bytes: Uint8Array, ext: string): boolean;
+  /** The rules of the type beyond its format (markdown: not blank, not over the size limit); throws a domain error. */
+  checkBody(bytes: Uint8Array): void;
+  /** Whether a note of this type can have alternative text. */
+  hasAlt: boolean;
   /** Whether `read` needs the file's bytes: listing a picture does not. */
   needsContent: boolean;
   /** Builds the note from what is on disk. */
@@ -29,8 +33,8 @@ function validUtf8(bytes: Uint8Array): boolean {
   }
 }
 
-const markdown: NoteType = { name: "markdown", exts: ["md"], verify: validUtf8, needsContent: true, read: (init, content) => new MarkdownNote(init, content.toString("utf8")) };
-const image: NoteType = { name: "image", exts: IMAGE_EXTS, verify: (bytes, ext) => sniffImage(bytes) === ext, needsContent: false, read: (init) => new ImageNote(init) };
+const markdown: NoteType = { name: "markdown", exts: ["md"], verify: validUtf8, checkBody: (bytes) => checkMarkdown(Buffer.from(bytes).toString("utf8")), hasAlt: false, needsContent: true, read: (init, content) => new MarkdownNote(init, content.toString("utf8")) };
+const image: NoteType = { name: "image", exts: IMAGE_EXTS, verify: (bytes, ext) => sniffImage(bytes) === ext, checkBody: () => {}, hasAlt: true, needsContent: false, read: (init) => new ImageNote(init) };
 
 export const NOTE_TYPES: readonly NoteType[] = [markdown, image];
 

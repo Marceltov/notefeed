@@ -5,16 +5,17 @@ import { FeedExistsError, FeedLimitError, ImageLimitError, InvalidBodyError, Not
 import { type FeedAccess, checkFeedAccess, createProtected } from "./feedlock";
 import { type FeedSettings, checkSettings, getStoredSettings, saveSettings } from "./feedsettings";
 import { assertFeed, deleteFeed as removeWholeFeed, feedCount, hasFeed, isHeldBack, readIdOf, setReadId } from "./feeds";
-import { sniffImage } from "./images";
 import { capReached, rateLimit } from "./limits";
+import { parseMediaType } from "./note/types";
 import { checkTags } from "./tags";
-import { checkLine, checkMarkdown, countNotes, createImageNote, createNote, hasImageNote, MAX_ALT, MAX_NOTE_TITLE, removeNote, updateNote, type Note, type NoteEdit } from "./notes";
+import { checkLine, countNotes, createNoteOf, hasImageNote, MAX_ALT, MAX_NOTE_TITLE, removeNote, updateNote, type Note, type NoteEdit } from "./notes";
 
-// What a post carries besides the note itself. `name` is the file name an image came with.
-export type PostInput = { password?: string; tags?: string[]; readId?: string; name?: string; title?: string; alt?: string } & ({ markdown: string } | { image: Uint8Array });
+// What a post carries: the file (`body`) and the type the poster declared for it (`mediaType`, a Content-Type), with the optional
+// metadata (`name` is the file name it came with) and, for the post that creates the feed, a password and a read id.
+export type PostInput = { body: Uint8Array; mediaType: string; title?: string; tags?: string[]; alt?: string; name?: string; password?: string; readId?: string };
 
 // `read` runs only once the post is admitted, so a refused request never has its body read.
-// A password (header, or body `password`) is set only by the post that creates the feed.
+// A password (the feed's `X-Feed-Password`) is set only by the post that creates the feed.
 // `created`: this post created the feed protected, so its sender is the one who chose the password.
 // `readId` (in what `read` gives): the read id the new feed should get; ignored when the feed exists, random when empty or left out.
 // `readId` (in the result): the read id of the feed the note went into; null when that feed has no read link.
@@ -31,27 +32,26 @@ export async function postNote(
   if (wait !== null) throw new RateLimitedError(wait);
 
   // ponytail: caps are checked, not locked; concurrent posts can overshoot by a few.
-  const maxFeeds = config.maxFeeds();
-  const maxNotes = config.maxNotesPerFeed();
-  const maxImages = config.maxImagesPerFeed();
   const exists = await hasFeed(feed);
+  const maxFeeds = config.maxFeeds();
   if (maxFeeds && !exists && (await feedCount()) >= maxFeeds) throw capReached("feed", new FeedLimitError());
 
   const input = await read();
-  const { password: bodyPassword, tags: given, readId: asked } = input;
-  const isImage = "image" in input;
-  // The caps are per kind: images have their own, the notes limit counts the markdown ones.
-  if (exists && isImage && maxImages && (await countNotes(feed, "image")) >= maxImages) throw capReached("image", new ImageLimitError());
-  if (exists && !isImage && maxNotes && (await countNotes(feed, "markdown")) >= maxNotes) throw capReached("note", new NoteLimitError());
-  const wantedReadId = exists || !asked?.trim() ? undefined : asked.trim();
+  const parsed = parseMediaType(input.mediaType);
+  if (!parsed) throw new UnsupportedTypeError();
+  const { type, ext } = parsed;
+  // The caps are per type: images have their own, the notes limit counts the markdown ones.
+  const image = type.name === "image";
+  const max = image ? config.maxImagesPerFeed() : config.maxNotesPerFeed();
+  if (exists && max && (await countNotes(feed, type.name)) >= max) throw image ? capReached("image", new ImageLimitError()) : capReached("note", new NoteLimitError());
   // Before createProtected: a refused note must not leave a protected, empty feed.
-  if (isImage) {
-    if (!sniffImage(input.image)) throw new UnsupportedTypeError("send a PNG, JPEG, GIF or WebP image");
-  } else checkMarkdown(input.markdown);
+  if (!type.verify(input.body, ext)) throw new UnsupportedTypeError(`the body is not ${parsed.mediaType}`);
+  type.checkBody(input.body);
   checkLine("title", input.title, MAX_NOTE_TITLE);
-  checkLine("alt", input.alt, MAX_ALT);
-  const tags = checkTags(given);
-  const password = (access.password ?? bodyPassword) || undefined; // empty means none
+  if (checkLine("alt", input.alt, MAX_ALT) && !type.hasAlt) throw new InvalidBodyError("alt is for image notes");
+  const tags = checkTags(input.tags);
+  const wantedReadId = exists || !input.readId?.trim() ? undefined : input.readId.trim();
+  const password = (access.password ?? input.password) || undefined; // empty means none
   let created = false;
   // A protected feed was already unlocked above; an open existing one can't be claimed.
   if (!proved && password !== undefined) {
@@ -63,11 +63,9 @@ export async function postNote(
   // a post that proved nothing above is checked again, with nothing to show.
   if (!proved && !created) await checkFeedAccess(feed, {}, ip);
   // ponytail: checked, not locked. A protected creation can still complete in the few microseconds between
-  // this check and createNote's ensureFeed, which then finds the feed and writes into it: this one note is
+  // this check and createNoteOf's ensureFeed, which then finds the feed and writes into it: this one note is
   // then in the protected feed. A lock around creation, per feed, would close it.
-  const made = isImage
-    ? await createImageNote(feed, input.image, { sender, tags, name: input.name, title: input.title, alt: input.alt, wantedReadId })
-    : await createNote(feed, input.markdown, undefined, sender, tags, wantedReadId, input.title);
+  const made = await createNoteOf(feed, type, ext, input.body, { sender, tags, title: input.title, alt: input.alt, name: input.name, wantedReadId });
   return { ...made, created };
 }
 

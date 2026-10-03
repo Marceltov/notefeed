@@ -53,29 +53,6 @@ describe("POST /feeds/{feed}/notes with an image body", () => {
     expect((await upload("pics", PNG)).status).toBe(201); // the same bytes again are another note
     expect(await imageFiles("pics")).toHaveLength(2);
   });
-  test("a multipart file part is an image note, with the password and read id of the post that creates the feed", async () => {
-    const f = new FormData();
-    f.set("file", new File([PNG], "cat.png", { type: "image/png" }));
-    f.set("password", "hunter22");
-    f.set("read_id", "my-pics");
-    f.set("tags", "a, b");
-    const res = await call("POST", "/feeds/pics/notes", { body: f });
-    expect(res.status).toBe(201);
-    const body = await res.json();
-    expect(body.file).toBe(`${body.id}.png`);
-    expect(await readIdOf("pics")).toBe("my-pics");
-    expect((await get("my-pics", body.file)).status).toBe(200);
-    const sidecar = JSON.parse(await readFile(join(process.env.DATA_DIR!, "pics", `.${body.file}.json`), "utf8"));
-    expect(sidecar).toEqual({ tags: ["a", "b"], name: "cat.png" });
-    expect((await upload("pics", PNG)).status).toBe(401); // protected by the first post's password
-  });
-  test("a form with both markdown and a file is 400", async () => {
-    const f = new FormData();
-    f.set("file", new File([PNG], "cat.png"));
-    f.set("markdown", "# x");
-    expect((await call("POST", "/feeds/pics/notes", { body: f })).status).toBe(400);
-    expect(await hasFeed("pics")).toBe(false);
-  });
   test("X-Note-Name is kept as the picture's name, cleaned of path characters", async () => {
     const res = await upload("pics", PNG, "image/png", { "x-note-name": "../my cat.png" });
     const { file } = await res.json();
@@ -87,9 +64,9 @@ describe("POST /feeds/{feed}/notes with an image body", () => {
     expect(await hasFeed("ghost")).toBe(true);
     expect(await imageFiles("ghost")).toHaveLength(1);
   });
-  test("bytes decide: a PNG sent as application/octet-stream is accepted, HTML sent as image/png is 415", async () => {
+  test("the bytes must be what was declared: HTML sent as image/png is 415, a PNG sent as application/octet-stream too", async () => {
     await createNote("pics", "# x");
-    expect((await upload("pics", PNG, "application/octet-stream")).status).toBe(201);
+    expect((await upload("pics", PNG, "application/octet-stream")).status).toBe(415);
     const res = await upload("pics", "<html><script>x</script></html>", "image/png");
     expect(res.status).toBe(415);
     expect((await res.json()).code).toBe("unsupported_type");

@@ -3,17 +3,17 @@ import { randomBytes } from "node:crypto";
 import { idStamp } from "../shared/notes";
 import { isErrno } from "./data/fs";
 import { deleteNoteFile, replaceNote, updateMeta, writeNote, listNoteFiles, readNote, type Meta } from "./data/notes";
-import { EmptyNoteError, InvalidBodyError, NoteTooLargeError, UnsupportedTypeError } from "./errors";
+import { InvalidBodyError, UnsupportedTypeError } from "./errors";
 import { assertFeed, checkFeed, ensureFeed, forgetFeed } from "./feeds";
 import { sniffImage } from "./images";
 import { ImageNote } from "./note/image";
-import { MarkdownNote } from "./note/markdown";
+import { checkMarkdown, MarkdownNote } from "./note/markdown";
 import { Note } from "./note/note";
-import { typeForExt } from "./note/types";
+import { typeForExt, type NoteType } from "./note/types";
 
+export { checkMarkdown, MAX_BYTES } from "./note/markdown";
 export { ImageNote, MarkdownNote, Note };
 
-export const MAX_BYTES = 102400;
 export const MAX_NOTE_TITLE = 100;
 export const MAX_ALT = 500;
 
@@ -57,12 +57,6 @@ function createdAt(id: string, meta: Meta, mtime: Date): Date {
   return stampOf(id) ?? (Number.isNaN(created) ? mtime : new Date(created));
 }
 
-// Storage only: no auth, rate limit or caps (that is posting.ts).
-export function checkMarkdown(markdown: string): void {
-  if (markdown.trim() === "") throw new EmptyNoteError();
-  if (Buffer.byteLength(markdown, "utf8") > MAX_BYTES) throw new NoteTooLargeError();
-}
-
 // What a new note is made of; the feed is created if it doesn't exist (`wantedReadId` is used only then, see feeds.ts).
 type NewNote = { ext: string; content: string | Uint8Array; meta: Meta };
 
@@ -84,31 +78,40 @@ async function store(feed: string, { ext, content, meta }: NewNote, now: Date, w
   }
 }
 
-export async function createNote(feed: string, markdown: string, now = new Date(), sender?: string, tags: string[] = [], wantedReadId?: string, title?: string): Promise<{ note: MarkdownNote; readId: string | null }> {
+export type NewNoteOptions = { sender?: string; tags?: string[]; title?: string; alt?: string; name?: string; wantedReadId?: string };
+
+/**
+ * A new note of any type: `body` is its file, `ext` the extension its type stores it under. The type's own rules (`checkBody`) apply; a
+ * title or alt text must be one short line. The feed is created if it does not exist. Whether the body is what the poster declared is
+ * posting.ts's business (`verify`).
+ */
+export async function createNoteOf(feed: string, type: NoteType, ext: string, body: Uint8Array, opts: NewNoteOptions = {}, now = new Date()): Promise<{ note: Note; readId: string | null }> {
   assertFeed(feed);
-  checkMarkdown(markdown);
-  const given = checkLine("title", title, MAX_NOTE_TITLE);
-  const meta: Meta = { ...(sender !== undefined && { sender }), ...(tags.length && { tags }), ...(given && { title: given }) };
-  const { id, readId } = await store(feed, { ext: "md", content: markdown, meta }, now, wantedReadId);
-  return { note: new MarkdownNote({ id, ext: "md", meta, createdAt: stampOf(id)!, size: Buffer.byteLength(markdown) }, markdown), readId };
+  type.checkBody(body);
+  const title = checkLine("title", opts.title, MAX_NOTE_TITLE);
+  const alt = checkLine("alt", opts.alt, MAX_ALT);
+  if (alt && !type.hasAlt) throw new InvalidBodyError("alt is for image notes");
+  const { sender, tags = [], name } = opts;
+  const meta: Meta = { ...(sender !== undefined && { sender }), ...(tags.length && { tags }), ...(title && { title }), ...(alt && { alt }), ...(name && { name }) };
+  const { id, readId } = await store(feed, { ext, content: body, meta }, now, opts.wantedReadId);
+  return { note: type.read({ id, ext, meta, createdAt: stampOf(id)!, size: body.length }, Buffer.from(body)), readId };
+}
+
+const MARKDOWN = typeForExt("md")!;
+const encoder = new TextEncoder();
+
+/** A markdown note from its text. */
+export async function createNote(feed: string, markdown: string, now = new Date(), sender?: string, tags: string[] = [], wantedReadId?: string, title?: string): Promise<{ note: MarkdownNote; readId: string | null }> {
+  const made = await createNoteOf(feed, MARKDOWN, "md", encoder.encode(markdown), { sender, tags, title, wantedReadId }, now);
+  return { note: made.note as MarkdownNote, readId: made.readId };
 }
 
 /** An image as a note of its own. The format is decided by the bytes (UnsupportedTypeError for anything else, SVG included). */
-export async function createImageNote(
-  feed: string,
-  bytes: Uint8Array,
-  opts: { sender?: string; tags?: string[]; title?: string; alt?: string; name?: string; wantedReadId?: string },
-  now = new Date(),
-): Promise<{ note: ImageNote; readId: string | null }> {
-  assertFeed(feed);
+export async function createImageNote(feed: string, bytes: Uint8Array, opts: NewNoteOptions, now = new Date()): Promise<{ note: ImageNote; readId: string | null }> {
   const ext = sniffImage(bytes);
-  if (!ext) throw new UnsupportedTypeError("send a PNG, JPEG, GIF or WebP image");
-  const { sender, tags = [], name } = opts;
-  const title = checkLine("title", opts.title, MAX_NOTE_TITLE);
-  const alt = checkLine("alt", opts.alt, MAX_ALT);
-  const meta: Meta = { ...(sender !== undefined && { sender }), ...(tags.length && { tags }), ...(title && { title }), ...(alt && { alt }), ...(name && { name }) };
-  const { id, readId } = await store(feed, { ext, content: bytes, meta }, now, opts.wantedReadId);
-  return { note: new ImageNote({ id, ext, meta, createdAt: stampOf(id)!, size: bytes.length }), readId };
+  if (!ext) throw new UnsupportedTypeError();
+  const made = await createNoteOf(feed, typeForExt(ext)!, ext, bytes, opts, now);
+  return { note: made.note as ImageNote, readId: made.readId };
 }
 
 async function noteIds(feed: string, typeName?: string): Promise<string[]> {

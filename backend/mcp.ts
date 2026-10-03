@@ -3,12 +3,14 @@ import { McpServer, createMcpHandler, type AuthInfo } from "@modelcontextprotoco
 import * as z from "zod";
 import { bearerOf, checkBearer, locked } from "./auth";
 import { config } from "./config";
-import { AuthError, ImageTooLargeError, NotefeedError, NotFoundError, TooManyAttemptsError } from "./errors";
+import { AuthError, ImageTooLargeError, NotefeedError, NotFoundError, TooManyAttemptsError, UnsupportedTypeError } from "./errors";
 import { checkFeedAccess } from "./feedlock";
 import { assertFeed, FEED_RE, hasFeed } from "./feeds";
 import { feedJson } from "./http/api";
 import { sender } from "./http/request";
+import { sniffImage } from "./images";
 import { clientIp } from "./limits";
+import { mediaTypeOf } from "./note/media";
 import { logger } from "./log";
 import { getNote, listNotes, type Note } from "./notes";
 import { verify } from "./oauth/tokens";
@@ -60,7 +62,7 @@ function server(h: Headers): McpServer {
       outputSchema: z.object({ id: z.string(), url: z.string(), feed_url: z.string(), read_url: z.string().nullable() }),
     },
     guard(async ({ feed, markdown, title, password, tags, read_id }) => {
-      const { note, readId } = await postNote(feed, clientIp(h), async () => ({ markdown, title, tags, readId: read_id }), { password }, sender(h));
+      const { note, readId } = await postNote(feed, clientIp(h), async () => ({ body: new TextEncoder().encode(markdown), mediaType: "text/markdown", title, tags, readId: read_id }), { password }, sender(h));
       const feedUrl = base + feedPath(feed);
       return ok({ id: note.id, url: `${feedUrl}/${note.id}`, feed_url: feedUrl, read_url: readId && base + rssPath(readId) });
     }),
@@ -181,7 +183,9 @@ function server(h: Headers): McpServer {
     guard(async ({ feed, data, password }) => {
       const image = Buffer.from(data, "base64");
       if (image.length > config.maxImageBytes()) throw new ImageTooLargeError();
-      const { note, readId } = await postNote(feed, clientIp(h), async () => ({ image }), { password }, sender(h));
+      const ext = sniffImage(image);
+      if (!ext) throw new UnsupportedTypeError("send a PNG, JPEG, GIF or WebP image");
+      const { note, readId } = await postNote(feed, clientIp(h), async () => ({ body: image, mediaType: mediaTypeOf(ext) }), { password }, sender(h));
       return ok({ id: note.id, file: note.file, url: readId ? base + imagePath(readId, note.file) : "", markdown: `![](${note.file})` });
     }),
   );

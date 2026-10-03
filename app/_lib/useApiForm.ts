@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
-import { uploadImage } from "@/app/_lib/api";
+import { postNote } from "@/app/_lib/api";
 import { encodeHeaderValue } from "@/shared/headers";
 import { errorMessage, imageErrorMessage } from "@/app/_lib/messages";
 
@@ -36,17 +36,17 @@ export function useApiForm(page: string, initialError?: string, message = errorM
   return { run, error, setError, pending, setPending, router };
 }
 
-// Posts one image to the feed as a note of its own (the generated client; the server decides the format by the bytes) and returns the
+// Posts one image to the feed as a note of its own (the generated client; the server checks the bytes against the declared type) and returns the
 // note's id and file name, or the refusal's message. `password` is only for the post that creates a protected feed; `meta` is a title and tags to put on the picture. Shared by the
 // markdown boxes and the title image.
 export async function uploadImageFile(feed: string, file: File, password?: string, meta: { title?: string; tags?: string[] } = {}): Promise<{ id: string; file: string; url: string } | { error: string }> {
   try {
-    const { data, error, response } = await uploadImage({
+    const { data, error, response } = await postNote({
       baseUrl: window.location.origin,
       path: { feed },
       body: file,
       headers: {
-        "Content-Type": file.type || "application/octet-stream",
+        "Content-Type": file.type, // the server accepts only the types it lists, and checks the bytes against it
         ...(password && { "X-Feed-Password": password }),
         ...(meta.title && { "X-Note-Title": encodeHeaderValue(meta.title) }),
         ...(meta.tags?.length && { "X-Note-Tags": meta.tags.join(",") }),

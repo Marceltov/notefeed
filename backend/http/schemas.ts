@@ -41,8 +41,8 @@ export const Created = z
     url: z.url().describe("The note's page in the web UI"),
     feed_url: z.url().describe("The feed's page in the web UI"),
     read_url: z.url().nullable().describe("The feed's read-only RSS link, safe to share; null only if the server can't read the feed's stored read id, or if that id and the derived one both belong to other feeds"),
-    file: z.string().optional().describe("For an image note: its file name, `<id>.<extension>`; absent for markdown. Pass it as a feed's `image` setting"),
-    file_url: z.url().nullable().optional().describe("For an image note: where the picture is served, absolute, under the feed's read id (public like the read link); absent for markdown"),
+    file: z.string().describe("The note's file name, `<id>.<extension>`. For an image note, pass it as a feed's `image` setting"),
+    file_url: z.url().nullable().describe("Where the note's file is served, absolute, under the feed's read id (public like the read link); null while the feed has no read link"),
   })
   .meta({ id: "Created" });
 export type Created = z.infer<typeof Created>;
@@ -54,20 +54,8 @@ export const ErrorJson = z
   })
   .meta({ id: "Error" });
 
-const NewPassword = z
-  .string()
-  .describe(`Protects the feed: ${PASSWORD_RULE}. Only honored on the post that creates the feed; an existing open feed answers 409. Empty is the same as leaving it out.`);
-const Tags = z.array(z.string()).describe(`Labels for the note: ${TAG_RULE}. Free labels, not verified, shown with the note (also to readers of the read link and RSS). Ignored when editing a note: an edit keeps its tags.`);
-const NewReadId = z
-  .string()
-  .optional()
-  .describe("The read id the feed gets when this post creates it: 3 to 64 characters (a-z, 0-9, - and _), random when left out or empty, ignored for a feed that exists. A short readable one is guessable: protect the feed with a password if that matters. 409 when it is taken");
 const NoteTitle = z.string().describe("The note's title, at most 100 characters, one line; empty or left out means the title is taken from the text (a markdown note) or there is none (an image)");
 const NoteAlt = z.string().describe("Alternative text of an image note, at most 500 characters, one line");
-export const PostJson = z.object({ markdown: z.string(), title: NoteTitle.optional(), password: NewPassword.optional(), tags: Tags.optional(), read_id: NewReadId }).meta({ id: "PostJson" });
-export const PostForm = z
-  .object({ markdown: z.string().describe("The note; or send a `file` part with an image instead"), title: NoteTitle.optional(), alt: NoteAlt.optional(), password: NewPassword.optional(), tags: Tags.optional(), read_id: NewReadId })
-  .meta({ id: "PostForm" });
 export const EditJson = z
   .object({ markdown: z.string().optional().describe("The new text; only for a markdown note"), title: NoteTitle.optional(), alt: NoteAlt.optional() })
   .meta({ id: "EditJson" });
@@ -86,6 +74,7 @@ export const NoteTagsHeader = z
   .describe(`Tags for the note, comma-separated (\`ci,deploy\`): ${TAG_RULE}. For a raw markdown body; a JSON or form body's own \`tags\` wins. Empty is none.`);
 export const NoteTitleHeader = NoteTitle.describe("The note's title, for a raw body; a JSON or form body's own `title` wins. At most 100 characters, one line.");
 export const NoteAltHeader = NoteAlt.describe("For an image body: its alternative text; a form's own `alt` wins.");
+export const ReadIdHeader = z.string().describe("The read id the feed gets when this post creates it: 3 to 64 characters (a-z, 0-9, - and _), random when left out or empty, ignored for a feed that exists. A short readable one is guessable: protect the feed with a password if that matters. 409 when it is taken");
 export const NoteNameHeader = z.string().describe("For an image body: the picture's original file name, kept with the note (at most 200 characters)");
 export const CurrentPasswordHeader = z.string().describe("The feed's current password");
 
@@ -121,9 +110,9 @@ export const FeedJson = z
 export const ReadFeedJson = z.object({ title: TITLE, description: DESCRIPTION, image_url: IMAGE_URL }).meta({ id: "ReadFeed" });
 
 // A raw request body, not JSON.
-export const ImageBody = z.string().meta({ format: "binary" }).describe("The image's bytes: PNG, JPEG, GIF or WebP, recognized by their first bytes, not by the Content-Type");
+export const FileBody = z.string().meta({ format: "binary" }).describe("The note, a file: its bytes, of the type `Content-Type` declares");
 
-export const COMPONENTS = [NoteJson, NoteList, Created, ErrorJson, PostJson, PostForm, EditJson, EditForm, PasswordJson, FeedSettingsJson, FeedJson, ReadFeedJson];
+export const COMPONENTS = [NoteJson, NoteList, Created, ErrorJson, EditJson, EditForm, PasswordJson, FeedSettingsJson, FeedJson, ReadFeedJson];
 
 export const FeedParam = z.string().regex(FEED_RE).describe("The feed's name. It is the write key: anyone who knows it can post.");
 export const ReadIdParam = z.string().regex(/^[A-Za-z0-9_-]{1,64}$/).describe("The feed's read id, from its read link: 22 random characters, one the feed's owner chose, or the feed's own name for a reserved feed. Read-only; never reveals the name of any other feed.");

@@ -20,18 +20,10 @@ test("every $ref points at a component", () => {
   for (const r of refs) expect((doc.components as { schemas: object }).schemas).toHaveProperty(r);
 });
 
-test("postNote lists every body type the server reads", () => {
-  const doc = openApiDocument("https://notefeed.me") as { paths: Record<string, { post?: { requestBody: { content: object } } }> };
-  expect(Object.keys(doc.paths["/api/v1/feeds/{feed}/notes"].post!.requestBody.content).sort()).toEqual([
-    "application/json",
-    "application/octet-stream",
-    "application/x-www-form-urlencoded",
-    "image/gif",
-    "image/jpeg",
-    "image/png",
-    "image/webp",
-    "multipart/form-data",
-    "text/markdown",
-    "text/plain",
-  ]);
+test("postNote lists every media type the registry accepts, each as a binary body", () => {
+  const doc = openApiDocument("https://notefeed.me") as { paths: Record<string, { post?: { requestBody: { content: Record<string, { schema: { format?: string } }> } } }> };
+  const content = doc.paths["/api/v1/feeds/{feed}/notes"].post!.requestBody.content;
+  expect(Object.keys(content).sort()).toEqual(["image/gif", "image/jpeg", "image/png", "image/webp", "text/markdown"]);
+  for (const body of Object.values(content)) expect(body.schema.format).toBe("binary");
+  expect(doc.paths["/api/v1/feeds/{feed}/images"]).toBeUndefined();
 });

@@ -12,6 +12,7 @@ import { MAX_BYTES, countNotes, getNote, listNotes, type Note } from "../notes";
 import { PASSWORD_RULE } from "../../shared/password";
 import { TAG_RULE } from "../tags";
 import { API_PREFIX, feedPath, imagePath, publicUrl, readPath, rssPath } from "../urls";
+import { MEDIA_TYPES } from "../note/media";
 import { createDispatcher, op, type AnyOp, type ResponseSpec } from "./dispatch";
 import { deleteFeed, deleteNote, editNote, updateFeed } from "../posting";
 import { handlePostNote, readEdit } from "./notes";
@@ -25,20 +26,19 @@ import {
   FeedParam,
   FeedPasswordHeader,
   FeedSettingsJson,
-  ImageBody,
+  FileBody,
   EditForm,
   EditJson,
   NoteAltHeader,
   NoteNameHeader,
   NoteTitleHeader,
+  ReadIdHeader,
   NoteIdParam,
   NoteJson,
   NoteList,
   NoteTagsHeader,
   PageQuery,
   PasswordJson,
-  PostForm,
-  PostJson,
   ReadFeedJson,
   ReadIdParam,
 } from "./schemas";
@@ -117,88 +117,38 @@ const OPS: AnyOp[] = [
     operationId: "postNote",
     summary: "Post a note",
     description:
-      "Creates the feed with its first note, optionally protected by its own password (`X-Feed-Password` header or a `password` field in the JSON or form body; " +
-      `${PASSWORD_RULE}). ` +
-      "Posting to a protected feed needs that password. Also served at `POST /{feed}`, the short form the client packages and curl one-liners use. " +
-      `A markdown body is at most ${MAX_BYTES} bytes and must be UTF-8. ` +
-      "A body that is an image (`image/png`, `image/jpeg`, `image/gif`, `image/webp` or `application/octet-stream`) is posted as a note of its own: PNG, JPEG, GIF or WebP, recognized by its first bytes, whatever `Content-Type` is sent (SVG is refused). " +
-      "It is stored byte for byte, with no resizing and no metadata stripped (EXIF such as GPS position stays in the file), at most NOTEFEED_MAX_IMAGE_BYTES (default 5 MiB). The response has its `file` and a `file_url` under the feed's read id, public like the read link. " +
-      "`X-Note-Name` gives the picture's original file name. A multipart form may send a `file` part instead of `markdown`. " +
-      "`application/x-www-form-urlencoded` (what `curl -d` sends) is read as raw markdown, not as form fields. " +
-      "`read_id` (JSON or form field) is the feed's read id when this post creates it: random when left out, ignored for a feed that exists. " +
-      `Tags (${TAG_RULE}) go in the JSON \`tags\` array, a repeated \`tags\` form field, or, for a raw body, the \`X-Note-Tags\` header.`,
+      "The body is the note, a file, and `Content-Type` says which kind: `text/markdown` (UTF-8, at most " +
+      `${MAX_BYTES} bytes), or an image, \`image/png\`, \`image/jpeg\`, \`image/gif\` or \`image/webp\` (at most NOTEFEED_MAX_IMAGE_BYTES, default 5 MiB). ` +
+      "Nothing is guessed: any other type, or none, is `415`, and so is a body that is not what the type says (an image is recognized by its first bytes; SVG is refused). " +
+      "It is stored byte for byte, with no resizing and no metadata stripped (EXIF such as GPS position stays in an image). " +
+      "Creates the feed with its first note, optionally protected by its own password (`X-Feed-Password`; " +
+      `${PASSWORD_RULE}) and with the read id in \`X-Read-Id\`; both are only used by the post that creates the feed. ` +
+      "Posting to a protected feed needs its password. Also served at `POST /{feed}`, the short form curl one-liners use. " +
+      "The response names the note's `file` and where it is served, `file_url`, under the feed's read id (public like the read link). " +
+      `Metadata goes in headers: \`X-Note-Title\`, \`X-Note-Tags\` (${TAG_RULE}), \`X-Note-Alt\` (images), \`X-Note-Name\` (the original file name).`,
     tags: ["Feeds"],
     password: true,
     params: { feed: FeedParam },
-    headers: { "X-Feed-Password": FeedPasswordHeader, "X-Note-Tags": NoteTagsHeader, "X-Note-Name": NoteNameHeader, "X-Note-Title": NoteTitleHeader, "X-Note-Alt": NoteAltHeader },
-    body: {
-      "text/markdown": z.string(),
-      "text/plain": z.string(),
-      // What `curl -d` sends: read as raw markdown, not as form fields.
-      "application/x-www-form-urlencoded": z.string(),
-      "application/json": PostJson,
-      "multipart/form-data": PostForm,
-      "image/png": ImageBody,
-      "image/jpeg": ImageBody,
-      "image/gif": ImageBody,
-      "image/webp": ImageBody,
-      "application/octet-stream": ImageBody,
+    headers: {
+      "X-Feed-Password": FeedPasswordHeader,
+      "X-Read-Id": ReadIdHeader,
+      "X-Note-Title": NoteTitleHeader,
+      "X-Note-Tags": NoteTagsHeader,
+      "X-Note-Alt": NoteAltHeader,
+      "X-Note-Name": NoteNameHeader,
     },
+    body: Object.fromEntries(MEDIA_TYPES.map((m) => [m.mediaType, FileBody])),
     responses: {
       201: { description: "Stored", schema: Created },
-      303: {
-        description:
-          "Only when the request accepts `text/html` (a browser submitting a form): back to the feed page with `?posted=<id>` or `?error=<code>`, or to the login page",
-        headers: { Location: { description: "Where to go", type: "string" } },
-      },
-      400: err("Invalid or reserved feed name; empty note; bad JSON, form or UTF-8; a new password that is not printable ASCII; invalid tags"),
+      400: err("Invalid or reserved feed name; a blank note; a bad title, alt text or tags; a new password that is not printable ASCII"),
       401: UNAUTHORIZED,
-      409: err("A password was sent for a feed that already exists without one: it can't be claimed; or the chosen `read_id` is taken"),
-      413: err(`A markdown body over ${MAX_BYTES} bytes, or an image over NOTEFEED_MAX_IMAGE_BYTES`),
-      415: err("Unsupported content type, or an image that is not a PNG, JPEG, GIF or WebP"),
+      409: err("A password was sent for a feed that already exists without one: it can't be claimed; or the chosen read id is taken"),
+      413: err(`Markdown over ${MAX_BYTES} bytes, or an image over NOTEFEED_MAX_IMAGE_BYTES`),
+      415: err("Content-Type missing or not one of the accepted types, or the body is not what it declares"),
       429: { ...err("Too many posts, or wrong passwords, from this client"), headers: RETRY },
       507: err("NOTEFEED_MAX_FEEDS, NOTEFEED_MAX_NOTES_PER_FEED or NOTEFEED_MAX_IMAGES_PER_FEED reached"),
     },
   }).handle(({ req, params }) => handlePostNote(req, params.feed)),
-
-  op({
-    method: "POST",
-    path: `${API_PREFIX}/feeds/{feed}/images`,
-    operationId: "uploadImage",
-    summary: "Post an image",
-    description:
-      "The same as posting a note with an image body, for clients that send the picture itself: it becomes a note of its own. " +
-      "The body is PNG, JPEG, GIF or WebP, recognized by its first bytes, whatever `Content-Type` is sent (SVG is refused). " +
-      "Stored byte for byte, with no resizing and no metadata stripped (EXIF such as GPS position stays in the file). " +
-      "The response has the note's `file` and a `file_url` under the feed's read link, public like the read link, and `![](file)` in a markdown note shows it. " +
-      "Creates the feed if it does not exist, like a first note; a password given then protects it. Needs the same credentials as posting and counts against the post rate limit. " +
-      "The size limit is NOTEFEED_MAX_IMAGE_BYTES (default 5 MiB).",
-    tags: ["Feeds"],
-    password: true,
-    params: { feed: FeedParam },
-    headers: { "X-Feed-Password": FeedPasswordHeader, "X-Note-Tags": NoteTagsHeader, "X-Note-Name": NoteNameHeader, "X-Note-Title": NoteTitleHeader, "X-Note-Alt": NoteAltHeader },
-    body: {
-      "image/png": ImageBody,
-      "image/jpeg": ImageBody,
-      "image/gif": ImageBody,
-      "image/webp": ImageBody,
-      "application/octet-stream": ImageBody,
-    },
-    responses: {
-      201: { description: "Stored", schema: Created },
-      303: {
-        description: "Only when the request accepts `text/html` (a browser navigating): back to the feed page with `?posted=<id>` or `?error=<code>`, or to the login page",
-        headers: { Location: { description: "Where to go", type: "string" } },
-      },
-      400: err("Invalid or reserved feed name; a bad title or alt; a new password that is not printable ASCII; invalid tags"),
-      401: UNAUTHORIZED,
-      409: err("A password was sent for a feed that already exists without one: it can't be claimed"),
-      413: err("Body over NOTEFEED_MAX_IMAGE_BYTES"),
-      415: err("Not a PNG, JPEG, GIF or WebP image"),
-      429: { ...err("Too many posts, or wrong passwords, from this client"), headers: RETRY },
-      507: err("NOTEFEED_MAX_FEEDS or NOTEFEED_MAX_IMAGES_PER_FEED reached"),
-    },
-  }).handle(({ req, params }) => handlePostNote(req, params.feed, true)),
 
   op({
     method: "GET",

@@ -12,8 +12,6 @@ from .note import Note
 from .note_kind import NoteKind
 from .note_list import NoteList
 from .password_json import PasswordJson
-from .post_form import PostForm
-from .post_json import PostJson
 from .read_feed import ReadFeed
 
 __all__ = (
@@ -29,7 +27,5 @@ __all__ = (
     "NoteKind",
     "NoteList",
     "PasswordJson",
-    "PostForm",
-    "PostJson",
     "ReadFeed",
 )
