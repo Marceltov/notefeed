@@ -14,7 +14,7 @@ type Io = {
 class UsageError extends Error {}
 
 const USAGE = [
-  "usage: notefeed post <text | - | --file PATH> [--type MEDIA_TYPE] [--title TITLE] [--tag TAG]... [--url URL] [--feed FEED] [--password PASSWORD]",
+  "usage: notefeed post <text | - | --file PATH> [--type MEDIA_TYPE] [--title TITLE] [--tag TAG]... [--attach PATH]... [--url URL] [--feed FEED] [--password PASSWORD]",
   "       notefeed edit <id> <text | - | --file PATH> [--type MEDIA_TYPE] [--url URL] [--feed FEED] [--password PASSWORD]",
   "       notefeed update <id> [--title TITLE] [--alt ALT] [--url URL] [--feed FEED] [--password PASSWORD]",
   "       notefeed delete <id> [--url URL] [--feed FEED] [--password PASSWORD]",
@@ -39,6 +39,7 @@ export async function main(argv: string[], io: Io = process): Promise<number> {
         title: { type: "string" },
         alt: { type: "string" },
         tag: { type: "string", multiple: true },
+        attach: { type: "string", multiple: true },
         limit: { type: "string" },
         json: { type: "boolean" },
         version: { type: "boolean" },
@@ -57,8 +58,9 @@ export async function main(argv: string[], io: Io = process): Promise<number> {
     const [command, text, ...rest] = positionals;
     if (command === "post" && !rest.length) {
       const input = await read(text, values.file, values.type, io);
-      const note = await client(values).post(input.content, { type: input.type, title: values.title, tags: values.tag, name: input.name });
-      io.stdout.write(`${note.url}\n`);
+      const attachments = await Promise.all((values.attach ?? []).map(attachment));
+      const note = await client(values).post(input.content, { type: input.type, title: values.title, tags: values.tag, name: input.name, attachments });
+      io.stdout.write(`${[note.url, ...note.attachments.map((a) => a.url)].join("\n")}\n`);
       return 0;
     }
     if (command === "edit" && text !== undefined && rest.length <= 1) {
@@ -94,6 +96,7 @@ export async function main(argv: string[], io: Io = process): Promise<number> {
     throw new UsageError(USAGE);
   } catch (e) {
     io.stderr.write(`notefeed: ${(e as Error).message.split("\n")[0]}\n`);
+    if (e instanceof NotefeedError) for (const p of e.posted) io.stderr.write(`posted: ${p.url}\n`);
     if (e instanceof ConfigError || e instanceof UsageError) return 2;
     if (e instanceof NotefeedError) return 1;
     return 2; // parseArgs rejects unknown options with a TypeError
@@ -134,6 +137,17 @@ async function read(text: string | undefined, file: string | undefined, type: st
   }
   if (text === undefined) throw new UsageError('give the note text, "-" for stdin, or --file PATH');
   return { content: text, type: type ?? "text/markdown" };
+}
+
+// A picture to post first: its name is the file's, its type comes from the extension.
+async function attachment(path: string): Promise<{ name: string; content: Uint8Array; type: string }> {
+  const type = TYPES[extname(path).toLowerCase()];
+  if (!type || type === "text/markdown") throw new UsageError(`cannot attach ${path}: a picture (${Object.keys(TYPES).filter((e) => TYPES[e] !== "text/markdown").join(", ")}) is expected`);
+  try {
+    return { name: basename(path), content: await readFile(path), type };
+  } catch (e) {
+    throw new UsageError(`cannot read ${path}: ${(e as NodeJS.ErrnoException).code ?? (e as Error).message}`);
+  }
 }
 
 function utf8(bytes: Uint8Array, source: string): string {
