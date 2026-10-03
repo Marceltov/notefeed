@@ -102,26 +102,35 @@ test("a new feed takes images and a password in its first post", async ({ page }
   await expect(page.getByRole("link", { name: "Locked pictures" })).toHaveCount(0);
 });
 
-test("a refused upload keeps the box as it was, and posting again continues", async ({ page }) => {
+test("two pictures and a text that refers to one go in one request: the text shows both, each picture is a note", async ({ page }) => {
   const name = feedName();
+  const posts: string[] = [];
+  page.on("request", (r) => r.method() === "POST" && r.url().endsWith("/notes") && posts.push(r.headers()["content-type"] ?? ""));
   await page.goto(`/${name}`);
-  await note(page).fill("# Two pictures");
   await drop(page, "one.png", "two.png");
-  let calls = 0;
-  await page.route("**/notes", async (route) => {
-    if (!route.request().headers()["content-type"]?.startsWith("image/")) return route.continue(); // the text note
-    calls++;
-    if (calls === 2) return route.fulfill({ status: 415, contentType: "application/json", body: JSON.stringify({ error: "x", code: "unsupported_type" }) });
-    return route.continue();
-  });
+  await note(page).fill("# Two pictured\n\nsee ![](one.png) here");
   await page.getByRole("button", { name: "Post note" }).click();
-  await expect(page.getByRole("alert").filter({ hasText: "Only PNG, JPEG, GIF and WebP" })).toBeVisible();
-  await expect(note(page)).toHaveValue(/Two pictures[\s\S]*one\.png[\s\S]*two\.png/);
+  await expect(page.getByRole("link", { name: "Two pictured" })).toBeVisible();
+  await expect(page.locator("ol > li")).toHaveCount(3); // the text, one.png and two.png
+  await expect(page.locator(".md img")).toHaveCount(2); // one.png where the text refers to it, two.png appended
+  await loaded(page.locator(".md img")).toBeGreaterThan(0);
+  expect(posts).toHaveLength(1);
+  expect(posts[0]).toMatch(/^multipart\/form-data; boundary=/);
+});
+
+test("a picture the server refuses posts nothing: the box says which, and keeps the text and the pictures", async ({ page }) => {
+  const name = feedName();
+  await post(page, name, "# Before");
+  await note(page).fill("# Half posted?");
+  await drop(page, "good.png");
+  await choose(page, "Add image", { name: "a.png", mimeType: "image/png", buffer: Buffer.from("not an image") });
+  await page.getByRole("button", { name: "Post note" }).click();
+  await expect(page.getByRole("alert").filter({ hasText: "a.png: Only PNG, JPEG, GIF and WebP" })).toBeVisible();
+  await expect(note(page)).toHaveValue(/Half posted\?[\s\S]*good\.png[\s\S]*a\.png/);
   await expect(page.getByRole("list", { name: "Images to post" }).getByRole("listitem")).toHaveCount(2);
-  await page.getByRole("button", { name: "Post note" }).click(); // the first is not sent again
-  await expect(page.getByRole("link", { name: "Two pictures" })).toBeVisible();
-  await expect(page.locator("ol > li")).toHaveCount(3); // the text, and one.png and two.png once each
-  expect(calls).toBe(3); // one.png, two.png (refused), two.png again
+  await page.reload();
+  await expect(page.locator("ol > li")).toHaveCount(1); // only the note from before
+  await expect(page.getByRole("link", { name: "Half posted?" })).toHaveCount(0);
 });
 
 test("a text file chosen as an image is refused when posting, and stays in the box", async ({ page }) => {

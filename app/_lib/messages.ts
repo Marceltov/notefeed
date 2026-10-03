@@ -67,3 +67,12 @@ export function imageErrorMessage(code: unknown, retry?: unknown): string | unde
   };
   return own[String(code)] ?? errorMessage(code, retry);
 }
+
+// The same, for a note sent with its pictures: a refusal that names a picture (`attachment "a.png": …`) is worded as an image
+// refusal, after the picture's name; any other goes to `message`.
+export const withPictures =
+  (message: (code: unknown, retry?: unknown) => string | undefined) =>
+  (code: unknown, retry?: unknown, detail?: string): string | undefined => {
+    const name = /^attachment "(.*)": /.exec(detail ?? "")?.[1];
+    return name === undefined ? message(code, retry) : `${name}: ${imageErrorMessage(code, retry)}`;
+  };

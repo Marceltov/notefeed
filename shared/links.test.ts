@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { absolutizeImages, isAttachmentName, isRelativeLink, placeImages, substitute } from "./links";
+import { absolutizeImages, isAttachmentName, isRelativeLink, placeImages } from "./links";
 
 test("only a link with no scheme and no leading slash is relative", () => {
   expect(["a.png", "x/a.png"].map(isRelativeLink)).toEqual([true, true]);
@@ -9,22 +9,6 @@ test("only a link with no scheme and no leading slash is relative", () => {
 test("absolutizeImages changes relative image links only", () => {
   const md = '![a](1.png) ![b](https://x.test/2.png) ![c](/r/old/3.png "t") [link](page.html) ![d](4.png "title")';
   expect(absolutizeImages(md, "https://n.test/r/id/")).toBe('![a](https://n.test/r/id/1.png) ![b](https://x.test/2.png) ![c](/r/old/3.png "t") [link](page.html) ![d](https://n.test/r/id/4.png "title")');
-});
-
-test("substitute replaces only an image whose destination is exactly a sent token", () => {
-  const sent = new Map([["cat.png", "20261003T1-a.png"]]);
-  expect(substitute("![a cat](cat.png)", sent)).toBe("![a cat](20261003T1-a.png)");
-  expect(substitute("![](cat.png) and ![](cat.png)", sent)).toBe("![](20261003T1-a.png) and ![](20261003T1-a.png)");
-});
-
-test("substitute leaves a token in prose, in a link, or as part of another name", () => {
-  const sent = new Map([["cat.png", "X.png"]]);
-  expect(substitute("see cat.png and [cat](cat.png)", sent)).toBe("see cat.png and [cat](cat.png)");
-  expect(substitute("![](big-cat.png) ![](cat.png.bak) ![](dir/cat.png)", sent)).toBe("![](big-cat.png) ![](cat.png.bak) ![](dir/cat.png)");
-});
-
-test("substitute with nothing sent is the identity", () => {
-  expect(substitute("![](cat.png)", new Map())).toBe("![](cat.png)");
 });
 
 test("isAttachmentName takes one path segment of 1 to 200 characters", () => {

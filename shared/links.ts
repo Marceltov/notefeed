@@ -9,24 +9,9 @@ export const isRelativeLink = (src: string): boolean => src !== "" && !/^([a-z][
 export const absolutizeImages = (markdown: string, base: string): string =>
   markdown.replace(/(!\[[^\]]*\]\()([^)\s]+)/g, (m, head: string, src: string) => (isRelativeLink(src) ? head + base + src : m));
 
-const IMAGE_REF = /(!\[[^\]]*\]\()([^)\s]+)(\))/g;
-
 /** A name an attachment may have: one path segment of 1 to 200 characters, no `/`, `\`, control characters or leading/trailing space, not only dots. */
 export const isAttachmentName = (name: string): boolean =>
   name.length >= 1 && name.length <= 200 && !/[/\\\u0000-\u001f\u007f]/.test(name) && name === name.trim() && !/^\.+$/.test(name);
-
-// Swaps the destination of each image whose destination is exactly a key of `sent`; `used` collects the keys it swapped.
-const swap = (text: string, sent: ReadonlyMap<string, string>, used?: Set<string>): string =>
-  sent.size === 0
-    ? text
-    : text.replace(IMAGE_REF, (m, head: string, dest: string, tail: string) => {
-        if (!sent.has(dest)) return m;
-        used?.add(dest);
-        return head + sent.get(dest) + tail;
-      });
-
-/** Swaps the destination of each image whose destination is exactly a key of `sent` (name → file name). Nothing else changes. */
-export const substitute = (text: string, sent: ReadonlyMap<string, string>): string => swap(text, sent);
 
 type MdNode = { type: string; children?: MdNode[]; position?: { start: { offset?: number }; end: { offset?: number } } };
 

@@ -14,6 +14,12 @@ test("uniqueToken makes a name safe to write in markdown, and never empty", () =
   expect(uniqueToken("../../x.png", new Set())).toBe("x.png");
 });
 
+test("uniqueToken never returns a name made only of dots", () => {
+  expect(uniqueToken("..", new Set())).toBe("image");
+  expect(uniqueToken(".", new Set())).toBe("image");
+  expect(uniqueToken("...", new Set(["image"]))).toBe("image-2");
+});
+
 test("onlyReferences: the text holds nothing but pictures that are waiting", () => {
   expect(onlyReferences("![](cat.png)\n![](dog.png)\n", ["cat.png", "dog.png"])).toBe(true);
   expect(onlyReferences("  \n![](cat.png)", ["cat.png"])).toBe(true);

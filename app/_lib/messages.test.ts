@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { errorMessage, feedDetailsErrorMessage, feedErrorMessage, imageErrorMessage, noteErrorMessage } from "./messages";
+import { errorMessage, feedDetailsErrorMessage, feedErrorMessage, imageErrorMessage, noteErrorMessage, withPictures } from "./messages";
 
 test("an inherited property name in the URL is an unknown code, not a crash", () => {
   for (const fn of [errorMessage, noteErrorMessage, feedErrorMessage, feedDetailsErrorMessage])
@@ -18,4 +18,12 @@ test("a failed sign-in through the provider has its own wording", () => {
 test("an image upload to a feed that can't take one is worded neutrally", () => {
   expect(imageErrorMessage("not_found")).toBe("Images can't be added to this feed yet.");
   expect(noteErrorMessage("not_found")).not.toContain("images");
+});
+
+test("withPictures words a refusal that names a picture as an image refusal, with its name; others as before", () => {
+  const message = withPictures(errorMessage);
+  expect(message("unsupported_type", null, 'attachment "a.png": the body is not image/png')).toBe("a.png: Only PNG, JPEG, GIF and WebP images can be added.");
+  expect(message("too_large", null, 'attachment "big.png": image exceeds the size limit')).toBe("big.png: That image is too large.");
+  expect(message("too_large", null, "note exceeds 100 KB")).toBe("The note is over 100 KB.");
+  expect(message("rate_limited", "5")).toBe("Too many requests, try again in 5 seconds.");
 });

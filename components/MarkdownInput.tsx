@@ -52,7 +52,7 @@ export function MarkdownInput({ id, name, label, value, onChange, rows, placehol
       taken.add(token);
       return newPending(file, token);
     });
-    // By its own file name for now: posting swaps it for the note's.
+    // By its own file name: posting sends the picture under that name, and the server swaps it for the stored file's.
     onChange(insert(added.map((p) => `![](${p.token})`).join("\n"), area.current?.value ?? value));
     onPendingChange([...pending, ...added]);
   }
