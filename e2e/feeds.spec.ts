@@ -42,7 +42,7 @@ test("title and description show on the feed page, the read-only view and in the
 test("a refused title says why, on the settings page", async ({ page }) => {
   const name = feedName();
   await post(page, name);
-  const refusal = "The title or description is too long or has characters that aren't allowed.";
+  const refusal = "The title, description or read id is too long or too short, or has characters that aren't allowed.";
   // With JavaScript: the API refuses a tab, and the form shows it.
   await page.getByRole("link", { name: "Settings" }).click();
   await page.getByLabel("Title").fill("a\tb");
