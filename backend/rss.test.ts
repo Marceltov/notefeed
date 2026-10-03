@@ -1,16 +1,10 @@
 import { expect, test } from "vitest";
 import { renderFeed } from "./rss";
-import type { Note } from "./notes";
+import { mdNote } from "./note/testing";
 
-const notes: Note[] = [
-  {
-    id: "20260929T140512Z-a-b",
-    title: "A & <B>",
-    markdown: "# A & <B>\ncode: a]]>b ]]> end",
-    createdAt: new Date("2026-09-29T14:05:12Z"),
-    tags: ["env:prod", "a&b"],
-  },
-  { id: "20260928T090000Z-plain", title: "Plain", markdown: "Plain", createdAt: new Date("2026-09-28T09:00:00Z"), tags: [] },
+const notes = [
+  mdNote({ id: "20260929T140512Z-a-b", markdown: "# A & <B>\ncode: a]]>b ]]> end", createdAt: new Date("2026-09-29T14:05:12Z"), tags: ["env:prod", "a&b"] }),
+  mdNote({ id: "20260928T090000Z-plain", markdown: "Plain", createdAt: new Date("2026-09-28T09:00:00Z") }),
 ];
 const xml = renderFeed(notes, { title: "my feed", description: "about it", baseUrl: "https://x.test", readId: "AbCdEfGhIjKlMnOpQrSt_-" });
 
@@ -48,7 +42,7 @@ test("lists tags as category elements", () => {
 
 test("strips XML-forbidden control characters", () => {
   const out = renderFeed(
-    [{ id: "20260929T140512Z-red", title: "\x1b[31mred", markdown: "\x1b[31mred\x1b[0m\ttab\r\nok", createdAt: new Date(), tags: [] }],
+    [mdNote({ id: "20260929T140512Z-red", title: "\x1b[31mred", markdown: "\x1b[31mred\x1b[0m\ttab\r\nok", createdAt: new Date() })],
     { title: "t", description: "t", baseUrl: "https://x.test", readId: "AbCdEfGhIjKlMnOpQrSt_-" },
   );
   expect(out).not.toMatch(/[\x00-\x08\x0B\x0C\x0E-\x1F￾￿]/);
@@ -57,7 +51,7 @@ test("strips XML-forbidden control characters", () => {
 
 test("a sender becomes an escaped dc:creator and declares the namespace; none, no namespace", () => {
   const o = { title: "t", description: "t", baseUrl: "https://x.test", readId: "AbCdEfGhIjKlMnOpQrSt_-" };
-  const out = renderFeed([{ ...notes[1], sender: "A & <B>" }, notes[0]], o);
+  const out = renderFeed([mdNote({ id: "20260928T090000Z-plain", markdown: "Plain", sender: "A & <B>" }), notes[0]], o);
   expect(out).toContain('<rss version="2.0" xmlns:dc="http://purl.org/dc/elements/1.1/">');
   expect(out.match(/<dc:creator>/g)).toHaveLength(1);
   expect(out).toContain("<dc:creator>A &amp; &lt;B&gt;</dc:creator>");

@@ -1,13 +1,16 @@
 // Notes: validation, ids and reading them back. Storage itself is in data/notes.ts.
 import { randomBytes } from "node:crypto";
-import { extractTitle, idStamp } from "../shared/notes";
-import type { Meta } from "./data/frontmatter";
+import { idStamp } from "../shared/notes";
 import { isErrno } from "./data/fs";
-import { deleteNoteFile, replaceNote, writeNote, listNoteFiles, readNote } from "./data/notes";
+import { deleteNoteFile, replaceNote, writeNote, listNoteFiles, readNote, type Meta } from "./data/notes";
 import { EmptyNoteError, NoteTooLargeError } from "./errors";
 import { assertFeed, checkFeed, ensureFeed, forgetFeed } from "./feeds";
+import { MarkdownNote } from "./note/markdown";
+import { typeForExt } from "./note/types";
 
-export type Note = { id: string; title: string; markdown: string; createdAt: Date; sender?: string; tags: string[] };
+export { MarkdownNote } from "./note/markdown";
+// ponytail: only markdown notes exist until image notes (Task 3 widens these to Note).
+export type Note = MarkdownNote;
 
 export const MAX_BYTES = 102400;
 
@@ -28,17 +31,9 @@ export function isValidId(id: string): boolean {
   return ID_RE.test(id);
 }
 
-function toNote(id: string, { markdown, sender, meta }: { markdown: string; sender?: string; meta?: Meta }): Note {
+function createdAt(id: string): Date {
   const [, y, mo, d, h, mi, s] = ID_RE.exec(id)!;
-  return {
-    id,
-    title: extractTitle(markdown),
-    markdown,
-    createdAt: new Date(Date.UTC(+y, +mo - 1, +d, +h, +mi, +s)),
-    ...(sender !== undefined && { sender }),
-    // A hand-edited file may hold anything under `tags`; only strings count.
-    tags: Array.isArray(meta?.tags) ? meta.tags.filter((t): t is string => typeof t === "string") : [],
-  };
+  return new Date(Date.UTC(+y, +mo - 1, +d, +h, +mi, +s));
 }
 
 // Storage only: no auth, rate limit or caps (that is posting.ts).
@@ -58,7 +53,9 @@ export async function createNote(feed: string, markdown: string, now = new Date(
   for (let retried = false; ; retried = true) {
     const readId = await ensureFeed(feed, wantedReadId);
     try {
-      return { note: toNote(await writeNote(feed, base, markdown, sender, tags), { markdown, sender, meta: tags.length ? { tags } : {} }), readId };
+      const meta: Meta = { ...(sender !== undefined && { sender }), ...(tags.length && { tags }) };
+      const id = await writeNote(feed, base, "md", markdown, meta);
+      return { note: new MarkdownNote({ id, ext: "md", meta, createdAt: createdAt(id), size: Buffer.byteLength(markdown) }, markdown), readId };
     } catch (e) {
       // The listed feed's directory is gone (deleted since ensureFeed, or removed by hand): this is a new
       // feed. Once only: gone again means another delete, and that is an error.
@@ -70,7 +67,7 @@ export async function createNote(feed: string, markdown: string, now = new Date(
 
 async function noteIds(feed: string): Promise<string[]> {
   if (checkFeed(feed)) return [];
-  return (await listNoteFiles(feed)).filter(isValidId);
+  return (await listNoteFiles(feed)).filter((e) => typeForExt(e.ext)).map((e) => e.id).filter(isValidId);
 }
 
 // Newest first. `before` (a note id) pages backwards: ids sort by time, so older notes sort lower.
@@ -97,7 +94,8 @@ export async function countNotes(feed: string): Promise<number> {
 export async function getNote(feed: string, id: string): Promise<Note | null> {
   if (checkFeed(feed) || !isValidId(id)) return null;
   const stored = await readNote(feed, id);
-  return stored === null ? null : toNote(id, stored);
+  const type = stored && typeForExt(stored.ext);
+  return stored && type ? (type.read({ id, ext: stored.ext, meta: stored.meta, createdAt: createdAt(id), size: stored.content.length }, stored.content) as MarkdownNote) : null;
 }
 
 // The id never changes, so neither does createdAt. null: invalid feed or id, or no such note.

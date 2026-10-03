@@ -2,7 +2,6 @@ import { mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { beforeEach, describe, expect, test } from "vitest";
-import { encode, decode } from "../data/frontmatter";
 import { resetFeedsForTests, readIdOf } from "../feeds";
 import { resetRateLimitsForTests } from "../limits";
 import { getNote } from "../notes";
@@ -41,11 +40,12 @@ describe("checkTags", () => {
 });
 
 describe("posting tags", () => {
-  test("JSON body, stored in the frontmatter and read back", async () => {
+  test("JSON body, stored in the sidecar and read back", async () => {
     const res = await json(["CI", "env:prod"]);
     expect(res.status).toBe(201);
     const { id } = await res.json();
-    expect(await readFile(join(dir, "t", `${id}.md`), "utf8")).toBe('---\ntags: ["ci","env:prod"]\n---\n# Hi');
+    expect(await readFile(join(dir, "t", `${id}.md`), "utf8")).toBe("# Hi");
+    expect(JSON.parse(await readFile(join(dir, "t", `.${id}.md.json`), "utf8"))).toEqual({ tags: ["ci", "env:prod"] });
     expect((await getNote("t", id))!.tags).toEqual(["ci", "env:prod"]);
   });
   test("X-Note-Tags header on a raw body", async () => {
@@ -67,9 +67,10 @@ describe("posting tags", () => {
     await post(f);
     expect((await list())[0].tags).toEqual(["ci", "deploy"]);
   });
-  test("no tags is an empty list and no frontmatter key", async () => {
+  test("no tags is an empty list and no sidecar", async () => {
     const { id } = await (await post("# Plain")).json();
-    expect(await readFile(join(dir, "t", `${id}.md`), "utf8")).toBe("---\n---\n# Plain");
+    expect(await readFile(join(dir, "t", `${id}.md`), "utf8")).toBe("# Plain");
+    await expect(readFile(join(dir, "t", `.${id}.md.json`), "utf8")).rejects.toThrow();
     expect((await list())[0].tags).toEqual([]);
   });
   test("an invalid tag is a 400 and posts nothing", async () => {
@@ -117,8 +118,4 @@ describe("filtering", () => {
     expect(only).toContain("One");
     expect(only).not.toContain("Two");
   }, 15000);
-});
-
-test("the frontmatter round-trips a tags key", () => {
-  expect(decode(encode("body", { tags: ["a", "b"] }))).toEqual({ markdown: "body", meta: { tags: ["a", "b"] } });
 });

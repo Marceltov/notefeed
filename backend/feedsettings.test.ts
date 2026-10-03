@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { beforeEach, expect, test } from "vitest";
 import { readSettings, writeSettings } from "./data/settings";
 import { forReaders, getSettings } from "./feedsettings";
+import { mdNote } from "./note/testing";
 
 beforeEach(async () => {
   process.env.DATA_DIR = await mkdtemp(join(tmpdir(), "notefeed-fs-"));
@@ -28,10 +29,12 @@ test("showSender is written only when false, so a file stays as it was without s
 });
 
 test("forReaders drops the sender only when showSender is false", () => {
-  const a = { id: "1", title: "a", markdown: "a", createdAt: new Date(0), sender: "x@y.z", tags: [] };
-  const b = { id: "2", title: "b", markdown: "b", createdAt: new Date(0), tags: [] };
+  const a = mdNote({ id: "1", markdown: "a", sender: "x@y.z" });
+  const b = mdNote({ id: "2", markdown: "b" });
   expect(forReaders([a, b], { showSender: true })).toEqual([a, b]);
   const hidden = forReaders([a, b], { showSender: false });
-  expect(hidden[0]).not.toHaveProperty("sender");
-  expect(hidden).toEqual([{ ...a, sender: undefined }, b]);
+  expect(hidden[0].sender).toBeUndefined();
+  expect(hidden[0].title).toBe("a");
+  expect(hidden[1]).toBe(b);
+  expect(a.sender).toBe("x@y.z");
 });

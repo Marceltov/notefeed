@@ -36,7 +36,7 @@ export function checkSettings(input: unknown): Omit<FeedSettings, "image" | "sho
 }
 
 // What readers (RSS, the read API and pages) get: the sender only while the feed shows it.
-export const forReaders = (notes: Note[], s: { showSender: boolean }): Note[] => (s.showSender ? notes : notes.map((n) => Object.fromEntries(Object.entries(n).filter(([k]) => k !== "sender")) as Note));
+export const forReaders = (notes: Note[], s: { showSender: boolean }): Note[] => notes.map((n) => n.forReaders(s.showSender));
 
 // What is stored, whatever has become of the image file (the save path in posting.ts keeps it as it is).
 export const getStoredSettings = (feed: string): Promise<FeedSettings> => readSettings(feed);
