@@ -8,7 +8,7 @@ decision-makers: Marcel Bruckner
 
 ## Context and Problem Statement
 
-Until now a note was always a markdown file with a small `---` block at the top for its sender and tags, and an image was something a note could contain: a file named by the hash of its bytes, uploaded separately and referred to from the text (ADR 0011, ADR 0017). Issue #91 asks for notes that are any file, starting with images: a photo feed, pictures dropped into the compose box without any text, and, later, notes that notefeed can only store and serve (the planned encryption). A binary file has no place for a front matter block, and putting metadata in the content mixes what a person wrote with what notefeed knows about it. What is a note, where does its metadata live, and what happens to the hash-named images? (Amends ADR 0011 and ADR 0017.)
+Until now a note was always a markdown file with a small `---` block at the top for its sender and tags, and an image was something a note could contain: a file named by the hash of its bytes, uploaded separately and referred to from the text (ADR 0011, ADR 0017). Issue #91 asks for notes that are any file, starting with images: a photo feed, pictures dropped into the compose box without any text, and, later, notes that notefeed can only store and serve (the planned encryption). A binary file has no place for a front matter block, and putting metadata in the content mixes what a person wrote with what notefeed knows about it. What is a note, where does its metadata live, and what happens to the hash-named images? (Amends ADR 0011 and ADR 0017. Amended by ADR 0019: one API for every type of note, strict about its Content-Type; the picture endpoint is gone.)
 
 ## Considered Options
 

@@ -2,9 +2,8 @@
 
 notefeed's HTTP API lives under `/api/v1`. It's what the [client libraries](clients.md) and the web UI use, and it's stable: a breaking change gets a new version prefix.
 
-- **Post** to `/api/v1/feeds/{feed}/notes`, or the short form `/{feed}` (see [Posting notes](posting.md)).
-- **Edit** a note with `PUT /api/v1/feeds/{feed}/notes/{id}` and **delete** it with `DELETE` on the same URL. See [Editing and deleting notes](posting.md#editing-and-deleting-notes).
-- **Images:** an image is a note of its own. Post the picture to `/api/v1/feeds/{feed}/notes` or `POST /api/v1/feeds/{feed}/images`; the response has the note's `file` and `file_url`, and `![](file)` shows it in a markdown note. See [Images](posting.md#images).
+- **Post** to `/api/v1/feeds/{feed}/notes`, or the short form `/{feed}`. The body is the note, a file: `Content-Type` says whether it is markdown or a picture, and metadata and creation settings are `X-Note-*`, `X-Feed-Password` and `X-Read-Id` headers. See [Posting notes](posting.md), [Types](posting.md#types) and [Pictures](posting.md#pictures).
+- **Edit** a note with `PUT /api/v1/feeds/{feed}/notes/{id}` (replace its content, same type), change its title or alt text with `PATCH` on the same URL, and **delete** it with `DELETE`. See [Editing and deleting notes](posting.md#editing-and-deleting-notes).
 - **Settings and deleting a feed:** `GET`, `PUT` and `DELETE` on `/api/v1/feeds/{feed}` read and replace a feed's title, description and title image and delete the feed with everything in it. See [Feed settings and deleting a feed](posting.md#feed-settings-and-deleting-a-feed).
 - **Read** a feed's notes as JSON at `/api/v1/feeds/{feed}/notes`, newest first, a page at a time: pass the response's `next` as `before` to get older notes. Add `?tag=ci` to see only notes with that [tag](posting.md#tags).
 - **Read without the name** at `/api/v1/read/{readId}/notes`, and the feed's title and description at `/api/v1/read/{readId}`: public and read-only, like the [read link](feed.md). A reserved feed's `readId` is its name.

@@ -18,19 +18,19 @@ Open notefeed in a browser. The start page asks for a feed name and suggests a r
 
 Type markdown into the box at the top. The note is saved under an id of the time plus a random UUID, never its title: see [Titles and filenames](posting.md#titles-and-filenames).
 
-Post with **Post note**, or press ++ctrl+enter++ (++cmd+enter++ on a Mac). The note appears at the top of the list, briefly highlighted. The box posts to the same `POST /<feed>` as scripts, so it counts toward the same [rate limit and caps](configuration.md#rate-limits-and-caps) and works without JavaScript too.
+Post with **Post note**, or press ++ctrl+enter++ (++cmd+enter++ on a Mac). The note appears at the top of the list, briefly highlighted. The box posts to the same `POST /<feed>` as scripts, so it counts toward the same [rate limit and caps](configuration.md#rate-limits-and-caps). The web UI needs JavaScript for posting, editing and deleting notes; use the [API](posting.md) or the `notefeed` command without it.
 
 The **Settings** button at the top right opens the feed's [settings page](#feed-settings-and-deleting-a-feed), which also has a ready-to-copy `curl` command for this feed. A feed without notes shows the command right under the box.
 
 ### Adding an image
 
-The compose box has an **Add image** button. Choose PNG, JPEG, GIF or WebP files, or paste an image into the box, or drop files on it. Each one waits in the box, with a small preview and a remove button, and `![](name)` goes into the text at the cursor, with the file's own name. Nothing is uploaded yet, so leaving the page uploads nothing. When you **Post note**, every picture is posted as a [note of its own](posting.md#images), and the names in your text are swapped for the new notes' files; then the text is posted. If the text holds only the pictures, no text note is made. If a picture is refused (not an image, too large, too many requests), the page says why and keeps your text and the pictures that were not posted; posting again continues without making the ones that went through twice. The note editor works the same way, and a feed that does not exist yet takes pictures too: the first post creates it, with its password.
+The compose box has an **Add image** button. Choose PNG, JPEG, GIF or WebP files, or paste an image into the box, or drop files on it. Each one waits in the box, with a small preview and a remove button, and `![](name)` goes into the text at the cursor, with the file's own name. Nothing is uploaded yet, so leaving the page uploads nothing. When you **Post note**, every picture is posted as a [note of its own](posting.md#pictures), and the names in your text are swapped for the new notes' files; then the text is posted. If the text holds only the pictures, no text note is made. If a picture is refused (not an image, too large, too many requests), the page says why and keeps your text and the pictures that were not posted; posting again continues without making the ones that went through twice. The note editor works the same way, and a feed that does not exist yet takes pictures too: the first post creates it, with its password.
 
-This needs JavaScript. Without it the box is a plain text box: post a picture with the [API](posting.md#images) or `notefeed image`, then write `![](file)` yourself. Pictures are posted as they are, so a photo keeps its EXIF data, including where it was taken, and anyone with the read link can download it: remove it with a tool such as `exiftool` first (see [operations](operations.md)).
+This needs JavaScript. Without it the box is a plain text box: post a picture with the [API](posting.md#pictures) or `notefeed post --file`, then write `![](file)` yourself. Pictures are posted as they are, so a photo keeps its EXIF data, including where it was taken, and anyone with the read link can download it: remove it with a tool such as `exiftool` first (see [operations](operations.md)).
 
 A **Title** field sits next to the tags: leave it empty and the note is titled by its text. The editor has it too, and for a picture also an alternative text for screen readers.
 
-Images in notes load lazily and are never wider than the note. They are as public as the [read link](#the-read-link): see [Images](posting.md#images).
+Images in notes load lazily and are never wider than the note. They are as public as the [read link](#the-read-link): see [Images](posting.md#pictures).
 
 ### The read link
 
@@ -48,9 +48,9 @@ A note's [tags](posting.md#tags) show next to its title in the list and on its p
 
 ### Editing and deleting a note
 
-A note's own page, `/<feed>/<id>`, has an **Edit** control and a **Delete** control. **Edit** shows a box with the note's markdown; change it and press **Save**. The note keeps its address, its place in the list and its RSS item identity, and its title follows the new text. **Delete** asks you to confirm before it removes the note; once confirmed it is gone for good, and you land back on the feed, which stays even if it now has no notes.
+A note's own page, `/<feed>/<id>`, has an **Edit** control and a **Delete** control. **Edit** shows a box with the note's markdown and a **Title** field; change them and press **Save**. For a picture there is no text, only the title and an alternative text. The note keeps its address, its place in the list and its RSS item identity, and its title follows the new text. **Delete** asks you to confirm before it removes the note; once confirmed it is gone for good, and you land back on the feed, which stays even if it now has no notes.
 
-Both work without JavaScript. They are plain forms that post to `/<feed>/<id>/edit` and `/<feed>/<id>/delete`, and they only accept requests from the instance's own pages: a script uses the [API](posting.md#editing-and-deleting-notes) instead. If a change is refused (an empty note, one over the size limit, too many requests), the page says why and the note stays as it was. They count toward the same [rate limit](configuration.md#rate-limits-and-caps) as posting.
+Both go through the [API](posting.md#editing-and-deleting-notes) (`PUT`, `PATCH` and `DELETE`), so they need JavaScript. If a change is refused (an empty note, one over the size limit, too many requests), the page says why and the note stays as it was. They count toward the same [rate limit](configuration.md#rate-limits-and-caps) as posting.
 
 Anyone who can open the feed can edit and delete its notes. On a feed with [its own password](#a-password-for-a-feed) that means anyone who has unlocked it. The [read-only view](#the-read-only-view) has neither control.
 
@@ -67,7 +67,7 @@ The **Title image** control has a **Choose image** button, which posts an image 
 
 **Delete feed**, the last section, removes the feed with all its notes, its settings, its password and its read link, for good. You confirm by typing the feed's name, exactly. Afterwards you land on the start page, and the name can be used again. A new feed with that name gets a different read link, and the old link stays empty.
 
-Both work without JavaScript: they are plain forms that post to `/<feed>/details` and `/<feed>/delete`, and they only accept requests from the instance's own pages. A script uses the [API](posting.md#feed-settings-and-deleting-a-feed) instead. If something is refused (a title that is too long, too many requests), the settings page says why next to these sections and nothing changes. They count toward the same [rate limit](configuration.md#rate-limits-and-caps) as posting.
+Both work without JavaScript: they are plain forms that post to `/<feed>/details` and `/<feed>/delete`, and they only accept requests from the instance's own pages. (Posting, editing and deleting *notes* need JavaScript.) A script uses the [API](posting.md#feed-settings-and-deleting-a-feed) instead. If something is refused (a title that is too long, too many requests), the settings page says why next to these sections and nothing changes. They count toward the same [rate limit](configuration.md#rate-limits-and-caps) as posting.
 
 Anyone who can open the feed can change its settings and delete it: on an open feed that is anyone who knows its name, and on a feed with [its own password](#a-password-for-a-feed) it is anyone who has unlocked it. A locked feed shows only its unlock form, without its title, description or title image. The read-only view has neither section.
 
