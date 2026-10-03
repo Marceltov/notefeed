@@ -27,17 +27,19 @@ export function NoteActions({ feed, id, kind, markdown, title: savedTitle, alt: 
     // Only what changed is sent: a text note's content is replaced (PUT, the text and the added pictures in one multipart request:
     // the text part goes even when it holds only the pictures' references, a PUT needs it) when its text changed or pictures were added, and its title set (PATCH)
     // when that changed; a picture has no text, only a title and an alt text. Nothing changed: nothing is sent.
+    // The PATCH goes first: it can be sent twice, the PUT can't (it stores the pictures). So a refused PATCH sent nothing else,
+    // and saving again after a refused PUT repeats the harmless PATCH and stores the pictures once.
     const textChanged = !image && (text !== markdown || images.pending.length > 0);
     const meta = { ...(title !== savedTitle && { title }), ...(image && alt !== savedAlt && { alt }) };
     const metaChanged = Object.keys(meta).length > 0;
     if (!textChanged && !metaChanged) return setEditing(false);
     const call = async () => {
       let last: { response?: Response; error?: { code?: string; error?: string } } | undefined;
-      if (textChanged) {
-        last = await editNote({ ...opts(), ...multipart(await multipartBody(text, images.pending)), headers: { "Content-Type": null } });
+      if (metaChanged) {
+        last = await patchNote({ ...opts(), body: meta });
         if (!last.response?.ok) return last;
       }
-      if (metaChanged) last = await patchNote({ ...opts(), body: meta });
+      if (textChanged) last = await editNote({ ...opts(), ...multipart(await multipartBody(text, images.pending)), headers: { "Content-Type": null } });
       return last!;
     };
     run(e, call, () => {

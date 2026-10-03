@@ -153,6 +153,28 @@ test("editing a note offers the same control, and saving posts the picture", asy
   await loaded(page.locator(".md img")).toBeGreaterThan(0);
 });
 
+test("a title that fails to save after a picture was added: saving again stores the picture once", async ({ page }) => {
+  const name = feedName();
+  await post(page, name, "# Retried");
+  await page.getByRole("link", { name: "Retried" }).click();
+  await page.getByText("Edit", { exact: true }).click();
+  await page.getByLabel("Title (optional, otherwise taken from the text)").fill("New title");
+  await choose(page, "Add image", PNG);
+  let failed = false;
+  await page.route("**/notes/*", (route) => {
+    if (route.request().method() !== "PATCH" || failed) return route.continue();
+    failed = true;
+    return route.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify({ error: "x", code: "x" }) });
+  });
+  await page.getByRole("button", { name: "Save" }).click();
+  await expect(page.getByRole("alert").filter({ hasText: "Something went wrong." })).toBeVisible();
+  await page.getByRole("button", { name: "Save" }).click();
+  await expect(page.getByRole("status")).toHaveText("Saved.");
+  await page.goto(`/${name}`);
+  await expect(page.getByRole("link", { name: "New title" })).toBeVisible();
+  await expect(page.locator("ol > li")).toHaveCount(2); // the text note and one picture, not two
+});
+
 // A paste event as a browser makes it: a clipboard holding the fixture PNG, and `text` when given.
 async function paste(page: Page, text?: string) {
   const png = readFileSync(PNG).toString("base64");

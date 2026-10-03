@@ -13,9 +13,11 @@ export function uniqueToken(name: string, taken: ReadonlySet<string>): string {
   const safe = name.replace(/^.*[\\/]/, "").replace(/[^A-Za-z0-9._-]+/g, "-");
   const base = /^\.*$/.test(safe) ? "image" : safe;
   const dot = base.lastIndexOf(".");
-  const [stem, ext] = dot > 0 ? [base.slice(0, dot), base.slice(dot)] : [base, ""];
+  const [whole, ext] = dot > 0 ? [base.slice(0, dot), base.slice(dot, dot + 20)] : [base, ""];
+  // The server takes names of at most 200 characters; the token is only a local name it swaps, so shortening it is invisible.
+  const stem = whole.slice(0, 190 - ext.length);
   for (let n = 1; ; n++) {
-    const token = n === 1 ? base : `${stem}-${n}${ext}`;
+    const token = n === 1 ? stem + ext : `${stem}-${n}${ext}`;
     if (!taken.has(token)) return token;
   }
 }

@@ -36,3 +36,15 @@ test("removeReference drops the image line for a token and tidies the blank line
   expect(removeReference("![](cat.png)\n![](dog.png)", "cat.png")).toBe("![](dog.png)");
   expect(removeReference("![](big-cat.png)", "cat.png")).toBe("![](big-cat.png)");
 });
+
+test("uniqueToken keeps a token within 200 characters, with its extension, and still numbers collisions", () => {
+  const long = "a".repeat(251) + ".png";
+  const token = uniqueToken(long, new Set());
+  expect(token.length).toBeLessThanOrEqual(200);
+  expect(token.endsWith(".png")).toBe(true);
+  const next = uniqueToken(long, new Set([token]));
+  expect(next).not.toBe(token);
+  expect(next.length).toBeLessThanOrEqual(200);
+  expect(next.endsWith("-2.png")).toBe(true);
+  expect(uniqueToken("b".repeat(255), new Set()).length).toBeLessThanOrEqual(200);
+});
