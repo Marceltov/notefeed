@@ -533,6 +533,13 @@ def test_no_content_and_no_attachments_is_a_config_error(server):
     assert server.requests == []
 
 
+@pytest.mark.parametrize("extra", [{"alt": "a"}, {"name": "n.md"}])
+def test_alt_or_name_with_attachments_is_a_config_error(server, extra):
+    with pytest.raises(ConfigError):
+        Client(server.url, "inbox").post("x", attachments=[Attachment("a.png", PNG, "image/png")], **extra)
+    assert server.requests == []
+
+
 EMOJI = "\U0001F600" * 101  # 101 code points, 202 UTF-16 units
 
 

@@ -445,6 +445,14 @@ test("postAttachNameWithASpaceIsAcceptedAndSentWithThatFilename", async () => {
   expect(((await parse(0)).get("file") as File).name).toBe("my chart.png");
 });
 
+test("postAttachWithAMarkdownFileIsOneRequestWithItsText", async () => {
+  server.reply(201, { ...created("T", "T.md"), attachments: [created("I1", "F1.png")] });
+  const dir = pics();
+  const t = io();
+  expect(await main(["post", "--file", join(dir, "notes.md"), "--attach", join(dir, "chart.png"), "--url", server.url, "--feed", "inbox"], t.io)).toBe(0);
+  expect(await ((await parse(0)).get("text") as File).text()).toBe("# x");
+});
+
 test("postAttachWithANonMarkdownFileExits2AndPostsNothing", async () => {
   const dir = pics();
   const t = io();
