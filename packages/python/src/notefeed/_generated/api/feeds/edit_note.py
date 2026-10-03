@@ -117,15 +117,16 @@ def sync_detailed(
     note's own (`415` otherwise). Id, creation time and metadata stay: the title of a markdown note
     without one set follows the new text. Change the title or alt text with `PATCH`. Needs the feed's
     password if it has one, and counts against the post rate limit. Read links can't edit. A markdown
-    note with its pictures is one `multipart/form-data` request: a `text` part (the markdown), `file`
-    parts (up to 10 pictures, each with its file name and image `Content-Type`) and `alt.<file name>`
-    fields. The pictures are stored first, each as its own note named by its file name, then the text
-    with its references to them (`![](chart.png)`, `[x]: chart.png`, as written or percent-decoded)
-    swapped for the stored files; a picture it never refers to is appended as `![](file)`. Everything is
-    checked before the first write, and a failed write removes what the request stored: all or nothing.
-    `X-Note-Alt` and `X-Note-Name` are 400. The answer has `attachments`, the stored pictures in the
-    order of the `file` parts. On a `PUT` the `text` part is required and the note must be a markdown
-    note; the note keeps its own title and tags, `X-Note-Tags` goes on the new pictures.
+    note with its pictures is one `multipart/form-data` request: a `text` part (the markdown, a field or
+    a file part; a file part keeps its line breaks, a field's are sent as CRLF), `file` parts (up to 10
+    pictures, each with its file name and image `Content-Type`) and `alt.<file name>` fields. The
+    pictures are stored first, each as its own note named by its file name, then the text with its
+    references to them (`![](chart.png)`, `[x]: chart.png`, as written or percent-decoded) swapped for
+    the stored files; a picture it never refers to is appended as `![](file)`. Everything is checked
+    before the first write, and a failed write removes what the request stored: all or nothing. `X-Note-
+    Alt` and `X-Note-Name` are 400. The answer has `attachments`, the stored pictures in the order of
+    the `file` parts. On a `PUT` the `text` part is required and the note must be a markdown note; the
+    note keeps its own title and tags, `X-Note-Tags` goes on the new pictures.
 
     Args:
         feed (str):
@@ -173,15 +174,16 @@ def sync(
     note's own (`415` otherwise). Id, creation time and metadata stay: the title of a markdown note
     without one set follows the new text. Change the title or alt text with `PATCH`. Needs the feed's
     password if it has one, and counts against the post rate limit. Read links can't edit. A markdown
-    note with its pictures is one `multipart/form-data` request: a `text` part (the markdown), `file`
-    parts (up to 10 pictures, each with its file name and image `Content-Type`) and `alt.<file name>`
-    fields. The pictures are stored first, each as its own note named by its file name, then the text
-    with its references to them (`![](chart.png)`, `[x]: chart.png`, as written or percent-decoded)
-    swapped for the stored files; a picture it never refers to is appended as `![](file)`. Everything is
-    checked before the first write, and a failed write removes what the request stored: all or nothing.
-    `X-Note-Alt` and `X-Note-Name` are 400. The answer has `attachments`, the stored pictures in the
-    order of the `file` parts. On a `PUT` the `text` part is required and the note must be a markdown
-    note; the note keeps its own title and tags, `X-Note-Tags` goes on the new pictures.
+    note with its pictures is one `multipart/form-data` request: a `text` part (the markdown, a field or
+    a file part; a file part keeps its line breaks, a field's are sent as CRLF), `file` parts (up to 10
+    pictures, each with its file name and image `Content-Type`) and `alt.<file name>` fields. The
+    pictures are stored first, each as its own note named by its file name, then the text with its
+    references to them (`![](chart.png)`, `[x]: chart.png`, as written or percent-decoded) swapped for
+    the stored files; a picture it never refers to is appended as `![](file)`. Everything is checked
+    before the first write, and a failed write removes what the request stored: all or nothing. `X-Note-
+    Alt` and `X-Note-Name` are 400. The answer has `attachments`, the stored pictures in the order of
+    the `file` parts. On a `PUT` the `text` part is required and the note must be a markdown note; the
+    note keeps its own title and tags, `X-Note-Tags` goes on the new pictures.
 
     Args:
         feed (str):
@@ -224,15 +226,16 @@ async def asyncio_detailed(
     note's own (`415` otherwise). Id, creation time and metadata stay: the title of a markdown note
     without one set follows the new text. Change the title or alt text with `PATCH`. Needs the feed's
     password if it has one, and counts against the post rate limit. Read links can't edit. A markdown
-    note with its pictures is one `multipart/form-data` request: a `text` part (the markdown), `file`
-    parts (up to 10 pictures, each with its file name and image `Content-Type`) and `alt.<file name>`
-    fields. The pictures are stored first, each as its own note named by its file name, then the text
-    with its references to them (`![](chart.png)`, `[x]: chart.png`, as written or percent-decoded)
-    swapped for the stored files; a picture it never refers to is appended as `![](file)`. Everything is
-    checked before the first write, and a failed write removes what the request stored: all or nothing.
-    `X-Note-Alt` and `X-Note-Name` are 400. The answer has `attachments`, the stored pictures in the
-    order of the `file` parts. On a `PUT` the `text` part is required and the note must be a markdown
-    note; the note keeps its own title and tags, `X-Note-Tags` goes on the new pictures.
+    note with its pictures is one `multipart/form-data` request: a `text` part (the markdown, a field or
+    a file part; a file part keeps its line breaks, a field's are sent as CRLF), `file` parts (up to 10
+    pictures, each with its file name and image `Content-Type`) and `alt.<file name>` fields. The
+    pictures are stored first, each as its own note named by its file name, then the text with its
+    references to them (`![](chart.png)`, `[x]: chart.png`, as written or percent-decoded) swapped for
+    the stored files; a picture it never refers to is appended as `![](file)`. Everything is checked
+    before the first write, and a failed write removes what the request stored: all or nothing. `X-Note-
+    Alt` and `X-Note-Name` are 400. The answer has `attachments`, the stored pictures in the order of
+    the `file` parts. On a `PUT` the `text` part is required and the note must be a markdown note; the
+    note keeps its own title and tags, `X-Note-Tags` goes on the new pictures.
 
     Args:
         feed (str):
@@ -278,15 +281,16 @@ async def asyncio(
     note's own (`415` otherwise). Id, creation time and metadata stay: the title of a markdown note
     without one set follows the new text. Change the title or alt text with `PATCH`. Needs the feed's
     password if it has one, and counts against the post rate limit. Read links can't edit. A markdown
-    note with its pictures is one `multipart/form-data` request: a `text` part (the markdown), `file`
-    parts (up to 10 pictures, each with its file name and image `Content-Type`) and `alt.<file name>`
-    fields. The pictures are stored first, each as its own note named by its file name, then the text
-    with its references to them (`![](chart.png)`, `[x]: chart.png`, as written or percent-decoded)
-    swapped for the stored files; a picture it never refers to is appended as `![](file)`. Everything is
-    checked before the first write, and a failed write removes what the request stored: all or nothing.
-    `X-Note-Alt` and `X-Note-Name` are 400. The answer has `attachments`, the stored pictures in the
-    order of the `file` parts. On a `PUT` the `text` part is required and the note must be a markdown
-    note; the note keeps its own title and tags, `X-Note-Tags` goes on the new pictures.
+    note with its pictures is one `multipart/form-data` request: a `text` part (the markdown, a field or
+    a file part; a file part keeps its line breaks, a field's are sent as CRLF), `file` parts (up to 10
+    pictures, each with its file name and image `Content-Type`) and `alt.<file name>` fields. The
+    pictures are stored first, each as its own note named by its file name, then the text with its
+    references to them (`![](chart.png)`, `[x]: chart.png`, as written or percent-decoded) swapped for
+    the stored files; a picture it never refers to is appended as `![](file)`. Everything is checked
+    before the first write, and a failed write removes what the request stored: all or nothing. `X-Note-
+    Alt` and `X-Note-Name` are 400. The answer has `attachments`, the stored pictures in the order of
+    the `file` parts. On a `PUT` the `text` part is required and the note must be a markdown note; the
+    note keeps its own title and tags, `X-Note-Tags` goes on the new pictures.
 
     Args:
         feed (str):

@@ -38,6 +38,10 @@ test("placeImages swaps a referenced name and appends an unreferenced one", () =
   expect(placeImages("see ![x](a.png) and ![x](a.png)", sent)).toBe("see ![x](F1.png) and ![x](F1.png)\n\n![](F2.png)");
 });
 
+test("placeImages keeps a leading BOM and still finds the references after it", () => {
+  expect(placeImages("\uFEFF# Hi\n\n![](a.png)", new Map([["a.png", "F1.png"]]))).toBe("\uFEFF# Hi\n\n![](F1.png)");
+});
+
 test("placeImages with empty markdown is only the references, in order", () => {
   expect(placeImages("", new Map([["a.png", "F1.png"], ["b.png", "F2.png"]]))).toBe("![](F1.png)\n\n![](F2.png)");
 });

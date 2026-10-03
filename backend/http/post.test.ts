@@ -8,6 +8,7 @@ import { hasFeed, readIdOf, resetFeedsForTests } from "../feeds";
 import { resetRateLimitsForTests } from "../limits";
 import { countNotes } from "../notes";
 import { API_PREFIX, dispatch } from "./api";
+import { readMultipart } from "./notes";
 
 const BASE = "http://localhost:3000";
 let dir: string;
@@ -253,7 +254,7 @@ describe("multipart: a text with its pictures", () => {
   test.each([
     ["no text and no file", [], {}],
     ["two text parts", [["text", "a"], ["text", "b"]], {}],
-    ["a text part that is a file", [["text", new File(["# a"], "a.md", { type: "text/markdown" })]], {}],
+    ["a text field and a text file", [["text", "# a"], ["text", new File(["# b"], "b.md", { type: "text/markdown" })]], {}],
     ["a part named other", [["text", "a"], ["other", "x"]], {}],
     ["a file part without a file name", [["file", "just a string"]], {}],
     ["a duplicate file name", [["file", png("a.png")], ["file", png("a.png")]], {}],
@@ -283,8 +284,41 @@ describe("multipart: a text with its pictures", () => {
   test("an oversize picture or a body over the request cap is 413, and nothing is created", async () => {
     process.env.NOTEFEED_MAX_IMAGE_BYTES = "20";
     expect((await sendForm([["text", "# a"], ["file", png("a.png", new Uint8Array([...PNG, ...new Uint8Array(20)]))]])).status).toBe(413);
-    // The cap is 102400 + 10 * 20 bytes: an alt text that long would be a 400 if it were read.
-    expect((await sendForm([["file", png("a.png")], ["alt.a.png", "a".repeat(102700)]])).status).toBe(413);
+    // The cap is 102400 + 10 * 20 bytes + 64 KiB of framing: an alt text that long would be a 400 if it were read.
+    expect((await sendForm([["file", png("a.png")], ["alt.a.png", "a".repeat(102400 + 200 + 65536 + 1)]])).status).toBe(413);
+    expect(await hasFeed("f")).toBe(false);
+  });
+  test("a request at every limit at once passes the request cap: 10 pictures at the image limit and a text at the markdown limit", async () => {
+    process.env.NOTEFEED_MAX_IMAGE_BYTES = "20";
+    const full = new Uint8Array([...PNG, ...new Uint8Array(20 - PNG.length)]);
+    const files = Array.from({ length: 10 }, (_, i) => ["file", png(`${i}.png`, full)] as [string, File]);
+    const req = (text: string) => new Request(`${BASE}${API_PREFIX}/feeds/f/notes`, { method: "POST", body: form([["text", text], ...files]) });
+    // Read as the request cap sees it: a text of exactly MAX_BYTES can't be stored with pictures, their references make it longer.
+    const read = await readMultipart(req("a".repeat(102400)), "post");
+    expect([read.text!.length, read.pictures.length]).toEqual([102400, 10]);
+    // Stored, with room left for the ten references.
+    const res = await sendForm([["text", "a".repeat(102400 - 10 * 64)], ...files]);
+    expect(res.status).toBe(201);
+    expect((await res.json()).attachments).toHaveLength(10);
+  });
+  test("the text as a file part is stored byte for byte: no CRLF, a BOM kept; its name is ignored", async () => {
+    const bytes = new Uint8Array([0xef, 0xbb, 0xbf, ...new TextEncoder().encode("# Hi\n\n![](a.png)\n")]);
+    for (const type of ["text/markdown", "text/markdown; charset=utf-8"]) {
+      const res = await sendForm([["text", new File([bytes as BlobPart], "whatever.txt", { type })], ["file", png("a.png")]]);
+      expect(res.status, type).toBe(201);
+      const { file, attachments } = await res.json();
+      const text = (await stored(file)).toString();
+      expect(text).not.toContain("\r");
+      expect(text).toBe(`\uFEFF# Hi\n\n![](${attachments[0].file})\n`);
+    }
+  });
+  test("a text file part of another type is 415, invalid UTF-8 is 400; nothing is created", async () => {
+    const as = (bytes: BlobPart, type: string) => sendForm([["text", new File([bytes], "t.md", { type })], ["file", png("a.png")]]);
+    const wrong = await as("# a", "image/png");
+    expect([wrong.status, (await wrong.json()).code]).toEqual([415, "unsupported_type"]);
+    expect((await as("# a", "text/markdown; charset=iso-8859-1")).status).toBe(415);
+    const bad = await as(new Uint8Array([0xff, 0xfe, 0x41]) as BlobPart, "text/markdown");
+    expect([bad.status, (await bad.json()).code]).toEqual([400, "invalid_body"]);
     expect(await hasFeed("f")).toBe(false);
   });
   test("a protected feed: the first multipart post creates it, a refused one leaves none, a later post needs the password", async () => {

@@ -7,6 +7,7 @@ import { cookieValue } from "../feedlock";
 import { clientIp } from "../limits";
 import { MAX_BYTES, type Note } from "../notes";
 import { MAX_ATTACHMENTS, postNote, postWithPictures, type Picture, type PostBundle, type PostInput } from "../posting";
+import { parseMedia } from "../note/media";
 import { parseMediaType } from "../note/types";
 import { tagsFromHeader } from "../tags";
 import { feedPath, imagePath, publicUrl, rssPath } from "../urls";
@@ -40,7 +41,21 @@ export async function readPost(req: Request): Promise<PostInput> {
   };
 }
 
-// A multipart/form-data post or PUT: a `text` part (at most one; required on a PUT), `file` parts (pictures, each with its file
+// What a multipart body's framing (boundaries, part headers, alt fields) may add to its text and pictures.
+export const MULTIPART_SLACK = 64 * 1024;
+
+// A `text` sent as a file part: its bytes as UTF-8, kept as they are (a browser's FormData sends a string field's line breaks as
+// CRLF, a file part's bytes untouched). The file name is ignored; a type, when given, must be markdown.
+async function textFile(file: File): Promise<string> {
+  if (file.type && parseMedia(file.type)?.mediaType !== "text/markdown") throw new UnsupportedTypeError("send the text part as text/markdown (UTF-8)");
+  try {
+    return new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(await file.arrayBuffer());
+  } catch {
+    throw new InvalidBodyError("the text part is not UTF-8");
+  }
+}
+
+// A multipart/form-data post or PUT: a `text` part (a field or a file part; at most one; required on a PUT), `file` parts (pictures, each with its file
 // name) and `alt.<file name>` fields; anything else is 400. The pictures themselves are checked in postWithPictures. Title, tags
 // and the read id are the headers a raw post has; X-Note-Alt and X-Note-Name have their place in the form instead, so they are 400.
 export async function readMultipart(req: Request, kind: "edit"): Promise<PostBundle & { text: string }>;
@@ -48,7 +63,7 @@ export async function readMultipart(req: Request, kind: "post"): Promise<PostBun
 export async function readMultipart(req: Request, kind: "post" | "edit"): Promise<PostBundle> {
   const header = headerOf(req);
   if (header("x-note-alt") || header("x-note-name")) throw new InvalidBodyError("with a multipart body, send alt texts as alt.<file name> fields and the file name with each file");
-  const bytes = await readCapped(req, MAX_BYTES + MAX_ATTACHMENTS * config.maxImageBytes());
+  const bytes = await readCapped(req, MAX_BYTES + MAX_ATTACHMENTS * config.maxImageBytes() + MULTIPART_SLACK);
   if (!bytes) throw new NoteTooLargeError();
   const form = await parseForm(bytes, req.headers).catch(() => {
     throw new InvalidBodyError("not a valid multipart body");
@@ -57,7 +72,7 @@ export async function readMultipart(req: Request, kind: "post" | "edit"): Promis
   const pictures: Picture[] = [];
   const alts = new Map<string, string>();
   for (const [key, value] of form.entries()) {
-    if (key === "text" && typeof value === "string" && text === undefined) text = value;
+    if (key === "text" && text === undefined) text = typeof value === "string" ? value : await textFile(value);
     else if (key === "file" && typeof value !== "string" && value.name) pictures.push({ name: value.name, body: new Uint8Array(await value.arrayBuffer()), mediaType: value.type });
     else if (key.startsWith("alt.") && typeof value === "string" && !alts.has(key.slice(4))) alts.set(key.slice(4), value.trim());
     else throw new InvalidBodyError(`unexpected part "${key}": send one text field, files with their file names, and alt.<file name> fields`);

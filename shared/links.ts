@@ -85,6 +85,8 @@ function resolve(dest: string, sent: ReadonlyMap<string, string>): string | unde
  */
 export function placeImages(markdown: string, sent: ReadonlyMap<string, string>): string {
   if (sent.size === 0) return markdown;
+  // The parser drops a leading BOM, so its offsets would be one short: set it aside.
+  if (markdown.startsWith("\uFEFF")) return "\uFEFF" + placeImages(markdown.slice(1), sent);
   const used = new Set<string>();
   let text = "";
   let at = 0;

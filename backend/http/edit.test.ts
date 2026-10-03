@@ -148,6 +148,13 @@ describe("multipart PUT: a markdown note's new text with its pictures", () => {
     expect(await sidecar(c.file)).toEqual({ alt: "C", name: "c.png", tags: ["pics"] });
     expect((await content(made.file)).toString()).toBe(`# New ![](${c.file})`);
   });
+  test("the text as a file part works the same, byte for byte", async () => {
+    const made = await post("# Old", "text/markdown");
+    const res = await putForm(made.id, [["text", new File(["# New\nline"], "n.md", { type: "text/markdown" })]]);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ content: "# New\nline", attachments: [] });
+    expect((await putForm(made.id, [["text", new File(["# x"], "n.md", { type: "image/png" })]])).status).toBe(415);
+  });
   test("a raw PUT's answer has no attachments", async () => {
     const made = await post("# Old", "text/markdown");
     expect("attachments" in (await (await put(made.id, "# New", "text/markdown")).json())).toBe(false);

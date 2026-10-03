@@ -15,7 +15,7 @@ import { API_PREFIX, feedPath, imagePath, publicUrl, readPath, rssPath } from ".
 import { MEDIA_TYPES } from "../note/media";
 import { createDispatcher, op, type AnyOp, type ResponseSpec } from "./dispatch";
 import { MAX_ATTACHMENTS, deleteFeed, deleteNote, editContent, editMeta, editWithPictures, updateFeed } from "../posting";
-import { createdOf, handlePostNote, readContent, readMetaPatch, readMultipart } from "./notes";
+import { MULTIPART_SLACK, createdOf, handlePostNote, readContent, readMetaPatch, readMultipart } from "./notes";
 import { authorize, feedAccess, mediaType, readCapped, sender } from "./request";
 import {
   COMPONENTS,
@@ -49,7 +49,7 @@ export { API_PREFIX };
 const err = (description: string) => ({ description, schema: ErrorJson }) satisfies ResponseSpec;
 const RETRY = { "Retry-After": { description: "Seconds to wait before trying again", type: "integer" } } as const;
 const MULTIPART =
-  "A markdown note with its pictures is one `multipart/form-data` request: a `text` part (the markdown), " +
+  "A markdown note with its pictures is one `multipart/form-data` request: a `text` part (the markdown, a field or a file part; a file part keeps its line breaks, a field's are sent as CRLF), " +
   `\`file\` parts (up to ${MAX_ATTACHMENTS} pictures, each with its file name and image \`Content-Type\`) and \`alt.<file name>\` fields. ` +
   "The pictures are stored first, each as its own note named by its file name, then the text with its references to them (`![](chart.png)`, `[x]: chart.png`, " +
   "as written or percent-decoded) swapped for the stored files; a picture it never refers to is appended as `![](file)`. Everything is checked before the first write, " +
@@ -157,7 +157,7 @@ const OPS: AnyOp[] = [
       ),
       401: UNAUTHORIZED,
       409: err("A password was sent for a feed that already exists without one: it can't be claimed; or the chosen read id is taken"),
-      413: err(`Markdown over ${MAX_BYTES} bytes, or an image over NOTEFEED_MAX_IMAGE_BYTES (each picture of a multipart body too), or a multipart body over ${MAX_BYTES} bytes plus ${MAX_ATTACHMENTS} images`),
+      413: err(`Markdown over ${MAX_BYTES} bytes, or an image over NOTEFEED_MAX_IMAGE_BYTES (each picture of a multipart body too), or a multipart body over ${MAX_BYTES} bytes plus ${MAX_ATTACHMENTS} images plus ${MULTIPART_SLACK / 1024} KiB`),
       415: err("Content-Type missing or not one of the accepted types, or the body (or a multipart body's picture) is not what it declares"),
       429: { ...err("Too many posts, or wrong passwords, from this client"), headers: RETRY },
       507: err("NOTEFEED_MAX_FEEDS, NOTEFEED_MAX_NOTES_PER_FEED or NOTEFEED_MAX_IMAGES_PER_FEED reached"),
@@ -234,7 +234,7 @@ const OPS: AnyOp[] = [
       ),
       401: UNAUTHORIZED,
       404: err("No such note"),
-      413: err(`Markdown over ${MAX_BYTES} bytes, or an image over NOTEFEED_MAX_IMAGE_BYTES (each picture of a multipart body too), or a multipart body over ${MAX_BYTES} bytes plus ${MAX_ATTACHMENTS} images`),
+      413: err(`Markdown over ${MAX_BYTES} bytes, or an image over NOTEFEED_MAX_IMAGE_BYTES (each picture of a multipart body too), or a multipart body over ${MAX_BYTES} bytes plus ${MAX_ATTACHMENTS} images plus ${MULTIPART_SLACK / 1024} KiB`),
       415: err("Content-Type missing, not accepted or not the note's own type (a multipart body is for a markdown note), or the body (or a picture) is not what it declares"),
       429: { ...err("Too many posts, edits and deletes, or wrong passwords, from this client"), headers: RETRY },
       507: err("NOTEFEED_MAX_IMAGES_PER_FEED reached"),

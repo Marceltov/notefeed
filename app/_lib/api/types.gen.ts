@@ -186,7 +186,7 @@ export type NoteEdited = {
 
 export type MultipartNote = {
     /**
-     * The markdown note (UTF-8). At most one; required on a PUT. Its references to the files (`![](chart.png)`, `[x]: chart.png`) are swapped for the stored files; a file it never refers to is appended as `![](file)`
+     * The markdown note (UTF-8): a field, or a file part (its name is ignored; its type, if any, `text/markdown`) to keep its line breaks as they are, since a form field's are sent as CRLF. At most one; required on a PUT. Its references to the files (`![](chart.png)`, `[x]: chart.png`) are swapped for the stored files; a file it never refers to is appended as `![](file)`
      */
     text?: string;
     /**
@@ -405,7 +405,7 @@ export type PostNoteErrors = {
      */
     409: Error;
     /**
-     * Markdown over 102400 bytes, or an image over NOTEFEED_MAX_IMAGE_BYTES (each picture of a multipart body too), or a multipart body over 102400 bytes plus 10 images
+     * Markdown over 102400 bytes, or an image over NOTEFEED_MAX_IMAGE_BYTES (each picture of a multipart body too), or a multipart body over 102400 bytes plus 10 images plus 64 KiB
      */
     413: Error;
     /**
@@ -636,7 +636,7 @@ export type EditNoteErrors = {
      */
     404: Error;
     /**
-     * Markdown over 102400 bytes, or an image over NOTEFEED_MAX_IMAGE_BYTES (each picture of a multipart body too), or a multipart body over 102400 bytes plus 10 images
+     * Markdown over 102400 bytes, or an image over NOTEFEED_MAX_IMAGE_BYTES (each picture of a multipart body too), or a multipart body over 102400 bytes plus 10 images plus 64 KiB
      */
     413: Error;
     /**
