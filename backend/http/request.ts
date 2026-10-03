@@ -60,8 +60,6 @@ export function sameOrigin(h: Headers): boolean {
   return origin !== null && URL.canParse(origin) && new URL(origin).host === new URL(publicUrl(h)).host;
 }
 
-// A browser navigating (a plain form post) rather than a script or fetch() asking for JSON.
-export const wantsHtml = (h: Headers) => (h.get("accept") ?? "").includes("text/html");
 
 // `headers` may repeat a name (two Set-Cookie).
 export function seeOther(location: string, headers: HeadersInit = {}): Response {

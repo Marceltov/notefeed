@@ -25,19 +25,26 @@ export function NoteActions({ feed, id, kind, markdown, title: savedTitle, alt: 
   const opts = () => ({ baseUrl: window.location.origin, path: { feed, id } }); // in handlers only: no window while rendering on the server
   async function save(e: FormEvent) {
     e.preventDefault();
+    // Only what changed is sent: a text note's content is replaced (PUT) when its text changed or pictures were added, and its title set (PATCH)
+    // when that changed; a picture has no text, only a title and an alt text. Nothing changed: nothing is sent.
+    const textChanged = !image && (text !== markdown || images.pending.length > 0);
+    const meta = { ...(title !== savedTitle && { title }), ...(image && alt !== savedAlt && { alt }) };
+    const metaChanged = Object.keys(meta).length > 0;
+    if (!textChanged && !metaChanged) return setEditing(false);
     setPending(true);
     const refused = await images.flush();
     if (refused) {
       setError(refused);
       return setPending(false);
     }
-    // A text note's content is replaced (PUT), then its title is set (PATCH); a picture has no text, only a title and an alt text.
     const call = async () => {
-      if (!image) {
-        const replaced = await editNote({ ...opts(), body: new Blob([images.apply(text)], { type: "text/markdown" }), headers: { "Content-Type": "text/markdown" } });
-        if (!replaced.response?.ok) return replaced;
+      let last: { response?: Response; error?: { code?: string } } | undefined;
+      if (textChanged) {
+        last = await editNote({ ...opts(), body: new Blob([images.apply(text)], { type: "text/markdown" }), headers: { "Content-Type": "text/markdown" } });
+        if (!last.response?.ok) return last;
       }
-      return patchNote({ ...opts(), body: image ? { title, alt } : { title } });
+      if (metaChanged) last = await patchNote({ ...opts(), body: meta });
+      return last!;
     };
     run(undefined, call, () => {
       setError(undefined);

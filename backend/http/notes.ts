@@ -32,13 +32,12 @@ export async function readPost(req: Request): Promise<PostInput> {
     mediaType: parsed.mediaType,
     title: header("x-note-title"),
     alt: header("x-note-alt"),
-    name: fileName(req.headers.get("x-note-name")),
+    name: header("x-note-name"), // cleaned where the note is made (cleanName)
     tags: tagsFromHeader(req.headers.get("x-note-tags")),
     readId: header("x-read-id"),
   };
 }
 
-const fileName = (v: string | null) => decodeHeaderValue(v ?? "").replace(/[\x00-\x1f\x7f/\\]/g, "").trim().slice(0, 200) || undefined;
 
 // The file of a PUT: the same body and Content-Type rules as a post (the note's own type is checked against it later).
 export async function readContent(req: Request): Promise<{ body: Uint8Array; mediaType: string }> {

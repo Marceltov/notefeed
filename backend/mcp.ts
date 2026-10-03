@@ -12,7 +12,7 @@ import { clientIp } from "./limits";
 import { ACCEPTED_TYPES } from "./note/media";
 import { parseMediaType } from "./note/types";
 import { logger } from "./log";
-import { getNote, listNotes, type Note } from "./notes";
+import { checkLine, getNote, listNotes, MAX_NOTE_TITLE, type Note } from "./notes";
 import { verify } from "./oauth/tokens";
 import { TAG_RULE } from "./tags";
 import { deleteFeed, deleteNote, editContent, editMeta, postNote, updateFeed } from "./posting";
@@ -110,6 +110,7 @@ function server(h: Headers): McpServer {
     },
     guard(async ({ feed, id, markdown, title, password }) => {
       if (markdown === undefined && title === undefined) throw new InvalidBodyError("nothing to change: send markdown, title or both");
+      checkLine("title", title, MAX_NOTE_TITLE); // before the content is replaced: a bad title must not leave a half edit
       let note = markdown === undefined ? undefined : await editContent(feed, id, clientIp(h), async () => ({ body: new TextEncoder().encode(markdown), mediaType: "text/markdown" }), { password });
       if (title !== undefined) note = await editMeta(feed, id, clientIp(h), async () => ({ title }), { password });
       return ok({ ...summary(feed, note!), ...(note!.content !== undefined && { content: note!.content }) });

@@ -93,7 +93,7 @@ export class NoteTooLargeError extends NotefeedError {
 }
 /** The request body can't be read as a note: the content type, or (InvalidBodyError) not UTF-8 or bad JSON. */
 export class UnsupportedTypeError extends NotefeedError {
-  constructor(message = `send a Content-Type of ${ACCEPTED_TYPES}`) {
+  constructor(message = `send a Content-Type of ${ACCEPTED_TYPES} (markdown as UTF-8)`) {
     super("unsupported_type", message);
   }
 }

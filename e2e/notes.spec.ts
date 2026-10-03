@@ -92,3 +92,26 @@ test("the browser refuses a tag with a space in it", async ({ page }) => {
   await page.getByRole("button", { name: "Post note" }).click();
   await expect(page.getByRole("link", { name: "Nope" })).toHaveCount(0);
 });
+
+test("saving an edit sends only what changed: nothing, the title, or the text", async ({ page }) => {
+  const name = feedName();
+  await postAndOpen(page, name, "# Edited");
+  const writes: string[] = [];
+  page.on("request", (r) => /\/notes\/[^/]+$/.test(r.url()) && ["PUT", "PATCH"].includes(r.method()) && writes.push(r.method()));
+  await page.getByText("Edit", { exact: true }).click();
+  await page.getByRole("button", { name: "Save" }).click();
+  await expect(page.getByLabel("Note in markdown")).toBeHidden(); // the editor closed without a request
+  expect(writes).toEqual([]);
+
+  await page.getByText("Edit", { exact: true }).click();
+  await page.getByLabel("Title (optional, otherwise taken from the text)").fill("Only the title");
+  await page.getByRole("button", { name: "Save" }).click();
+  await expect(page.getByRole("status")).toHaveText("Saved.");
+  expect(writes).toEqual(["PATCH"]);
+
+  await page.getByText("Edit", { exact: true }).click();
+  await page.getByLabel("Note in markdown").fill("# Edited\nmore text");
+  await page.getByRole("button", { name: "Save" }).click();
+  await expect(page.getByText("more text")).toBeVisible();
+  expect(writes).toEqual(["PATCH", "PUT"]);
+});

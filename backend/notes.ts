@@ -7,7 +7,7 @@ import { InvalidBodyError, UnsupportedTypeError } from "./errors";
 import { assertFeed, checkFeed, ensureFeed, forgetFeed } from "./feeds";
 import { sniffImage } from "./images";
 import { ImageNote } from "./note/image";
-import { checkMarkdown, MarkdownNote } from "./note/markdown";
+import { MarkdownNote } from "./note/markdown";
 import { Note } from "./note/note";
 import { parseMediaType, typeForExt, type NoteType } from "./note/types";
 
@@ -78,6 +78,9 @@ async function store(feed: string, { ext, content, meta }: NewNote, now: Date, w
   }
 }
 
+/** A file's original name as kept with the note: no control characters or slashes, trimmed, at most 200 characters. */
+export const cleanName = (name: string | undefined): string | undefined => (name ?? "").replace(/[\x00-\x1f\x7f/\\]/g, "").trim().slice(0, 200) || undefined;
+
 export type NewNoteOptions = { sender?: string; tags?: string[]; title?: string; alt?: string; name?: string; wantedReadId?: string };
 
 /**
@@ -91,7 +94,8 @@ export async function createNoteOf(feed: string, type: NoteType, ext: string, bo
   const title = checkLine("title", opts.title, MAX_NOTE_TITLE);
   const alt = checkLine("alt", opts.alt, MAX_ALT);
   if (alt && !type.hasAlt) throw new InvalidBodyError("alt is for image notes");
-  const { sender, tags = [], name } = opts;
+  const { sender, tags = [] } = opts;
+  const name = cleanName(opts.name);
   const meta: Meta = { ...(sender !== undefined && { sender }), ...(tags.length && { tags }), ...(title && { title }), ...(alt && { alt }), ...(name && { name }) };
   const { id, readId } = await store(feed, { ext, content: body, meta }, now, opts.wantedReadId);
   return { note: type.read({ id, ext, meta, createdAt: stampOf(id)!, size: body.length }, Buffer.from(body)), readId };

@@ -161,7 +161,8 @@ describe("GET /r/{readId}/{file}", () => {
     expect(new Uint8Array(await res.arrayBuffer())).toEqual(PNG);
     expect(res.headers.get("content-type")).toBe("image/png");
     expect(res.headers.get("x-content-type-options")).toBe("nosniff");
-    expect(res.headers.get("cache-control")).toBe("public, max-age=31536000, immutable");
+    expect(res.headers.get("cache-control")).toBe("no-cache"); // a picture can be replaced: the cache asks again (ETag)
+    expect(res.headers.get("etag")).toMatch(/^"[A-Za-z0-9_-]+"$/);
     expect(res.headers.get("content-security-policy")).toBe("default-src 'none'; sandbox");
   });
   test("a PNG-headed HTML payload is served as image/png", async () => {
@@ -211,6 +212,24 @@ describe("GET /r/{readId}/{file}", () => {
     await writeFile(join(process.env.DATA_DIR!, "outside.txt"), "secret");
     await symlink(join(process.env.DATA_DIR!, "outside.txt"), join(process.env.DATA_DIR!, "pics", "link.txt"));
     expect((await get((await readIdOf("pics"))!, "link.txt")).status).toBe(404);
+  });
+  test("a file answers a repeat request with 304 while it is unchanged, and with the new bytes once it was replaced", async () => {
+    const { id, file } = await (await upload("pics", PNG)).json();
+    const rid = (await readIdOf("pics"))!;
+    const first = await get(rid, file);
+    const etag = first.headers.get("etag")!;
+    const again = await fileRoute(rid, file, etag);
+    expect(again.status).toBe(304);
+    expect(await again.text()).toBe("");
+    expect(again.headers.get("etag")).toBe(etag);
+    const PNG2 = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 9, 9, 9, 9, 9]);
+    const put = await call("PUT", `/feeds/pics/notes/${id}`, { body: PNG2 as BodyInit, headers: { "content-type": "image/png" } });
+    expect(put.status).toBe(200);
+    const changed = await fileRoute(rid, file, etag);
+    expect(changed.status).toBe(200);
+    expect(changed.headers.get("etag")).not.toBe(etag);
+    expect([...new Uint8Array(await changed.arrayBuffer())]).toEqual([...PNG2]);
+    expect((await fileRoute(rid, file, '"other"')).status).toBe(200);
   });
   test("the feed's name never serves it", async () => {
     await createNote("pics", "# x");

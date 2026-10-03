@@ -380,6 +380,12 @@ describe("post_file", () => {
     const r = (await call("post_file", { feed: "t", type: "text/markdown", data: Buffer.from("# From a file").toString("base64") })).structuredContent;
     expect((await call("get_note", { feed: "t", id: r.id })).structuredContent).toMatchObject({ type: "text/markdown", content: "# From a file" });
   });
+  test("post_file cleans the file name like the HTTP post does", async () => {
+    const data = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.from("x")]).toString("base64");
+    const r = (await call("post_file", { feed: "names", type: "image/png", data, name: "../my\ncat/pic.png" })).structuredContent;
+    const sidecar = JSON.parse(await (await import("node:fs/promises")).readFile(join(process.env.DATA_DIR!, "names", `.${r.file}.json`), "utf8"));
+    expect(sidecar.name).toBe("..mycatpic.png");
+  });
   test("refuses a type that is not accepted, a body that is not that type, too much, and a protected feed without the password", async () => {
     await call("post_note", { feed: "i", markdown: "# Hi" });
     const bad = await call("post_file", { feed: "i", type: "application/pdf", data: png });
@@ -392,5 +398,16 @@ describe("post_file", () => {
     delete process.env.NOTEFEED_MAX_IMAGE_BYTES;
     await call("post_note", { feed: "p", markdown: "# Hi", password: "pw" });
     expect((await call("post_file", { feed: "p", type: "image/png", data: png })).content[0].text).toBe("missing or wrong password");
+  });
+});
+
+describe("edit_note validates before it changes anything", () => {
+  test("valid text with a bad title replaces nothing, and the answer says the edit failed", async () => {
+    const id = (await call("post_note", { feed: "v", markdown: "# Old" })).structuredContent.id;
+    const e = await call("edit_note", { feed: "v", id, markdown: "# New", title: "x".repeat(101) });
+    expect(e.isError).toBe(true);
+    expect((await call("get_note", { feed: "v", id })).structuredContent.content).toBe("# Old");
+    const none = await call("edit_note", { feed: "v", id });
+    expect(none.isError).toBe(true);
   });
 });
