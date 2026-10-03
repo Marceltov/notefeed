@@ -21,6 +21,8 @@ CREATED = {
     "url": "https://n.example/inbox/20260930T100000Z-cafe",
     "feed_url": "https://n.example/inbox",
     "read_url": "https://n.example/r/AAAAAAAAAAAAAAAAAAAAAA/feed.xml",
+    "file": "20260930T100000Z-cafe.md",
+    "file_url": "https://n.example/r/AAAAAAAAAAAAAAAAAAAAAA/20260930T100000Z-cafe.md",
 }
 READ_ID = "A" * 22
 
@@ -29,11 +31,12 @@ def note(h):
     return {
         "id": f"20260930T{h:02d}0000Z-n{h}",
         "title": f"N{h}",
-        "markdown": f"# N{h}",
+        "content": f"# N{h}",
         "created_at": f"2026-09-30T{h:02d}:00:00.000Z",
         "url": f"https://n.example/inbox/n{h}",
-        "kind": "markdown",
+        "type": "text/markdown",
         "file": f"20260930T{h:02d}0000Z-n{h}.md",
+        "file_url": f"https://n.example/r/X/20260930T{h:02d}0000Z-n{h}.md",
         "size": 4,
         "tags": [],
     }
@@ -56,57 +59,64 @@ def serve_feed(server, notes):
 # --- post ---
 
 
-def test_post_sends_markdown_as_json_and_returns_created(server):
+def test_a_string_is_markdown_the_body_is_the_text_and_the_answer_is_created(server):
     server.reply(201, CREATED)
     created = Client(server.url, "inbox").post("# Café\r\nx")
     assert isinstance(created, Created)
-    assert (created.id, created.url, created.read_url) == (CREATED["id"], CREATED["url"], CREATED["read_url"])
+    assert (created.id, created.url, created.read_url, created.file) == (CREATED["id"], CREATED["url"], CREATED["read_url"], CREATED["file"])
     req = server.requests[0]
     assert (req["method"], req["path"]) == ("POST", "/api/v1/feeds/inbox/notes")
-    assert json.loads(req["body"]) == {"markdown": "# Café\r\nx"}
+    assert req["body"] == "# Café\r\nx".encode()
+    assert req["headers"]["Content-Type"] == "text/markdown"
     assert "Authorization" not in req["headers"]
 
 
-def test_title_goes_in_the_json_body_and_is_left_out_otherwise(server):
-    Client(server.url, "inbox").post("x", title="T")
-    Client(server.url, "inbox").post("x")
-    assert json.loads(server.requests[0]["body"]) == {"markdown": "x", "title": "T"}
-    assert json.loads(server.requests[1]["body"]) == {"markdown": "x"}
+def test_bytes_are_a_file_of_the_given_type_and_need_one(server):
+    server.reply(201, CREATED)
+    png = bytes([0x89, 0x50, 0x4E, 0x47, 0, 255])
+    Client(server.url, "inbox").post(png, type="image/png")
+    q = server.requests[0]
+    assert (q["body"], q["headers"]["Content-Type"]) == (png, "image/png")
+    with pytest.raises(ConfigError):
+        Client(server.url, "inbox").post(png)
 
-
-def test_edit_sends_title_only_when_given(server):
-    server.reply(200, note(10))
-    server.reply(200, note(10))
-    Client(server.url, "inbox").edit("i", "x", title="")
-    Client(server.url, "inbox").edit("i", "x")
-    assert json.loads(server.requests[0]["body"]) == {"markdown": "x", "title": ""}
-    assert json.loads(server.requests[1]["body"]) == {"markdown": "x"}
-
-
-def test_upload_image_sends_tags_title_alt_and_name_as_headers(server):
-    server.reply(201, UPLOADED)
-    Client(server.url, "inbox").upload_image(b"x", tags=["a", "b"], title="Cat", alt="a cat", name="cat.png")
+def test_title_tags_alt_name_and_read_id_go_as_headers_and_nothing_is_sent_for_what_is_left_out(server):
+    Client(server.url, "inbox").post("x", title="T", tags=["ci", "deploy"], read_id="my-feed")
+    Client(server.url, "inbox").post("x", tags=[])
     h = server.requests[0]["headers"]
-    assert (h["X-Note-Tags"], h["X-Note-Title"], h["X-Note-Alt"], h["X-Note-Name"]) == ("a,b", "Cat", "a cat", "cat.png")
+    assert (h["X-Note-Title"], h["X-Note-Tags"], h["X-Read-Id"]) == ("T", "ci,deploy", "my-feed")
+    for k in ("X-Note-Title", "X-Note-Tags", "X-Note-Alt", "X-Note-Name", "X-Read-Id"):
+        assert k not in server.requests[1]["headers"]
 
+def test_update_patches_title_and_alt_as_json_and_leaves_out_what_is_none(server):
+    server.reply(200, note(10))
+    server.reply(200, note(10))
+    c = Client(server.url, "inbox", "pw", feed_password="fp")
+    assert c.update("i", title="", alt="a cat").id == note(10)["id"]
+    c.update("i", title="T")
+    q = server.requests[0]
+    assert (q["method"], q["path"]) == ("PATCH", "/api/v1/feeds/inbox/notes/i")
+    assert json.loads(q["body"]) == {"title": "", "alt": "a cat"}
+    assert json.loads(server.requests[1]["body"]) == {"title": "T"}
+    assert (q["headers"]["Authorization"], q["headers"]["X-Feed-Password"]) == ("Bearer pw", "fp")
 
-def test_upload_image_sends_non_ascii_title_alt_and_name_as_utf8_bytes(server):
+def test_a_picture_is_posted_like_any_note_with_its_alt_and_name_as_headers(server):
     server.reply(201, UPLOADED)
-    Client(server.url, "inbox").upload_image(b"x", title="Café 日本語", alt="Größe", name="Größe.png")
+    Client(server.url, "inbox").post(b"x", type="image/png", tags=["a", "b"], title="Cat", alt="a cat", name="cat.png")
+    h = server.requests[0]["headers"]
+    assert (h["Content-Type"], h["X-Note-Tags"], h["X-Note-Title"], h["X-Note-Alt"], h["X-Note-Name"]) == ("image/png", "a,b", "Cat", "a cat", "cat.png")
+
+def test_non_ascii_title_alt_and_name_go_as_utf8_bytes(server):
+    server.reply(201, UPLOADED)
+    Client(server.url, "inbox").post(b"x", type="image/png", title="Café 日本語", alt="Größe", name="Größe.png")
     h = server.requests[0]["headers"]
     utf8 = lambda v: v.encode("latin-1").decode("utf-8")  # how a server reads the header bytes
     assert (utf8(h["X-Note-Title"]), utf8(h["X-Note-Alt"]), utf8(h["X-Note-Name"])) == ("Café 日本語", "Größe", "Größe.png")
 
-
-def test_tags_go_in_the_json_body_and_tag_in_the_list_query(server):
-    Client(server.url, "inbox").post("x", tags=["ci", "deploy"])
-    Client(server.url, "inbox").post("x")
-    assert json.loads(server.requests[0]["body"]) == {"markdown": "x", "tags": ["ci", "deploy"]}
-    assert json.loads(server.requests[1]["body"]) == {"markdown": "x"}
+def test_tag_goes_in_the_list_query(server):
     server.reply(200, {"notes": [], "next": None})
     assert list(Client(server.url, "inbox").notes(tag="ci")) == []
-    assert "tag=ci" in server.requests[2]["path"]
-
+    assert "tag=ci" in server.requests[0]["path"]
 
 def test_post_to_a_feed_without_a_read_link_has_read_url_none(server):
     server.reply(201, {**CREATED, "read_url": None})
@@ -329,21 +339,21 @@ def test_close_and_with_release_the_connection_pool(server):
 NOTE_ID = "20260930T100000Z-n10"
 
 
-def test_edit_puts_markdown_and_returns_the_note(server):
+def test_edit_puts_the_new_content_as_the_notes_type_and_returns_the_note(server):
     server.reply(200, note(10))
     with Client(server.url, "inbox", "pw", feed_password="fp") as c:
         edited = c.edit(NOTE_ID, "# New\r\nx")
         assert edited.id == note(10)["id"]
         req = server.requests[0]
         assert (req["method"], req["path"]) == ("PUT", f"/api/v1/feeds/inbox/notes/{NOTE_ID}")
-        assert json.loads(req["body"]) == {"markdown": "# New\r\nx"}
+        assert (req["body"], req["headers"]["Content-Type"]) == ("# New\r\nx".encode(), "text/markdown")
         assert req["headers"]["Authorization"] == "Bearer pw"
         assert req["headers"]["X-Feed-Password"] == "fp"
         server.reply(200, note(10))
-        c.edit(NOTE_ID, "x", feed="other", feed_password="o")
+        c.edit(NOTE_ID, b"\x89PNG", type="image/png", feed="other", feed_password="o")
         assert server.requests[1]["path"] == f"/api/v1/feeds/other/notes/{NOTE_ID}"
+        assert server.requests[1]["headers"]["Content-Type"] == "image/png"
         assert server.requests[1]["headers"]["X-Feed-Password"] == "o"
-
 
 def test_delete_sends_delete_and_returns_none(server):
     server.reply(204, "")
@@ -422,30 +432,28 @@ def test_feed_calls_404_is_not_found_and_no_feed_is_config_error(server):
 UPLOADED = {"id": "20261003T101010Z-u", "url": "https://n.example/inbox/20261003T101010Z-u", "feed_url": "https://n.example/inbox", "read_url": None, "file": "20261003T101010Z-u.png", "file_url": "https://n.example/r/X/20261003T101010Z-u.png"}
 
 
-def test_upload_image_posts_the_raw_bytes_and_returns_the_model(server):
+def test_a_picture_posts_its_bytes_as_its_type_and_the_answer_names_its_file(server):
     server.reply(201, UPLOADED)
     data = bytes([0x89, 0x50, 0x4E, 0x47, 0, 255])
-    r = Client(server.url, "inbox", "pw", feed_password="fp").upload_image(data)
+    r = Client(server.url, "inbox", "pw", feed_password="fp").post(data, type="image/png")
     assert (r.id, r.file, r.file_url) == (UPLOADED["id"], UPLOADED["file"], UPLOADED["file_url"])
     q = server.requests[0]
-    assert (q["method"], q["path"], q["body"]) == ("POST", "/api/v1/feeds/inbox/images", data)
-    assert q["headers"]["Content-Type"] == "application/octet-stream"
+    assert (q["method"], q["path"], q["body"]) == ("POST", "/api/v1/feeds/inbox/notes", data)
+    assert q["headers"]["Content-Type"] == "image/png"
     assert (q["headers"]["Authorization"], q["headers"]["X-Feed-Password"]) == ("Bearer pw", "fp")
 
-
-def test_upload_image_per_call_feed_and_password_win_and_errors_map(server):
+def test_per_call_feed_and_password_win_and_a_refused_file_maps_to_the_usual_errors(server):
     server.reply(201, UPLOADED)
-    Client(server.url, "inbox", feed_password="fp").upload_image(b"x", feed="other", feed_password="o")
-    assert server.requests[0]["path"] == "/api/v1/feeds/other/images"
+    Client(server.url, "inbox", feed_password="fp").post(b"x", type="image/png", feed="other", feed_password="o")
+    assert server.requests[0]["path"] == "/api/v1/feeds/other/notes"
     assert server.requests[0]["headers"]["X-Feed-Password"] == "o"
     with pytest.raises(ConfigError):
-        Client(server.url).upload_image(b"x")
+        Client(server.url).post(b"x", type="image/png")
     for status, code, cls in [(415, "unsupported_type", InvalidRequestError), (413, "too_large", NoteTooLargeError),
                               (507, "image_limit", LimitReachedError), (404, "not_found", NotFoundError)]:
         server.reply(status, {"error": code, "code": code})
         with pytest.raises(cls):
-            Client(server.url, "inbox").upload_image(b"x")
-
+            Client(server.url, "inbox").post(b"x", type="image/png")
 
 def test_update_feed_sends_image_only_when_given(server):
     c = Client(server.url, "inbox")

@@ -16,8 +16,9 @@ beforeEach(async () => {
 });
 afterEach(() => server.close());
 
-// The markdown the CLI posted (the client sends JSON {markdown}).
-const sent = (i: number) => JSON.parse(server.requests[i].body.toString()).markdown;
+// What the CLI sent: the body is the file itself, its Content-Type the type.
+const sent = (i: number) => server.requests[i].body.toString();
+const typeOf = (i: number) => server.requests[i].headers["content-type"];
 
 function io(stdin = "") {
   const out = { stdout: "", stderr: "" };
@@ -258,14 +259,15 @@ test("notesRejectsBadLimit", async () => {
 test("notesJsonPrintsExactlyTheDocumentedFields", async () => {
   server.route(() => [
     200,
-    { notes: [{ id: "20260930T100000Z-a", title: "A", markdown: "# A", created_at: "2026-09-30T10:00:00.000Z", url: "https://n/a", mood: "new" }], next: null },
+    { notes: [{ id: "20260930T100000Z-a", type: "text/markdown", title: "A", content: "# A", file: "a.md", file_url: null, size: 3, tags: ["x"], created_at: "2026-09-30T10:00:00.000Z", url: "https://n/a", mood: "new" }], next: null },
   ]);
   const { out, io: x } = io();
   expect(await main(args("--json"), x)).toBe(0);
-  expect(Object.keys(JSON.parse(out.stdout))).toEqual(["id", "title", "markdown", "created_at", "url"]);
+  expect(Object.keys(JSON.parse(out.stdout))).toEqual(["id", "type", "title", "content", "file", "file_url", "size", "tags", "created_at", "url"]);
 });
 
-const NOTE = { id: "i", title: "T", markdown: "x", created_at: "2026-09-30T10:00:00.000Z", url: "https://n.example/inbox/i" };
+const NOTE = { id: "i", type: "text/markdown", title: "T", content: "x", file: "i.md", file_url: "https://n.example/r/X/i.md", size: 1, tags: [], created_at: "2026-09-30T10:00:00.000Z", url: "https://n.example/inbox/i" };
+const CREATED_REPLY = { id: "i", url: "https://n.example/inbox/i", feed_url: "https://n.example/inbox", read_url: "https://n.example/r/x/feed.xml", file: "i.md", file_url: "https://n.example/r/x/i.md" };
 
 test("editTextPrintsUrl", async () => {
   server.reply(200, NOTE);
@@ -309,26 +311,65 @@ test("deleteErrors", async () => {
   expect(await main(["delete", "i", "--url", server.url], io().io)).toBe(2);
 });
 
-test("imagePrintsMarkdownAndSendsTheFileBytes", async () => {
-  const f = join(mkdtempSync(join(tmpdir(), "nf-")), "p.png");
-  writeFileSync(f, Buffer.from([0x89, 0x50, 0x4e, 0x47, 0, 255]));
-  server.reply(201, { id: "a", url: "https://n.example/inbox/a", feed_url: "https://n.example/inbox", read_url: null, file: "a.png", file_url: "https://n.example/r/X/a.png" });
-  const t = io();
-  expect(await main(["image", f, "--url", server.url, "--feed", "inbox"], t.io)).toBe(0);
-  expect(t.out.stdout).toBe("![](a.png)\n");
-  expect(server.requests[0].path).toBe("/api/v1/feeds/inbox/images");
-  expect([...server.requests[0].body]).toEqual([0x89, 0x50, 0x4e, 0x47, 0, 255]);
+test("postDeclaresMarkdownForTextAndFiles", async () => {
+  server.reply(201, CREATED_REPLY);
+  await main(["post", "hi", "--url", server.url, "--feed", "inbox"], io().io);
+  expect(typeOf(0)).toBe("text/markdown");
+  const f = join(mkdtempSync(join(tmpdir(), "nf-")), "note.md");
+  writeFileSync(f, "# File\n");
+  await main(["post", "--file", f, "--url", server.url, "--feed", "inbox"], io().io);
+  expect(typeOf(1)).toBe("text/markdown");
 });
 
-test("imageErrorsExitLikePost", async () => {
+test("postPictureFileSendsItsBytesAsItsType", async () => {
+  server.reply(201, CREATED_REPLY);
+  const f = join(mkdtempSync(join(tmpdir(), "nf-")), "Photo.PNG");
+  const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 255]);
+  writeFileSync(f, png);
   const t = io();
-  expect(await main(["image", "/nonexistent/x.png", "--url", "http://x", "--feed", "inbox"], t.io)).toBe(2);
-  expect(await main(["image", "--url", "http://x", "--feed", "inbox"], io().io)).toBe(2);
-  const f = join(mkdtempSync(join(tmpdir(), "nf-")), "p.svg");
-  writeFileSync(f, "<svg/>");
-  server.reply(415, { error: "not an image", code: "unsupported_type" });
+  expect(await main(["post", "--file", f, "--title", "Café", "--tag", "pets", "--url", server.url, "--feed", "inbox"], t.io)).toBe(0);
+  expect(t.out.stdout.trim()).toBe(CREATED_REPLY.url);
+  expect(typeOf(0)).toBe("image/png");
+  expect([...server.requests[0].body]).toEqual([...png]);
+  expect(Buffer.from(String(server.requests[0].headers["x-note-title"]), "latin1").toString("utf8")).toBe("Café");
+  expect(server.requests[0].headers["x-note-tags"]).toBe("pets");
+  expect(server.requests[0].headers["x-note-name"]).toBe("Photo.PNG");
+});
+
+test("postTypeFlagWinsAndAnUnknownExtensionNeedsIt", async () => {
+  server.reply(201, CREATED_REPLY);
+  const dir = mkdtempSync(join(tmpdir(), "nf-"));
+  const f = join(dir, "data.bin");
+  writeFileSync(f, Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0]));
+  const t = io();
+  expect(await main(["post", "--file", f, "--url", server.url, "--feed", "inbox"], t.io)).toBe(2);
+  expect(t.out.stderr).toContain("--type");
+  expect(await main(["post", "--file", f, "--type", "image/jpeg", "--url", server.url, "--feed", "inbox"], io().io)).toBe(0);
+  expect(typeOf(0)).toBe("image/jpeg");
+});
+
+test("postRefusedTypeExitsLikeAnyError", async () => {
+  server.reply(415, { error: "send a Content-Type of text/markdown, image/png", code: "unsupported_type" });
+  const f = join(mkdtempSync(join(tmpdir(), "nf-")), "x.png");
+  writeFileSync(f, "not a png");
   const u = io();
-  expect(await main(["image", f, "--url", server.url, "--feed", "inbox"], u.io)).toBe(1);
-  expect(u.out.stderr).toBe("notefeed: not an image\n");
-  expect(await main(["image", f, "--feed", "inbox"], io().io)).toBe(2);
+  expect(await main(["post", "--file", f, "--url", server.url, "--feed", "inbox"], u.io)).toBe(1);
+  expect(u.out.stderr).toBe("notefeed: send a Content-Type of text/markdown, image/png\n");
+});
+
+test("updateSetsTitleAndAlt", async () => {
+  server.reply(200, { ...NOTE, url: "https://n.example/inbox/i" });
+  const t = io();
+  expect(await main(["update", "i", "--title", "T", "--alt", "A", "--url", server.url, "--feed", "inbox"], t.io)).toBe(0);
+  expect([server.requests[0].method, server.requests[0].path]).toEqual(["PATCH", "/api/v1/feeds/inbox/notes/i"]);
+  expect(JSON.parse(sent(0))).toEqual({ title: "T", alt: "A" });
+  expect(await main(["update", "i", "--url", server.url, "--feed", "inbox"], io().io)).toBe(2); // nothing to change
+});
+
+test("editSendsThePictureOfItsType", async () => {
+  server.reply(200, NOTE);
+  const f = join(mkdtempSync(join(tmpdir(), "nf-")), "x.webp");
+  writeFileSync(f, "RIFF....WEBPVP8 ");
+  expect(await main(["edit", "i", "--file", f, "--url", server.url, "--feed", "inbox"], io().io)).toBe(0);
+  expect([server.requests[0].method, typeOf(0)]).toEqual(["PUT", "image/webp"]);
 });

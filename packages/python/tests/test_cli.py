@@ -6,12 +6,16 @@ from notefeed.cli import main
 
 
 def sent(server, i=0):
-    """The markdown the CLI posted (the client sends JSON {markdown})."""
-    return json.loads(server.requests[i]["body"])["markdown"]
+    """What the CLI sent: the body is the file itself, its Content-Type the type."""
+    return server.requests[i]["body"].decode("utf-8")
+
+
+def type_of(server, i=0):
+    return server.requests[i]["headers"]["Content-Type"]
 
 
 def test_post_text_prints_url(server, capsys):
-    server.reply(201, {"id": "20260930T100000Z-i", "url": "https://n.example/inbox/i", "feed_url": "https://n.example/inbox", "read_url": "https://n.example/r/x/feed.xml"})
+    server.reply(201, {"id": "20260930T100000Z-i", "url": "https://n.example/inbox/i", "feed_url": "https://n.example/inbox", "read_url": "https://n.example/r/x/feed.xml", "file": "i.md", "file_url": "https://n.example/r/x/i.md"})
     assert main(["post", "hi", "--url", server.url, "--feed", "inbox"]) == 0
     assert capsys.readouterr().out.strip() == "https://n.example/inbox/i"
     assert sent(server) == "hi"
@@ -154,10 +158,11 @@ def serve_notes(server, count):
         {
             "id": f"20260930T10{i:02d}00Z-n{i}",
             "title": f"Note {i}",
-            "markdown": f"# Note {i}",
+            "content": f"# Note {i}",
             "created_at": f"2026-09-30T10:{i:02d}:00.000Z",
             "url": f"https://n.example/inbox/n{i}",
-            "kind": "markdown",
+            "type": "text/markdown",
+            "file_url": f"https://n.example/r/X/20260930T10{i:02d}00Z-n{i}.md",
             "file": f"20260930T10{i:02d}00Z-n{i}.md",
             "size": 4,
             "tags": [],
@@ -219,10 +224,10 @@ def test_notes_rejects_a_bad_limit(server, capsys):
 def test_notes_json_prints_exactly_the_documented_fields(server, capsys):
     server.route = lambda method, path: (
         200,
-        {"notes": [{"id": "20260930T100000Z-a", "title": "A", "markdown": "# A", "created_at": "2026-09-30T10:00:00.000Z", "url": "https://n/a", "kind": "markdown", "file": "a.md", "size": 3, "tags": [], "mood": "new"}], "next": None},
+        {"notes": [{"id": "20260930T100000Z-a", "type": "text/markdown", "title": "A", "content": "# A", "file": "a.md", "file_url": None, "size": 3, "tags": ["x"], "created_at": "2026-09-30T10:00:00.000Z", "url": "https://n/a", "mood": "new"}], "next": None},
     )
     assert main(notes_args(server, "--json")) == 0
-    assert sorted(json.loads(capsys.readouterr().out)) == sorted(["id", "title", "markdown", "created_at", "url", "kind", "file", "size", "tags"])  # the unknown "mood" is dropped
+    assert list(json.loads(capsys.readouterr().out)) == ["id", "type", "title", "content", "file", "file_url", "size", "tags", "created_at", "url"]  # the unknown "mood" is dropped
 
 
 def test_notes_stops_quietly_when_the_reader_goes_away(server, capsys, monkeypatch):
@@ -238,7 +243,8 @@ def test_notes_stops_quietly_when_the_reader_goes_away(server, capsys, monkeypat
     assert capsys.readouterr().err == ""
 
 
-NOTE = {"id": "i", "title": "T", "markdown": "x", "created_at": "2026-09-30T10:00:00.000Z", "url": "https://n.example/inbox/i", "kind": "markdown", "file": "i.md", "size": 1, "tags": []}
+NOTE = {"id": "i", "type": "text/markdown", "title": "T", "content": "x", "file": "i.md", "file_url": "https://n.example/r/X/i.md", "size": 1, "tags": [], "created_at": "2026-09-30T10:00:00.000Z", "url": "https://n.example/inbox/i"}
+CREATED = {"id": "a", "url": "https://n.example/inbox/a", "feed_url": "https://n.example/inbox", "read_url": None, "file": "a.png", "file_url": "https://n.example/r/X/a.png"}
 
 
 def test_edit_text_prints_url(server, capsys):
@@ -282,22 +288,60 @@ def test_delete_errors(server, capsys):
     assert main(["delete", "i", "--url", server.url]) == 2
 
 
-def test_image_prints_markdown_and_sends_the_file_bytes(server, capsys, tmp_path):
-    f = tmp_path / "p.png"
-    f.write_bytes(bytes([0x89, 0x50, 0x4E, 0x47, 0, 255]))
-    server.reply(201, {"id": "a", "url": "https://n.example/inbox/a", "feed_url": "https://n.example/inbox", "read_url": None, "file": "a.png", "file_url": "https://n.example/r/X/a.png"})
-    assert main(["image", str(f), "--url", server.url, "--feed", "inbox"]) == 0
-    assert capsys.readouterr().out == "![](a.png)\n"
-    assert server.requests[0]["path"] == "/api/v1/feeds/inbox/images"
-    assert server.requests[0]["body"] == f.read_bytes()
+def test_post_declares_markdown_for_text_and_files(server, tmp_path):
+    server.reply(201, CREATED)
+    assert main(["post", "hi", "--url", server.url, "--feed", "inbox"]) == 0
+    assert type_of(server) == "text/markdown"
+    f = tmp_path / "n.md"
+    f.write_text("# File\n")
+    server.reply(201, CREATED)
+    assert main(["post", "--file", str(f), "--url", server.url, "--feed", "inbox"]) == 0
+    assert type_of(server, 1) == "text/markdown"
 
 
-def test_image_errors_exit_like_post(server, capsys, tmp_path):
-    assert main(["image", "/nonexistent/x.png", "--url", "http://x", "--feed", "inbox"]) == 2
-    f = tmp_path / "p.svg"
-    f.write_text("<svg/>")
-    server.reply(415, {"error": "not an image", "code": "unsupported_type"})
-    capsys.readouterr()
-    assert main(["image", str(f), "--url", server.url, "--feed", "inbox"]) == 1
-    assert capsys.readouterr().err == "notefeed: not an image\n"
-    assert main(["image", str(f), "--feed", "inbox"]) == 2
+def test_post_a_picture_file_sends_its_bytes_as_its_type(server, capsys, tmp_path):
+    f = tmp_path / "Photo.PNG"
+    png = bytes([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0, 255])
+    f.write_bytes(png)
+    server.reply(201, CREATED)
+    assert main(["post", "--file", str(f), "--title", "Café", "--tag", "pets", "--url", server.url, "--feed", "inbox"]) == 0
+    assert capsys.readouterr().out == "https://n.example/inbox/a\n"
+    q = server.requests[0]
+    assert (q["body"], q["headers"]["Content-Type"], q["headers"]["X-Note-Tags"], q["headers"]["X-Note-Name"]) == (png, "image/png", "pets", "Photo.PNG")
+    assert q["headers"]["X-Note-Title"].encode("latin-1").decode("utf-8") == "Café"
+
+
+def test_post_type_flag_wins_and_an_unknown_extension_needs_it(server, capsys, tmp_path):
+    f = tmp_path / "data.bin"
+    f.write_bytes(bytes([0xFF, 0xD8, 0xFF, 0xE0, 0]))
+    assert main(["post", "--file", str(f), "--url", server.url, "--feed", "inbox"]) == 2
+    assert "--type" in capsys.readouterr().err
+    server.reply(201, CREATED)
+    assert main(["post", "--file", str(f), "--type", "image/jpeg", "--url", server.url, "--feed", "inbox"]) == 0
+    assert type_of(server) == "image/jpeg"
+
+
+def test_post_a_refused_file_exits_like_any_error(server, capsys, tmp_path):
+    f = tmp_path / "x.png"
+    f.write_text("not a png")
+    server.reply(415, {"error": "send a Content-Type of text/markdown, image/png", "code": "unsupported_type"})
+    assert main(["post", "--file", str(f), "--url", server.url, "--feed", "inbox"]) == 1
+    assert capsys.readouterr().err == "notefeed: send a Content-Type of text/markdown, image/png\n"
+    assert main(["post", "--file", "/nonexistent/x.png", "--url", "http://x", "--feed", "inbox"]) == 2
+
+
+def test_update_sets_title_and_alt(server, capsys):
+    server.reply(200, NOTE)
+    assert main(["update", "i", "--title", "T", "--alt", "A", "--url", server.url, "--feed", "inbox"]) == 0
+    assert capsys.readouterr().out == "https://n.example/inbox/i\n"
+    q = server.requests[0]
+    assert (q["method"], q["path"], json.loads(q["body"])) == ("PATCH", "/api/v1/feeds/inbox/notes/i", {"title": "T", "alt": "A"})
+    assert main(["update", "i", "--url", server.url, "--feed", "inbox"]) == 2  # nothing to change
+
+
+def test_edit_a_picture_file_sends_it_as_its_type(server, tmp_path):
+    f = tmp_path / "x.webp"
+    f.write_bytes(b"RIFF....WEBPVP8 ")
+    server.reply(200, NOTE)
+    assert main(["edit", "i", "--file", str(f), "--url", server.url, "--feed", "inbox"]) == 0
+    assert (server.requests[0]["method"], type_of(server)) == ("PUT", "image/webp")
