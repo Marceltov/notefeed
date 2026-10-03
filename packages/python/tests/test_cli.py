@@ -392,3 +392,16 @@ def test_attach_failed_upload_exits_1_naming_the_attachment_and_the_posted_image
     out = capsys.readouterr()
     assert out.out == ""
     assert out.err.splitlines() == ['notefeed: attachment "t.webp": bad image', "posted: https://n.example/inbox/I1"]
+
+
+def test_attach_name_with_a_space_exits_2_saying_why_and_posts_nothing(server, capsys, tmp_path):
+    (tmp_path / "my chart.png").write_bytes(PNG)
+    assert main(["post", "hi", "--attach", str(tmp_path / "my chart.png"), "--url", server.url, "--feed", "inbox"]) == 2
+    assert "file name" in capsys.readouterr().err
+    assert server.requests == []
+
+
+def test_attach_with_a_non_markdown_file_exits_2_and_posts_nothing(server, tmp_path):
+    d = _pics(tmp_path)
+    assert main(["post", "--file", str(d / "chart.png"), "--attach", str(d / "t.webp"), "--url", server.url, "--feed", "inbox"]) == 2
+    assert server.requests == []

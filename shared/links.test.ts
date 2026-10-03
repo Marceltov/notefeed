@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { absolutizeImages, isRelativeLink, placeImages, substitute } from "./links";
+import { absolutizeImages, ATTACHMENT_NAME, isRelativeLink, placeImages, substitute } from "./links";
 
 test("only a link with no scheme and no leading slash is relative", () => {
   expect(["a.png", "x/a.png"].map(isRelativeLink)).toEqual([true, true]);
@@ -25,6 +25,11 @@ test("substitute leaves a token in prose, in a link, or as part of another name"
 
 test("substitute with nothing sent is the identity", () => {
   expect(substitute("![](cat.png)", new Map())).toBe("![](cat.png)");
+});
+
+test("ATTACHMENT_NAME takes letters, digits, . _ - and not . or ..", () => {
+  expect(["a.png", "a-b_c", ".hidden"].map((n) => ATTACHMENT_NAME.test(n))).toEqual([true, true, true]);
+  expect([".", "..", "...", "a b", "a/b", ""].map((n) => ATTACHMENT_NAME.test(n))).toEqual(Array(6).fill(false));
 });
 
 test("placeImages swaps a referenced name and appends an unreferenced one", () => {

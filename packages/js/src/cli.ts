@@ -143,8 +143,10 @@ async function read(text: string | undefined, file: string | undefined, type: st
 async function attachment(path: string): Promise<{ name: string; content: Uint8Array; type: string }> {
   const type = TYPES[extname(path).toLowerCase()];
   if (!type || type === "text/markdown") throw new UsageError(`cannot attach ${path}: a picture (${Object.keys(TYPES).filter((e) => TYPES[e] !== "text/markdown").join(", ")}) is expected`);
+  const name = basename(path);
+  if (!/^(?!\.+$)[A-Za-z0-9._-]+$/.test(name)) throw new UsageError(`cannot attach ${path}: its file name "${name}" is what the text refers to it by, so it may only have letters, digits, ., _ and -: rename the file`);
   try {
-    return { name: basename(path), content: await readFile(path), type };
+    return { name, content: await readFile(path), type };
   } catch (e) {
     throw new UsageError(`cannot read ${path}: ${(e as NodeJS.ErrnoException).code ?? (e as Error).message}`);
   }

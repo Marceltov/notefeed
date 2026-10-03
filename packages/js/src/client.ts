@@ -70,7 +70,7 @@ const BY_CODE: Partial<Record<ErrorCode, typeof NotefeedError>> = {
   unsupported_type: InvalidRequestError,
 };
 
-const ATTACHMENT_NAME = /^[A-Za-z0-9._-]+$/; // same rule as the server's MCP tool: safe to write in ![](name)
+const ATTACHMENT_NAME = /^(?!\.+$)[A-Za-z0-9._-]+$/; // same rule as the server's MCP tool: safe to write in ![](name)
 const IMAGE_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"];
 
 const FEED_RE = /^[a-z0-9_-]{1,64}$/; // same rule as the server; reserved names still come back as a 400

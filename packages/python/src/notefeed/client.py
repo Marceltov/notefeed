@@ -86,7 +86,7 @@ _BY_CODE: dict[str, type[NotefeedError]] = {
     "unsupported_type": InvalidRequestError,
 }
 
-_ATTACHMENT_NAME = re.compile(r"[A-Za-z0-9._-]+")  # safe to write in ![](name)
+_ATTACHMENT_NAME = re.compile(r"(?!\.+$)[A-Za-z0-9._-]+")  # safe to write in ![](name)
 _IMAGE_TYPES = ("image/png", "image/jpeg", "image/gif", "image/webp")
 
 

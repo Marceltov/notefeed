@@ -457,6 +457,7 @@ describe("post with attachments", () => {
   test.each([
     ["a duplicate name", "x", [{ name: "a.png", content: png, type: "image/png" }, { name: "a.png", content: png, type: "image/png" }]],
     ["an unsafe name", "x", [{ name: "a b.png", content: png, type: "image/png" }]],
+    ["the name ..", "x", [{ name: "..", content: png, type: "image/png" }]],
     ["a markdown attachment", "x", [{ name: "a.md", content: png, type: "text/markdown" }]],
     ["bytes without a type", "x", [{ name: "a.png", content: png }]],
     ["non-markdown content", png, [{ name: "a.png", content: png, type: "image/png" }]],
@@ -498,5 +499,11 @@ describe("post with attachments", () => {
     await c().post("![](a.png) and ![](a.png)\n", { attachments: [{ name: "a.png", content: png, type: "image/png" }] });
     expect(server.requests).toHaveLength(2);
     expect(server.requests[1].body.toString()).toBe("![](F1.png) and ![](F1.png)\n");
+  });
+
+  test("the client's own feed password goes on every request", async () => {
+    route();
+    await new Client({ url: server.url, feed: "inbox", feedPassword: "pw" }).post("x", { attachments: [{ name: "a.png", content: png, type: "image/png" }] });
+    expect(server.requests.map((q) => q.headers["x-feed-password"])).toEqual(["pw", "pw"]);
   });
 });

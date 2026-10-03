@@ -10,7 +10,7 @@ export const absolutizeImages = (markdown: string, base: string): string =>
 const IMAGE_REF = /(!\[[^\]]*\]\()([^)\s]+)(\))/g;
 
 /** Names an attachment may have: safe to write in `![](…)`. */
-export const ATTACHMENT_NAME = /^[A-Za-z0-9._-]+$/;
+export const ATTACHMENT_NAME = /^(?!\.+$)[A-Za-z0-9._-]+$/;
 
 // Swaps the destination of each image whose destination is exactly a key of `sent`; `used` collects the keys it swapped.
 const swap = (text: string, sent: ReadonlyMap<string, string>, used?: Set<string>): string =>

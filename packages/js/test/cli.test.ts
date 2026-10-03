@@ -427,3 +427,19 @@ test("usageListsAttach", async () => {
   expect(await main(["--help"], t.io)).toBe(0);
   expect(t.out.stdout).toContain("[--attach PATH]...");
 });
+
+test("postAttachNameWithASpaceExits2SayingWhyAndPostsNothing", async () => {
+  const dir = pics();
+  writeFileSync(join(dir, "my chart.png"), PNG);
+  const t = io();
+  expect(await main(["post", "hi", "--attach", join(dir, "my chart.png"), "--url", server.url, "--feed", "inbox"], t.io)).toBe(2);
+  expect(t.out.stderr).toContain("file name");
+  expect(server.requests).toHaveLength(0);
+});
+
+test("postAttachWithANonMarkdownFileExits2AndPostsNothing", async () => {
+  const dir = pics();
+  const t = io();
+  expect(await main(["post", "--file", join(dir, "chart.png"), "--attach", join(dir, "t.webp"), "--url", server.url, "--feed", "inbox"], t.io)).toBe(2);
+  expect(server.requests).toHaveLength(0);
+});

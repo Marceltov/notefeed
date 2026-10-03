@@ -7,6 +7,7 @@ import io
 import itertools
 import json
 import os
+import re
 import sys
 from datetime import timezone
 from pathlib import Path
@@ -125,8 +126,11 @@ def _attachment(path: str) -> Attachment:
     media = _TYPES.get(Path(path).suffix.lower())
     if not media or media == "text/markdown":
         raise _UsageError(f"cannot attach {path}: a picture ({', '.join(e for e, t in _TYPES.items() if t != 'text/markdown')}) is expected")
+    name = Path(path).name
+    if not re.fullmatch(r"(?!\.+$)[A-Za-z0-9._-]+", name):
+        raise _UsageError(f'cannot attach {path}: its file name "{name}" is what the text refers to it by, so it may only have letters, digits, ., _ and -: rename the file')
     try:
-        return Attachment(Path(path).name, Path(path).read_bytes(), media)
+        return Attachment(name, Path(path).read_bytes(), media)
     except OSError as e:
         raise _UsageError(f"cannot read {path}: {e.strerror}") from None
 
