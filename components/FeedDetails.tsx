@@ -78,7 +78,7 @@ export function FeedDetails({ feed, title: savedTitle, description: savedDescrip
                   <label htmlFor="feed-read-id" className="mb-1 block text-muted">
                     Read id
                   </label>
-                  <input id="feed-read-id" name="read_id" minLength={3} maxLength={64} pattern="[a-z0-9_\-]{3,64}" spellCheck={false} autoComplete="off" value={readIdValue} onChange={(e) => setReadIdValue(e.target.value)} className={`${input} mb-2 font-mono`} />
+                  <input id="feed-read-id" name="read_id" minLength={3} maxLength={64} spellCheck={false} autoComplete="off" value={readIdValue} onChange={(e) => setReadIdValue(e.target.value)} className={`${input} mb-2 font-mono`} />
                 </>
               )}
               <button type="submit" name="generate_read_id" value="1" formNoValidate disabled={pending} onClick={(e) => { if (hydrated) { e.preventDefault(); save(undefined, { title, description, ...(identity && { show_sender: showSender }), read_id: "" }); } }} className={`${secondary} font-normal`}>
