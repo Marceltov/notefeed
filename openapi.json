@@ -1665,16 +1665,16 @@
         "type": "object",
         "properties": {
           "kind": {
+            "description": "What the note is: a markdown text, or a picture (then `markdown` is empty and the picture is the file `file`). Always sent; optional here so a client still reads an older server's notes, which have only markdown",
             "type": "string",
             "enum": [
               "markdown",
               "image"
-            ],
-            "description": "What the note is: a markdown text, or a picture (then `markdown` is empty and the picture is the file `file`)"
+            ]
           },
           "file": {
-            "type": "string",
-            "description": "The note's file name, `<id>.<extension>`; served under the feed's read id, like the picture of an image note"
+            "description": "The note's file name, `<id>.<extension>`; served under the feed's read id, like the picture of an image note. Always sent; optional here for older servers",
+            "type": "string"
           },
           "id": {
             "type": "string",
@@ -1700,10 +1700,10 @@
             ]
           },
           "size": {
+            "description": "The size of the note's content in bytes. Always sent; optional here for older servers",
             "type": "integer",
             "minimum": -9007199254740991,
-            "maximum": 9007199254740991,
-            "description": "The size of the note's content in bytes"
+            "maximum": 9007199254740991
           },
           "file_url": {
             "description": "Where the note's file is served, absolute, under the feed's read id; null while the feed has no read link",
@@ -1748,11 +1748,8 @@
           }
         },
         "required": [
-          "kind",
-          "file",
           "id",
           "title",
-          "size",
           "markdown",
           "created_at",
           "url",

@@ -11,13 +11,13 @@ export const MAX_LIMIT = 100;
 
 export const NoteJson = z
   .object({
-    kind: z.enum(["markdown", "image"]).describe("What the note is: a markdown text, or a picture (then `markdown` is empty and the picture is the file `file`)"),
-    file: z.string().describe("The note's file name, `<id>.<extension>`; served under the feed's read id, like the picture of an image note"),
+    kind: z.enum(["markdown", "image"]).optional().describe("What the note is: a markdown text, or a picture (then `markdown` is empty and the picture is the file `file`). Always sent; optional here so a client still reads an older server's notes, which have only markdown"),
+    file: z.string().optional().describe("The note's file name, `<id>.<extension>`; served under the feed's read id, like the picture of an image note. Always sent; optional here for older servers"),
     id: z.string().regex(NOTE_ID).describe("The note's id: a UTC time to the second plus a random UUID for notes made here; any name without a dot for a file placed by hand"),
     title: z.string().describe("The title set for the note, else the first heading or the first non-empty line of a markdown note; may be empty (an image without one)"),
     alt: z.string().nullable().optional().describe("Alternative text of an image note"),
     name: z.string().nullable().optional().describe("The file name an image was posted with"),
-    size: z.number().int().describe("The size of the note's content in bytes"),
+    size: z.number().int().optional().describe("The size of the note's content in bytes. Always sent; optional here for older servers"),
     file_url: z.url().nullable().optional().describe("Where the note's file is served, absolute, under the feed's read id; null while the feed has no read link"),
     markdown: z.string().describe("The note, byte-for-byte as posted"),
     created_at: z.iso.datetime().describe("When the note was posted (UTC)"),

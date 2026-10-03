@@ -6,13 +6,13 @@ export type ClientOptions = {
 
 export type Note = {
     /**
-     * What the note is: a markdown text, or a picture (then `markdown` is empty and the picture is the file `file`)
+     * What the note is: a markdown text, or a picture (then `markdown` is empty and the picture is the file `file`). Always sent; optional here so a client still reads an older server's notes, which have only markdown
      */
-    kind: 'markdown' | 'image';
+    kind?: 'markdown' | 'image';
     /**
-     * The note's file name, `<id>.<extension>`; served under the feed's read id, like the picture of an image note
+     * The note's file name, `<id>.<extension>`; served under the feed's read id, like the picture of an image note. Always sent; optional here for older servers
      */
-    file: string;
+    file?: string;
     /**
      * The note's id: a UTC time to the second plus a random UUID for notes made here; any name without a dot for a file placed by hand
      */
@@ -30,9 +30,9 @@ export type Note = {
      */
     name?: string | null;
     /**
-     * The size of the note's content in bytes
+     * The size of the note's content in bytes. Always sent; optional here for older servers
      */
-    size: number;
+    size?: number;
     /**
      * Where the note's file is served, absolute, under the feed's read id; null while the feed has no read link
      */
