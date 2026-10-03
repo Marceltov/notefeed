@@ -7,12 +7,12 @@ import { FEED_RE } from "../feeds";
 import { IMAGE_FILE_RE } from "../images";
 import { TAG_RE, TAG_RULE } from "../tags";
 
-export const NOTE_ID = /^\d{8}T\d{6}Z-[a-z0-9-]+$/;
+export const NOTE_ID = /^[A-Za-z0-9_-]{1,128}$/;
 export const MAX_LIMIT = 100;
 
 export const NoteJson = z
   .object({
-    id: z.string().regex(NOTE_ID).describe("UTC time to the second plus a random UUID"),
+    id: z.string().regex(NOTE_ID).describe("The note's id: a UTC time to the second plus a random UUID for notes made here; any name without a dot for a file placed by hand"),
     title: z.string().describe("The first heading, or the first non-empty line; may be empty"),
     markdown: z.string().describe("The note, byte-for-byte as posted"),
     created_at: z.iso.datetime().describe("When the note was posted (UTC)"),

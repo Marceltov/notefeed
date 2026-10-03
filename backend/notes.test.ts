@@ -1,4 +1,4 @@
-import { mkdtemp, readdir, readFile, writeFile } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { beforeEach, describe, expect, test } from "vitest";
@@ -22,10 +22,62 @@ describe("isValidId", () => {
   test("accepts a real id", () => {
     expect(isValidId("20260929T140512Z-backup-finished")).toBe(true);
   });
-  test.each(["../etc/passwd", "20260929T140512Z-a/../../x", "20260929T140512Z-A", ""])(
+  test.each(["../etc/passwd", "20260929T140512Z-a/../../x", "a.b", "a b", "", "x".repeat(129)])(
     "rejects %j",
     (id) => expect(isValidId(id)).toBe(false),
   );
+  test.each(["holiday", "20260929T140512Z-A", "Photo_1-2"])("accepts %j: ids are not enforced", (id) => expect(isValidId(id)).toBe(true));
+});
+
+describe("hand-placed notes", () => {
+  const place = async (name: string, content = "x", meta?: object) => {
+    if (!(await readdir(dir).catch(() => null))) await createNote("test", "# Seed", at("2020-01-01T00:00:00Z")); // makes the feed
+    await writeFile(join(dir, name), content);
+    if (meta) await writeFile(join(dir, `.${name}.json`), JSON.stringify(meta));
+  };
+  test("a note under another name lists and reads", async () => {
+    await place("holiday.md", "# Holiday");
+    expect((await listNotes("test")).map((n) => n.id)).toContain("holiday");
+    expect((await getNote("test", "holiday"))?.title).toBe("Holiday");
+  });
+  test("it is dated by the sidecar created, else by the file's mtime", async () => {
+    await place("a.md", "x", { created: "2021-05-06T07:08:09Z" });
+    expect((await getNote("test", "a"))?.createdAt).toEqual(at("2021-05-06T07:08:09Z"));
+    await writeFile(join(dir, "b.md"), "y");
+    const mtime = (await stat(join(dir, "b.md"))).mtime;
+    expect((await getNote("test", "b"))?.createdAt).toEqual(mtime);
+  });
+  test("an unreadable created falls back to the mtime", async () => {
+    await place("c.md", "x", { created: "nope" });
+    const mtime = (await stat(join(dir, "c.md"))).mtime;
+    expect((await getNote("test", "c"))?.createdAt).toEqual(mtime);
+  });
+  test("a name with a dot is not a note", async () => {
+    await place("a.b.md");
+    expect((await listNotes("test")).map((n) => n.id)).not.toContain("a.b");
+  });
+  test("lists newest first by date, ties by id", async () => {
+    const { note } = await createNote("test", "# New", at("2026-09-29T14:05:12Z"));
+    await place("old.md", "x", { created: "2019-01-01T00:00:00Z" });
+    await place("same-a.md", "x", { created: "2026-09-29T14:05:12Z" });
+    await place("same-b.md", "x", { created: "2026-09-29T14:05:12Z" });
+    const ids = (await listNotes("test")).map((n) => n.id);
+    expect(ids.slice(0, 3)).toEqual(["same-b", "same-a", note.id]); // same second: the larger id first
+    expect(ids.indexOf("old")).toBe(ids.length - 1); // after the 2020 seed too
+  });
+  test("before pages past a hand-placed note", async () => {
+    await createNote("test", "# New", at("2026-09-29T14:05:12Z"));
+    await place("mid.md", "x", { created: "2024-01-01T00:00:00Z" });
+    await place("older.md", "x", { created: "2023-01-01T00:00:00Z" });
+    expect((await listNotes("test", 1)).map((n) => n.title)).toEqual(["New"]);
+    expect((await listNotes("test", 5, "mid")).map((n) => n.id)).toEqual(["older"]);
+    expect(await listNotes("test", 5, "gone")).toEqual([]);
+  });
+  test("a path-like id reads nothing", async () => {
+    await place("a.md");
+    expect(await getNote("test", "../test/a")).toBeNull();
+    expect(await removeNote("test", "a/b")).toBe(false);
+  });
 });
 
 describe("createNote", () => {

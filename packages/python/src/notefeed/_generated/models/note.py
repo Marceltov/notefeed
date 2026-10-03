@@ -15,7 +15,8 @@ T = TypeVar("T", bound="Note")
 class Note:
     """
     Attributes:
-        id (str): UTC time to the second plus a random UUID
+        id (str): The note's id: a UTC time to the second plus a random UUID for notes made here; any name without a dot
+            for a file placed by hand
         title (str): The first heading, or the first non-empty line; may be empty
         markdown (str): The note, byte-for-byte as posted
         created_at (datetime.datetime): When the note was posted (UTC)

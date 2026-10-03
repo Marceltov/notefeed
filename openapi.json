@@ -257,7 +257,7 @@
             "description": "Only notes older than this id: the previous page's `next`",
             "schema": {
               "type": "string",
-              "pattern": "^\\d{8}T\\d{6}Z-[a-z0-9-]+$"
+              "pattern": "^[A-Za-z0-9_-]{1,128}$"
             }
           },
           {
@@ -353,7 +353,7 @@
             "description": "The note's id",
             "schema": {
               "type": "string",
-              "pattern": "^\\d{8}T\\d{6}Z-[a-z0-9-]+$"
+              "pattern": "^[A-Za-z0-9_-]{1,128}$"
             }
           },
           {
@@ -458,7 +458,7 @@
             "description": "The note's id",
             "schema": {
               "type": "string",
-              "pattern": "^\\d{8}T\\d{6}Z-[a-z0-9-]+$"
+              "pattern": "^[A-Za-z0-9_-]{1,128}$"
             }
           },
           {
@@ -613,7 +613,7 @@
             "description": "The note's id",
             "schema": {
               "type": "string",
-              "pattern": "^\\d{8}T\\d{6}Z-[a-z0-9-]+$"
+              "pattern": "^[A-Za-z0-9_-]{1,128}$"
             }
           },
           {
@@ -1420,7 +1420,7 @@
             "description": "Only notes older than this id: the previous page's `next`",
             "schema": {
               "type": "string",
-              "pattern": "^\\d{8}T\\d{6}Z-[a-z0-9-]+$"
+              "pattern": "^[A-Za-z0-9_-]{1,128}$"
             }
           },
           {
@@ -1494,7 +1494,7 @@
             "description": "The note's id",
             "schema": {
               "type": "string",
-              "pattern": "^\\d{8}T\\d{6}Z-[a-z0-9-]+$"
+              "pattern": "^[A-Za-z0-9_-]{1,128}$"
             }
           }
         ],
@@ -1557,8 +1557,8 @@
         "properties": {
           "id": {
             "type": "string",
-            "pattern": "^\\d{8}T\\d{6}Z-[a-z0-9-]+$",
-            "description": "UTC time to the second plus a random UUID"
+            "pattern": "^[A-Za-z0-9_-]{1,128}$",
+            "description": "The note's id: a UTC time to the second plus a random UUID for notes made here; any name without a dot for a file placed by hand"
           },
           "title": {
             "type": "string",
@@ -1633,7 +1633,7 @@
         "properties": {
           "id": {
             "type": "string",
-            "pattern": "^\\d{8}T\\d{6}Z-[a-z0-9-]+$"
+            "pattern": "^[A-Za-z0-9_-]{1,128}$"
           },
           "url": {
             "type": "string",

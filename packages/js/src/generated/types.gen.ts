@@ -6,7 +6,7 @@ export type ClientOptions = {
 
 export type Note = {
     /**
-     * UTC time to the second plus a random UUID
+     * The note's id: a UTC time to the second plus a random UUID for notes made here; any name without a dot for a file placed by hand
      */
     id: string;
     /**

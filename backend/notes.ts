@@ -25,15 +25,24 @@ function uuidV7(now: Date): string {
   return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
 }
 
-const ID_RE = /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z-[a-z0-9-]+$/;
+// Ids are not enforced: any name without a dot is one, so a file placed by hand is a note. The ones we make are
+// `<stamp>-<uuid v7>`, which carry the time.
+const STAMP_RE = /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z-/;
+const ID_RE = /^[A-Za-z0-9_-]{1,128}$/;
 
 export function isValidId(id: string): boolean {
   return ID_RE.test(id);
 }
 
-function createdAt(id: string): Date {
-  const [, y, mo, d, h, mi, s] = ID_RE.exec(id)!;
-  return new Date(Date.UTC(+y, +mo - 1, +d, +h, +mi, +s));
+const stampOf = (id: string): Date | null => {
+  const m = STAMP_RE.exec(id);
+  return m ? new Date(Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6])) : null;
+};
+
+// The id's time if it has one, else the metadata's `created`, else when the file was last written.
+function createdAt(id: string, meta: Meta, mtime: Date): Date {
+  const created = meta.created === undefined ? NaN : Date.parse(meta.created);
+  return stampOf(id) ?? (Number.isNaN(created) ? mtime : new Date(created));
 }
 
 // Storage only: no auth, rate limit or caps (that is posting.ts).
@@ -55,7 +64,7 @@ export async function createNote(feed: string, markdown: string, now = new Date(
     try {
       const meta: Meta = { ...(sender !== undefined && { sender }), ...(tags.length && { tags }) };
       const id = await writeNote(feed, base, "md", markdown, meta);
-      return { note: new MarkdownNote({ id, ext: "md", meta, createdAt: createdAt(id), size: Buffer.byteLength(markdown) }, markdown), readId };
+      return { note: new MarkdownNote({ id, ext: "md", meta, createdAt: stampOf(id)!, size: Buffer.byteLength(markdown) }, markdown), readId };
     } catch (e) {
       // The listed feed's directory is gone (deleted since ensureFeed, or removed by hand): this is a new
       // feed. Once only: gone again means another delete, and that is an error.
@@ -67,16 +76,22 @@ export async function createNote(feed: string, markdown: string, now = new Date(
 
 async function noteIds(feed: string): Promise<string[]> {
   if (checkFeed(feed)) return [];
-  return (await listNoteFiles(feed)).filter((e) => typeForExt(e.ext)).map((e) => e.id).filter(isValidId);
+  return (await listNoteFiles(feed)).filter((e) => typeForExt(e.ext) && isValidId(e.id)).map((e) => e.id);
 }
 
-// Newest first. `before` (a note id) pages backwards: ids sort by time, so older notes sort lower.
+// Newest first, ties by id. An id with a time is placed without reading anything; the others are looked up.
+async function newestFirst(feed: string, ids: string[]): Promise<string[]> {
+  const keyed = await Promise.all(
+    ids.map(async (id) => ({ id, at: (stampOf(id) ?? (await getNote(feed, id))?.createdAt)?.getTime() ?? 0 })), // gone since the listing: oldest
+  );
+  return keyed.sort((a, b) => b.at - a.at || (a.id < b.id ? 1 : -1)).map((k) => k.id);
+}
+
+// `before` (a note id) pages backwards: the notes after it in that order. A `before` that is gone ends the list.
 // `tag`: only notes carrying it; the files are read newest first until `limit` match.
 export async function listNotes(feed: string, limit = 50, before?: string, tag?: string): Promise<Note[]> {
-  const ids = (await noteIds(feed))
-    .filter((id) => before === undefined || id < before)
-    .sort()
-    .reverse();
+  let ids = await newestFirst(feed, await noteIds(feed));
+  if (before !== undefined) ids = ids.slice(ids.indexOf(before) + 1 || ids.length);
   const read = async (page: string[]) => (await Promise.all(page.map((id) => getNote(feed, id)))).filter((n) => n !== null); // null: deleted between readdir and read
   if (tag === undefined) return read(ids.slice(0, limit));
   // ponytail: a rare tag reads every note of the feed; a tag index would fix it if feeds get large.
@@ -95,7 +110,7 @@ export async function getNote(feed: string, id: string): Promise<Note | null> {
   if (checkFeed(feed) || !isValidId(id)) return null;
   const stored = await readNote(feed, id);
   const type = stored && typeForExt(stored.ext);
-  return stored && type ? (type.read({ id, ext: stored.ext, meta: stored.meta, createdAt: createdAt(id), size: stored.content.length }, stored.content) as MarkdownNote) : null;
+  return stored && type ? (type.read({ id, ext: stored.ext, meta: stored.meta, createdAt: createdAt(id, stored.meta, stored.mtime), size: stored.content.length }, stored.content) as MarkdownNote) : null;
 }
 
 // The id never changes, so neither does createdAt. null: invalid feed or id, or no such note.
