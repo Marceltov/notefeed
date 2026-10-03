@@ -33,7 +33,7 @@
       "post": {
         "operationId": "postNote",
         "summary": "Post a note",
-        "description": "The body is the note, a file, and `Content-Type` says which kind: `text/markdown` (UTF-8, at most 102400 bytes), or an image, `image/png`, `image/jpeg`, `image/gif` or `image/webp` (at most NOTEFEED_MAX_IMAGE_BYTES, default 5 MiB). Nothing is guessed: any other type, or none, is `415`, and so is a body that is not what the type says (an image is recognized by its first bytes; SVG is refused). It is stored byte for byte, with no resizing and no metadata stripped (EXIF such as GPS position stays in an image). Creates the feed with its first note, optionally protected by its own password (`X-Feed-Password`; 1 to 256 printable ASCII characters, with no space at the start or end) and with the read id in `X-Read-Id`; both are only used by the post that creates the feed. Posting to a protected feed needs its password. Also served at `POST /{feed}`, the short form curl one-liners use. The response names the note's `file` and where it is served, `file_url`, under the feed's read id (public like the read link). Metadata goes in headers: `X-Note-Title`, `X-Note-Tags` (at most 10 tags, each 1 to 32 characters of letters, digits, `-`, `_`, `.` and `:`; case is folded to lowercase, duplicates are removed), `X-Note-Alt` (images), `X-Note-Name` (the original file name).",
+        "description": "The body is the note, a file, and `Content-Type` says which kind: `text/markdown` (UTF-8, at most 102400 bytes), or an image, `image/png`, `image/jpeg`, `image/gif` or `image/webp` (at most NOTEFEED_MAX_IMAGE_BYTES, default 5 MiB). Nothing is guessed: any other type, or none, is `415`, and so is a body that is not what the type says (an image is recognized by its first bytes; SVG is refused). It is stored byte for byte, with no resizing and no metadata stripped (EXIF such as GPS position stays in an image). Creates the feed with its first note, optionally protected by its own password (`X-Feed-Password`; 1 to 256 printable ASCII characters, with no space at the start or end) and with the read id in `X-Read-Id`; both are only used by the post that creates the feed. Posting to a protected feed needs its password. Also served at `POST /{feed}`, the short form curl one-liners use. The response names the note's `file` and where it is served, `file_url`, under the feed's read id (public like the read link). Metadata goes in headers: `X-Note-Title`, `X-Note-Tags` (at most 10 tags, each 1 to 32 characters of letters, digits, `-`, `_`, `.` and `:`; case is folded to lowercase, duplicates are removed), `X-Note-Alt` (images), `X-Note-Name` (the original file name). A markdown note with its pictures is one `multipart/form-data` request: a `text` part (the markdown), `file` parts (up to 10 pictures, each with its file name and image `Content-Type`) and `alt.<file name>` fields. The pictures are stored first, each as its own note named by its file name, then the text with its references to them (`![](chart.png)`, `[x]: chart.png`, as written or percent-decoded) swapped for the stored files; a picture it never refers to is appended as `![](file)`. Everything is checked before the first write, and a failed write removes what the request stored: all or nothing. `X-Note-Alt` and `X-Note-Name` are 400. The answer has `attachments`, the stored pictures in the order of the `file` parts. The `text` part is optional: `X-Note-Title` goes on the text note and `X-Note-Tags` on every note; with no `text` part only the pictures are stored, each with the title, and the answer's top level is the first picture. A refused multipart post that would have created a protected feed creates nothing.",
         "tags": [
           "Feeds"
         ],
@@ -146,22 +146,27 @@
                 "format": "binary",
                 "description": "The note, a file: its bytes, of the type `Content-Type` declares"
               }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/MultipartNote"
+              }
             }
           }
         },
         "responses": {
           "201": {
-            "description": "Stored",
+            "description": "Stored: the note, and with a multipart body its pictures",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Created"
+                  "$ref": "#/components/schemas/Posted"
                 }
               }
             }
           },
           "400": {
-            "description": "Invalid or reserved feed name; a blank note; a bad title, alt text or tags; a new password that is not printable ASCII",
+            "description": "Invalid or reserved feed name; a blank note; a bad title, alt text or tags; a new password that is not printable ASCII; a multipart body with an unexpected part, no `text` and no `file`, more than 10 files, a bad or repeated file name, or `X-Note-Alt` / `X-Note-Name`",
             "content": {
               "application/json": {
                 "schema": {
@@ -191,7 +196,7 @@
             }
           },
           "413": {
-            "description": "Markdown over 102400 bytes, or an image over NOTEFEED_MAX_IMAGE_BYTES",
+            "description": "Markdown over 102400 bytes, or an image over NOTEFEED_MAX_IMAGE_BYTES (each picture of a multipart body too), or a multipart body over 102400 bytes plus 10 images",
             "content": {
               "application/json": {
                 "schema": {
@@ -201,7 +206,7 @@
             }
           },
           "415": {
-            "description": "Content-Type missing or not one of the accepted types, or the body is not what it declares",
+            "description": "Content-Type missing or not one of the accepted types, or the body (or a multipart body's picture) is not what it declares",
             "content": {
               "application/json": {
                 "schema": {
@@ -465,7 +470,7 @@
       "put": {
         "operationId": "editNote",
         "summary": "Replace a note's content",
-        "description": "The body is the new file, with the same rules as posting: a `Content-Type` that is one of the accepted types, a body that is what it declares. A note keeps its type, so the type must be the note's own (`415` otherwise). Id, creation time and metadata stay: the title of a markdown note without one set follows the new text. Change the title or alt text with `PATCH`. Needs the feed's password if it has one, and counts against the post rate limit. Read links can't edit.",
+        "description": "The body is the new file, with the same rules as posting: a `Content-Type` that is one of the accepted types, a body that is what it declares. A note keeps its type, so the type must be the note's own (`415` otherwise). Id, creation time and metadata stay: the title of a markdown note without one set follows the new text. Change the title or alt text with `PATCH`. Needs the feed's password if it has one, and counts against the post rate limit. Read links can't edit. A markdown note with its pictures is one `multipart/form-data` request: a `text` part (the markdown), `file` parts (up to 10 pictures, each with its file name and image `Content-Type`) and `alt.<file name>` fields. The pictures are stored first, each as its own note named by its file name, then the text with its references to them (`![](chart.png)`, `[x]: chart.png`, as written or percent-decoded) swapped for the stored files; a picture it never refers to is appended as `![](file)`. Everything is checked before the first write, and a failed write removes what the request stored: all or nothing. `X-Note-Alt` and `X-Note-Name` are 400. The answer has `attachments`, the stored pictures in the order of the `file` parts. On a `PUT` the `text` part is required and the note must be a markdown note; the note keeps its own title and tags, `X-Note-Tags` goes on the new pictures.",
         "tags": [
           "Feeds"
         ],
@@ -501,6 +506,15 @@
             "in": "header",
             "required": false,
             "description": "The feed's own password, when it has one: to post, list or get, and (as the current password) to change or remove it. On the `POST` that creates a feed it sets the feed's password; on a `POST` to an existing feed that has none it answers 409. An empty value is the same as no header, so a `POST` with an empty one creates an open feed.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Note-Tags",
+            "in": "header",
+            "required": false,
+            "description": "Tags for the note, comma-separated (`ci,deploy`): at most 10 tags, each 1 to 32 characters of letters, digits, `-`, `_`, `.` and `:`; case is folded to lowercase, duplicates are removed. For a raw markdown body; a JSON or form body's own `tags` wins. Empty is none.",
             "schema": {
               "type": "string"
             }
@@ -543,22 +557,27 @@
                 "format": "binary",
                 "description": "The note, a file: its bytes, of the type `Content-Type` declares"
               }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/MultipartNote"
+              }
             }
           }
         },
         "responses": {
           "200": {
-            "description": "The note as it is now",
+            "description": "The note as it is now, and with a multipart body the new pictures",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Note"
+                  "$ref": "#/components/schemas/NoteEdited"
                 }
               }
             }
           },
           "400": {
-            "description": "Invalid or reserved feed name; a blank note",
+            "description": "Invalid or reserved feed name; a blank note; a multipart body with an unexpected part, no `text`, more than 10 files, a bad or repeated file name, or `X-Note-Alt` / `X-Note-Name`",
             "content": {
               "application/json": {
                 "schema": {
@@ -588,7 +607,7 @@
             }
           },
           "413": {
-            "description": "Markdown over 102400 bytes, or an image over NOTEFEED_MAX_IMAGE_BYTES",
+            "description": "Markdown over 102400 bytes, or an image over NOTEFEED_MAX_IMAGE_BYTES (each picture of a multipart body too), or a multipart body over 102400 bytes plus 10 images",
             "content": {
               "application/json": {
                 "schema": {
@@ -598,7 +617,7 @@
             }
           },
           "415": {
-            "description": "Content-Type missing, not accepted or not the note's own type, or the body is not what it declares",
+            "description": "Content-Type missing, not accepted or not the note's own type (a multipart body is for a markdown note), or the body (or a picture) is not what it declares",
             "content": {
               "application/json": {
                 "schema": {
@@ -617,6 +636,16 @@
                 }
               }
             },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "507": {
+            "description": "NOTEFEED_MAX_IMAGES_PER_FEED reached",
             "content": {
               "application/json": {
                 "schema": {
@@ -1722,6 +1751,185 @@
           "file",
           "file_url"
         ],
+        "additionalProperties": false
+      },
+      "Posted": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,128}$"
+          },
+          "url": {
+            "type": "string",
+            "format": "uri",
+            "description": "The note's page in the web UI"
+          },
+          "feed_url": {
+            "type": "string",
+            "format": "uri",
+            "description": "The feed's page in the web UI"
+          },
+          "read_url": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uri"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The feed's read-only RSS link, safe to share; null only if the server can't read the feed's stored read id, or if that id and the derived one both belong to other feeds"
+          },
+          "file": {
+            "type": "string",
+            "description": "The note's file name, `<id>.<extension>`. For an image note, pass it as a feed's `image` setting"
+          },
+          "file_url": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uri"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Where the note's file is served, absolute, under the feed's read id (public like the read link); null while the feed has no read link"
+          },
+          "attachments": {
+            "description": "A multipart request's pictures, one per `file` part, in their order; absent for a raw body",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Created"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "url",
+          "feed_url",
+          "read_url",
+          "file",
+          "file_url"
+        ],
+        "additionalProperties": false,
+        "description": "The note the post is about: its text note, or with no `text` part its first picture"
+      },
+      "NoteEdited": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,128}$",
+            "description": "The note's id: a UTC time to the second plus a random UUID for notes made here; any name without a dot for a file placed by hand"
+          },
+          "type": {
+            "type": "string",
+            "description": "The media type of the note's file: `text/markdown`, `image/png`, `image/jpeg`, `image/gif` or `image/webp`"
+          },
+          "file": {
+            "type": "string",
+            "description": "The note's file name, `<id>.<extension>`"
+          },
+          "file_url": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uri"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Where the note's file is served, absolute, under the feed's read id (public like the read link); null while the feed has no read link"
+          },
+          "size": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991,
+            "description": "The size of the note's file in bytes"
+          },
+          "title": {
+            "type": "string",
+            "description": "The title set for the note, else the first heading or the first non-empty line of a markdown note, else the picture's alt text; may be empty"
+          },
+          "content": {
+            "description": "The note's text, byte-for-byte as posted: for a text type (markdown) only; absent for a picture",
+            "type": "string"
+          },
+          "alt": {
+            "description": "Alternative text of an image note, when it has one",
+            "type": "string"
+          },
+          "name": {
+            "description": "The file name an image was posted with, when it came with one",
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+            "description": "When the note was posted (UTC)"
+          },
+          "url": {
+            "type": "string",
+            "format": "uri",
+            "description": "The note's page in the web UI"
+          },
+          "sender": {
+            "description": "Verified sign-in name of the poster; absent when the note was posted without a sign-in",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Labels the poster gave the note (not verified, and shown to readers like the note itself); empty when none"
+          },
+          "attachments": {
+            "description": "A multipart request's pictures, one per `file` part, in their order; absent for a raw body",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Created"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "type",
+          "file",
+          "file_url",
+          "size",
+          "title",
+          "created_at",
+          "url",
+          "tags"
+        ],
+        "additionalProperties": false
+      },
+      "MultipartNote": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "description": "The markdown note (UTF-8). At most one; required on a PUT. Its references to the files (`![](chart.png)`, `[x]: chart.png`) are swapped for the stored files; a file it never refers to is appended as `![](file)`",
+            "type": "string"
+          },
+          "file": {
+            "description": "A picture: up to 10 parts, each with a file name (one path segment, 1 to 200 characters, unique in the request) and its image `Content-Type`. An `alt.<file name>` field gives one its alternative text",
+            "maxItems": 10,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "binary"
+            }
+          }
+        },
         "additionalProperties": false
       },
       "Error": {

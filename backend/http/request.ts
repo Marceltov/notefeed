@@ -12,24 +12,33 @@ import { errorResponse } from "./errors";
 // Reads at most `max` bytes; null (and the stream cancelled) as soon as the body is larger. A body that ends
 // before the Content-Length it declared was cut short on its way (a proxy's buffer limit, a dropped
 // connection): null too, so it is never stored. Content-Length can be absent (chunked) or too large for
-// the cap's sake, so it is never trusted for the cap.
+// the cap's sake, so it is never trusted for the cap. The chunks are kept as they come and joined at the end, so a
+// small body costs its own size, not the cap (a multipart post's is about 50 to 100 MB).
 export async function readCapped(req: Request, max: number): Promise<Uint8Array | null> {
   const declared = req.headers.get("content-length");
   if (Number(declared) > max) return null;
-  const out = new Uint8Array(max);
+  if (!req.body) return declared !== null && Number(declared) > 0 ? null : new Uint8Array();
+  const chunks: Uint8Array[] = [];
   let size = 0;
-  if (!req.body) return declared !== null && Number(declared) > 0 ? null : out.subarray(0, 0);
   const reader = req.body.getReader();
   for (;;) {
     const { done, value } = await reader.read();
-    if (done) return declared !== null && size < Number(declared) ? null : out.subarray(0, size);
+    if (done) break;
     if (size + value.byteLength > max) {
       await reader.cancel();
       return null;
     }
-    out.set(value, size);
+    chunks.push(value);
     size += value.byteLength;
   }
+  if (declared !== null && size < Number(declared)) return null;
+  const out = new Uint8Array(size);
+  let at = 0;
+  for (const c of chunks) {
+    out.set(c, at);
+    at += c.byteLength;
+  }
+  return out;
 }
 
 // The content type without parameters, lower case; "" when absent.

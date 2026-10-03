@@ -14,12 +14,11 @@ import { TAG_RULE } from "../tags";
 import { API_PREFIX, feedPath, imagePath, publicUrl, readPath, rssPath } from "../urls";
 import { MEDIA_TYPES } from "../note/media";
 import { createDispatcher, op, type AnyOp, type ResponseSpec } from "./dispatch";
-import { deleteFeed, deleteNote, editContent, editMeta, updateFeed } from "../posting";
-import { handlePostNote, readContent, readMetaPatch } from "./notes";
-import { authorize, feedAccess, readCapped } from "./request";
+import { MAX_ATTACHMENTS, deleteFeed, deleteNote, editContent, editMeta, editWithPictures, updateFeed } from "../posting";
+import { createdOf, handlePostNote, readContent, readMetaPatch, readMultipart } from "./notes";
+import { authorize, feedAccess, mediaType, readCapped, sender } from "./request";
 import {
   COMPONENTS,
-  Created,
   CurrentPasswordHeader,
   ErrorJson,
   FeedJson,
@@ -28,16 +27,19 @@ import {
   FeedSettingsJson,
   FileBody,
   MetaJson,
+  MultipartNote,
   NoteAltHeader,
   NoteNameHeader,
   NoteTitleHeader,
   ReadIdHeader,
   NoteIdParam,
+  NoteEdited,
   NoteJson,
   NoteList,
   NoteTagsHeader,
   PageQuery,
   PasswordJson,
+  Posted,
   ReadFeedJson,
   ReadIdParam,
 } from "./schemas";
@@ -46,6 +48,13 @@ export { API_PREFIX };
 
 const err = (description: string) => ({ description, schema: ErrorJson }) satisfies ResponseSpec;
 const RETRY = { "Retry-After": { description: "Seconds to wait before trying again", type: "integer" } } as const;
+const MULTIPART =
+  "A markdown note with its pictures is one `multipart/form-data` request: a `text` part (the markdown), " +
+  `\`file\` parts (up to ${MAX_ATTACHMENTS} pictures, each with its file name and image \`Content-Type\`) and \`alt.<file name>\` fields. ` +
+  "The pictures are stored first, each as its own note named by its file name, then the text with its references to them (`![](chart.png)`, `[x]: chart.png`, " +
+  "as written or percent-decoded) swapped for the stored files; a picture it never refers to is appended as `![](file)`. Everything is checked before the first write, " +
+  "and a failed write removes what the request stored: all or nothing. `X-Note-Alt` and `X-Note-Name` are 400. " +
+  "The answer has `attachments`, the stored pictures in the order of the `file` parts. ";
 const UNAUTHORIZED = err("The instance has a password, or the feed has its own, and it is missing or wrong");
 
 // For the Feeds reads: the password first (a locked instance tells strangers nothing else), then the name.
@@ -124,7 +133,10 @@ const OPS: AnyOp[] = [
       `${PASSWORD_RULE}) and with the read id in \`X-Read-Id\`; both are only used by the post that creates the feed. ` +
       "Posting to a protected feed needs its password. Also served at `POST /{feed}`, the short form curl one-liners use. " +
       "The response names the note's `file` and where it is served, `file_url`, under the feed's read id (public like the read link). " +
-      `Metadata goes in headers: \`X-Note-Title\`, \`X-Note-Tags\` (${TAG_RULE}), \`X-Note-Alt\` (images), \`X-Note-Name\` (the original file name).`,
+      `Metadata goes in headers: \`X-Note-Title\`, \`X-Note-Tags\` (${TAG_RULE}), \`X-Note-Alt\` (images), \`X-Note-Name\` (the original file name). ` +
+      MULTIPART +
+      "The `text` part is optional: `X-Note-Title` goes on the text note and `X-Note-Tags` on every note; with no `text` part only the pictures are stored, each with the title, and the answer's top level is the first picture. " +
+      "A refused multipart post that would have created a protected feed creates nothing.",
     tags: ["Feeds"],
     password: true,
     params: { feed: FeedParam },
@@ -136,14 +148,17 @@ const OPS: AnyOp[] = [
       "X-Note-Alt": NoteAltHeader,
       "X-Note-Name": NoteNameHeader,
     },
-    body: Object.fromEntries(MEDIA_TYPES.map((m) => [m.mediaType, FileBody])),
+    body: { ...Object.fromEntries(MEDIA_TYPES.map((m) => [m.mediaType, FileBody])), "multipart/form-data": MultipartNote },
     responses: {
-      201: { description: "Stored", schema: Created },
-      400: err("Invalid or reserved feed name; a blank note; a bad title, alt text or tags; a new password that is not printable ASCII"),
+      201: { description: "Stored: the note, and with a multipart body its pictures", schema: Posted },
+      400: err(
+        "Invalid or reserved feed name; a blank note; a bad title, alt text or tags; a new password that is not printable ASCII; " +
+          `a multipart body with an unexpected part, no \`text\` and no \`file\`, more than ${MAX_ATTACHMENTS} files, a bad or repeated file name, or \`X-Note-Alt\` / \`X-Note-Name\``,
+      ),
       401: UNAUTHORIZED,
       409: err("A password was sent for a feed that already exists without one: it can't be claimed; or the chosen read id is taken"),
-      413: err(`Markdown over ${MAX_BYTES} bytes, or an image over NOTEFEED_MAX_IMAGE_BYTES`),
-      415: err("Content-Type missing or not one of the accepted types, or the body is not what it declares"),
+      413: err(`Markdown over ${MAX_BYTES} bytes, or an image over NOTEFEED_MAX_IMAGE_BYTES (each picture of a multipart body too), or a multipart body over ${MAX_BYTES} bytes plus ${MAX_ATTACHMENTS} images`),
+      415: err("Content-Type missing or not one of the accepted types, or the body (or a multipart body's picture) is not what it declares"),
       429: { ...err("Too many posts, or wrong passwords, from this client"), headers: RETRY },
       507: err("NOTEFEED_MAX_FEEDS, NOTEFEED_MAX_NOTES_PER_FEED or NOTEFEED_MAX_IMAGES_PER_FEED reached"),
     },
@@ -203,25 +218,40 @@ const OPS: AnyOp[] = [
       "The body is the new file, with the same rules as posting: a `Content-Type` that is one of the accepted types, a body that is what it declares. " +
       "A note keeps its type, so the type must be the note's own (`415` otherwise). Id, creation time and metadata stay: " +
       "the title of a markdown note without one set follows the new text. Change the title or alt text with `PATCH`. " +
-      "Needs the feed's password if it has one, and counts against the post rate limit. Read links can't edit.",
+      "Needs the feed's password if it has one, and counts against the post rate limit. Read links can't edit. " +
+      MULTIPART +
+      "On a `PUT` the `text` part is required and the note must be a markdown note; the note keeps its own title and tags, `X-Note-Tags` goes on the new pictures.",
     tags: ["Feeds"],
     password: true,
     params: { feed: FeedParam, id: NoteIdParam },
-    headers: { "X-Feed-Password": FeedPasswordHeader },
-    body: Object.fromEntries(MEDIA_TYPES.map((m) => [m.mediaType, FileBody])),
+    headers: { "X-Feed-Password": FeedPasswordHeader, "X-Note-Tags": NoteTagsHeader },
+    body: { ...Object.fromEntries(MEDIA_TYPES.map((m) => [m.mediaType, FileBody])), "multipart/form-data": MultipartNote },
     responses: {
-      200: { description: "The note as it is now", schema: NoteJson },
-      400: err("Invalid or reserved feed name; a blank note"),
+      200: { description: "The note as it is now, and with a multipart body the new pictures", schema: NoteEdited },
+      400: err(
+        "Invalid or reserved feed name; a blank note; " +
+          `a multipart body with an unexpected part, no \`text\`, more than ${MAX_ATTACHMENTS} files, a bad or repeated file name, or \`X-Note-Alt\` / \`X-Note-Name\``,
+      ),
       401: UNAUTHORIZED,
       404: err("No such note"),
-      413: err(`Markdown over ${MAX_BYTES} bytes, or an image over NOTEFEED_MAX_IMAGE_BYTES`),
-      415: err("Content-Type missing, not accepted or not the note's own type, or the body is not what it declares"),
+      413: err(`Markdown over ${MAX_BYTES} bytes, or an image over NOTEFEED_MAX_IMAGE_BYTES (each picture of a multipart body too), or a multipart body over ${MAX_BYTES} bytes plus ${MAX_ATTACHMENTS} images`),
+      415: err("Content-Type missing, not accepted or not the note's own type (a multipart body is for a markdown note), or the body (or a picture) is not what it declares"),
       429: { ...err("Too many posts, edits and deletes, or wrong passwords, from this client"), headers: RETRY },
+      507: err("NOTEFEED_MAX_IMAGES_PER_FEED reached"),
     },
     before: passwordAndFeed,
   }).handle(async ({ req, params }) => {
-    const note = await editContent(params.feed, params.id, clientIp(req.headers), () => readContent(req), feedAccess(req.headers, params.feed));
-    return { status: 200, body: noteJson(note, publicUrl(req.headers) + feedPath(params.feed), await filesOf(params.feed, req.headers)) };
+    const h = req.headers;
+    const [ip, access] = [clientIp(h), feedAccess(h, params.feed)];
+    const base = publicUrl(h) + feedPath(params.feed);
+    if (mediaType(h) !== "multipart/form-data") {
+      const note = await editContent(params.feed, params.id, ip, () => readContent(req), access);
+      return { status: 200, body: noteJson(note, base, await filesOf(params.feed, h)) };
+    }
+    const { note, pictures } = await editWithPictures(params.feed, params.id, ip, () => readMultipart(req, "edit"), access, sender(h));
+    const readId = await readIdOf(params.feed);
+    const attachments = pictures.map((p) => createdOf(h, params.feed, readId, p));
+    return { status: 200, body: { ...noteJson(note, base, await filesOf(params.feed, h)), attachments } };
   }),
 
   op({

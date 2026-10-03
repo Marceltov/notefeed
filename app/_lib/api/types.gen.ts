@@ -94,6 +94,107 @@ export type Created = {
     file_url: string | null;
 };
 
+/**
+ * The note the post is about: its text note, or with no `text` part its first picture
+ */
+export type Posted = {
+    id: string;
+    /**
+     * The note's page in the web UI
+     */
+    url: string;
+    /**
+     * The feed's page in the web UI
+     */
+    feed_url: string;
+    /**
+     * The feed's read-only RSS link, safe to share; null only if the server can't read the feed's stored read id, or if that id and the derived one both belong to other feeds
+     */
+    read_url: string | null;
+    /**
+     * The note's file name, `<id>.<extension>`. For an image note, pass it as a feed's `image` setting
+     */
+    file: string;
+    /**
+     * Where the note's file is served, absolute, under the feed's read id (public like the read link); null while the feed has no read link
+     */
+    file_url: string | null;
+    /**
+     * A multipart request's pictures, one per `file` part, in their order; absent for a raw body
+     */
+    attachments?: Array<Created>;
+};
+
+export type NoteEdited = {
+    /**
+     * The note's id: a UTC time to the second plus a random UUID for notes made here; any name without a dot for a file placed by hand
+     */
+    id: string;
+    /**
+     * The media type of the note's file: `text/markdown`, `image/png`, `image/jpeg`, `image/gif` or `image/webp`
+     */
+    type: string;
+    /**
+     * The note's file name, `<id>.<extension>`
+     */
+    file: string;
+    /**
+     * Where the note's file is served, absolute, under the feed's read id (public like the read link); null while the feed has no read link
+     */
+    file_url: string | null;
+    /**
+     * The size of the note's file in bytes
+     */
+    size: number;
+    /**
+     * The title set for the note, else the first heading or the first non-empty line of a markdown note, else the picture's alt text; may be empty
+     */
+    title: string;
+    /**
+     * The note's text, byte-for-byte as posted: for a text type (markdown) only; absent for a picture
+     */
+    content?: string;
+    /**
+     * Alternative text of an image note, when it has one
+     */
+    alt?: string;
+    /**
+     * The file name an image was posted with, when it came with one
+     */
+    name?: string;
+    /**
+     * When the note was posted (UTC)
+     */
+    created_at: string;
+    /**
+     * The note's page in the web UI
+     */
+    url: string;
+    /**
+     * Verified sign-in name of the poster; absent when the note was posted without a sign-in
+     */
+    sender?: string | null;
+    /**
+     * Labels the poster gave the note (not verified, and shown to readers like the note itself); empty when none
+     */
+    tags: Array<string>;
+    /**
+     * A multipart request's pictures, one per `file` part, in their order; absent for a raw body
+     */
+    attachments?: Array<Created>;
+};
+
+export type MultipartNote = {
+    /**
+     * The markdown note (UTF-8). At most one; required on a PUT. Its references to the files (`![](chart.png)`, `[x]: chart.png`) are swapped for the stored files; a file it never refers to is appended as `![](file)`
+     */
+    text?: string;
+    /**
+     * A picture: up to 10 parts, each with a file name (one path segment, 1 to 200 characters, unique in the request) and its image `Content-Type`. An `alt.<file name>` field gives one its alternative text
+     */
+    file?: Array<Blob | File>;
+};
+
 export type Error = {
     /**
      * A short reason, for people
@@ -292,7 +393,7 @@ export type PostNoteData = {
 
 export type PostNoteErrors = {
     /**
-     * Invalid or reserved feed name; a blank note; a bad title, alt text or tags; a new password that is not printable ASCII
+     * Invalid or reserved feed name; a blank note; a bad title, alt text or tags; a new password that is not printable ASCII; a multipart body with an unexpected part, no `text` and no `file`, more than 10 files, a bad or repeated file name, or `X-Note-Alt` / `X-Note-Name`
      */
     400: Error;
     /**
@@ -304,11 +405,11 @@ export type PostNoteErrors = {
      */
     409: Error;
     /**
-     * Markdown over 102400 bytes, or an image over NOTEFEED_MAX_IMAGE_BYTES
+     * Markdown over 102400 bytes, or an image over NOTEFEED_MAX_IMAGE_BYTES (each picture of a multipart body too), or a multipart body over 102400 bytes plus 10 images
      */
     413: Error;
     /**
-     * Content-Type missing or not one of the accepted types, or the body is not what it declares
+     * Content-Type missing or not one of the accepted types, or the body (or a multipart body's picture) is not what it declares
      */
     415: Error;
     /**
@@ -325,9 +426,9 @@ export type PostNoteError = PostNoteErrors[keyof PostNoteErrors];
 
 export type PostNoteResponses = {
     /**
-     * Stored
+     * Stored: the note, and with a multipart body its pictures
      */
-    201: Created;
+    201: Posted;
 };
 
 export type PostNoteResponse = PostNoteResponses[keyof PostNoteResponses];
@@ -502,6 +603,10 @@ export type EditNoteData = {
          * The feed's own password, when it has one: to post, list or get, and (as the current password) to change or remove it. On the `POST` that creates a feed it sets the feed's password; on a `POST` to an existing feed that has none it answers 409. An empty value is the same as no header, so a `POST` with an empty one creates an open feed.
          */
         'X-Feed-Password'?: string;
+        /**
+         * Tags for the note, comma-separated (`ci,deploy`): at most 10 tags, each 1 to 32 characters of letters, digits, `-`, `_`, `.` and `:`; case is folded to lowercase, duplicates are removed. For a raw markdown body; a JSON or form body's own `tags` wins. Empty is none.
+         */
+        'X-Note-Tags'?: string;
     };
     path: {
         /**
@@ -519,7 +624,7 @@ export type EditNoteData = {
 
 export type EditNoteErrors = {
     /**
-     * Invalid or reserved feed name; a blank note
+     * Invalid or reserved feed name; a blank note; a multipart body with an unexpected part, no `text`, more than 10 files, a bad or repeated file name, or `X-Note-Alt` / `X-Note-Name`
      */
     400: Error;
     /**
@@ -531,26 +636,30 @@ export type EditNoteErrors = {
      */
     404: Error;
     /**
-     * Markdown over 102400 bytes, or an image over NOTEFEED_MAX_IMAGE_BYTES
+     * Markdown over 102400 bytes, or an image over NOTEFEED_MAX_IMAGE_BYTES (each picture of a multipart body too), or a multipart body over 102400 bytes plus 10 images
      */
     413: Error;
     /**
-     * Content-Type missing, not accepted or not the note's own type, or the body is not what it declares
+     * Content-Type missing, not accepted or not the note's own type (a multipart body is for a markdown note), or the body (or a picture) is not what it declares
      */
     415: Error;
     /**
      * Too many posts, edits and deletes, or wrong passwords, from this client
      */
     429: Error;
+    /**
+     * NOTEFEED_MAX_IMAGES_PER_FEED reached
+     */
+    507: Error;
 };
 
 export type EditNoteError = EditNoteErrors[keyof EditNoteErrors];
 
 export type EditNoteResponses = {
     /**
-     * The note as it is now
+     * The note as it is now, and with a multipart body the new pictures
      */
-    200: Note;
+    200: NoteEdited;
 };
 
 export type EditNoteResponse = EditNoteResponses[keyof EditNoteResponses];
