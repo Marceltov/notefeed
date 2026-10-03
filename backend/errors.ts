@@ -73,6 +73,13 @@ export class FeedExistsError extends NotefeedError {
   }
 }
 
+/** A chosen read id belongs to another feed or is held back for a reserved one. */
+export class ReadIdTakenError extends NotefeedError {
+  constructor() {
+    super("taken", "that read id is not available");
+  }
+}
+
 export class EmptyNoteError extends NotefeedError {
   constructor() {
     super("empty_note", "note is empty");

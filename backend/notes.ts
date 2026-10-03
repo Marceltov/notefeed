@@ -48,14 +48,15 @@ export function checkMarkdown(markdown: string): void {
 }
 
 // `readId`: the read id of the feed the note went into (null: that feed has no read link).
-export async function createNote(feed: string, markdown: string, now = new Date(), sender?: string, tags: string[] = []): Promise<{ note: Note; readId: string | null }> {
+// `wantedReadId` is used only if this call creates the feed (feeds.ts).
+export async function createNote(feed: string, markdown: string, now = new Date(), sender?: string, tags: string[] = [], wantedReadId?: string): Promise<{ note: Note; readId: string | null }> {
   assertFeed(feed);
   checkMarkdown(markdown);
   // ponytail: checked, not locked. A post that is past ensureFeed when its feed is deleted and the name
   // re-created lands in the new feed (as do settings written after hasFeed); a per-feed lock would close it.
   const base = `${idStamp(now)}-${uuidV7(now)}`;
   for (let retried = false; ; retried = true) {
-    const readId = await ensureFeed(feed);
+    const readId = await ensureFeed(feed, wantedReadId);
     try {
       return { note: toNote(await writeNote(feed, base, markdown, sender, tags), { markdown, sender, meta: tags.length ? { tags } : {} }), readId };
     } catch (e) {

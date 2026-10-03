@@ -142,9 +142,24 @@ What to know:
 - **The name is free again,** at once. A feed created under it later is a new feed with a new read link; the old read link stays empty for good, and the old feed's password and settings are gone. A post that was already on its way when the feed was deleted creates such a new feed.
 - **Settings are public to readers.** Anyone with the read link sees the title and description, through `GET /api/v1/read/<read id>` too, which needs no password. Anyone who has the feed's name and its password reads them with `GET /api/v1/feeds/<feed>`.
 - **Limits:** `PUT` and `DELETE` count toward the same per-client [rate limit](configuration.md#rate-limits-and-caps) as posts. The `PUT` body is limited to 8 KB. A refused `PUT` leaves the settings as they were.
-- **Errors:** `400` for an invalid or reserved name, or a body that isn't JSON with string `title` and `description` (and `image`, if present), or a title or description that is too long or has control characters; `401` when a password is missing or wrong (before it says anything about the feed); `404` when the feed doesn't exist; `429` over the limit.
+- **Errors:** `400` for an invalid or reserved name, or a body that isn't JSON with string `title` and `description` (and `image`, if present), or a title or description that is too long or has control characters, or a malformed or reserved feed's `read_id`; `401` when a password is missing or wrong (before it says anything about the feed); `404` when the feed doesn't exist; `409` (`taken`) when the `read_id` belongs to another feed; `429` over the limit.
 
 In the browser the same two things are in the feed page's [Feed settings and Delete feed sections](web-ui.md#feed-settings-and-deleting-a-feed).
+
+## Choosing a feed's read id
+
+A feed's name never changes, but its [read id](feed.md) (the part of the read link and the RSS link after `/r/`) can be chosen and changed. It is 22 random characters unless you say otherwise.
+
+- **At creation:** add `read_id` to the post that creates the feed, as a JSON or form field (or the `read_id` argument of the MCP `post_note` tool): `{"markdown": "# Hi", "read_id": "my-blog"}`. Left out or empty, it is random. For a feed that already exists it is ignored.
+- **Later:** `read_id` in the `PUT /api/v1/feeds/<feed>` body (`{"title": "", "description": "", "read_id": "my-blog"}`), in the **Read id** field on the settings page, in `update_feed`, and in the client packages (`readId` on `post()`, `read_id` in `updateFeed()` settings; `read_id` in Python). An empty value gives a new random one; leaving it out keeps the current one.
+- **Rule:** 3 to 64 characters of `a-z`, `0-9`, `-` and `_`. A read id that belongs to another feed, or that is held back for a [reserved feed](configuration.md#reserved-feeds), is refused with `409` (`taken`); a malformed one with `400`. A reserved feed keeps its read id (its name). An operator can turn chosen read ids off with `NOTEFEED_ALLOW_CUSTOM_IDS=0` ([configuration](configuration.md)), which leaves only random ones.
+
+What to know:
+
+- **A short, readable read id can be guessed**, and anyone who guesses it can read the feed. Protect the feed with [a password](#a-feed-with-its-own-password) if that matters.
+- **The old read id is freed.** Nothing is recorded: the old link answers like any unknown read id (an empty feed) until another feed takes that id, so it may later show somebody else's notes. Tell the people who have the old link.
+- **Notes are not edited.** Images in a note that are written relative to the feed (`![](3b1f….png)`, as an [upload](#images) answers) follow the new read id, and so does the title image. A full URL in a note (`![](https://…/r/<old id>/<file>)`) keeps the old read id and stops working: changing those is up to you.
+- **Limits:** a change counts toward the same per-client [rate limit](configuration.md#rate-limits-and-caps) as posts.
 
 ## Feed names
 
@@ -236,9 +251,9 @@ EOF
 
 | Status | When |
 |---|---|
-| `400` | The feed name is invalid or reserved; the note is empty; the JSON is invalid or has no string `markdown`; the body is not UTF-8; the password for a new feed is not valid (see [A feed with its own password](#a-feed-with-its-own-password)) |
+| `400` | The feed name is invalid or reserved; the note is empty; the JSON is invalid or has no string `markdown`; the body is not UTF-8; the password for a new feed is not valid (see [A feed with its own password](#a-feed-with-its-own-password)); a `read_id` that is not 3 to 64 characters of `a-z`, `0-9`, `-`, `_`, or when chosen read ids are turned off |
 | `401` | The instance has a password and the `Authorization` header is missing or wrong, or the feed has its own password and `X-Feed-Password` is missing or wrong |
-| `409` | A password was sent for a feed that already exists without one (`feed_exists`) |
+| `409` | A password was sent for a feed that already exists without one (`feed_exists`); the `read_id` for a new feed belongs to another feed (`taken`) |
 | `404` | No feed in the URL: `POST /`, for example from an empty variable in `$NOTEFEED_URL/$FEED`. For [editing and deleting](#editing-and-deleting-notes): no such note |
 | `413` | The body is larger than 100 KB (102400 bytes); for an [image upload](#images), larger than `NOTEFEED_MAX_IMAGE_BYTES` |
 | `415` | The content type is not one of those above; for an [image upload](#images), the bytes are not a PNG, JPEG, GIF or WebP image |
@@ -247,7 +262,7 @@ EOF
 | `500` | The note could not be written. No partial file is left behind. |
 | `507` | A cap is reached: a new feed when there are already `NOTEFEED_MAX_FEEDS` feeds, or a note to a feed that already has `NOTEFEED_MAX_NOTES_PER_FEED` notes, or an image to a feed that already has `NOTEFEED_MAX_IMAGES_PER_FEED` images |
 
-Error responses are JSON: `{"error": "<short reason>", "code": "<code>"}`. The reason is for people; match on the status or the `code` (`invalid_feed`, `reserved_feed`, `auth`, `rate_limited`, `too_many_attempts`, `feed_limit`, `note_limit`, `image_limit`, `empty_note`, `too_large`, `unsupported_type`, `invalid_body`, `feed_exists`).
+Error responses are JSON: `{"error": "<short reason>", "code": "<code>"}`. The reason is for people; match on the status or the `code` (`invalid_feed`, `reserved_feed`, `auth`, `rate_limited`, `too_many_attempts`, `feed_limit`, `note_limit`, `image_limit`, `empty_note`, `too_large`, `unsupported_type`, `invalid_body`, `feed_exists`, `taken`).
 
 ## From a script
 

@@ -52,7 +52,7 @@ test("unknown but well-formed read id → empty feed", async () => {
 });
 
 test("malformed read id → 404", async () => {
-  expect((await get("short")).status).toBe(404);
+  expect((await get("ab")).status).toBe(404);
 });
 
 test("public even when the instance is locked", async () => {

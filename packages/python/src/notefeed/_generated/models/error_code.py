@@ -14,6 +14,7 @@ class ErrorCode(StrEnum):
     NOT_FOUND = "not_found"
     RATE_LIMITED = "rate_limited"
     RESERVED_FEED = "reserved_feed"
+    TAKEN = "taken"
     TOO_LARGE = "too_large"
     TOO_MANY_ATTEMPTS = "too_many_attempts"
     UNSUPPORTED_TYPE = "unsupported_type"

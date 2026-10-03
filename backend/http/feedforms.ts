@@ -6,7 +6,7 @@ import { settingsPath } from "../urls";
 import { feedCookies } from "./feedsession";
 import { feedAccess, formPost, readFields, seeOther } from "./request";
 
-const FORM_MAX = 8192; // 100 + 500 characters at up to 4 bytes, plus framing
+const FORM_MAX = 8192; // 100 + 500 characters at up to 4 bytes, the read id, plus framing
 
 // `form=details` tells the feed page which of its forms the refusal belongs to.
 const refused = (feed: string) => `${settingsPath(feed)}?form=details`;
@@ -18,7 +18,14 @@ export const feedSettingsRoute = (req: Request, feed: string): Promise<Response>
       const form = await readFields(req, FORM_MAX);
       if (!form) throw new InvalidBodyError("form needs title and description");
       // The checkbox is only on the page while identity is on; without its marker the setting stays as it is.
-      return { title: form.get("title"), description: form.get("description"), showSender: form.has("show_sender_present") ? form.has("show_sender") : undefined };
+      // `read_id` is the page's current value (an unchanged one is no change); the "generate" button asks for a random one.
+      const readId = form.get("read_id");
+      return {
+        title: form.get("title"),
+        description: form.get("description"),
+        showSender: form.has("show_sender_present") ? form.has("show_sender") : undefined,
+        readId: form.has("generate_read_id") ? "" : typeof readId === "string" ? readId : undefined,
+      };
     };
     await updateFeed(feed, ip, read, feedAccess(h, feed));
     return seeOther(`${settingsPath(feed)}?saved=1`);

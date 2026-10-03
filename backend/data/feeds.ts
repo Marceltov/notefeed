@@ -74,3 +74,14 @@ export async function removeLeftovers(): Promise<void> {
     );
   }
 }
+
+// Replaces `.readid` in one rename, so a crash leaves the old id or the new one, never a half-written file.
+export async function writeReadId(feed: string, id: string): Promise<void> {
+  const tmp = join(feedDir(feed), `.${randomBytes(6).toString("hex")}.tmp`);
+  try {
+    await writeFile(/*turbopackIgnore: true*/ tmp, id);
+    await rename(/*turbopackIgnore: true*/ tmp, readIdFile(feed));
+  } finally {
+    await rm(/*turbopackIgnore: true*/ tmp, { force: true });
+  }
+}

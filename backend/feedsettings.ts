@@ -21,14 +21,18 @@ function field(input: Record<string, unknown>, name: "title" | "description", ma
 }
 
 // `image` and `showSender` absent (undefined, or null from a form without the field) mean "unchanged": the caller fills them in.
-export function checkSettings(input: unknown): Omit<FeedSettings, "image" | "showSender"> & { image?: string; showSender?: boolean } {
+// `readId` absent (or null, from a form without the field) leaves the read id as it is; "" asks for a new random one.
+// posting.ts checks it against the other feeds.
+export function checkSettings(input: unknown): Omit<FeedSettings, "image" | "showSender"> & { image?: string; showSender?: boolean; readId?: string } {
   if (typeof input !== "object" || input === null || Array.isArray(input)) throw new InvalidBodyError('JSON needs "title" and "description" strings');
   const o = input as Record<string, unknown>;
   const image = o.image ?? undefined;
   if (image !== undefined && typeof image !== "string") throw new InvalidBodyError("image must be a string");
   const showSender = o.showSender ?? undefined;
   if (showSender !== undefined && typeof showSender !== "boolean") throw new InvalidBodyError("show_sender must be a boolean");
-  return { title: field(o, "title", MAX_TITLE), description: field(o, "description", MAX_DESCRIPTION), image, showSender };
+  const readId = o.readId ?? undefined;
+  if (readId !== undefined && typeof readId !== "string") throw new InvalidBodyError("read_id must be a string");
+  return { title: field(o, "title", MAX_TITLE), description: field(o, "description", MAX_DESCRIPTION), image, showSender, readId: readId?.trim() };
 }
 
 // What readers (RSS, the read API and pages) get: the sender only while the feed shows it.

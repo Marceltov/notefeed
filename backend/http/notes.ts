@@ -18,15 +18,18 @@ const TEXT_TYPES = ["", "text/markdown", "text/plain", "application/x-www-form-u
 type PostReply = { status: 201; body: Created; headers?: HeadersInit } | { status: 303; body: undefined; headers: HeadersInit };
 const redirect = (location: string, more: [string, string][] = []): PostReply => ({ status: 303, body: undefined, headers: [["Location", location], ...more] });
 
+// The API's snake_case `read_id` is `readId` inside.
+const withReadId = ({ read_id, ...rest }: { markdown: string; password?: string; tags?: string[]; read_id?: string }) => ({ ...rest, readId: read_id });
+
 // The note's markdown (and the optional new-feed password and tags) from a raw text body, JSON, or a form's fields.
 // Tags come from the body; a raw body has none, so it takes the X-Note-Tags header.
 // The 100 KB cap counts the whole body, so a form's own framing takes a few bytes of it.
-export async function readMarkdown(req: Request): Promise<{ markdown: string; password?: string; tags?: string[] }> {
+export async function readMarkdown(req: Request): Promise<{ markdown: string; password?: string; tags?: string[]; readId?: string }> {
   const note = await readBody(req);
   return { ...note, tags: note.tags ?? tagsFromHeader(req.headers.get("x-note-tags")) };
 }
 
-async function readBody(req: Request): Promise<{ markdown: string; password?: string; tags?: string[] }> {
+async function readBody(req: Request): Promise<{ markdown: string; password?: string; tags?: string[]; readId?: string }> {
   const type = mediaType(req.headers);
   const isJson = type === "application/json";
   const isForm = type === "multipart/form-data";
@@ -42,7 +45,7 @@ async function readBody(req: Request): Promise<{ markdown: string; password?: st
     const form = await parseForm(bytes, req.headers).then((f) => ({ ...Object.fromEntries(f), ...(f.has("tags") && { tags: tagsOf(f) }) }), () => null);
     const parsed = PostForm.safeParse(form);
     if (!parsed.success) throw new InvalidBodyError('form needs a "markdown" field');
-    return parsed.data;
+    return withReadId(parsed.data);
   }
 
   let text: string;
@@ -61,7 +64,7 @@ async function readBody(req: Request): Promise<{ markdown: string; password?: st
   }
   const parsed = PostJson.safeParse(json);
   if (!parsed.success) throw new InvalidBodyError('JSON needs a "markdown" string');
-  return parsed.data;
+  return withReadId(parsed.data);
 }
 
 // The postNote entry's handler (backend/http/api.ts). Refusals are thrown as domain errors, except to

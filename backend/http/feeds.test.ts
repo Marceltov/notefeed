@@ -158,7 +158,7 @@ describe("settings", () => {
 
   test("an unknown read id has empty settings, a malformed one is 404", async () => {
     expect(await (await call("GET", `/read/${"A".repeat(22)}`)).json()).toEqual({ title: "", description: "", image_url: null });
-    expect((await call("GET", "/read/short")).status).toBe(404);
+    expect((await call("GET", "/read/ab")).status).toBe(404);
   });
 
   test("a corrupt .feed.json reads as empty", async () => {

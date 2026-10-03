@@ -105,6 +105,7 @@ const OPS: AnyOp[] = [
       "Posting to a protected feed needs that password. Also served at `POST /{feed}`, the short form the client packages and curl one-liners use. " +
       `The body is at most ${MAX_BYTES} bytes and must be UTF-8. ` +
       "`application/x-www-form-urlencoded` (what `curl -d` sends) is read as raw markdown, not as form fields. " +
+      "`read_id` (JSON or form field) is the feed's read id when this post creates it: random when left out, ignored for a feed that exists. " +
       `Tags (${TAG_RULE}) go in the JSON \`tags\` array, a repeated \`tags\` form field, or, for a raw body, the \`X-Note-Tags\` header.`,
     tags: ["Feeds"],
     password: true,
@@ -127,7 +128,7 @@ const OPS: AnyOp[] = [
       },
       400: err("Invalid or reserved feed name; empty note; bad JSON, form or UTF-8; a new password that is not printable ASCII; invalid tags"),
       401: UNAUTHORIZED,
-      409: err("A password was sent for a feed that already exists without one: it can't be claimed"),
+      409: err("A password was sent for a feed that already exists without one: it can't be claimed; or the chosen `read_id` is taken"),
       413: err(`Body over ${MAX_BYTES} bytes`),
       415: err("Unsupported content type"),
       429: { ...err("Too many posts, or wrong passwords, from this client"), headers: RETRY },
@@ -309,7 +310,7 @@ const OPS: AnyOp[] = [
     summary: "Change a feed's settings",
     description:
       "Replaces both the title (at most 100 characters) and the description (at most 500); surrounding whitespace is trimmed and control characters are refused. " +
-      "`show_sender` (default true) shows who posted each note to readers; omitted leaves it as it is. `image` is the file name `uploadImage` returned for this feed (title image), empty to remove it, or omitted to leave it as it is; any other value is a 400. " +
+      "`show_sender` (default true) shows who posted each note to readers; omitted leaves it as it is. `read_id` gives the feed another read link (3 to 64 characters: a-z, 0-9, - and _; empty for a random one): the old id is freed and answers like an unknown read id until another feed takes it, and the notes are not edited (a relative image link follows the new id, a full URL does not). A short readable read id is guessable, so protect the feed with a password if that matters. An instance can turn chosen read ids off (NOTEFEED_ALLOW_CUSTOM_IDS=0): then only an empty `read_id` is accepted. `image` is the file name `uploadImage` returned for this feed (title image), empty to remove it, or omitted to leave it as it is; any other value is a 400. " +
       "Needs the feed's password if it has one, and counts against the post rate limit. Only on a feed that exists: it is created by its first note. Read links can't change settings.",
     tags: ["Feeds"],
     password: true,
@@ -318,9 +319,10 @@ const OPS: AnyOp[] = [
     body: { "application/json": FeedSettingsJson },
     responses: {
       200: { description: "The feed as it is now", schema: FeedJson },
-      400: err("Invalid or reserved feed name, bad JSON, or a title or description that is too long or has control characters"),
+      400: err("Invalid or reserved feed name, bad JSON, a title or description that is too long or has control characters, a malformed read id, a reserved feed's read id, or chosen read ids turned off"),
       401: UNAUTHORIZED,
       404: err("No such feed"),
+      409: err("The read id belongs to another feed or is held back for a reserved one"),
       429: { ...err("Too many posts, edits and deletes, or wrong passwords, from this client"), headers: RETRY },
     },
     before: passwordAndFeed,
@@ -330,7 +332,7 @@ const OPS: AnyOp[] = [
       try {
         const j = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes ?? new Uint8Array()));
         // The API's snake_case name; checkSettings reads the stored one.
-        return j && typeof j === "object" && !Array.isArray(j) ? { ...j, showSender: j.show_sender } : j;
+        return j && typeof j === "object" && !Array.isArray(j) ? { ...j, showSender: j.show_sender, readId: j.read_id } : j;
       } catch {
         throw new InvalidBodyError('JSON needs "title" and "description" strings');
       }
