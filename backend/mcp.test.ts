@@ -368,7 +368,7 @@ describe("upload_image", () => {
   test("stores an image, and update_feed can make it the title image", async () => {
     await call("post_note", { feed: "i", markdown: "# Hi" });
     const r = (await call("upload_image", { feed: "i", data: png })).structuredContent;
-    expect(r.url).toBe(`http://localhost:3000/r/${(await readIdOf("i"))!}/images/${r.file}`);
+    expect(r.url).toBe(`http://localhost:3000/r/${(await readIdOf("i"))!}/${r.file}`);
     expect(r.markdown).toBe(`![](${r.url})`);
     const f = await call("update_feed", { feed: "i", title: "", description: "", image: r.file });
     expect(f.structuredContent.image_url).toBe(r.url);

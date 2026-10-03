@@ -3,7 +3,7 @@ import { expect, test, type Page } from "@playwright/test";
 
 const PNG = "e2e/fixtures/pixel.png";
 const feedName = () => `e2e-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-const SRC = /!\[\]\(http[^)]*\/r\/[^)]*\/images\/[0-9a-f]+\.png\)/;
+const SRC = /!\[\]\([0-9a-f]+\.png\)/; // by file name, relative to the feed
 
 async function post(page: Page, name: string, markdown: string) {
   await page.goto(`/${name}`);

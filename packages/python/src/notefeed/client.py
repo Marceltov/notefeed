@@ -77,6 +77,7 @@ _BY_CODE: dict[str, type[NotefeedError]] = {
     "invalid_body": InvalidRequestError,
     "invalid_request": InvalidRequestError,
     "feed_exists": InvalidRequestError,
+    "taken": InvalidRequestError,
     "unsupported_type": InvalidRequestError,
 }
 
@@ -153,16 +154,23 @@ class Client:
         )
 
     def post(
-        self, markdown: str, feed: str | None = None, feed_password: str | None = None, tags: list[str] | None = None
+        self,
+        markdown: str,
+        feed: str | None = None,
+        feed_password: str | None = None,
+        tags: list[str] | None = None,
+        read_id: str | None = None,
     ) -> Created:
         """`feed_password` overrides the client's, for a feed that has its own password. `tags` label the note
-        (at most 10, each 1 to 32 characters of letters, digits, `-`, `_`, `.`, `:`; not verified)."""
-        body = PostJson(markdown=markdown, tags=tags or UNSET)
+        (at most 10, each 1 to 32 characters of letters, digits, `-`, `_`, `.`, `:`; not verified). `read_id` is the
+        read id the feed gets when this post creates it (3 to 64 characters of `a-z`, `0-9`, `-`, `_`; random when
+        left out; ignored for a feed that exists; a `taken` error when another feed has it)."""
+        body = PostJson(markdown=markdown, tags=tags or UNSET, read_id=read_id or UNSET)
         kwargs = post_note._get_kwargs(feed=self._feed_for(feed), body=body, x_feed_password=self._fp(feed_password))
         return self._parse(Created, self._call(kwargs))
 
     def upload_image(self, data: bytes, feed: str | None = None, feed_password: str | None = None) -> ImageUploaded:
-        """Upload a PNG, JPEG, GIF or WebP image to an existing feed. The server decides the format by the bytes. `.markdown` is `![](url)`, to put in a note. Same options as post()."""
+        """Upload a PNG, JPEG, GIF or WebP image to an existing feed. The server decides the format by the bytes. `.markdown` is `![](file)`, relative to the feed so it follows a changed read id, to put in a note; use `.url` for a link outside notefeed. Same options as post()."""
         kwargs = upload_image._get_kwargs(
             feed=self._feed_for(feed), body=File(payload=data), x_feed_password=self._fp(feed_password)
         )
@@ -185,10 +193,21 @@ class Client:
         return self._parse(Feed, self._call(kwargs))
 
     def update_feed(
-        self, title: str, description: str, feed: str | None = None, feed_password: str | None = None, image: str | None = None
+        self,
+        title: str,
+        description: str,
+        feed: str | None = None,
+        feed_password: str | None = None,
+        image: str | None = None,
+        read_id: str | None = None,
     ) -> Feed:
-        """Replace the feed's title and description (both; an empty string clears one). `image` sets the title image (a file name from upload_image), "" clears it, None keeps it. The feed must already exist. Same options as post()."""
-        settings = FeedSettings(title=title, description=description, image=UNSET if image is None else image)
+        """Replace the feed's title and description (both; an empty string clears one). `image` sets the title image (a file name from upload_image), "" clears it, None keeps it. `read_id` gives the feed another read id (3 to 64 characters of `a-z`, `0-9`, `-`, `_`; "" for a random one; None keeps it); the old one is freed, and relative image links in notes follow while full URLs do not. The feed must already exist. Same options as post()."""
+        settings = FeedSettings(
+            title=title,
+            description=description,
+            image=UNSET if image is None else image,
+            read_id=UNSET if read_id is None else read_id,
+        )
         kwargs = update_feed._get_kwargs(feed=self._feed_for(feed), body=settings, x_feed_password=self._fp(feed_password))
         return self._parse(Feed, self._call(kwargs))
 

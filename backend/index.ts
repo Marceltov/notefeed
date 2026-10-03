@@ -10,7 +10,7 @@ import { imagePath } from "./urls";
 
 export type { Note };
 export { IDENTITY_COOKIE, SESSION_COOKIE, identitySender, locked, sessionOk } from "./auth";
-export { checkFeed } from "./feeds";
+export { checkFeed, isHeldBack as isReservedFeed, readIdOf } from "./feeds";
 export { identityOn };
 export { feedPath, publicUrl, readPath, rssPath, safeNext, settingsPath } from "./urls";
 // Every write is one of these HTTP handlers; the frontend only mounts them and renders.
@@ -33,6 +33,9 @@ export const signInProviders = (): { id: string; label: string }[] => providers(
 
 /** Whether the instance password is set (sign-in alone can lock an instance too). */
 export const passwordSet = () => config.password() !== "";
+
+/** Whether a feed's owner may choose its read id (NOTEFEED_ALLOW_CUSTOM_IDS); otherwise only a random one. */
+export const customIdsOn = config.allowCustomIds;
 
 const PAGE = 50;
 

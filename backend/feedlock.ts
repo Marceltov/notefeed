@@ -98,9 +98,9 @@ export async function unlock(feed: string, password: string, ip: string): Promis
   return cookieOf(feed, hash);
 }
 
-export async function createProtected(feed: string, password: string): Promise<void> {
+export async function createProtected(feed: string, password: string, readId?: string): Promise<void> {
   checkNewPassword(password);
-  if (await createProtectedFeed(feed, await hashPassword(password))) return;
+  if (await createProtectedFeed(feed, await hashPassword(password), readId)) return;
   throw (await protectedFeed(feed)) ? new AuthError() : new FeedExistsError();
 }
 

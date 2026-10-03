@@ -56,11 +56,11 @@ function server(h: Headers): McpServer {
     "post_note",
     {
       description: `Post a markdown note to a feed; the feed is created by its first note; a password given then protects the feed for good, and is refused on a feed that already exists. ${PROTECTED} ${SECRET_NOTE}`,
-      inputSchema: z.object({ feed, markdown: z.string(), password, tags: z.array(z.string()).optional().describe(`Labels for the note, e.g. ["ci","deploy"]: ${TAG_RULE}. Not verified; readers see them.`) }),
+      inputSchema: z.object({ feed, markdown: z.string(), password, tags: z.array(z.string()).optional().describe(`Labels for the note, e.g. ["ci","deploy"]: ${TAG_RULE}. Not verified; readers see them.`), read_id: z.string().optional().describe("Only when this post creates the feed: its read id (3 to 64 characters of a-z, 0-9, - and _), random when left out. A short readable one is guessable. Fails if taken.") }),
       outputSchema: z.object({ id: z.string(), url: z.string(), feed_url: z.string(), read_url: z.string().nullable() }),
     },
-    guard(async ({ feed, markdown, password, tags }) => {
-      const { note, readId } = await postNote(feed, clientIp(h), async () => ({ markdown, tags }), { password }, sender(h));
+    guard(async ({ feed, markdown, password, tags, read_id }) => {
+      const { note, readId } = await postNote(feed, clientIp(h), async () => ({ markdown, tags, readId: read_id }), { password }, sender(h));
       const feedUrl = base + feedPath(feed);
       return ok({ id: note.id, url: `${feedUrl}/${note.id}`, feed_url: feedUrl, read_url: readId && base + rssPath(readId) });
     }),
@@ -146,13 +146,13 @@ function server(h: Headers): McpServer {
   s.registerTool(
     "update_feed",
     {
-      description: `Replace a feed's title (at most 100 characters) and description (at most 500), both one line; an empty title shows the feed's name. image is the file name upload_image returned for this feed (the title image), empty to remove it, left out to keep it. The feed must exist. ${PROTECTED} ${SECRET_NOTE}`,
-      inputSchema: z.object({ feed, title: z.string(), description: z.string(), image: z.string().optional(), password }),
+      description: `Replace a feed's title (at most 100 characters) and description (at most 500), both one line; an empty title shows the feed's name. image is the file name upload_image returned for this feed (the title image), empty to remove it, left out to keep it. read_id gives the feed another read link (3 to 64 characters of a-z, 0-9, - and _; empty for a random one; left out keeps it): the old link stops showing this feed and may later show another one, relative image links in notes follow, full URLs do not. The feed must exist. ${PROTECTED} ${SECRET_NOTE}`,
+      inputSchema: z.object({ feed, title: z.string(), description: z.string(), image: z.string().optional(), read_id: z.string().optional(), password }),
       outputSchema: FeedOut,
       annotations: { destructiveHint: true, idempotentHint: true },
     },
-    guard(async ({ feed, title, description, image, password }) => {
-      await updateFeed(feed, clientIp(h), async () => ({ title, description, image }), { password });
+    guard(async ({ feed, title, description, image, read_id, password }) => {
+      await updateFeed(feed, clientIp(h), async () => ({ title, description, image, readId: read_id }), { password });
       return ok(await feedJson(feed, h));
     }),
   );

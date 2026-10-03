@@ -7,7 +7,7 @@ import { uploadImageFile } from "@/app/_lib/useApiForm";
 const ACCEPT = "image/png,image/jpeg,image/gif,image/webp";
 
 // The note textarea of the compose box and the editor, with image upload: the "Add image" button, paste and
-// drag-and-drop each upload the files one after another and insert `![](url)` at the cursor. `images` is false
+// drag-and-drop each upload the files one after another and insert `![](file)` at the cursor. `images` is false
 // for a feed without a first note (nothing can be uploaded to it yet). The button only exists once hydrated,
 // so without JavaScript only the textarea renders.
 export function MarkdownInput({ id, name, label, value, onChange, feed, rows, placeholder, describedBy, className = "", images = true, onBusy, children }: {
@@ -57,7 +57,7 @@ export function MarkdownInput({ id, name, label, value, onChange, feed, rows, pl
         setError(result.error);
         break;
       }
-      insert(`![](${result.url})`);
+      insert(`![](${result.file})`); // by file name: it follows a changed read id
     }
     setUploading(false);
     onBusy?.(false);

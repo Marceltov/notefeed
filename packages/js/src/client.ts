@@ -61,6 +61,7 @@ const BY_CODE: Partial<Record<ErrorCode, typeof NotefeedError>> = {
   invalid_body: InvalidRequestError,
   invalid_request: InvalidRequestError,
   feed_exists: InvalidRequestError,
+  taken: InvalidRequestError,
   unsupported_type: InvalidRequestError,
 };
 
@@ -99,14 +100,14 @@ export class Client {
     });
   }
 
-  /** `feedPassword` overrides the client's, for a feed that has its own password. `tags` label the note (at most 10, each 1 to 32 characters of letters, digits, `-`, `_`, `.`, `:`; not verified). */
-  async post(markdown: string, options: { feed?: string; feedPassword?: string; tags?: string[] } = {}): Promise<Created> {
+  /** `feedPassword` overrides the client's, for a feed that has its own password. `tags` label the note (at most 10, each 1 to 32 characters of letters, digits, `-`, `_`, `.`, `:`; not verified). `readId` is the read id the feed gets when this post creates it (3 to 64 characters of `a-z`, `0-9`, `-`, `_`; random when left out; ignored for a feed that exists; a `taken` error when another feed has it). */
+  async post(markdown: string, options: { feed?: string; feedPassword?: string; tags?: string[]; readId?: string } = {}): Promise<Created> {
     const feed = this.feedFor(options.feed);
-    const body = { markdown, ...(options.tags?.length && { tags: options.tags }) };
+    const body = { markdown, ...(options.tags?.length && { tags: options.tags }), ...(options.readId && { read_id: options.readId }) };
     return this.call(postNote({ client: this.api, path: { feed }, body, ...this.opts(options.feedPassword) }));
   }
 
-  /** Upload a PNG, JPEG, GIF or WebP image to an existing feed. The server decides the format by the bytes, so no content type is needed. `markdown` in the answer is `![](url)`, to put in a note. Same options as post(). */
+  /** Upload a PNG, JPEG, GIF or WebP image to an existing feed. The server decides the format by the bytes, so no content type is needed. `markdown` in the answer is `![](file)`, relative to the feed so it follows a changed read id, to put in a note; use `url` for a link outside notefeed. Same options as post(). */
   async uploadImage(data: Uint8Array | Blob, options: { feed?: string; feedPassword?: string } = {}): Promise<ImageUploaded> {
     const feed = this.feedFor(options.feed);
     const body = data instanceof Blob ? data : new Blob([data as BlobPart]);
@@ -132,10 +133,10 @@ export class Client {
     return this.call(getFeed({ client: this.api, path: { feed }, ...this.opts(options.feedPassword) }));
   }
 
-  /** Replace the feed's title and description (both; an empty string clears one), and set (`image`: a file name from uploadImage) or clear (`""`) the title image; leave `image` out to keep it. The feed must already exist. Same options as post(). */
+  /** Replace the feed's title and description (both; an empty string clears one), and set (`image`: a file name from uploadImage) or clear (`""`) the title image; leave `image` out to keep it. `read_id` gives the feed another read id (3 to 64 characters of `a-z`, `0-9`, `-`, `_`; `""` for a random one; left out keeps it); the old one is freed, and relative image links in notes follow while full URLs do not. The feed must already exist. Same options as post(). */
   async updateFeed(settings: FeedSettings, options: { feed?: string; feedPassword?: string } = {}): Promise<Feed> {
     const feed = this.feedFor(options.feed);
-    const body = { title: settings.title, description: settings.description, ...(settings.image === undefined ? {} : { image: settings.image }) };
+    const body = { title: settings.title, description: settings.description, ...(settings.image === undefined ? {} : { image: settings.image }), ...(settings.read_id === undefined ? {} : { read_id: settings.read_id }) };
     return this.call(updateFeed({ client: this.api, path: { feed }, body, ...this.opts(options.feedPassword) }));
   }
 

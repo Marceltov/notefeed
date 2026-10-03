@@ -6,7 +6,7 @@ Every feed has a **read link**:
 https://notes.example.com/r/<read id>/feed.xml
 ```
 
-The read id is 22 characters, e.g. `q2Zc9kD0bTnVx4LmAe7sWp`; the one exception is a [reserved feed](configuration.md#reserved-feeds), whose read id is its name (`/r/news`). A feed created since feed deletion was added gets a random read id that notefeed stores in the feed's folder (`.readid`). A feed that existed before keeps the read id computed from its name and the server secret, so no read link has changed. You find the link on the feed page, and in every `POST /<feed>` answer as `read_url`.
+The read id is 22 random characters by default, e.g. `q2Zc9kD0bTnVx4LmAe7sWp`, or one the feed's owner [chose](posting.md#choosing-a-feeds-read-id) (3 to 64 characters of `a-z`, `0-9`, `-` and `_`); the exception is is a [reserved feed](configuration.md#reserved-feeds), whose read id is its name (`/r/news`). A feed created since feed deletion was added gets a random read id that notefeed stores in the feed's folder (`.readid`). A feed that existed before keeps the read id computed from its name and the server secret, so no read link has changed. You find the link on the feed page, and in every `POST /<feed>` answer as `read_url`.
 
 A read link:
 

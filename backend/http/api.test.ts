@@ -142,7 +142,7 @@ describe("GET /read/{readId}/notes", () => {
   });
   test("an unknown read id is an empty list; a malformed one 404", async () => {
     expect(await json(await call("GET", `/read/${"A".repeat(22)}/notes`))).toEqual({ notes: [], next: null });
-    expect((await call("GET", "/read/short/notes")).status).toBe(404);
+    expect((await call("GET", "/read/ab/notes")).status).toBe(404);
   });
   test("one note by read id, or 404", async () => {
     const { note: n } = await createNote("secretname", "# Shared");
@@ -200,7 +200,7 @@ describe("each entry's errors arrive with their declared status", () => {
   });
 
   test("getReadNote: 404 for a malformed read id", async () => {
-    expect((await call("GET", `/read/short/notes/${await feedNote()}`)).status).toBe(404);
+    expect((await call("GET", `/read/ab/notes/${await feedNote()}`)).status).toBe(404);
   });
 
   test("postNote: 401, 413, 415, 429 and 507 through the API", async () => {

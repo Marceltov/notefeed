@@ -72,7 +72,7 @@ export type ImageUploaded = {
      */
     url: string;
     /**
-     * `![](url)`, to paste into a note
+     * `![](file)`, to paste into a note: relative to the feed, so it keeps working if the feed's read id changes. Use `url` instead for a link outside notefeed (that one is yours to update)
      */
     markdown: string;
 };
@@ -85,7 +85,7 @@ export type Error = {
     /**
      * Stable machine-readable code; absent only on a 500
      */
-    code?: 'invalid_feed' | 'reserved_feed' | 'auth' | 'rate_limited' | 'too_many_attempts' | 'feed_limit' | 'note_limit' | 'image_limit' | 'empty_note' | 'too_large' | 'unsupported_type' | 'invalid_body' | 'invalid_request' | 'not_found' | 'feed_exists';
+    code?: 'invalid_feed' | 'reserved_feed' | 'auth' | 'rate_limited' | 'too_many_attempts' | 'feed_limit' | 'note_limit' | 'image_limit' | 'empty_note' | 'too_large' | 'unsupported_type' | 'invalid_body' | 'invalid_request' | 'not_found' | 'feed_exists' | 'taken';
 };
 
 export type PostJson = {
@@ -98,6 +98,10 @@ export type PostJson = {
      * Labels for the note: at most 10 tags, each 1 to 32 characters of letters, digits, `-`, `_`, `.` and `:`; case is folded to lowercase, duplicates are removed. Free labels, not verified, shown with the note (also to readers of the read link and RSS). Ignored when editing a note: an edit keeps its tags.
      */
     tags?: Array<string>;
+    /**
+     * The read id the feed gets when this post creates it: 3 to 64 characters (a-z, 0-9, - and _), random when left out or empty, ignored for a feed that exists. A short readable one is guessable: protect the feed with a password if that matters. 409 when it is taken
+     */
+    read_id?: string;
 };
 
 export type PostForm = {
@@ -110,6 +114,10 @@ export type PostForm = {
      * Labels for the note: at most 10 tags, each 1 to 32 characters of letters, digits, `-`, `_`, `.` and `:`; case is folded to lowercase, duplicates are removed. Free labels, not verified, shown with the note (also to readers of the read link and RSS). Ignored when editing a note: an edit keeps its tags.
      */
     tags?: Array<string>;
+    /**
+     * The read id the feed gets when this post creates it: 3 to 64 characters (a-z, 0-9, - and _), random when left out or empty, ignored for a feed that exists. A short readable one is guessable: protect the feed with a password if that matters. 409 when it is taken
+     */
+    read_id?: string;
 };
 
 export type PasswordJson = {
@@ -136,6 +144,10 @@ export type FeedSettings = {
      * Whether readers (RSS, the read API and pages) see who posted each note; omitted leaves it as it is, a new feed starts with true
      */
     show_sender?: boolean;
+    /**
+     * A new read id (3 to 64 characters: a-z, 0-9, - and _), empty for a random one; omitted leaves it as it is. The old read link stops showing this feed, and may later show another one. Notes are not edited: a relative image link (`![](file)`) follows the new id, a full URL keeps the old one and is yours to change. Reserved feeds keep theirs. 409 when it is taken
+     */
+    read_id?: string;
 };
 
 export type Feed = {
@@ -273,7 +285,7 @@ export type PostNoteErrors = {
      */
     401: Error;
     /**
-     * A password was sent for a feed that already exists without one: it can't be claimed
+     * A password was sent for a feed that already exists without one: it can't be claimed; or the chosen `read_id` is taken
      */
     409: Error;
     /**
@@ -648,7 +660,7 @@ export type UpdateFeedData = {
 
 export type UpdateFeedErrors = {
     /**
-     * Invalid or reserved feed name, bad JSON, or a title or description that is too long or has control characters
+     * Invalid or reserved feed name, bad JSON, a title or description that is too long or has control characters, a malformed read id, a reserved feed's read id, or chosen read ids turned off
      */
     400: Error;
     /**
@@ -659,6 +671,10 @@ export type UpdateFeedErrors = {
      * No such feed
      */
     404: Error;
+    /**
+     * The read id belongs to another feed or is held back for a reserved one
+     */
+    409: Error;
     /**
      * Too many posts, edits and deletes, or wrong passwords, from this client
      */
@@ -776,7 +792,7 @@ export type GetReadFeedData = {
     body?: never;
     path: {
         /**
-         * The feed's read id, from its read link: 22 random characters, or the feed's own name for a reserved feed. Read-only; never reveals the name of any other feed.
+         * The feed's read id, from its read link: 22 random characters, one the feed's owner chose, or the feed's own name for a reserved feed. Read-only; never reveals the name of any other feed.
          */
         readId: string;
     };
@@ -806,7 +822,7 @@ export type ListReadNotesData = {
     body?: never;
     path: {
         /**
-         * The feed's read id, from its read link: 22 random characters, or the feed's own name for a reserved feed. Read-only; never reveals the name of any other feed.
+         * The feed's read id, from its read link: 22 random characters, one the feed's owner chose, or the feed's own name for a reserved feed. Read-only; never reveals the name of any other feed.
          */
         readId: string;
     };
@@ -853,7 +869,7 @@ export type GetReadNoteData = {
     body?: never;
     path: {
         /**
-         * The feed's read id, from its read link: 22 random characters, or the feed's own name for a reserved feed. Read-only; never reveals the name of any other feed.
+         * The feed's read id, from its read link: 22 random characters, one the feed's owner chose, or the feed's own name for a reserved feed. Read-only; never reveals the name of any other feed.
          */
         readId: string;
         /**

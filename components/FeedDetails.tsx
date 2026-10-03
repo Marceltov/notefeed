@@ -14,12 +14,13 @@ const secondary = "inline-flex items-center gap-1.5 rounded-sm border border-rul
 // `children` (the sharing and password sections) sit between the two, so deleting stays last. With
 // JavaScript they go through the generated API client and show refusals inline; without, the browser follows
 // the 303 (the feed page says "Saved." or shows the refusal as `error`, or the home page says "Feed deleted.").
-export function FeedDetails({ feed, title: savedTitle, description: savedDescription, image, imageUrl, showSender: savedShowSender, identity, error: initialError, children }: { children?: ReactNode; feed: string; title: string; description: string; image: string; imageUrl: string | null; showSender: boolean; identity: boolean; error?: string }) {
+export function FeedDetails({ feed, title: savedTitle, description: savedDescription, image, imageUrl, showSender: savedShowSender, readId, readIdChoice, identity, error: initialError, children }: { children?: ReactNode; feed: string; title: string; description: string; image: string; imageUrl: string | null; showSender: boolean; readId: string | null; readIdChoice: "custom" | "random" | "fixed"; identity: boolean; error?: string }) {
   const page = `/${feed}/settings`;
   const { run, error, setError, pending, setPending, router } = useApiForm(page, initialError, feedDetailsErrorMessage);
   const [title, setTitle] = useState(savedTitle);
   const [description, setDescription] = useState(savedDescription);
   const [showSender, setShowSender] = useState(savedShowSender);
+  const [readIdValue, setReadIdValue] = useState(readId ?? "");
   const [confirm, setConfirm] = useState("");
   // False while rendering on the server, true once hydrated: without JavaScript the delete button stays enabled
   // and the server checks the name.
@@ -27,7 +28,8 @@ export function FeedDetails({ feed, title: savedTitle, description: savedDescrip
   const opts = () => ({ baseUrl: window.location.origin, path: { feed } }); // in handlers only: no window while rendering on the server
 
   const picker = useRef<HTMLInputElement>(null);
-  const save = (e: FormEvent | undefined, body: { title: string; description: string; image?: string; show_sender?: boolean } = { title, description, ...(identity && { show_sender: showSender }) }) =>
+  // The read id goes along with every save while it can be chosen; an unchanged one is no change to the server.
+  const save = (e: FormEvent | undefined, body: { title: string; description: string; image?: string; show_sender?: boolean; read_id?: string } = { title, description, ...(identity && { show_sender: showSender }), ...(readIdChoice === "custom" && readId && { read_id: readIdValue }) }) =>
     run(e, () => updateFeed({ ...opts(), body }), () => {
       setError(undefined);
       setPending(false);
@@ -68,6 +70,24 @@ export function FeedDetails({ feed, title: savedTitle, description: savedDescrip
               <input type="checkbox" name="show_sender" checked={showSender} onChange={(e) => setShowSender(e.target.checked)} />
               Show who posted
             </label>
+          )}
+          {readIdChoice !== "fixed" && readId && (
+            <div className="mb-3">
+              {readIdChoice === "custom" && (
+                <>
+                  <label htmlFor="feed-read-id" className="mb-1 block text-muted">
+                    Read id
+                  </label>
+                  <input id="feed-read-id" name="read_id" minLength={3} maxLength={64} spellCheck={false} autoComplete="off" value={readIdValue} onChange={(e) => setReadIdValue(e.target.value)} className={`${input} mb-2 font-mono`} />
+                </>
+              )}
+              <button type="submit" name="generate_read_id" value="1" formNoValidate disabled={pending} onClick={(e) => { if (hydrated) { e.preventDefault(); save(undefined, { title, description, ...(identity && { show_sender: showSender }), read_id: "" }); } }} className={`${secondary} font-normal`}>
+                Generate a random one
+              </button>
+              <p className="mt-2 text-muted">
+                The read id is in the read link and the RSS link. {readIdChoice === "custom" && "3 to 64 characters: a–z, 0–9, - and _. "}A short, readable one can be guessed: protect the feed with a password if that matters. The old link stops showing this feed and may later show another one. Image links in your notes that are relative follow the new id; full URLs don&apos;t, and you change those yourself.
+              </p>
+            </div>
           )}
           <button type="submit" disabled={pending} className="rounded-sm bg-carbon px-4 py-1.5 font-bold text-on-carbon disabled:opacity-60">
             Save changes

@@ -52,7 +52,7 @@ test("unknown but well-formed read id → empty feed", async () => {
 });
 
 test("malformed read id → 404", async () => {
-  expect((await get("short")).status).toBe(404);
+  expect((await get("ab")).status).toBe(404);
 });
 
 test("public even when the instance is locked", async () => {
@@ -80,4 +80,12 @@ test("dc:creator shows the sender, and not when the feed hides it", async () => 
   const xml = await (await get(rid)).text();
   expect(xml).not.toContain("dc:creator");
   expect(xml).not.toContain("xmlns:dc");
+});
+
+test("a relative image link in a note is absolute in the feed, and the note on disk is unchanged", async () => {
+  const { note } = await createNote("secretname", "# Pic\n\n![](abc.png) ![](https://x.test/y.png)");
+  const rid = (await readIdOf("secretname"))!;
+  const xml = await (await get(rid)).text();
+  expect(xml).toContain(`![](${BASE}/r/${rid}/abc.png) ![](https://x.test/y.png)`);
+  expect(note.markdown).toContain("![](abc.png)");
 });

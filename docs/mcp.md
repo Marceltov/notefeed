@@ -4,15 +4,15 @@ notefeed has an [MCP](https://modelcontextprotocol.io) endpoint, so AI assistant
 
 | Tool | What it does |
 |---|---|
-| `post_note` | Posts a markdown note to a feed. Takes `feed` and `markdown`, optionally `tags` (a list of [tags](posting.md#tags)). |
+| `post_note` | Posts a markdown note to a feed. Takes `feed` and `markdown`, optionally `tags` (a list of [tags](posting.md#tags)) and `read_id` (the [read id](posting.md#choosing-a-feeds-read-id) of the feed this post creates). |
 | `list_notes` | Lists a feed's notes, newest first, without their text. Takes `feed`, optionally `limit` (1–100, default 20), `before` and `tag` (only notes carrying it). Each note lists its `tags`. |
 | `get_note` | Reads one note with its markdown. Takes `feed` and `id`. |
 | `edit_note` | Replaces a note's markdown; its id stays. Takes `feed`, `id` and `markdown`, and returns the note. |
 | `delete_note` | Permanently deletes a note. Takes `feed` and `id`, and returns `{ "deleted": true }`. It is marked as destructive, so clients can ask you before running it. |
 | `get_feed` | Takes `feed`, and returns its title, description, title image URL, whether it is protected, and its read link. |
-| `update_feed` | Replaces a feed's title, description and title image. Takes `feed`, `title`, `description` and optionally `image`, and returns the feed. |
+| `update_feed` | Replaces a feed's title, description and title image, and can change its read id. Takes `feed`, `title`, `description` and optionally `image` and `read_id` (empty for a random one; see [Choosing a feed's read id](posting.md#choosing-a-feeds-read-id)), and returns the feed. |
 | `delete_feed` | Permanently deletes a feed with all its notes, settings, password and read link. Takes `feed`, and returns `{ "deleted": true }`. It is marked as destructive. |
-| `upload_image` | Uploads a PNG, JPEG, GIF or WebP image to an existing feed. Takes `feed` and `data` (the image's bytes, base64), and returns `file`, `url` and `markdown` (`![](url)`, to put in a note). The same [rules as the API](posting.md#images): size limit, rate limit, public URL. `update_feed` takes the returned `file` as `image` to make it the feed's title image. |
+| `upload_image` | Uploads a PNG, JPEG, GIF or WebP image to an existing feed. Takes `feed` and `data` (the image's bytes, base64), and returns `file`, `url` and `markdown` (`![](file)`, relative to the feed, to put in a note). The same [rules as the API](posting.md#images): size limit, rate limit, public URL. `update_feed` takes the returned `file` as `image` to make it the feed's title image. |
 
 Posting follows the same rules as the [HTTP API](posting.md): size limit, rate limit, caps, and the first post creates the feed. Editing and deleting follow [Editing and deleting notes](posting.md#editing-and-deleting-notes): the same access as posting, the same rate limit, and a note that does not exist is the error "no such note". Anyone who can post to a feed can use these tools on it, and a deleted note cannot be brought back, so think before giving an assistant a feed it should only add to. Results use the API's field names.
 

@@ -51,8 +51,12 @@ const NewPassword = z
   .string()
   .describe(`Protects the feed: ${PASSWORD_RULE}. Only honored on the post that creates the feed; an existing open feed answers 409. Empty is the same as leaving it out.`);
 const Tags = z.array(z.string()).describe(`Labels for the note: ${TAG_RULE}. Free labels, not verified, shown with the note (also to readers of the read link and RSS). Ignored when editing a note: an edit keeps its tags.`);
-export const PostJson = z.object({ markdown: z.string(), password: NewPassword.optional(), tags: Tags.optional() }).meta({ id: "PostJson" });
-export const PostForm = z.object({ markdown: z.string(), password: NewPassword.optional(), tags: Tags.optional() }).meta({ id: "PostForm" });
+const NewReadId = z
+  .string()
+  .optional()
+  .describe("The read id the feed gets when this post creates it: 3 to 64 characters (a-z, 0-9, - and _), random when left out or empty, ignored for a feed that exists. A short readable one is guessable: protect the feed with a password if that matters. 409 when it is taken");
+export const PostJson = z.object({ markdown: z.string(), password: NewPassword.optional(), tags: Tags.optional(), read_id: NewReadId }).meta({ id: "PostJson" });
+export const PostForm = z.object({ markdown: z.string(), password: NewPassword.optional(), tags: Tags.optional(), read_id: NewReadId }).meta({ id: "PostForm" });
 export const PasswordJson = z.object({ password: z.string().describe(`The new password: ${PASSWORD_RULE}`) }).meta({ id: "PasswordJson" });
 
 export const FeedPasswordHeader = z
@@ -79,6 +83,10 @@ export const FeedSettingsJson = z
       .optional()
       .describe("The file name of an image uploaded to this feed (see uploadImage), shown as the feed's title image; empty removes it, omitted leaves it as it is"),
     show_sender: z.boolean().optional().describe("Whether readers (RSS, the read API and pages) see who posted each note; omitted leaves it as it is, a new feed starts with true"),
+    read_id: z
+      .string()
+      .optional()
+      .describe("A new read id (3 to 64 characters: a-z, 0-9, - and _), empty for a random one; omitted leaves it as it is. The old read link stops showing this feed, and may later show another one. Notes are not edited: a relative image link (`![](file)`) follows the new id, a full URL keeps the old one and is yours to change. Reserved feeds keep theirs. 409 when it is taken"),
   })
   .meta({ id: "FeedSettings" });
 export const FeedJson = z
@@ -98,7 +106,7 @@ export const ImageUploaded = z
   .object({
     file: z.string().regex(IMAGE_FILE_RE).describe("The stored file's name: 32 hex characters of the SHA-256 plus the extension. Pass it as a feed's `image` setting"),
     url: z.url().describe("Where the image is served, absolute, under the feed's read id; public like the read link"),
-    markdown: z.string().describe("`![](url)`, to paste into a note"),
+    markdown: z.string().describe("`![](file)`, to paste into a note: relative to the feed, so it keeps working if the feed's read id changes. Use `url` instead for a link outside notefeed (that one is yours to update)"),
   })
   .meta({ id: "ImageUploaded" });
 // A raw request body, not JSON.
@@ -107,7 +115,7 @@ export const ImageBody = z.string().meta({ format: "binary" }).describe("The ima
 export const COMPONENTS = [NoteJson, NoteList, Created, ImageUploaded, ErrorJson, PostJson, PostForm, PasswordJson, FeedSettingsJson, FeedJson, ReadFeedJson];
 
 export const FeedParam = z.string().regex(FEED_RE).describe("The feed's name. It is the write key: anyone who knows it can post.");
-export const ReadIdParam = z.string().regex(/^[A-Za-z0-9_-]{1,64}$/).describe("The feed's read id, from its read link: 22 random characters, or the feed's own name for a reserved feed. Read-only; never reveals the name of any other feed.");
+export const ReadIdParam = z.string().regex(/^[A-Za-z0-9_-]{1,64}$/).describe("The feed's read id, from its read link: 22 random characters, one the feed's owner chose, or the feed's own name for a reserved feed. Read-only; never reveals the name of any other feed.");
 export const NoteIdParam = z.string().regex(NOTE_ID).describe("The note's id");
 
 export const PageQuery = z.object({

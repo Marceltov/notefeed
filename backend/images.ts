@@ -33,7 +33,7 @@ export async function storeImage(feed: string, bytes: Uint8Array): Promise<strin
   const name = imageName(bytes, type);
   const max = config.maxImagesPerFeed();
   // ponytail: checked, not locked; concurrent uploads can overshoot the cap by a few.
-  if (max && !(await hasImage(feed, name)) && (await countImages(feed)) >= max) throw capReached("image", new ImageLimitError());
+  if (max && !(await hasImage(feed, name)) && (await countImages(feed, (n) => IMAGE_FILE_RE.test(n))) >= max) throw capReached("image", new ImageLimitError());
   try {
     await writeImage(feed, name, bytes);
   } catch (e) {

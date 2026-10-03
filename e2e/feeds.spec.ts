@@ -42,7 +42,7 @@ test("title and description show on the feed page, the read-only view and in the
 test("a refused title says why, on the settings page", async ({ page }) => {
   const name = feedName();
   await post(page, name);
-  const refusal = "The title or description is too long or has characters that aren't allowed.";
+  const refusal = "The title, description or read id is too long or too short, or has characters that aren't allowed.";
   // With JavaScript: the API refuses a tab, and the form shows it.
   await page.getByRole("link", { name: "Settings" }).click();
   await page.getByLabel("Title").fill("a\tb");
@@ -127,4 +127,20 @@ test("without JavaScript, settings and delete still work", async ({ browser, bas
   await page.getByRole("button", { name: "Delete feed" }).click();
   await expect(page).toHaveURL(/\/\?deleted=/);
   await expect(page.getByRole("status")).toHaveText("Feed deleted.");
+});
+
+test("the read id can be chosen on the settings page, and generated again", async ({ page, request }) => {
+  const name = feedName();
+  await post(page, name);
+  const id = `rid-${Math.random().toString(36).slice(2, 10)}`;
+  await page.getByRole("link", { name: "Settings" }).click();
+  await page.getByLabel("Read id").fill(id);
+  await page.getByRole("button", { name: "Save" }).click();
+  await expect(page.getByRole("status")).toHaveText("Saved.");
+  await expect(page.getByText(`/r/${id}/feed.xml`)).toBeVisible();
+  expect((await request.get(`/r/${id}/feed.xml`)).status()).toBe(200);
+  await expect(page.getByLabel("Read id")).toHaveValue(id);
+  await page.getByRole("button", { name: "Generate a random one" }).click();
+  await expect(page.getByLabel("Read id")).not.toHaveValue(id);
+  await expect(page.getByLabel("Read id")).toHaveValue(/^[A-Za-z0-9_-]{22}$/);
 });

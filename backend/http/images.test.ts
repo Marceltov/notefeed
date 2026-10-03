@@ -10,6 +10,7 @@ import { resetRateLimitsForTests } from "../limits";
 import { createNote, listNotes, removeNote } from "../notes";
 import { API_PREFIX, dispatch } from "./api";
 import { feedSettingsRoute } from "./feedforms";
+import { IMAGE_FILE_RE } from "../images";
 import { imageRoute } from "./images";
 import { rssRoute } from "./rss";
 
@@ -42,11 +43,11 @@ describe("POST /feeds/{feed}/images", () => {
     const body = await res.json();
     const rid = (await readIdOf("pics"))!;
     expect(body.file).toMatch(/^[0-9a-f]{32}\.png$/);
-    expect(body.url).toBe(`${BASE}/r/${rid}/images/${body.file}`);
-    expect(body.markdown).toBe(`![](${body.url})`);
+    expect(body.url).toBe(`${BASE}/r/${rid}/${body.file}`);
+    expect(body.markdown).toBe(`![](${body.file})`); // relative: follows a changed read id
     expect(body.url).not.toContain("pics");
     expect((await upload("pics", PNG)).status).toBe(201); // same bytes again
-    expect(await readdir(join(process.env.DATA_DIR!, "pics", ".images"))).toEqual([body.file]);
+    expect((await readdir(join(process.env.DATA_DIR!, "pics"))).filter((f) => IMAGE_FILE_RE.test(f))).toEqual([body.file]);
   });
   test("a feed without a read link is 404, says why, and stores nothing", async () => {
     await mkdir(join(process.env.DATA_DIR!, "nolink", ".readid"), { recursive: true }); // unreadable .readid
@@ -54,7 +55,7 @@ describe("POST /feeds/{feed}/images", () => {
     const res = await upload("nolink", PNG);
     expect(res.status).toBe(404);
     expect((await res.json()).error).toContain("no read link");
-    expect(await readdir(join(process.env.DATA_DIR!, "nolink"))).not.toContain(".images");
+    expect((await readdir(join(process.env.DATA_DIR!, "nolink"))).filter((f) => IMAGE_FILE_RE.test(f))).toEqual([]);
   });
   test("a feed that does not exist is 404 and no directory is made", async () => {
     const res = await upload("ghost", PNG);
@@ -75,7 +76,7 @@ describe("POST /feeds/{feed}/images", () => {
     const res = await upload("pics", new Uint8Array([...PNG, ...new Uint8Array(20)]));
     expect(res.status).toBe(413);
     expect((await res.json()).code).toBe("too_large");
-    await expect(readdir(join(process.env.DATA_DIR!, "pics", ".images"))).rejects.toThrow();
+    expect((await readdir(join(process.env.DATA_DIR!, "pics"))).filter((f) => IMAGE_FILE_RE.test(f))).toEqual([]);
   });
   test("a chunked body over the cap stops being read at the cap", async () => {
     process.env.NOTEFEED_MAX_IMAGE_BYTES = "20";
@@ -146,7 +147,7 @@ describe("upload: body edge cases", () => {
     await createNote("pics", "# x");
     const res = await upload("pics", PNG, "image/png", { "content-length": String(PNG.length + 100) });
     expect(res.status).toBe(413);
-    await expect(readdir(join(process.env.DATA_DIR!, "pics", ".images"))).rejects.toThrow();
+    expect((await readdir(join(process.env.DATA_DIR!, "pics"))).filter((f) => IMAGE_FILE_RE.test(f))).toEqual([]);
   });
   test("a configured cap above 10 MiB behaves as 10 MiB (the proxy buffers no more)", async () => {
     process.env.NOTEFEED_MAX_IMAGE_BYTES = "20971520";
@@ -161,7 +162,7 @@ describe("upload: body edge cases", () => {
     expect(await listNotes("pics", 10)).toEqual([]);
     const res = await upload("pics", PNG);
     expect(res.status).toBe(201);
-    expect((await res.json()).url).toContain(`/r/${await readIdOf("pics")}/images/`);
+    expect((await res.json()).url).toContain(`/r/${await readIdOf("pics")}/`);
   });
   test("a feed deleted and created again protected while the body is read gets no file", async () => {
     await createNote("pics", "# x");
@@ -187,11 +188,11 @@ describe("upload: body edge cases", () => {
     await createNote("pics", "# again");
     finish();
     expect((await res).status).toBe(404);
-    await expect(readdir(join(process.env.DATA_DIR!, "pics", ".images"))).rejects.toThrow();
+    expect((await readdir(join(process.env.DATA_DIR!, "pics"))).filter((f) => IMAGE_FILE_RE.test(f))).toEqual([]);
   });
 });
 
-describe("GET /r/{readId}/images/{file}", () => {
+describe("GET /r/{readId}/{file}", () => {
   test("bytes with the four headers; a protected feed needs no password", async () => {
     await createProtected("locked", "hunter22");
     await createNote("locked", "# x");
@@ -247,8 +248,8 @@ describe("feed settings: image", () => {
     expect((await (await call("GET", "/feeds/pics")).json()).image_url).toBe(url);
     const rid = (await readIdOf("pics"))!;
     expect((await (await call("GET", `/read/${rid}`)).json()).image_url).toBe(url);
-    expect((await getFeed("pics"))!.imageUrl).toBe(`/r/${rid}/images/${file}`);
-    expect((await getReadFeed(rid))!.imageUrl).toBe(`/r/${rid}/images/${file}`);
+    expect((await getFeed("pics"))!.imageUrl).toBe(`/r/${rid}/${file}`);
+    expect((await getReadFeed(rid))!.imageUrl).toBe(`/r/${rid}/${file}`);
     const xml = await (await rssRoute(new Request(`${BASE}/r/${rid}/feed.xml`, { headers: { host: "localhost:3000" } }), rid)).text();
     expect(xml).toContain(`<image><url>${url}</url><title>T</title><link>${BASE}/r/${rid}</link></image>`);
   });
@@ -276,7 +277,7 @@ describe("feed settings: image", () => {
     await createNote("pics", "# x");
     const { file } = await (await upload("pics", PNG)).json();
     expect((await put("pics", { title: "T", description: "D", image: file })).status).toBe(200);
-    await rm(join(process.env.DATA_DIR!, "pics", ".images", file));
+    await rm(join(process.env.DATA_DIR!, "pics", file));
     const res = await put("pics", { title: "T2", description: "D" });
     expect(res.status).toBe(200);
     expect((await res.json()).image_url).toBeNull();
@@ -300,10 +301,9 @@ describe("feed settings: image", () => {
   });
 });
 
-test("a settings image can't name a real file outside .images", async () => {
+test("a settings image can't name a real file that is not an image", async () => {
   await createNote("pics", "# x");
   await writeFile(join(process.env.DATA_DIR!, "pics", "secret.txt"), "x");
-  await upload("pics", PNG); // makes .images
   const res = await call("PUT", "/feeds/pics", { body: JSON.stringify({ title: "", description: "", image: "../secret.txt" }), headers: { "content-type": "application/json" } });
   expect(res.status).toBe(400);
 });

@@ -120,9 +120,11 @@ def sync_detailed(
     space at the start or end). Posting to a protected feed needs that password. Also served at `POST
     /{feed}`, the short form the client packages and curl one-liners use. The body is at most 102400
     bytes and must be UTF-8. `application/x-www-form-urlencoded` (what `curl -d` sends) is read as raw
-    markdown, not as form fields. Tags (at most 10 tags, each 1 to 32 characters of letters, digits,
-    `-`, `_`, `.` and `:`; case is folded to lowercase, duplicates are removed) go in the JSON `tags`
-    array, a repeated `tags` form field, or, for a raw body, the `X-Note-Tags` header.
+    markdown, not as form fields. `read_id` (JSON or form field) is the feed's read id when this post
+    creates it: random when left out, ignored for a feed that exists. Tags (at most 10 tags, each 1 to
+    32 characters of letters, digits, `-`, `_`, `.` and `:`; case is folded to lowercase, duplicates are
+    removed) go in the JSON `tags` array, a repeated `tags` form field, or, for a raw body, the `X-Note-
+    Tags` header.
 
     Args:
         feed (str):
@@ -167,9 +169,11 @@ def sync(
     space at the start or end). Posting to a protected feed needs that password. Also served at `POST
     /{feed}`, the short form the client packages and curl one-liners use. The body is at most 102400
     bytes and must be UTF-8. `application/x-www-form-urlencoded` (what `curl -d` sends) is read as raw
-    markdown, not as form fields. Tags (at most 10 tags, each 1 to 32 characters of letters, digits,
-    `-`, `_`, `.` and `:`; case is folded to lowercase, duplicates are removed) go in the JSON `tags`
-    array, a repeated `tags` form field, or, for a raw body, the `X-Note-Tags` header.
+    markdown, not as form fields. `read_id` (JSON or form field) is the feed's read id when this post
+    creates it: random when left out, ignored for a feed that exists. Tags (at most 10 tags, each 1 to
+    32 characters of letters, digits, `-`, `_`, `.` and `:`; case is folded to lowercase, duplicates are
+    removed) go in the JSON `tags` array, a repeated `tags` form field, or, for a raw body, the `X-Note-
+    Tags` header.
 
     Args:
         feed (str):
@@ -209,9 +213,11 @@ async def asyncio_detailed(
     space at the start or end). Posting to a protected feed needs that password. Also served at `POST
     /{feed}`, the short form the client packages and curl one-liners use. The body is at most 102400
     bytes and must be UTF-8. `application/x-www-form-urlencoded` (what `curl -d` sends) is read as raw
-    markdown, not as form fields. Tags (at most 10 tags, each 1 to 32 characters of letters, digits,
-    `-`, `_`, `.` and `:`; case is folded to lowercase, duplicates are removed) go in the JSON `tags`
-    array, a repeated `tags` form field, or, for a raw body, the `X-Note-Tags` header.
+    markdown, not as form fields. `read_id` (JSON or form field) is the feed's read id when this post
+    creates it: random when left out, ignored for a feed that exists. Tags (at most 10 tags, each 1 to
+    32 characters of letters, digits, `-`, `_`, `.` and `:`; case is folded to lowercase, duplicates are
+    removed) go in the JSON `tags` array, a repeated `tags` form field, or, for a raw body, the `X-Note-
+    Tags` header.
 
     Args:
         feed (str):
@@ -254,9 +260,11 @@ async def asyncio(
     space at the start or end). Posting to a protected feed needs that password. Also served at `POST
     /{feed}`, the short form the client packages and curl one-liners use. The body is at most 102400
     bytes and must be UTF-8. `application/x-www-form-urlencoded` (what `curl -d` sends) is read as raw
-    markdown, not as form fields. Tags (at most 10 tags, each 1 to 32 characters of letters, digits,
-    `-`, `_`, `.` and `:`; case is folded to lowercase, duplicates are removed) go in the JSON `tags`
-    array, a repeated `tags` form field, or, for a raw body, the `X-Note-Tags` header.
+    markdown, not as form fields. `read_id` (JSON or form field) is the feed's read id when this post
+    creates it: random when left out, ignored for a feed that exists. Tags (at most 10 tags, each 1 to
+    32 characters of letters, digits, `-`, `_`, `.` and `:`; case is folded to lowercase, duplicates are
+    removed) go in the JSON `tags` array, a repeated `tags` form field, or, for a raw body, the `X-Note-
+    Tags` header.
 
     Args:
         feed (str):

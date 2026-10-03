@@ -15,7 +15,8 @@ class ImageUploaded:
         file (str): The stored file's name: 32 hex characters of the SHA-256 plus the extension. Pass it as a feed's
             `image` setting
         url (str): Where the image is served, absolute, under the feed's read id; public like the read link
-        markdown (str): `![](url)`, to paste into a note
+        markdown (str): `![](file)`, to paste into a note: relative to the feed, so it keeps working if the feed's read
+            id changes. Use `url` instead for a link outside notefeed (that one is yours to update)
     """
 
     file: str

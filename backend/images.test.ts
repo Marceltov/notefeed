@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readdir, writeFile } from "node:fs/promises";
+import { mkdtemp, readdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { beforeEach, describe, expect, test } from "vitest";
@@ -49,14 +49,14 @@ describe("storeImage / loadImage", () => {
     const a = await storeImage("pics", PNG);
     const b = await storeImage("pics", PNG);
     expect(a).toBe(b);
-    expect(await readdir(join(process.env.DATA_DIR!, "pics", ".images"))).toEqual([a]);
+    expect((await readdir(join(process.env.DATA_DIR!, "pics"))).filter((f) => IMAGE_FILE_RE.test(f))).toEqual([a]);
     expect((await loadImage("pics", a))!.contentType).toBe("image/png");
     expect(Array.from((await loadImage("pics", a))!.bytes)).toEqual(Array.from(PNG));
   });
   test("an unsupported type is refused and writes nothing", async () => {
     await createNote("pics", "# x");
     await expect(storeImage("pics", new TextEncoder().encode("<html>"))).rejects.toBeInstanceOf(UnsupportedTypeError);
-    await expect(readdir(join(process.env.DATA_DIR!, "pics", ".images"))).rejects.toThrow();
+    expect((await readdir(join(process.env.DATA_DIR!, "pics"))).filter((f) => IMAGE_FILE_RE.test(f))).toEqual([]);
   });
   test("per-feed cap: a new image is refused, a repeat is not", async () => {
     process.env.NOTEFEED_MAX_IMAGES_PER_FEED = "2";
@@ -87,11 +87,10 @@ describe("storeImage / loadImage", () => {
 test("loadImage never reads a planted file through a bad name", async () => {
   await createNote("pics", "# x");
   const feed = join(process.env.DATA_DIR!, "pics");
-  await mkdir(join(feed, ".images"));
   await writeFile(join(feed, ".password"), "secret");
   const upper = "A".repeat(32) + ".png";
   const long = "a".repeat(33) + ".png";
   const svg = "a".repeat(32) + ".svg";
-  for (const f of [upper, long, svg]) await writeFile(join(feed, ".images", f), PNG);
-  for (const name of ["../.password", "../.images/" + upper, upper, long, svg]) expect(await loadImage("pics", name)).toBeNull();
+  for (const f of [upper, long, svg]) await writeFile(join(feed, f), PNG);
+  for (const name of ["../.password", upper, long, svg]) expect(await loadImage("pics", name)).toBeNull();
 });
