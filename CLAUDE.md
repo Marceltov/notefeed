@@ -2,11 +2,14 @@
 
 ## Tests
 
-Unit tests (vitest) are fine to run locally, along with typecheck and lint. Don't run the client packages' tests locally: CI is fast, so push and let it run them. Don't run e2e while developing either.
+Run every test locally, as often as useful, always through `scripts/quiet.sh`: it keeps the whole output in a log file and prints only the failures, the summary and the log's path (about 30 lines whatever the run prints), so a long run costs little context. Time is cheap, tokens are not. Grep the log for details instead of rerunning.
 
-When a branch is finished, push it, open the PR and wait for CI. Check the result (`gh pr checks <number>`); if everything is green, merge. Run tests locally (client packages, e2e) only when CI fails, to reproduce and debug, not before.
+- Unit tests, typecheck and lint: `scripts/quiet.sh npm test`, `scripts/quiet.sh npm run typecheck`, `scripts/quiet.sh npm run lint`.
+- Client packages: `scripts/quiet.sh sh -c 'cd packages/js && npm ci && npm run build && npm test'` and `scripts/quiet.sh sh -c 'cd packages/python && uv run --locked --extra test pytest -q'`.
+- e2e: `scripts/quiet.sh npm run test:e2e`.
+- Docker builds are left to CI.
 
-Run test commands through `scripts/quiet.sh`, e.g. `scripts/quiet.sh npx vitest run` or `scripts/quiet.sh npx playwright test`: it keeps the whole output in a log file and prints only the failures, the summary and the log's path, so a long run doesn't fill your context. Grep the log for details instead of rerunning.
+CI is still the gate. When a branch is finished, push it, open the PR and wait for CI (`gh pr checks <number> --watch`); if everything is green, merge. If something fails, read the failed job's log first (`gh run view <run> --log-failed`) and reproduce locally only when that is not enough.
 
 ## Releases
 
