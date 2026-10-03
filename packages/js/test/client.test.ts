@@ -409,101 +409,99 @@ describe("reading", () => {
 describe("post with attachments", () => {
   const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);
   const created = (n: number) => ({ id: `I${n}`, url: `https://n.example/inbox/I${n}`, feed_url: "https://n.example/inbox", read_url: null, file: `F${n}.png`, file_url: `https://n.example/r/X/F${n}.png` });
-  // Every picture gets the next F<n>.png; the text note gets CREATED.
-  const route = (fail?: { at: number; reply: [number, unknown, Record<string, string>?] }) => {
-    let n = 0;
-    server.route((r) => {
-      if (r.headers["content-type"] !== "text/markdown") {
-        n++;
-        if (fail && n === fail.at) return fail.reply;
-        return [201, created(n)];
-      }
-      return [201, CREATED];
-    });
-  };
   const c = () => new Client({ url: server.url, feed: "inbox" });
+  const img = (name: string) => ({ name, content: png, type: "image/png" });
+  const parse = (r: Recorded) => new Response(new Uint8Array(r.body), { headers: { "content-type": r.headers["content-type"]! } }).formData();
 
-  test("uploads the images in order, then the text with the references placed", async () => {
-    route();
-    const r = await new Client({ url: server.url, feed: "inbox" }).post("hi ![](a.png)", {
-      attachments: [{ name: "a.png", content: png, type: "image/png", alt: "A" }, { name: "b.png", content: png, type: "image/png" }],
+  test("one multipart request: the text as given, the files in order, alt fields, the headers once", async () => {
+    server.reply(201, { ...CREATED, attachments: [created(1), created(2)] });
+    const md = "hi ![](a.png)\nline two\n";
+    const r = await new Client({ url: server.url, feed: "inbox" }).post(md, {
+      attachments: [{ ...img("a.png"), alt: "A" }, img("b.png")],
       title: "T",
       tags: ["x"],
       feedPassword: "pw",
       readId: "my-read",
     });
-    expect(server.requests.map((q) => q.headers["content-type"])).toEqual(["image/png", "image/png", "text/markdown"]);
-    const [first, , text] = server.requests;
-    expect(first.headers).toMatchObject({ "x-note-name": "a.png", "x-note-alt": "A", "x-note-tags": "x", "x-feed-password": "pw", "x-read-id": "my-read" });
-    expect(first.headers["x-note-title"]).toBeUndefined();
-    expect(text.headers).toMatchObject({ "x-note-title": "T", "x-note-tags": "x", "x-feed-password": "pw", "x-read-id": "my-read" });
-    expect(text.body.toString()).toBe("hi ![](F1.png)\n\n![](F2.png)");
+    expect(server.requests).toHaveLength(1);
+    const q = server.requests[0];
+    expect(q.headers["content-type"]).toMatch(/^multipart\/form-data; boundary=/);
+    expect(q.headers).toMatchObject({ "x-note-title": "T", "x-note-tags": "x", "x-feed-password": "pw", "x-read-id": "my-read" });
+    expect(q.headers["x-note-alt"]).toBeUndefined();
+    expect(q.headers["x-note-name"]).toBeUndefined();
+    const form = await parse(q);
+    const text = form.get("text") as File;
+    expect(text.type).toBe("text/markdown");
+    expect(await text.text()).toBe(md);
+    const files = form.getAll("file") as File[];
+    expect(files.map((f) => [f.name, f.type])).toEqual([["a.png", "image/png"], ["b.png", "image/png"]]);
+    expect(new Uint8Array(await files[0].arrayBuffer())).toEqual(png);
+    expect(form.get("alt.a.png")).toBe("A");
+    expect(form.has("alt.b.png")).toBe(false);
     expect(r).toEqual({ ...CREATED, attachments: [created(1), created(2)] });
   });
 
-  test("a Blob attachment uses its own type; no attachments gives an empty list", async () => {
-    route();
+  test("a Blob attachment uses its own type; no attachments gives an empty list and the raw request", async () => {
+    server.reply(201, { ...CREATED, attachments: [created(1)] });
     await c().post("x", { attachments: [{ name: "a.png", content: new Blob([png], { type: "image/png" }) }] });
-    expect(server.requests[0].headers["content-type"]).toBe("image/png");
+    expect(((await parse(server.requests[0])).get("file") as File).type).toBe("image/png");
     expect((await c().post("x")).attachments).toEqual([]);
+    expect(server.requests[1].headers["content-type"]).toBe("text/markdown");
+    expect(server.requests[1].body.toString()).toBe("x");
   });
 
-  test("empty markdown posts only the references", async () => {
-    route();
-    await c().post("", { attachments: [{ name: "a.png", content: png, type: "image/png" }] });
-    expect(server.requests[1].body.toString()).toBe("![](F1.png)");
+  test("a name with spaces is valid", async () => {
+    server.reply(201, { ...CREATED, attachments: [created(1)] });
+    await c().post("x", { attachments: [img("Screenshot 2026-10-03.png")] });
+    expect(((await parse(server.requests[0])).get("file") as File).name).toBe("Screenshot 2026-10-03.png");
   });
 
   test.each([
-    ["a duplicate name", "x", [{ name: "a.png", content: png, type: "image/png" }, { name: "a.png", content: png, type: "image/png" }]],
-    ["an unsafe name", "x", [{ name: "a b.png", content: png, type: "image/png" }]],
-    ["the name ..", "x", [{ name: "..", content: png, type: "image/png" }]],
+    ["a duplicate name", "x", [img("a.png"), img("a.png")]],
+    ["a name with /", "x", [img("a/b.png")]],
+    ["the name ..", "x", [img("..")]],
+    ["the name .", "x", [img(".")]],
+    ["a name with a control character", "x", [img("a\u0001.png")]],
+    ["a name with a leading space", "x", [img(" a.png")]],
+    ["a name over 200 characters", "x", [img("a".repeat(197) + ".png")]],
     ["a markdown attachment", "x", [{ name: "a.md", content: png, type: "text/markdown" }]],
     ["bytes without a type", "x", [{ name: "a.png", content: png }]],
-    ["non-markdown content", png, [{ name: "a.png", content: png, type: "image/png" }]],
+    ["non-markdown content", png, [img("a.png")]],
+    ["no content and no attachments", null, []],
   ])("%s is refused before anything is sent", async (_, content, attachments) => {
-    await expect(c().post(content as string | Uint8Array, { type: content === "x" ? undefined : "image/png", attachments })).rejects.toBeInstanceOf(ConfigError);
+    await expect(c().post(content as string | Uint8Array, { type: content === "x" || content === null ? undefined : "image/png", attachments })).rejects.toBeInstanceOf(ConfigError);
     expect(server.requests).toHaveLength(0);
   });
 
-  test("a failed upload raises the original error with the attachment and the images posted, and the text is not sent", async () => {
-    route({ at: 2, reply: [400, { error: "bad image", code: "invalid_body" }] });
-    const err = await c()
-      .post("x", { attachments: [{ name: "a.png", content: png, type: "image/png" }, { name: "b.png", content: png, type: "image/png" }] })
-      .catch((e) => e);
+  test("a server refusal surfaces with its message, one request", async () => {
+    server.reply(400, { error: 'attachment "b.png": bad', code: "invalid_body" });
+    const err = await c().post("x", { attachments: [img("a.png"), img("b.png")] }).catch((e) => e);
     expect(err).toBeInstanceOf(InvalidRequestError);
-    expect(err).toMatchObject({ attachment: "b.png", posted: [created(1)], status: 400, code: "invalid_body" });
-    expect(err.message).toContain("b.png");
-    expect(server.requests).toHaveLength(2);
+    expect(err).toMatchObject({ status: 400, code: "invalid_body", message: 'attachment "b.png": bad' });
+    expect(server.requests).toHaveLength(1);
   });
 
   test("a rate limit keeps retryAfter", async () => {
-    route({ at: 2, reply: [429, { error: "slow down", code: "rate_limited" }, { "Retry-After": "7" }] });
-    const err = await c()
-      .post("x", { attachments: [{ name: "a.png", content: png, type: "image/png" }, { name: "b.png", content: png, type: "image/png" }] })
-      .catch((e) => e);
+    server.reply(429, { error: "slow down", code: "rate_limited" }, "application/json", { "Retry-After": "7" });
+    const err = await c().post("x", { attachments: [img("a.png")] }).catch((e) => e);
     expect(err).toBeInstanceOf(RateLimitedError);
-    expect(err).toMatchObject({ retryAfter: 7, attachment: "b.png", posted: [created(1)] });
+    expect(err).toMatchObject({ retryAfter: 7 });
   });
 
-  test("a failed text post still carries the images already posted", async () => {
-    let n = 0;
-    server.route((r) => (r.headers["content-type"] === "text/markdown" ? [429, { error: "slow down", code: "rate_limited" }, { "Retry-After": "7" }] : [201, created(++n)]));
-    const err = await c().post("x", { attachments: [{ name: "a.png", content: png, type: "image/png" }] }).catch((e) => e);
-    expect(err).toBeInstanceOf(RateLimitedError);
-    expect(err).toMatchObject({ retryAfter: 7, attachment: null, posted: [created(1)] });
+  test("null content sends no text part, title and tags go as headers, the answer is the server's", async () => {
+    server.reply(201, { ...created(1), attachments: [created(1), created(2)] });
+    const r = await c().post(null, { attachments: [img("a.png"), img("b.png")], title: "T", tags: ["x"] });
+    const q = server.requests[0];
+    expect(q.headers).toMatchObject({ "x-note-title": "T", "x-note-tags": "x" });
+    const form = await parse(q);
+    expect(form.has("text")).toBe(false);
+    expect(form.getAll("file")).toHaveLength(2);
+    expect(r).toEqual({ ...created(1), attachments: [created(1), created(2)] });
   });
 
-  test("a name referenced twice is uploaded once and keeps the text's trailing newline", async () => {
-    route();
-    await c().post("![](a.png) and ![](a.png)\n", { attachments: [{ name: "a.png", content: png, type: "image/png" }] });
-    expect(server.requests).toHaveLength(2);
-    expect(server.requests[1].body.toString()).toBe("![](F1.png) and ![](F1.png)\n");
-  });
-
-  test("the client's own feed password goes on every request", async () => {
-    route();
-    await new Client({ url: server.url, feed: "inbox", feedPassword: "pw" }).post("x", { attachments: [{ name: "a.png", content: png, type: "image/png" }] });
-    expect(server.requests.map((q) => q.headers["x-feed-password"])).toEqual(["pw", "pw"]);
+  test("the client's own feed password goes on the request", async () => {
+    server.reply(201, { ...CREATED, attachments: [created(1)] });
+    await new Client({ url: server.url, feed: "inbox", feedPassword: "pw" }).post("x", { attachments: [img("a.png")] });
+    expect(server.requests[0].headers["x-feed-password"]).toBe("pw");
   });
 });

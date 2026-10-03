@@ -25,9 +25,6 @@ export class NotefeedError extends Error {
     super(message);
     this.name = new.target.name;
   }
-  /** Set when a post with `attachments` failed on one of them: its name, and the images already posted (the text note is not). */
-  attachment: string | null = null;
-  posted: Created[] = [];
 }
 /** Raised before sending: no URL, no feed, an invalid feed name or password. */
 export class ConfigError extends NotefeedError {}
@@ -70,7 +67,9 @@ const BY_CODE: Partial<Record<ErrorCode, typeof NotefeedError>> = {
   unsupported_type: InvalidRequestError,
 };
 
-const ATTACHMENT_NAME = /^(?!\.+$)[A-Za-z0-9._-]+$/; // same rule as the server's MCP tool: safe to write in ![](name)
+// Same rule as the server's isAttachmentName: one path segment of 1 to 200 UTF-16 units, no `/`, `\`, control characters, leading/trailing space, not only dots.
+const isAttachmentName = (name: string): boolean =>
+  name.length >= 1 && name.length <= 200 && !/[/\\\u0000-\u001f\u007f]/.test(name) && name === name.trim() && !/^\.+$/.test(name);
 const IMAGE_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"];
 
 const FEED_RE = /^[a-z0-9_-]{1,64}$/; // same rule as the server; reserved names still come back as a 400
@@ -87,18 +86,6 @@ function asFile(content: string | Uint8Array | Blob, type?: string): { body: Blo
   const media = type ?? (content instanceof Blob ? content.type : "");
   if (!media) throw new ConfigError("give the file's media type as `type`, e.g. image/png");
   return { body: content instanceof Blob ? content : new Blob([content as BlobPart]), type: media };
-}
-
-// The markdown with each `![](name)` of `sent` (name → file) pointing at its file; a name the text never refers to is appended as `![](file)`.
-function placeImages(markdown: string, sent: Map<string, string>): string {
-  const used = new Set<string>();
-  const text = markdown.replace(/(!\[[^\]]*\]\()([^)\s]+)(\))/g, (m, head: string, dest: string, tail: string) => {
-    if (!sent.has(dest)) return m;
-    used.add(dest);
-    return head + sent.get(dest) + tail;
-  });
-  const rest = [...sent].filter(([name]) => !used.has(name)).map(([, file]) => `![](${file})`);
-  return rest.length === 0 ? text : [text.trimEnd(), ...rest].filter((p) => p !== "").join("\n\n");
 }
 
 export class Client {
@@ -143,49 +130,40 @@ export class Client {
    * text. `alt` is a picture's alternative text, `name` the file's original name. `readId` is the read id the feed gets when this post creates it
    * (3 to 64 characters of `a-z`, `0-9`, `-`, `_`; random when left out; ignored for a feed that exists; a `taken` error when another feed has it).
    *
-   * `attachments` (only with a markdown string) are pictures posted first, one note each, in order: `![](name)` in the markdown shows one (an
-   * attachment the text never refers to is added at the end), and `Created.attachments` lists them. `tags` label the images too. The options
-   * are checked before anything is sent. If an upload fails, its error is thrown with `attachment` (the name) and `posted` (the images already
-   * posted, which stay) set; the text note is not posted.
+   * `attachments` are pictures posted with the note in one request: `![](name)` in the markdown shows one (a picture the text never refers to is
+   * added at the end), and `Created.attachments` lists them in order. `tags` label the pictures too. `content` may be `null` when there are
+   * attachments: only the pictures are posted, `title` and `tags` go on each, and the result is the first picture plus `attachments`. A name is
+   * one path segment of 1 to 200 characters, without `/`, `\`, control characters or a leading or trailing space, and not `.` or `..`. The options
+   * are checked before anything is sent, and when the server refuses any part (its message names it) nothing is posted.
    */
   async post(
-    content: string | Uint8Array | Blob,
+    content: string | Uint8Array | Blob | null,
     options: { feed?: string; feedPassword?: string; type?: string; title?: string; tags?: string[]; alt?: string; name?: string; readId?: string; attachments?: Attachment[] } = {},
   ): Promise<Created & { attachments: Created[] }> {
     const { attachments = [], ...own } = options;
-    if (attachments.length === 0) return { ...(await this.postOne(content, own)), attachments: [] };
-    if (typeof content !== "string") throw new ConfigError("attachments go with a markdown string");
-    if ((own.type ?? "text/markdown") !== "text/markdown") throw new ConfigError("attachments go with a markdown string");
-    const types = attachments.map((a) => {
-      if (!ATTACHMENT_NAME.test(a.name)) throw new ConfigError(`attachment name "${a.name}": use letters, digits, ., _ and - only`);
-      const type = asFile(a.content, a.type).type;
+    if (content === null && attachments.length === 0) throw new ConfigError("no content and no attachments");
+    if (attachments.length === 0) return { ...(await this.postOne(content!, own)), attachments: [] };
+    if (content !== null && (typeof content !== "string" || (own.type ?? "text/markdown") !== "text/markdown")) throw new ConfigError("attachments go with a markdown string");
+    const form = new FormData();
+    if (content !== null) form.append("text", new Blob([content], { type: "text/markdown" }));
+    for (const a of attachments) {
+      if (!isAttachmentName(a.name)) throw new ConfigError(`attachment name "${a.name}": one path segment of 1 to 200 characters, no / or \\, no control characters, no leading or trailing space, not . or ..`);
+      if (attachments.findIndex((b) => b.name === a.name) !== attachments.indexOf(a)) throw new ConfigError(`attachment "${a.name}" is given twice`);
+      const { body, type } = asFile(a.content, a.type);
       if (!IMAGE_TYPES.includes(type)) throw new ConfigError(`attachment "${a.name}" must be a picture (${IMAGE_TYPES.join(", ")})`);
-      return type;
-    });
-    const dup = attachments.find((a, i) => attachments.findIndex((b) => b.name === a.name) !== i);
-    if (dup) throw new ConfigError(`attachment "${dup.name}" is given twice`);
-    const posted: Created[] = [];
-    const sent = new Map<string, string>();
-    for (const [i, a] of attachments.entries()) {
-      try {
-        const done = await this.postOne(a.content, { feed: own.feed, feedPassword: own.feedPassword, type: types[i], alt: a.alt, name: a.name, tags: own.tags, readId: own.readId });
-        posted.push(done);
-        sent.set(a.name, done.file);
-      } catch (e) {
-        if (e instanceof NotefeedError) {
-          e.message = `attachment "${a.name}": ${e.message}`;
-          e.attachment = a.name;
-          e.posted = posted;
-        }
-        throw e;
-      }
+      form.append("file", new Blob([body], { type }), a.name);
+      if (a.alt) form.append(`alt.${a.name}`, a.alt);
     }
-    try {
-      return { ...(await this.postOne(placeImages(content, sent), own)), attachments: posted };
-    } catch (e) {
-      if (e instanceof NotefeedError) e.posted = posted; // the text failed: the images stay, `attachment` stays null
-      throw e;
-    }
+    const feed = this.feedFor(own.feed);
+    const headers = {
+      ...this.opts(own.feedPassword).headers,
+      "Content-Type": null, // fetch sets multipart/form-data with its boundary
+      ...(own.title && { "X-Note-Title": headerValue(own.title) }),
+      ...(own.tags?.length && { "X-Note-Tags": own.tags.join(",") }),
+      ...(own.readId && { "X-Read-Id": own.readId }),
+    };
+    const created = await this.call(postNote({ client: this.api, path: { feed }, body: form as never, bodySerializer: (b: unknown) => b as FormData, headers, signal: AbortSignal.timeout(this.timeoutMs) }));
+    return { ...created, attachments: created.attachments ?? [] };
   }
 
   private async postOne(

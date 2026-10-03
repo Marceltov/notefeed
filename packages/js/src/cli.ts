@@ -96,7 +96,6 @@ export async function main(argv: string[], io: Io = process): Promise<number> {
     throw new UsageError(USAGE);
   } catch (e) {
     io.stderr.write(`notefeed: ${(e as Error).message.split("\n")[0]}\n`);
-    if (e instanceof NotefeedError) for (const p of e.posted) io.stderr.write(`posted: ${p.url}\n`);
     if (e instanceof ConfigError || e instanceof UsageError) return 2;
     if (e instanceof NotefeedError) return 1;
     return 2; // parseArgs rejects unknown options with a TypeError
