@@ -72,7 +72,7 @@ export type ImageUploaded = {
      */
     url: string;
     /**
-     * `![](url)`, to paste into a note
+     * `![](file)`, to paste into a note: relative to the feed, so it keeps working if the feed's read id changes. Use `url` instead for a link outside notefeed (that one is yours to update)
      */
     markdown: string;
 };
