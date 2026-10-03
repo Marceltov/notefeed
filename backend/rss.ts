@@ -1,4 +1,5 @@
 // RSS 2.0, written by hand. Descriptions carry the raw markdown in CDATA.
+import { absolutizeImages } from "../shared/links";
 import type { Note } from "./notes";
 import { readPath } from "./urls";
 
@@ -22,7 +23,7 @@ export function renderFeed(notes: Note[], opts: { title: string; description: st
 <link>${url}</link>
 <guid isPermaLink="true">${url}</guid>
 <pubDate>${n.createdAt.toUTCString()}</pubDate>
-<description>${cdata(n.markdown)}</description>
+<description>${cdata(absolutizeImages(n.markdown, `${base}/`))}</description>
 ${n.sender ? `<dc:creator>${escapeXml(n.sender)}</dc:creator>\n` : ""}${n.tags.map((t) => `<category>${escapeXml(t)}</category>\n`).join("")}</item>`;
   });
   return `<?xml version="1.0" encoding="UTF-8"?>

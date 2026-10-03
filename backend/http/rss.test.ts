@@ -81,3 +81,11 @@ test("dc:creator shows the sender, and not when the feed hides it", async () => 
   expect(xml).not.toContain("dc:creator");
   expect(xml).not.toContain("xmlns:dc");
 });
+
+test("a relative image link in a note is absolute in the feed, and the note on disk is unchanged", async () => {
+  const { note } = await createNote("secretname", "# Pic\n\n![](abc.png) ![](https://x.test/y.png)");
+  const rid = (await readIdOf("secretname"))!;
+  const xml = await (await get(rid)).text();
+  expect(xml).toContain(`![](${BASE}/r/${rid}/abc.png) ![](https://x.test/y.png)`);
+  expect(note.markdown).toContain("![](abc.png)");
+});
