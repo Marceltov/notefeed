@@ -374,7 +374,7 @@ test("editSendsThePictureOfItsType", async () => {
   expect([server.requests[0].method, typeOf(0)]).toEqual(["PUT", "image/webp"]);
 });
 
-// --attach: pictures posted first; the text refers to them by file name.
+// --attach: pictures and text in one multipart request.
 const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47]);
 function pics() {
   const dir = mkdtempSync(join(tmpdir(), "nf-attach-"));
@@ -383,24 +383,31 @@ function pics() {
   writeFileSync(join(dir, "notes.md"), "# x");
   return dir;
 }
-const routeAttach = (failAt = 0) => {
-  let n = 0;
-  server.route((r) => {
-    if (r.headers["content-type"] === "text/markdown") return [201, { id: "T", url: "https://n.example/inbox/T", file: "T.md", file_url: "x" }];
-    n++;
-    return n === failAt ? [400, { error: "bad image", code: "invalid_body" }] : [201, { id: `I${n}`, url: `https://n.example/inbox/I${n}`, file: `F${n}.png`, file_url: "x" }];
-  });
-};
+const created = (id: string, file: string) => ({ id, url: `https://n.example/inbox/${id}`, feed_url: "f", read_url: null, file, file_url: "x" });
+const parse = (i: number) => new Response(new Uint8Array(server.requests[i].body), { headers: { "content-type": typeOf(i)! } }).formData();
 
-test("postAttachPostsImagesThenTextAndPrintsTheTextUrlThenTheImageUrls", async () => {
-  routeAttach();
+test("postAttachSendsOneMultipartRequestAndPrintsTheTextUrlThenTheImageUrls", async () => {
+  server.reply(201, { ...created("T", "T.md"), attachments: [created("I1", "F1.png"), created("I2", "F2.webp")] });
   const dir = pics();
   const t = io();
   expect(await main(["post", "see ![](chart.png)", "--attach", join(dir, "chart.png"), "--attach", join(dir, "t.webp"), "--url", server.url, "--feed", "inbox"], t.io)).toBe(0);
   expect(t.out.stdout.trim().split("\n")).toEqual(["https://n.example/inbox/T", "https://n.example/inbox/I1", "https://n.example/inbox/I2"]);
-  expect(server.requests.map((r) => r.headers["content-type"])).toEqual(["image/png", "image/webp", "text/markdown"]);
-  expect(server.requests[0].headers["x-note-name"]).toBe("chart.png");
-  expect(sent(2)).toBe("see ![](F1.png)\n\n![](F2.png)");
+  expect(server.requests).toHaveLength(1);
+  expect(typeOf(0)).toMatch(/^multipart\/form-data; boundary=/);
+  const form = await parse(0);
+  expect(await (form.get("text") as File).text()).toBe("see ![](chart.png)");
+  expect((form.getAll("file") as File[]).map((f) => [f.name, f.type])).toEqual([["chart.png", "image/png"], ["t.webp", "image/webp"]]);
+});
+
+test("postAttachWithoutTextSendsNoTextPartAndPrintsEachPictureUrlOnce", async () => {
+  server.reply(201, { ...created("I1", "F1.png"), attachments: [created("I1", "F1.png"), created("I2", "F2.png")] });
+  const dir = pics();
+  const t = io();
+  expect(await main(["post", "--attach", join(dir, "chart.png"), "--attach", join(dir, "chart.png").replace("chart", "t").replace(".png", ".webp"), "--url", server.url, "--feed", "inbox"], t.io)).toBe(0);
+  expect(t.out.stdout.trim().split("\n")).toEqual(["https://n.example/inbox/I1", "https://n.example/inbox/I2"]);
+  const form = await parse(0);
+  expect(form.has("text")).toBe(false);
+  expect(form.getAll("file")).toHaveLength(2);
 });
 
 test.each([
@@ -413,13 +420,14 @@ test.each([
   expect(server.requests).toHaveLength(0);
 });
 
-test("postAttachFailedUploadExits1NamingTheAttachmentAndThePostedImages", async () => {
-  routeAttach(2);
+test("postAttachRefusedExits1NamingTheAttachmentAndPrintsNothing", async () => {
+  server.reply(400, { error: 'attachment "t.webp": bad image', code: "invalid_body" });
   const dir = pics();
   const t = io();
   expect(await main(["post", "hi", "--attach", join(dir, "chart.png"), "--attach", join(dir, "t.webp"), "--url", server.url, "--feed", "inbox"], t.io)).toBe(1);
   expect(t.out.stdout).toBe("");
-  expect(t.out.stderr.split("\n")).toEqual(['notefeed: attachment "t.webp": bad image', "posted: https://n.example/inbox/I1", ""]);
+  expect(t.out.stderr).toBe('notefeed: attachment "t.webp": bad image\n');
+  expect(server.requests).toHaveLength(1);
 });
 
 test("usageListsAttach", async () => {
@@ -428,13 +436,13 @@ test("usageListsAttach", async () => {
   expect(t.out.stdout).toContain("[--attach PATH]...");
 });
 
-test("postAttachNameWithASpaceExits2SayingWhyAndPostsNothing", async () => {
+test("postAttachNameWithASpaceIsAcceptedAndSentWithThatFilename", async () => {
+  server.reply(201, { ...created("T", "T.md"), attachments: [created("I1", "F1.png")] });
   const dir = pics();
   writeFileSync(join(dir, "my chart.png"), PNG);
   const t = io();
-  expect(await main(["post", "hi", "--attach", join(dir, "my chart.png"), "--url", server.url, "--feed", "inbox"], t.io)).toBe(2);
-  expect(t.out.stderr).toContain("file name");
-  expect(server.requests).toHaveLength(0);
+  expect(await main(["post", "hi", "--attach", join(dir, "my chart.png"), "--url", server.url, "--feed", "inbox"], t.io)).toBe(0);
+  expect(((await parse(0)).get("file") as File).name).toBe("my chart.png");
 });
 
 test("postAttachWithANonMarkdownFileExits2AndPostsNothing", async () => {

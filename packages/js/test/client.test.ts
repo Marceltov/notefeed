@@ -473,6 +473,11 @@ describe("post with attachments", () => {
     expect(server.requests).toHaveLength(0);
   });
 
+  test.each([{ alt: "a" }, { name: "n.md" }])("%o with attachments is refused before anything is sent", async (extra) => {
+    await expect(c().post("x", { ...extra, attachments: [img("a.png")] })).rejects.toBeInstanceOf(ConfigError);
+    expect(server.requests).toHaveLength(0);
+  });
+
   test("a server refusal surfaces with its message, one request", async () => {
     server.reply(400, { error: 'attachment "b.png": bad', code: "invalid_body" });
     const err = await c().post("x", { attachments: [img("a.png"), img("b.png")] }).catch((e) => e);

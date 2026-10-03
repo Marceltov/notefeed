@@ -144,10 +144,11 @@ export class Client {
     if (content === null && attachments.length === 0) throw new ConfigError("no content and no attachments");
     if (attachments.length === 0) return { ...(await this.postOne(content!, own)), attachments: [] };
     if (content !== null && (typeof content !== "string" || (own.type ?? "text/markdown") !== "text/markdown")) throw new ConfigError("attachments go with a markdown string");
+    if (own.alt || own.name) throw new ConfigError("alt and name do not go with attachments: give each attachment its alt");
     const form = new FormData();
     if (content !== null) form.append("text", new Blob([content], { type: "text/markdown" }));
     for (const a of attachments) {
-      if (!isAttachmentName(a.name)) throw new ConfigError(`attachment name "${a.name}": one path segment of 1 to 200 characters, no / or \\, no control characters, no leading or trailing space, not . or ..`);
+      if (!isAttachmentName(a.name)) throw new ConfigError(`attachment name "${a.name}": one path segment of 1 to 200 characters, no / or \\, no control characters, no leading or trailing space, not made only of dots`);
       if (attachments.findIndex((b) => b.name === a.name) !== attachments.indexOf(a)) throw new ConfigError(`attachment "${a.name}" is given twice`);
       const { body, type } = asFile(a.content, a.type);
       if (!IMAGE_TYPES.includes(type)) throw new ConfigError(`attachment "${a.name}" must be a picture (${IMAGE_TYPES.join(", ")})`);
