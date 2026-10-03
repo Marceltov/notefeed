@@ -14,7 +14,7 @@ const secondary = "inline-flex items-center gap-1.5 rounded-sm border border-rul
 // `children` (the sharing and password sections) sit between the two, so deleting stays last. With
 // JavaScript they go through the generated API client and show refusals inline; without, the browser follows
 // the 303 (the feed page says "Saved." or shows the refusal as `error`, or the home page says "Feed deleted.").
-export function FeedDetails({ feed, title: savedTitle, description: savedDescription, image, imageUrl, showSender: savedShowSender, readId, readIdChoice, identity, error: initialError, children }: { children?: ReactNode; feed: string; title: string; description: string; image: string; imageUrl: string | null; showSender: boolean; readId: string | null; readIdChoice: "custom" | "random" | "fixed"; identity: boolean; error?: string }) {
+export function FeedDetails({ feed, title: savedTitle, description: savedDescription, image, imageUrl, images, showSender: savedShowSender, readId, readIdChoice, identity, error: initialError, children }: { children?: ReactNode; feed: string; title: string; description: string; image: string; imageUrl: string | null; images: { file: string; url: string; title: string }[]; showSender: boolean; readId: string | null; readIdChoice: "custom" | "random" | "fixed"; identity: boolean; error?: string }) {
   const page = `/${feed}/settings`;
   const { run, error, setError, pending, setPending, router } = useApiForm(page, initialError, feedDetailsErrorMessage);
   const [title, setTitle] = useState(savedTitle);
@@ -126,6 +126,28 @@ export function FeedDetails({ feed, title: savedTitle, description: savedDescrip
                 <X aria-hidden className="h-4 w-4" />
                 Remove image
               </button>
+            )}
+            {images.length > 0 && (
+              <>
+                <p className="mb-1 mt-3 text-muted">Or use one of this feed&apos;s images</p>
+                <ul className="flex flex-wrap gap-2">
+                  {images.map((i) => (
+                    <li key={i.file}>
+                      <button
+                        type="button"
+                        disabled={pending}
+                        aria-pressed={image === i.file}
+                        aria-label={`Use ${i.title || i.file} as the title image`}
+                        onClick={() => save(undefined, { title, description, image: i.file, ...(identity && { show_sender: showSender }) })}
+                        className={`rounded-sm border p-0.5 disabled:opacity-60 ${image === i.file ? "border-carbon" : "border-rule hover:border-carbon"}`}
+                      >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={i.url} alt="" loading="lazy" className="h-14 w-14 object-cover" />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </>
             )}
           </div>
         )}

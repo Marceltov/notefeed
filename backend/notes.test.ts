@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { beforeEach, describe, expect, test } from "vitest";
 import { EmptyNoteError, InvalidFeedError, NoteTooLargeError, ReservedFeedError } from "./errors";
 import { hasFeed } from "./feeds";
-import { countNotes, createNote, getNote, isValidId, listNotes, removeNote, updateNote } from "./notes";
+import { countNotes, createImageNote, createNote, getNote, isValidId, listNotes, removeNote, updateNote } from "./notes";
 
 let root: string;
 let dir: string; // the "test" feed's directory
@@ -27,6 +27,19 @@ describe("isValidId", () => {
     (id) => expect(isValidId(id)).toBe(false),
   );
   test.each(["holiday", "20260929T140512Z-A", "Photo_1-2"])("accepts %j: ids are not enforced", (id) => expect(isValidId(id)).toBe(true));
+});
+
+describe("listNotes by kind", () => {
+  test("only notes of that kind, in the usual order and paging", async () => {
+    const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1]);
+    await createNote("test", "# One", at("2026-09-29T10:00:00Z"));
+    const { note: i1 } = await createImageNote("test", png, {}, at("2026-09-29T11:00:00Z"));
+    await createNote("test", "# Two", at("2026-09-29T12:00:00Z"));
+    const { note: i2 } = await createImageNote("test", png, {}, at("2026-09-29T13:00:00Z"));
+    expect((await listNotes("test", 10, undefined, undefined, "image")).map((n) => n.id)).toEqual([i2.id, i1.id]);
+    expect((await listNotes("test", 10, undefined, undefined, "markdown")).map((n) => n.title)).toEqual(["Two", "One"]);
+    expect((await listNotes("test", 1, i2.id, undefined, "image")).map((n) => n.id)).toEqual([i1.id]);
+  });
 });
 
 describe("hand-placed notes", () => {

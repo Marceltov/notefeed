@@ -27,6 +27,9 @@ export const substitute = (text: string, sent: ReadonlyMap<string, string>): str
 
 const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
+/** Whether the text holds nothing but pictures from `tokens`: posting it makes their notes and no text note. */
+export const onlyReferences = (text: string, tokens: readonly string[]): boolean => tokens.reduce(removeReference, text).trim() === "";
+
 /** Takes the images that refer to `token` out of the text: a line holding only the image goes whole, an image in a line goes alone. */
 export function removeReference(text: string, token: string): string {
   const ref = `!\\[[^\\]]*\\]\\(${escapeRe(token)}\\)`;

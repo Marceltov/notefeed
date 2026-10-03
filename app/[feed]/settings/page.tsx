@@ -9,7 +9,7 @@ import { FeedDetails } from "@/components/FeedDetails";
 import { FeedSettings } from "@/components/FeedSettings";
 import { Header } from "@/components/Header";
 import { heading } from "@/components/styles";
-import { checkFeed, feedCookieName, feedPath, feedUnlocked, customIdsOn, getFeed, identityOn, isReservedFeed, publicUrl, readPath, rssPath } from "@/backend";
+import { checkFeed, feedCookieName, feedPath, feedUnlocked, customIdsOn, getFeed, getFeedImages, identityOn, isReservedFeed, publicUrl, readPath, rssPath } from "@/backend";
 
 export const dynamic = "force-dynamic";
 
@@ -24,6 +24,7 @@ export default async function SettingsPage({ params, searchParams }: PageProps<"
   // Locked feeds show only the unlock form on the feed page, and a feed without notes has nothing to set yet.
   if (!data?.exists) redirect(feedPath(feed));
   const { readId, title, description } = data;
+  const images = await getFeedImages(feed);
   const base = publicUrl(await headers());
   const readUrl = readId ? base + rssPath(readId) : undefined;
   const detailsError = form === "details";
@@ -39,12 +40,13 @@ export default async function SettingsPage({ params, searchParams }: PageProps<"
         </p>
       )}
       <FeedDetails
-        key={`${title}\n${description}\n${data.image}\n${data.showSender}\n${readId}`}
+        key={`${title}\n${description}\n${data.image}\n${data.showSender}\n${readId}\n${images.map((i) => i.file)}`}
         feed={feed}
         title={title}
         description={description}
         image={data.image}
         imageUrl={data.imageUrl}
+        images={images}
         showSender={data.showSender}
         readId={readId}
         readIdChoice={isReservedFeed(feed) ? "fixed" : customIdsOn() ? "custom" : "random"}

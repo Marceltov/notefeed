@@ -80,7 +80,6 @@ test("only images, no text: posts the image notes and nothing else", async ({ pa
   const name = feedName();
   await page.goto(`/${name}`);
   await choose(page, "Add image", PNG);
-  await note(page).fill("");
   await page.getByRole("button", { name: "Post note" }).click();
   await expect(page.locator("ol > li img")).toHaveCount(1);
   await expect(page.locator(".md")).toHaveCount(0);
@@ -190,5 +189,51 @@ test("a title image shows in the header and the read-only view, and can be remov
   await expect(page.getByRole("status")).toHaveText("Saved.");
   await expect(page.locator("header img:not([src=\"/icon.svg\"])")).toHaveCount(0);
   await page.getByRole("link", { name: "Open read-only view" }).click();
+  await expect(page.locator("header img:not([src=\"/icon.svg\"])")).toHaveCount(0);
+});
+
+test("a title typed in the compose box is the note's title in the list", async ({ page }) => {
+  const name = feedName();
+  await page.goto(`/${name}`);
+  await note(page).fill("# Derived heading\nbody");
+  await page.getByLabel("Title (optional, otherwise taken from the text)").fill("Chosen title");
+  await page.getByRole("button", { name: "Post note" }).click();
+  await expect(page.getByRole("link", { name: "Chosen title" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Derived heading" })).toHaveCount(0);
+});
+
+test("the title of an image note can be set and changed on its page", async ({ page }) => {
+  const name = feedName();
+  await page.goto(`/${name}`);
+  await choose(page, "Add image", PNG);
+  await page.getByRole("button", { name: "Post note" }).click();
+  await page.locator("ol > li a").first().click(); // the picture links to its page
+  await expect(page.locator("article img")).toBeVisible();
+  await page.getByText("Edit", { exact: true }).click();
+  await expect(page.getByLabel("Note in markdown")).toHaveCount(0); // a picture has no text to edit
+  await page.getByLabel("Title (optional)").fill("A pixel");
+  await page.getByLabel("Alternative text (optional, for screen readers)").fill("one red pixel");
+  await page.getByRole("button", { name: "Save" }).click();
+  await expect(page.getByRole("status")).toHaveText("Saved.");
+  await expect(page.getByRole("heading", { name: "A pixel" })).toBeVisible();
+  await expect(page.locator("article img")).toHaveAttribute("alt", "one red pixel");
+});
+
+test("the title image can be picked from the feed's images, and goes when its note is deleted", async ({ page }) => {
+  const name = feedName();
+  await post(page, name, "# Has pictures");
+  await choose(page, "Add image", PNG);
+  await page.getByRole("button", { name: "Post note" }).click();
+  await expect(page.locator("ol > li")).toHaveCount(2); // the picture is a note; its lone reference is no text note
+  await expect(page.locator("ol > li img")).toHaveCount(1);
+  await page.getByRole("link", { name: "Settings" }).click();
+  await page.getByRole("button", { name: /^Use .* as the title image$/ }).click();
+  await expect(page.getByRole("status")).toHaveText("Saved.");
+  await expect(page.locator("header img:not([src=\"/icon.svg\"])")).toBeVisible();
+  await page.goto(`/${name}`);
+  await page.locator("ol > li a").first().click();
+  await page.getByText("Delete", { exact: true }).click();
+  await page.getByRole("button", { name: "Delete note" }).click();
+  await expect(page).toHaveURL(new RegExp(`/${name}\\?deleted=`));
   await expect(page.locator("header img:not([src=\"/icon.svg\"])")).toHaveCount(0);
 });

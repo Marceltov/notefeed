@@ -55,6 +55,14 @@ export async function getFeed(feed: string, tag?: string): Promise<{ notes: Note
   return { notes, readId, exists: await hasFeed(feed), ...settings, imageUrl: readId && settings.image ? imagePath(readId, settings.image) : null };
 }
 
+/** A feed's image notes, newest first (at most 50), for choosing its title image: the file and its path under the read id. */
+export async function getFeedImages(feed: string): Promise<{ file: string; url: string; title: string }[]> {
+  if (checkFeed(feed)) return [];
+  const readId = await readIdOf(feed);
+  if (!readId) return [];
+  return (await listNotes(feed, PAGE, undefined, undefined, "image")).map((n) => ({ file: n.file, url: imagePath(readId, n.file), title: n.title }));
+}
+
 export async function getFeedNote(feed: string, id: string): Promise<Note | null> {
   return getNote(feed, id); // null for an invalid or reserved feed name too
 }

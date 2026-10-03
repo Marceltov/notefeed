@@ -4,9 +4,9 @@ import { join } from "node:path";
 import { beforeEach, expect, test } from "vitest";
 import { cookieValue, createProtected } from "./feedlock";
 import { readIdOf, resetFeedsForTests } from "./feeds";
-import { feedUnlocked, getFeed, getFeedNote, getReadFeed, getReadNote, identitySender, passwordSet, signInProviders } from "./index";
+import { feedUnlocked, getFeed, getFeedImages, getFeedNote, getReadFeed, getReadNote, identitySender, passwordSet, signInProviders } from "./index";
 import { sign } from "./oauth/tokens";
-import { createNote, removeNote } from "./notes";
+import { createImageNote, createNote, removeNote } from "./notes";
 import { saveSettings } from "./feedsettings";
 
 beforeEach(async () => {
@@ -31,6 +31,20 @@ test("getFeed says whether the feed exists: an emptied one still does", async ()
   expect((await getFeed("emptied"))!.exists).toBe(true);
   await removeNote("emptied", id);
   expect(await getFeed("emptied")).toEqual({ notes: [], readId: null, exists: true, title: "", description: "", image: "", showSender: true, imageUrl: null });
+});
+
+test("getFeedImages lists the feed's image notes, newest first, with their path under the read id; markdown notes are not in it", async () => {
+  const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1]);
+  await createNote("pics", "# Text", new Date("2026-01-01T00:00:00Z"));
+  const a = (await createImageNote("pics", png, { title: "First" }, new Date("2026-01-02T00:00:00Z"))).note;
+  const b = (await createImageNote("pics", png, {}, new Date("2026-01-03T00:00:00Z"))).note;
+  const rid = (await readIdOf("pics"))!;
+  expect(await getFeedImages("pics")).toEqual([
+    { file: b.file, url: `/r/${rid}/${b.file}`, title: "" },
+    { file: a.file, url: `/r/${rid}/${a.file}`, title: "First" },
+  ]);
+  expect(await getFeedImages("none")).toEqual([]);
+  expect(await getFeedImages("login")).toEqual([]);
 });
 
 test("feedUnlocked: open without a password, unlocked only by this feed's cookie", async () => {

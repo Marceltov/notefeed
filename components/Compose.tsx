@@ -4,6 +4,7 @@ import { Send } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import { postNote } from "@/app/_lib/api";
 import { MarkdownInput } from "@/components/MarkdownInput";
+import { onlyReferences } from "@/components/pendingFiles";
 import { usePendingImages } from "@/components/usePendingImages";
 import { useApiForm } from "@/app/_lib/useApiForm";
 import { PASSWORD_HINT, SENDER_NOTICE } from "@/app/_lib/messages";
@@ -21,6 +22,7 @@ export function Compose({ feed, action, error: initialError, isNew, sender }: { 
   const [text, setText] = useState("");
   const [password, setPassword] = useState("");
   const [tags, setTags] = useState("");
+  const [title, setTitle] = useState("");
 
   const tagList = tags.split(",").map((t) => t.trim()).filter(Boolean);
   async function submit(e: FormEvent) {
@@ -32,9 +34,9 @@ export function Compose({ feed, action, error: initialError, isNew, sender }: { 
       return setPending(false);
     }
     const posted = images.lastId();
-    if (!text.trim() && posted) return router.push(`${action}?posted=${posted}`); // only pictures
+    if (posted && onlyReferences(text, images.pending.map((p) => p.token))) return router.push(`${action}?posted=${posted}`); // only pictures: no note of text
     // The page remounts this box empty.
-    run(undefined, () => postNote({ baseUrl: window.location.origin, path: { feed }, body: { markdown: images.apply(text), ...(password && { password }), ...(tagList.length && { tags: tagList }) } }), ({ data }) => router.push(`${action}?posted=${data?.id}`));
+    run(undefined, () => postNote({ baseUrl: window.location.origin, path: { feed }, body: { markdown: images.apply(text), ...(title.trim() && { title: title.trim() }), ...(password && { password }), ...(tagList.length && { tags: tagList }) } }), ({ data }) => router.push(`${action}?posted=${data?.id}`));
   }
 
   return (
@@ -51,6 +53,20 @@ export function Compose({ feed, action, error: initialError, isNew, sender }: { 
         pending={images.pending}
         onPendingChange={images.setPending}
       >
+        <label htmlFor="note-title" className="sr-only">
+          Title (optional, otherwise taken from the text)
+        </label>
+        <input
+          id="note-title"
+          name="title"
+          type="text"
+          autoComplete="off"
+          maxLength={100}
+          placeholder="Title (optional)"
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          className="min-w-0 flex-1 rounded-sm border border-rule bg-transparent px-3 py-1 focus:border-carbon focus:outline-none sm:max-w-xs"
+        />
         <label htmlFor="note-tags" className="sr-only">
           Tags (optional, separated by commas)
         </label>

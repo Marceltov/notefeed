@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { removeReference, substitute, uniqueToken } from "./pendingFiles";
+import { onlyReferences, removeReference, substitute, uniqueToken } from "./pendingFiles";
 
 test("uniqueToken keeps a free name and numbers a taken one before the extension", () => {
   expect(uniqueToken("a.png", new Set())).toBe("a.png");
@@ -28,6 +28,15 @@ test("substitute leaves a token in prose, in a link, or as part of another name"
 
 test("substitute with nothing sent is the identity", () => {
   expect(substitute("![](cat.png)", new Map())).toBe("![](cat.png)");
+});
+
+test("onlyReferences: the text holds nothing but pictures that are waiting", () => {
+  expect(onlyReferences("![](cat.png)\n![](dog.png)\n", ["cat.png", "dog.png"])).toBe(true);
+  expect(onlyReferences("  \n![](cat.png)", ["cat.png"])).toBe(true);
+  expect(onlyReferences("", ["cat.png"])).toBe(true);
+  expect(onlyReferences("![](cat.png) hello", ["cat.png"])).toBe(false);
+  expect(onlyReferences("![](other.png)", ["cat.png"])).toBe(false); // not one of ours
+  expect(onlyReferences("![](cat.png)", [])).toBe(false);
 });
 
 test("removeReference drops the image line for a token and tidies the blank line it leaves", () => {
