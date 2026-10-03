@@ -51,14 +51,14 @@ test("201 with markdown body; file equals body; response links", async () => {
     feed_url: `${BASE}/test`,
     read_url: `${BASE}/r/${(await readIdOf("test"))!}/feed.xml`,
   });
-  expect(await file(body.id)).toBe("---\n---\n# Hi\nthere");
+  expect(await file(body.id)).toBe("# Hi\nthere");
 });
 
 test.each(["application/x-www-form-urlencoded", "text/plain; charset=utf-8"])("accepts %s as raw text", async (type) => {
   const res = await post("# A&b=c\n100% done", { "content-type": type });
   expect(res.status).toBe(201);
   const { id } = await res.json();
-  expect(await file(id)).toBe("---\n---\n# A&b=c\n100% done");
+  expect(await file(id)).toBe("# A&b=c\n100% done");
 });
 
 test("accepts a body without content type", async () => {
@@ -68,7 +68,7 @@ test("accepts a body without content type", async () => {
 test("accepts JSON {markdown}", async () => {
   const res = await post(JSON.stringify({ markdown: "# J" }), { "content-type": "application/json" });
   expect(res.status).toBe(201);
-  expect(await file((await res.json()).id)).toBe("---\n---\n# J");
+  expect(await file((await res.json()).id)).toBe("# J");
 });
 
 test("400 for JSON without a markdown string, or invalid JSON", async () => {
@@ -81,7 +81,7 @@ test("400 for JSON without a markdown string, or invalid JSON", async () => {
 });
 
 test("415 for other content types", async () => {
-  const res = await post("x", { "content-type": "image/png" });
+  const res = await post("x", { "content-type": "application/pdf" });
   expect(res.status).toBe(415);
   expect(await res.json()).toEqual({ error: "send text/markdown, text/plain, application/json or a form with a markdown field", code: "unsupported_type" });
 });
@@ -106,7 +106,7 @@ test("413 from the Content-Length header alone", async () => {
 
 test("keeps a leading BOM byte-for-byte", async () => {
   const res = await post("﻿# Bom\r\n", { "content-type": "text/plain" });
-  expect(await file((await res.json()).id)).toBe("---\n---\n﻿# Bom\r\n");
+  expect(await file((await res.json()).id)).toBe("﻿# Bom\r\n");
 });
 
 test("400 for a body that is not UTF-8, and nothing written", async () => {
@@ -144,7 +144,7 @@ const form = (fields: Record<string, string>) => {
 test("multipart (curl -F markdown=..., the compose box): the markdown field is the note", async () => {
   const res = await post(form({ markdown: "# From a form\r\nbody" }));
   expect(res.status).toBe(201);
-  expect(await file((await res.json()).id)).toBe("---\n---\n# From a form\r\nbody");
+  expect(await file((await res.json()).id)).toBe("# From a form\r\nbody");
 });
 
 test("an empty password field (the compose box's optional input) means no password", async () => {
@@ -283,7 +283,7 @@ test("a chunked body at the limit is accepted", async () => {
     "test",
   );
   expect(res.status).toBe(201);
-  expect(await file((await res.json()).id)).toBe("---\n---\n" + ("a".repeat(102400)));
+  expect(await file((await res.json()).id)).toBe(("a".repeat(102400)));
 });
 
 test("61st post in a minute is 429 with numeric Retry-After", async () => {

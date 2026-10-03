@@ -8,7 +8,7 @@ decision-makers: Marcel Bruckner
 
 ## Context and Problem Statement
 
-Notes are markdown files and the web UI renders markdown, but there was nowhere to put a picture a note could show, and a feed had no picture of its own. Issue #12 asks for it in one line: "Add images: title images for feed; images in the markdown". The decisions below were made on the owner's behalf while working on it, so each is stated with its reason, to be reviewed and overruled where the owner disagrees. Where do images live, who may add them, who may see them, what is checked on the way in and out, and what does notefeed do to them? (Issue #12, building on ADR 0001, ADR 0005, ADR 0008, ADR 0009 and ADR 0010.)
+Notes are markdown files and the web UI renders markdown, but there was nowhere to put a picture a note could show, and a feed had no picture of its own. Issue #12 asks for it in one line: "Add images: title images for feed; images in the markdown". The decisions below were made on the owner's behalf while working on it, so each is stated with its reason, to be reviewed and overruled where the owner disagrees. Where do images live, who may add them, who may see them, what is checked on the way in and out, and what does notefeed do to them? (Issue #12, building on ADR 0001, ADR 0005, ADR 0008, ADR 0009 and ADR 0010. Amended by ADR 0017 and ADR 0018: images are files of the feed folder, and an image is a note of its own.)
 
 ## Decision Drivers
 

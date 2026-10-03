@@ -43,7 +43,7 @@ The RSS feed holds the newest 50 notes. Its title is the feed's title, or `NOTEF
 
 `/r/<read id>/feed.xml?tag=ci` is the same feed with only the notes tagged `ci`, to subscribe to one kind of note; the read-only page takes the same `?tag=`.
 
-Images in notes are plain markdown image links, `![](https://...)`, in that raw markdown, pointing at absolute URLs under the same read id (see [Images](posting.md#images)). A reader that shows the description as text shows the link, not the picture; notefeed does not turn the markdown into HTML for the feed.
+A markdown note's image links, `![](file)` or `![](https://...)`, stay in that raw markdown; a relative one (`![](file)`, the file of an [image note](posting.md#images)) is written out as an absolute URL under the same read id in the feed, because a reader has no base to resolve it against (the stored note is unchanged). A reader that shows the description as text shows the link, not the picture; notefeed does not turn the markdown into HTML for the feed. An [image note](posting.md#images) is an item with an `<enclosure>` (RSS's way to attach a file, as podcasts do) holding the picture's absolute URL, size and type, and no description; many readers show an image enclosure inline, others offer it as an attachment, and some ignore enclosures. An item's title is the note's [title](posting.md#titles), else the image note's id.
 
 Control characters that XML doesn't allow (such as terminal colour codes from script output) are removed from the feed so one note can't break it. The file on disk keeps them.
 

@@ -32,6 +32,9 @@ def note(h):
         "markdown": f"# N{h}",
         "created_at": f"2026-09-30T{h:02d}:00:00.000Z",
         "url": f"https://n.example/inbox/n{h}",
+        "kind": "markdown",
+        "file": f"20260930T{h:02d}0000Z-n{h}.md",
+        "size": 4,
         "tags": [],
     }
 
@@ -62,6 +65,37 @@ def test_post_sends_markdown_as_json_and_returns_created(server):
     assert (req["method"], req["path"]) == ("POST", "/api/v1/feeds/inbox/notes")
     assert json.loads(req["body"]) == {"markdown": "# Café\r\nx"}
     assert "Authorization" not in req["headers"]
+
+
+def test_title_goes_in_the_json_body_and_is_left_out_otherwise(server):
+    Client(server.url, "inbox").post("x", title="T")
+    Client(server.url, "inbox").post("x")
+    assert json.loads(server.requests[0]["body"]) == {"markdown": "x", "title": "T"}
+    assert json.loads(server.requests[1]["body"]) == {"markdown": "x"}
+
+
+def test_edit_sends_title_only_when_given(server):
+    server.reply(200, note(10))
+    server.reply(200, note(10))
+    Client(server.url, "inbox").edit("i", "x", title="")
+    Client(server.url, "inbox").edit("i", "x")
+    assert json.loads(server.requests[0]["body"]) == {"markdown": "x", "title": ""}
+    assert json.loads(server.requests[1]["body"]) == {"markdown": "x"}
+
+
+def test_upload_image_sends_tags_title_alt_and_name_as_headers(server):
+    server.reply(201, UPLOADED)
+    Client(server.url, "inbox").upload_image(b"x", tags=["a", "b"], title="Cat", alt="a cat", name="cat.png")
+    h = server.requests[0]["headers"]
+    assert (h["X-Note-Tags"], h["X-Note-Title"], h["X-Note-Alt"], h["X-Note-Name"]) == ("a,b", "Cat", "a cat", "cat.png")
+
+
+def test_upload_image_sends_non_ascii_title_alt_and_name_as_utf8_bytes(server):
+    server.reply(201, UPLOADED)
+    Client(server.url, "inbox").upload_image(b"x", title="Café 日本語", alt="Größe", name="Größe.png")
+    h = server.requests[0]["headers"]
+    utf8 = lambda v: v.encode("latin-1").decode("utf-8")  # how a server reads the header bytes
+    assert (utf8(h["X-Note-Title"]), utf8(h["X-Note-Alt"]), utf8(h["X-Note-Name"])) == ("Café 日本語", "Größe", "Größe.png")
 
 
 def test_tags_go_in_the_json_body_and_tag_in_the_list_query(server):
@@ -385,14 +419,14 @@ def test_feed_calls_404_is_not_found_and_no_feed_is_config_error(server):
         Client(server.url).delete_feed()
 
 
-UPLOADED = {"file": "a" * 32 + ".png", "url": "https://n.example/r/X/images/a.png", "markdown": "![](https://n.example/r/X/images/a.png)"}
+UPLOADED = {"id": "20261003T101010Z-u", "url": "https://n.example/inbox/20261003T101010Z-u", "feed_url": "https://n.example/inbox", "read_url": None, "file": "20261003T101010Z-u.png", "file_url": "https://n.example/r/X/20261003T101010Z-u.png"}
 
 
 def test_upload_image_posts_the_raw_bytes_and_returns_the_model(server):
     server.reply(201, UPLOADED)
     data = bytes([0x89, 0x50, 0x4E, 0x47, 0, 255])
     r = Client(server.url, "inbox", "pw", feed_password="fp").upload_image(data)
-    assert (r.file, r.url, r.markdown) == (UPLOADED["file"], UPLOADED["url"], UPLOADED["markdown"])
+    assert (r.id, r.file, r.file_url) == (UPLOADED["id"], UPLOADED["file"], UPLOADED["file_url"])
     q = server.requests[0]
     assert (q["method"], q["path"], q["body"]) == ("POST", "/api/v1/feeds/inbox/images", data)
     assert q["headers"]["Content-Type"] == "application/octet-stream"

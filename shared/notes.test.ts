@@ -3,6 +3,18 @@ import { bodyAfterTitle, extractTitle, idStamp } from "./notes";
 
 const at = (iso: string) => new Date(iso);
 
+describe("extractTitle of a note that starts with a picture", () => {
+  test("the title is the picture's alt text, or empty: never the raw ![](file)", () => {
+    expect(extractTitle("![a grey cat](cat.png)")).toBe("a grey cat");
+    expect(extractTitle("![](20261003T1-a.png)\nsome text")).toBe("");
+    expect(extractTitle("  ![ spaced ](x.png)  ")).toBe("spaced");
+  });
+  test("a heading further down still wins, and a picture inside text is text", () => {
+    expect(extractTitle("![](a.png)\n# Real title")).toBe("Real title");
+    expect(extractTitle("look: ![](a.png)")).toBe("look: ![](a.png)");
+  });
+});
+
 describe("extractTitle", () => {
   test("uses the first heading", () => {
     expect(extractTitle("# Backup finished\nbody")).toBe("Backup finished");

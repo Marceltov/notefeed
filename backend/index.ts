@@ -20,7 +20,7 @@ export { feedDeleteRoute, feedSettingsRoute } from "./http/feedforms";
 export { feedAccessRoute } from "./http/feedsession";
 export { noteFormRoute } from "./http/noteforms";
 export { loginRoute, logoutRoute } from "./http/session";
-export { imageRoute } from "./http/images";
+export { fileRoute } from "./http/files";
 export { rssRoute } from "./http/rss";
 export { mcpRoute } from "./mcp";
 export { oidcCallbackRoute, oidcStartRoute } from "./oidc/routes";
@@ -53,6 +53,14 @@ export async function getFeed(feed: string, tag?: string): Promise<{ notes: Note
   const settings = await getSettings(feed);
   // The title image's path under the read id (it is served there, never under the feed's name).
   return { notes, readId, exists: await hasFeed(feed), ...settings, imageUrl: readId && settings.image ? imagePath(readId, settings.image) : null };
+}
+
+/** A feed's image notes, newest first (at most 50), for choosing its title image: the file and its path under the read id. */
+export async function getFeedImages(feed: string): Promise<{ file: string; url: string; title: string }[]> {
+  if (checkFeed(feed)) return [];
+  const readId = await readIdOf(feed);
+  if (!readId) return [];
+  return (await listNotes(feed, PAGE, undefined, undefined, "image")).map((n) => ({ file: n.file, url: imagePath(readId, n.file), title: n.title }));
 }
 
 export async function getFeedNote(feed: string, id: string): Promise<Note | null> {

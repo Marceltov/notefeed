@@ -8,7 +8,7 @@ decision-makers: Marcel Bruckner
 
 ## Context and Problem Statement
 
-Choosing and changing a feed's read id (ADR 0016, issue #89) raised the question of what happens to the image URLs written into notes. They contained the read id (`/r/<read id>/images/<file>`), and the first idea was to rewrite the notes on a change. Notes are meant to become encrypted, which notefeed will not be able to read, so it must not edit their content. Images were also a special case: a separate `.images/` folder and a separate route, while later files of other types would need the same again. How are a feed's files stored and served, and what do notes refer to? (Amends ADR 0011 and ADR 0016.)
+Choosing and changing a feed's read id (ADR 0016, issue #89) raised the question of what happens to the image URLs written into notes. They contained the read id (`/r/<read id>/images/<file>`), and the first idea was to rewrite the notes on a change. Notes are meant to become encrypted, which notefeed will not be able to read, so it must not edit their content. Images were also a special case: a separate `.images/` folder and a separate route, while later files of other types would need the same again. How are a feed's files stored and served, and what do notes refer to? (Amends ADR 0011 and ADR 0016. Amended by ADR 0018: an image is a note of its own, named by a note id instead of a hash, with its metadata in a sidecar; every non-dot file is served, markdown notes included.)
 
 ## Considered Options
 

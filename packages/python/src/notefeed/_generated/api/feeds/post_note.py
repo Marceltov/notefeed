@@ -18,6 +18,9 @@ def _get_kwargs(
     body: PostJson,
     x_feed_password: str | Unset = UNSET,
     x_note_tags: str | Unset = UNSET,
+    x_note_name: str | Unset = UNSET,
+    x_note_title: str | Unset = UNSET,
+    x_note_alt: str | Unset = UNSET,
 ) -> dict[str, Any]:
     headers: dict[str, Any] = {}
     if not isinstance(x_feed_password, Unset):
@@ -25,6 +28,15 @@ def _get_kwargs(
 
     if not isinstance(x_note_tags, Unset):
         headers["X-Note-Tags"] = x_note_tags
+
+    if not isinstance(x_note_name, Unset):
+        headers["X-Note-Name"] = x_note_name
+
+    if not isinstance(x_note_title, Unset):
+        headers["X-Note-Title"] = x_note_title
+
+    if not isinstance(x_note_alt, Unset):
+        headers["X-Note-Alt"] = x_note_alt
 
     _kwargs: dict[str, Any] = {
         "method": "post",
@@ -112,24 +124,36 @@ def sync_detailed(
     body: PostJson,
     x_feed_password: str | Unset = UNSET,
     x_note_tags: str | Unset = UNSET,
+    x_note_name: str | Unset = UNSET,
+    x_note_title: str | Unset = UNSET,
+    x_note_alt: str | Unset = UNSET,
 ) -> Response[Any | Created | Error]:
     """Post a note
 
      Creates the feed with its first note, optionally protected by its own password (`X-Feed-Password`
     header or a `password` field in the JSON or form body; 1 to 256 printable ASCII characters, with no
     space at the start or end). Posting to a protected feed needs that password. Also served at `POST
-    /{feed}`, the short form the client packages and curl one-liners use. The body is at most 102400
-    bytes and must be UTF-8. `application/x-www-form-urlencoded` (what `curl -d` sends) is read as raw
-    markdown, not as form fields. `read_id` (JSON or form field) is the feed's read id when this post
-    creates it: random when left out, ignored for a feed that exists. Tags (at most 10 tags, each 1 to
-    32 characters of letters, digits, `-`, `_`, `.` and `:`; case is folded to lowercase, duplicates are
-    removed) go in the JSON `tags` array, a repeated `tags` form field, or, for a raw body, the `X-Note-
-    Tags` header.
+    /{feed}`, the short form the client packages and curl one-liners use. A markdown body is at most
+    102400 bytes and must be UTF-8. A body that is an image (`image/png`, `image/jpeg`, `image/gif`,
+    `image/webp` or `application/octet-stream`) is posted as a note of its own: PNG, JPEG, GIF or WebP,
+    recognized by its first bytes, whatever `Content-Type` is sent (SVG is refused). It is stored byte
+    for byte, with no resizing and no metadata stripped (EXIF such as GPS position stays in the file),
+    at most NOTEFEED_MAX_IMAGE_BYTES (default 5 MiB). The response has its `file` and a `file_url` under
+    the feed's read id, public like the read link. `X-Note-Name` gives the picture's original file name.
+    A multipart form may send a `file` part instead of `markdown`. `application/x-www-form-urlencoded`
+    (what `curl -d` sends) is read as raw markdown, not as form fields. `read_id` (JSON or form field)
+    is the feed's read id when this post creates it: random when left out, ignored for a feed that
+    exists. Tags (at most 10 tags, each 1 to 32 characters of letters, digits, `-`, `_`, `.` and `:`;
+    case is folded to lowercase, duplicates are removed) go in the JSON `tags` array, a repeated `tags`
+    form field, or, for a raw body, the `X-Note-Tags` header.
 
     Args:
         feed (str):
         x_feed_password (str | Unset):
         x_note_tags (str | Unset):
+        x_note_name (str | Unset):
+        x_note_title (str | Unset):
+        x_note_alt (str | Unset):
         body (PostJson):
 
     Raises:
@@ -145,6 +169,9 @@ def sync_detailed(
         body=body,
         x_feed_password=x_feed_password,
         x_note_tags=x_note_tags,
+        x_note_name=x_note_name,
+        x_note_title=x_note_title,
+        x_note_alt=x_note_alt,
     )
 
     response = client.get_httpx_client().request(
@@ -161,24 +188,36 @@ def sync(
     body: PostJson,
     x_feed_password: str | Unset = UNSET,
     x_note_tags: str | Unset = UNSET,
+    x_note_name: str | Unset = UNSET,
+    x_note_title: str | Unset = UNSET,
+    x_note_alt: str | Unset = UNSET,
 ) -> Any | Created | Error | None:
     """Post a note
 
      Creates the feed with its first note, optionally protected by its own password (`X-Feed-Password`
     header or a `password` field in the JSON or form body; 1 to 256 printable ASCII characters, with no
     space at the start or end). Posting to a protected feed needs that password. Also served at `POST
-    /{feed}`, the short form the client packages and curl one-liners use. The body is at most 102400
-    bytes and must be UTF-8. `application/x-www-form-urlencoded` (what `curl -d` sends) is read as raw
-    markdown, not as form fields. `read_id` (JSON or form field) is the feed's read id when this post
-    creates it: random when left out, ignored for a feed that exists. Tags (at most 10 tags, each 1 to
-    32 characters of letters, digits, `-`, `_`, `.` and `:`; case is folded to lowercase, duplicates are
-    removed) go in the JSON `tags` array, a repeated `tags` form field, or, for a raw body, the `X-Note-
-    Tags` header.
+    /{feed}`, the short form the client packages and curl one-liners use. A markdown body is at most
+    102400 bytes and must be UTF-8. A body that is an image (`image/png`, `image/jpeg`, `image/gif`,
+    `image/webp` or `application/octet-stream`) is posted as a note of its own: PNG, JPEG, GIF or WebP,
+    recognized by its first bytes, whatever `Content-Type` is sent (SVG is refused). It is stored byte
+    for byte, with no resizing and no metadata stripped (EXIF such as GPS position stays in the file),
+    at most NOTEFEED_MAX_IMAGE_BYTES (default 5 MiB). The response has its `file` and a `file_url` under
+    the feed's read id, public like the read link. `X-Note-Name` gives the picture's original file name.
+    A multipart form may send a `file` part instead of `markdown`. `application/x-www-form-urlencoded`
+    (what `curl -d` sends) is read as raw markdown, not as form fields. `read_id` (JSON or form field)
+    is the feed's read id when this post creates it: random when left out, ignored for a feed that
+    exists. Tags (at most 10 tags, each 1 to 32 characters of letters, digits, `-`, `_`, `.` and `:`;
+    case is folded to lowercase, duplicates are removed) go in the JSON `tags` array, a repeated `tags`
+    form field, or, for a raw body, the `X-Note-Tags` header.
 
     Args:
         feed (str):
         x_feed_password (str | Unset):
         x_note_tags (str | Unset):
+        x_note_name (str | Unset):
+        x_note_title (str | Unset):
+        x_note_alt (str | Unset):
         body (PostJson):
 
     Raises:
@@ -195,6 +234,9 @@ def sync(
         body=body,
         x_feed_password=x_feed_password,
         x_note_tags=x_note_tags,
+        x_note_name=x_note_name,
+        x_note_title=x_note_title,
+        x_note_alt=x_note_alt,
     ).parsed
 
 
@@ -205,24 +247,36 @@ async def asyncio_detailed(
     body: PostJson,
     x_feed_password: str | Unset = UNSET,
     x_note_tags: str | Unset = UNSET,
+    x_note_name: str | Unset = UNSET,
+    x_note_title: str | Unset = UNSET,
+    x_note_alt: str | Unset = UNSET,
 ) -> Response[Any | Created | Error]:
     """Post a note
 
      Creates the feed with its first note, optionally protected by its own password (`X-Feed-Password`
     header or a `password` field in the JSON or form body; 1 to 256 printable ASCII characters, with no
     space at the start or end). Posting to a protected feed needs that password. Also served at `POST
-    /{feed}`, the short form the client packages and curl one-liners use. The body is at most 102400
-    bytes and must be UTF-8. `application/x-www-form-urlencoded` (what `curl -d` sends) is read as raw
-    markdown, not as form fields. `read_id` (JSON or form field) is the feed's read id when this post
-    creates it: random when left out, ignored for a feed that exists. Tags (at most 10 tags, each 1 to
-    32 characters of letters, digits, `-`, `_`, `.` and `:`; case is folded to lowercase, duplicates are
-    removed) go in the JSON `tags` array, a repeated `tags` form field, or, for a raw body, the `X-Note-
-    Tags` header.
+    /{feed}`, the short form the client packages and curl one-liners use. A markdown body is at most
+    102400 bytes and must be UTF-8. A body that is an image (`image/png`, `image/jpeg`, `image/gif`,
+    `image/webp` or `application/octet-stream`) is posted as a note of its own: PNG, JPEG, GIF or WebP,
+    recognized by its first bytes, whatever `Content-Type` is sent (SVG is refused). It is stored byte
+    for byte, with no resizing and no metadata stripped (EXIF such as GPS position stays in the file),
+    at most NOTEFEED_MAX_IMAGE_BYTES (default 5 MiB). The response has its `file` and a `file_url` under
+    the feed's read id, public like the read link. `X-Note-Name` gives the picture's original file name.
+    A multipart form may send a `file` part instead of `markdown`. `application/x-www-form-urlencoded`
+    (what `curl -d` sends) is read as raw markdown, not as form fields. `read_id` (JSON or form field)
+    is the feed's read id when this post creates it: random when left out, ignored for a feed that
+    exists. Tags (at most 10 tags, each 1 to 32 characters of letters, digits, `-`, `_`, `.` and `:`;
+    case is folded to lowercase, duplicates are removed) go in the JSON `tags` array, a repeated `tags`
+    form field, or, for a raw body, the `X-Note-Tags` header.
 
     Args:
         feed (str):
         x_feed_password (str | Unset):
         x_note_tags (str | Unset):
+        x_note_name (str | Unset):
+        x_note_title (str | Unset):
+        x_note_alt (str | Unset):
         body (PostJson):
 
     Raises:
@@ -238,6 +292,9 @@ async def asyncio_detailed(
         body=body,
         x_feed_password=x_feed_password,
         x_note_tags=x_note_tags,
+        x_note_name=x_note_name,
+        x_note_title=x_note_title,
+        x_note_alt=x_note_alt,
     )
 
     response = await client.get_async_httpx_client().request(**kwargs)
@@ -252,24 +309,36 @@ async def asyncio(
     body: PostJson,
     x_feed_password: str | Unset = UNSET,
     x_note_tags: str | Unset = UNSET,
+    x_note_name: str | Unset = UNSET,
+    x_note_title: str | Unset = UNSET,
+    x_note_alt: str | Unset = UNSET,
 ) -> Any | Created | Error | None:
     """Post a note
 
      Creates the feed with its first note, optionally protected by its own password (`X-Feed-Password`
     header or a `password` field in the JSON or form body; 1 to 256 printable ASCII characters, with no
     space at the start or end). Posting to a protected feed needs that password. Also served at `POST
-    /{feed}`, the short form the client packages and curl one-liners use. The body is at most 102400
-    bytes and must be UTF-8. `application/x-www-form-urlencoded` (what `curl -d` sends) is read as raw
-    markdown, not as form fields. `read_id` (JSON or form field) is the feed's read id when this post
-    creates it: random when left out, ignored for a feed that exists. Tags (at most 10 tags, each 1 to
-    32 characters of letters, digits, `-`, `_`, `.` and `:`; case is folded to lowercase, duplicates are
-    removed) go in the JSON `tags` array, a repeated `tags` form field, or, for a raw body, the `X-Note-
-    Tags` header.
+    /{feed}`, the short form the client packages and curl one-liners use. A markdown body is at most
+    102400 bytes and must be UTF-8. A body that is an image (`image/png`, `image/jpeg`, `image/gif`,
+    `image/webp` or `application/octet-stream`) is posted as a note of its own: PNG, JPEG, GIF or WebP,
+    recognized by its first bytes, whatever `Content-Type` is sent (SVG is refused). It is stored byte
+    for byte, with no resizing and no metadata stripped (EXIF such as GPS position stays in the file),
+    at most NOTEFEED_MAX_IMAGE_BYTES (default 5 MiB). The response has its `file` and a `file_url` under
+    the feed's read id, public like the read link. `X-Note-Name` gives the picture's original file name.
+    A multipart form may send a `file` part instead of `markdown`. `application/x-www-form-urlencoded`
+    (what `curl -d` sends) is read as raw markdown, not as form fields. `read_id` (JSON or form field)
+    is the feed's read id when this post creates it: random when left out, ignored for a feed that
+    exists. Tags (at most 10 tags, each 1 to 32 characters of letters, digits, `-`, `_`, `.` and `:`;
+    case is folded to lowercase, duplicates are removed) go in the JSON `tags` array, a repeated `tags`
+    form field, or, for a raw body, the `X-Note-Tags` header.
 
     Args:
         feed (str):
         x_feed_password (str | Unset):
         x_note_tags (str | Unset):
+        x_note_name (str | Unset):
+        x_note_title (str | Unset):
+        x_note_alt (str | Unset):
         body (PostJson):
 
     Raises:
@@ -287,5 +356,8 @@ async def asyncio(
             body=body,
             x_feed_password=x_feed_password,
             x_note_tags=x_note_tags,
+            x_note_name=x_note_name,
+            x_note_title=x_note_title,
+            x_note_alt=x_note_alt,
         )
     ).parsed

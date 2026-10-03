@@ -1,10 +1,10 @@
-import { mkdtemp, readdir, readFile, writeFile } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { beforeEach, describe, expect, test } from "vitest";
 import { EmptyNoteError, InvalidFeedError, NoteTooLargeError, ReservedFeedError } from "./errors";
 import { hasFeed } from "./feeds";
-import { countNotes, createNote, getNote, isValidId, listNotes, removeNote, updateNote } from "./notes";
+import { countNotes, createImageNote, createNote, getNote, isValidId, listNotes, removeNote, updateNote } from "./notes";
 
 let root: string;
 let dir: string; // the "test" feed's directory
@@ -22,10 +22,75 @@ describe("isValidId", () => {
   test("accepts a real id", () => {
     expect(isValidId("20260929T140512Z-backup-finished")).toBe(true);
   });
-  test.each(["../etc/passwd", "20260929T140512Z-a/../../x", "20260929T140512Z-A", ""])(
+  test.each(["../etc/passwd", "20260929T140512Z-a/../../x", "a.b", "a b", "", "x".repeat(129)])(
     "rejects %j",
     (id) => expect(isValidId(id)).toBe(false),
   );
+  test.each(["holiday", "20260929T140512Z-A", "Photo_1-2"])("accepts %j: ids are not enforced", (id) => expect(isValidId(id)).toBe(true));
+});
+
+describe("listNotes by kind", () => {
+  test("only notes of that kind, in the usual order and paging", async () => {
+    const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1]);
+    await createNote("test", "# One", at("2026-09-29T10:00:00Z"));
+    const { note: i1 } = await createImageNote("test", png, {}, at("2026-09-29T11:00:00Z"));
+    await createNote("test", "# Two", at("2026-09-29T12:00:00Z"));
+    const { note: i2 } = await createImageNote("test", png, {}, at("2026-09-29T13:00:00Z"));
+    expect((await listNotes("test", 10, undefined, undefined, "image")).map((n) => n.id)).toEqual([i2.id, i1.id]);
+    expect((await listNotes("test", 10, undefined, undefined, "markdown")).map((n) => n.title)).toEqual(["Two", "One"]);
+    expect((await listNotes("test", 1, i2.id, undefined, "image")).map((n) => n.id)).toEqual([i1.id]);
+  });
+});
+
+describe("hand-placed notes", () => {
+  const place = async (name: string, content = "x", meta?: object) => {
+    if (!(await readdir(dir).catch(() => null))) await createNote("test", "# Seed", at("2020-01-01T00:00:00Z")); // makes the feed
+    await writeFile(join(dir, name), content);
+    if (meta) await writeFile(join(dir, `.${name}.json`), JSON.stringify(meta));
+  };
+  test("a note under another name lists and reads", async () => {
+    await place("holiday.md", "# Holiday");
+    expect((await listNotes("test")).map((n) => n.id)).toContain("holiday");
+    expect((await getNote("test", "holiday"))?.title).toBe("Holiday");
+  });
+  test("it is dated by the sidecar created, else by the file's mtime", async () => {
+    await place("a.md", "x", { created: "2021-05-06T07:08:09Z" });
+    expect((await getNote("test", "a"))?.createdAt).toEqual(at("2021-05-06T07:08:09Z"));
+    await writeFile(join(dir, "b.md"), "y");
+    const mtime = (await stat(join(dir, "b.md"))).mtime;
+    expect((await getNote("test", "b"))?.createdAt).toEqual(mtime);
+  });
+  test("an unreadable created falls back to the mtime", async () => {
+    await place("c.md", "x", { created: "nope" });
+    const mtime = (await stat(join(dir, "c.md"))).mtime;
+    expect((await getNote("test", "c"))?.createdAt).toEqual(mtime);
+  });
+  test("a name with a dot is not a note", async () => {
+    await place("a.b.md");
+    expect((await listNotes("test")).map((n) => n.id)).not.toContain("a.b");
+  });
+  test("lists newest first by date, ties by id", async () => {
+    const { note } = await createNote("test", "# New", at("2026-09-29T14:05:12Z"));
+    await place("old.md", "x", { created: "2019-01-01T00:00:00Z" });
+    await place("same-a.md", "x", { created: "2026-09-29T14:05:12Z" });
+    await place("same-b.md", "x", { created: "2026-09-29T14:05:12Z" });
+    const ids = (await listNotes("test")).map((n) => n.id);
+    expect(ids.slice(0, 3)).toEqual(["same-b", "same-a", note.id]); // same second: the larger id first
+    expect(ids.indexOf("old")).toBe(ids.length - 1); // after the 2020 seed too
+  });
+  test("before pages past a hand-placed note", async () => {
+    await createNote("test", "# New", at("2026-09-29T14:05:12Z"));
+    await place("mid.md", "x", { created: "2024-01-01T00:00:00Z" });
+    await place("older.md", "x", { created: "2023-01-01T00:00:00Z" });
+    expect((await listNotes("test", 1)).map((n) => n.title)).toEqual(["New"]);
+    expect((await listNotes("test", 5, "mid")).map((n) => n.id)).toEqual(["older"]);
+    expect(await listNotes("test", 5, "gone")).toEqual([]);
+  });
+  test("a path-like id reads nothing", async () => {
+    await place("a.md");
+    expect(await getNote("test", "../test/a")).toBeNull();
+    expect(await removeNote("test", "a/b")).toBe(false);
+  });
 });
 
 describe("createNote", () => {
@@ -40,7 +105,7 @@ describe("createNote", () => {
     expect(note.id).toMatch(/^20260929T140512Z-[0-9a-f-]{36}$/);
     expect(note.title).toBe("Backup finished");
     expect(note.createdAt).toEqual(at("2026-09-29T14:05:12Z"));
-    expect(await readFile(join(dir, `${note.id}.md`), "utf8")).toBe("---\n---\n" + md);
+    expect(await readFile(join(dir, `${note.id}.md`), "utf8")).toBe(md);
   });
 
   test("same second, same title: distinct ids, nothing overwritten", async () => {
@@ -49,13 +114,13 @@ describe("createNote", () => {
     const { note: b } = await createNote("test", "# Same\nsecond", now);
     const { note: c } = await createNote("test", "# Same\nthird", now);
     expect(new Set([a.id, b.id, c.id]).size).toBe(3);
-    expect(await readFile(join(dir, `${a.id}.md`), "utf8")).toBe("---\n---\n# Same\nfirst");
+    expect(await readFile(join(dir, `${a.id}.md`), "utf8")).toBe("# Same\nfirst");
     expect((await files()).every((f) => f.endsWith(".md"))).toBe(true);
   });
 
   test("keeps CRLF bytes", async () => {
     const { note } = await createNote("test", "# T\r\nx\r\n");
-    expect(await readFile(join(dir, `${note.id}.md`), "utf8")).toBe("---\n---\n# T\r\nx\r\n");
+    expect(await readFile(join(dir, `${note.id}.md`), "utf8")).toBe("# T\r\nx\r\n");
   });
 
   test("rejects empty notes", async () => {
@@ -129,10 +194,11 @@ describe("sender", () => {
     expect((await listNotes("test")).map((n) => n.title)).toEqual(["N500", "N400", "N300", "N200", "N100"]);
   });
 
-  test("createNote stores it as frontmatter; getNote returns it without the block", async () => {
+  test("createNote stores the sender in the sidecar, the body as posted", async () => {
     const { note } = await createNote("test", "# Hi", undefined, "Ann");
     expect(note.sender).toBe("Ann");
-    expect(await readFile(join(dir, `${note.id}.md`), "utf8")).toBe('---\nsender: "Ann"\n---\n# Hi');
+    expect(await readFile(join(dir, `${note.id}.md`), "utf8")).toBe("# Hi");
+    expect(JSON.parse(await readFile(join(dir, `.${note.id}.md.json`), "utf8"))).toEqual({ sender: "Ann" });
     const got = await getNote("test", note.id);
     expect(got?.markdown).toBe("# Hi");
     expect(got?.sender).toBe("Ann");
@@ -140,7 +206,7 @@ describe("sender", () => {
   });
   test("updateNote keeps the sender", async () => {
     const { note } = await createNote("test", "# Old", undefined, "Ann");
-    const u = await updateNote("test", note.id, "# New");
+    const u = await updateNote("test", note.id, { markdown: "# New" });
     expect(u?.sender).toBe("Ann");
     expect((await getNote("test", note.id))?.sender).toBe("Ann");
     expect((await getNote("test", note.id))?.markdown).toBe("# New");
@@ -148,31 +214,38 @@ describe("sender", () => {
   test.each(["a\u2028b", "a\u2029b", "a\rb"])("sender %j survives create, get and update", async (sender) => {
     const { note } = await createNote("test", "# Hi", undefined, sender);
     expect((await getNote("test", note.id))?.sender).toBe(sender);
-    expect((await updateNote("test", note.id, "# New"))?.sender).toBe(sender);
+    expect((await updateNote("test", note.id, { markdown: "# New" }))?.sender).toBe(sender);
     expect(await getNote("test", note.id)).toMatchObject({ markdown: "# New", sender });
   });
-  test("a typed block in the body is body: no sender without one, intact behind ours with one", async () => {
+  test("a typed block in the body is body: no sender from it, with or without ours", async () => {
     const typed = '---\nsender: "Boss"\n---\nhi';
     const { note: a } = await createNote("test", typed);
     expect(await getNote("test", a.id)).toMatchObject({ markdown: typed });
     expect((await getNote("test", a.id))?.sender).toBeUndefined();
     const { note: b } = await createNote("test", typed, undefined, "Ann");
-    expect(await readFile(join(dir, `${b.id}.md`), "utf8")).toBe('---\nsender: "Ann"\n---\n' + typed);
+    expect(await readFile(join(dir, `${b.id}.md`), "utf8")).toBe(typed);
     expect(await getNote("test", b.id)).toMatchObject({ markdown: typed, sender: "Ann" });
   });
-  test("unknown keys in a stored block survive an edit", async () => {
+  test("an edit leaves the sidecar as it is, unknown fields included", async () => {
     await createNote("test", "# Seed");
-    await writeFile(join(dir, "20260101T000000Z-k.md"), '---\nmodified: "x"\nsender: "Ann"\n---\nold');
-    await updateNote("test", "20260101T000000Z-k", "new");
-    expect(await readFile(join(dir, "20260101T000000Z-k.md"), "utf8")).toBe('---\nmodified: "x"\nsender: "Ann"\n---\nnew');
+    await writeFile(join(dir, "20260101T000000Z-k.md"), "old");
+    await writeFile(join(dir, ".20260101T000000Z-k.md.json"), '{"sender":"Ann","extra":1}');
+    expect((await updateNote("test", "20260101T000000Z-k", { markdown: "new" }))?.sender).toBe("Ann");
+    expect(await readFile(join(dir, ".20260101T000000Z-k.md.json"), "utf8")).toBe('{"sender":"Ann","extra":1}');
   });
-  test("editing a legacy note writes an empty block and adds no sender", async () => {
+  test("a sidecar title wins over the one derived from the text", async () => {
     await createNote("test", "# Seed");
-    await writeFile(join(dir, "20260101T000000Z-l.md"), "old");
-    expect((await updateNote("test", "20260101T000000Z-l", "new"))?.sender).toBeUndefined();
-    expect(await readFile(join(dir, "20260101T000000Z-l.md"), "utf8")).toBe("---\n---\nnew");
+    await writeFile(join(dir, "20260101T000000Z-t.md"), "# Derived");
+    await writeFile(join(dir, ".20260101T000000Z-t.md.json"), '{"title":"Set"}');
+    expect((await getNote("test", "20260101T000000Z-t"))?.title).toBe("Set");
   });
-  test("a file on disk with no block still lists, without a sender", async () => {
+  test("a note with a broken sidecar is a note with no metadata", async () => {
+    await createNote("test", "# Seed");
+    await writeFile(join(dir, "20260101T000000Z-b.md"), "# B");
+    await writeFile(join(dir, ".20260101T000000Z-b.md.json"), "{nope");
+    expect(await getNote("test", "20260101T000000Z-b")).toMatchObject({ title: "B", tags: [] });
+  });
+  test("a file on disk with no sidecar still lists, without a sender", async () => {
     const { note } = await createNote("test", "# One");
     await writeFile(join(dir, "20260101T000000Z-hand.md"), "# Hand");
     const all = await listNotes("test");
@@ -201,19 +274,19 @@ describe("updateNote and removeNote", () => {
   const now = at("2026-09-29T14:05:12Z");
   test("an edit keeps the id and createdAt, changes markdown and title", async () => {
     const { note: n } = await createNote("test", "# Old", now);
-    const u = await updateNote("test", n.id, "# New\nbody");
-    expect(u).toEqual({ id: n.id, title: "New", markdown: "# New\nbody", createdAt: now, tags: [] });
+    const u = await updateNote("test", n.id, { markdown: "# New\nbody" });
+    expect(u).toMatchObject({ id: n.id, title: "New", markdown: "# New\nbody", createdAt: now, tags: [] });
     expect((await getNote("test", n.id))?.markdown).toBe("# New\nbody");
   });
   test("a missing note is null and creates no file", async () => {
     await createNote("test", "# Old", now);
-    expect(await updateNote("test", "20260101T000000Z-x", "# New")).toBeNull();
+    expect(await updateNote("test", "20260101T000000Z-x", { markdown: "# New" })).toBeNull();
     expect(await files()).toHaveLength(1);
   });
   test("a refused edit leaves the file and no temp file", async () => {
     const { note: n } = await createNote("test", "# Old", now);
-    await expect(updateNote("test", n.id, "  ")).rejects.toThrow(EmptyNoteError);
-    expect(await readFile(join(dir, `${n.id}.md`), "utf8")).toBe("---\n---\n# Old");
+    await expect(updateNote("test", n.id, { markdown: "  " })).rejects.toThrow(EmptyNoteError);
+    expect(await readFile(join(dir, `${n.id}.md`), "utf8")).toBe("# Old");
     expect(await files()).toEqual([`${n.id}.md`]);
   });
   test("removeNote is true once, then false", async () => {
@@ -225,7 +298,7 @@ describe("updateNote and removeNote", () => {
   test.each(["../x", ".password", "a/b"])("id %j touches nothing", async (id) => {
     await createNote("test", "# Old", now);
     await writeFile(join(dir, ".password"), "hash");
-    expect(await updateNote("test", id, "# New")).toBeNull();
+    expect(await updateNote("test", id, { markdown: "# New" })).toBeNull();
     expect(await removeNote("test", id)).toBe(false);
     expect(await readFile(join(dir, ".password"), "utf8")).toBe("hash");
     expect(await files()).toHaveLength(2);
@@ -236,7 +309,7 @@ test("editing a note whose feed was deleted meanwhile is no such note, not a cra
   const { updateNote } = await import("./notes");
   const { deleteFeed } = await import("./feeds");
   const { note: n } = await createNote("gone", "# a");
-  const p = updateNote("gone", n.id, "# b"); // stat has passed by the time the directory goes
+  const p = updateNote("gone", n.id, { markdown: "# b" }); // stat has passed by the time the directory goes
   await deleteFeed("gone");
   expect(await p).toBeNull();
 });

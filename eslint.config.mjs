@@ -25,7 +25,7 @@ const eslintConfig = defineConfig([
   ...nextTs,
   {
     files: ["app/**", "components/**", "proxy.ts"],
-    ignores: ["**/*.test.ts"],
+    ignores: ["**/*.test.{ts,tsx}"],
     rules: { "no-restricted-imports": ["error", FRONTEND_IMPORTS] },
   },
   { files: ["backend/**"], rules: { "no-restricted-imports": ["error", BACKEND_IMPORTS] } },

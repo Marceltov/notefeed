@@ -18,11 +18,11 @@ export function extractTitle(markdown: string): string {
   const h = headingIndex(ls);
   const heading = h === -1 ? undefined : ls[h];
   const line = heading ?? ls.find((l) => l.trim() !== "") ?? "";
-  return line
-    .replace(/^\s*(?:(?:#{1,6}|[>*+-]|\d+\.)\s*)+/, "")
-    .replace(/[*_`]/g, "")
-    .trim()
-    .slice(0, 100);
+  const text = line.replace(/^\s*(?:(?:#{1,6}|[>*+-]|\d+\.)\s*)+/, "").trim();
+  // A note that starts with a picture is titled by the picture's alt text, not by the markdown that shows it.
+  const picture = /^!\[([^\]]*)\]\([^)]*\)$/.exec(text);
+  if (picture) return picture[1].trim().slice(0, 100);
+  return text.replace(/[*_`]/g, "").trim().slice(0, 100);
 }
 
 /** UTC timestamp to the second: 20260929T140512Z */

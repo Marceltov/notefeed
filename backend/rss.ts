@@ -1,5 +1,4 @@
 // RSS 2.0, written by hand. Descriptions carry the raw markdown in CDATA.
-import { absolutizeImages } from "../shared/links";
 import type { Note } from "./notes";
 import { readPath } from "./urls";
 
@@ -18,13 +17,13 @@ export function renderFeed(notes: Note[], opts: { title: string; description: st
   const base = opts.baseUrl + readPath(opts.readId);
   const items = notes.map((n) => {
     const url = `${base}/${n.id}`;
+    const { description, enclosure } = n.rssContent(base);
     return `<item>
 <title>${escapeXml(n.title || n.id)}</title>
 <link>${url}</link>
 <guid isPermaLink="true">${url}</guid>
 <pubDate>${n.createdAt.toUTCString()}</pubDate>
-<description>${cdata(absolutizeImages(n.markdown, `${base}/`))}</description>
-${n.sender ? `<dc:creator>${escapeXml(n.sender)}</dc:creator>\n` : ""}${n.tags.map((t) => `<category>${escapeXml(t)}</category>\n`).join("")}</item>`;
+${description === undefined ? "" : `<description>${cdata(description)}</description>\n`}${enclosure ? `<enclosure url="${escapeXml(enclosure.url)}" length="${enclosure.length}" type="${enclosure.type}"/>\n` : ""}${n.sender ? `<dc:creator>${escapeXml(n.sender)}</dc:creator>\n` : ""}${n.tags.map((t) => `<category>${escapeXml(t)}</category>\n`).join("")}</item>`;
   });
   return `<?xml version="1.0" encoding="UTF-8"?>
 <rss version="2.0"${notes.some((n) => n.sender) ? ' xmlns:dc="http://purl.org/dc/elements/1.1/"' : ""}>

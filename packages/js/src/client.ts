@@ -4,12 +4,12 @@
  */
 import { createClient, createConfig } from "./generated/client/index.js";
 import { deleteFeed, deleteNote, editNote, getFeed, getNote, getReadNote, listNotes, listReadNotes, postNote, updateFeed, uploadImage } from "./generated/sdk.gen.js";
-import type { Created, Error as ApiError, Feed, FeedSettings, ImageUploaded, Note, NoteList } from "./generated/types.gen.js";
+import type { Created, Error as ApiError, Feed, FeedSettings, Note, NoteList } from "./generated/types.gen.js";
 
 /** The stable error codes the API answers with. */
 export type ErrorCode = NonNullable<ApiError["code"]>;
 
-export type { Created, Feed, FeedSettings, ImageUploaded, Note };
+export type { Created, Feed, FeedSettings, Note };
 /** `timeoutMs` (default 10000) limits each whole request, including reading the answer. */
 export type ClientOptions = { url: string; feed?: string; password?: string; feedPassword?: string; timeoutMs?: number };
 
@@ -69,6 +69,10 @@ const FEED_RE = /^[a-z0-9_-]{1,64}$/; // same rule as the server; reserved names
 
 type Result<T> = { data?: T; error?: unknown; response?: Response };
 
+// A header holds bytes, and fetch refuses a character above U+00FF: text that may not be ASCII goes as its UTF-8 bytes written as
+// latin1 characters, which is what the server reads back.
+const headerValue = (text: string): string => Array.from(new TextEncoder().encode(text), (b) => String.fromCharCode(b)).join("");
+
 export class Client {
   readonly url: string;
   readonly feed: string | null;
@@ -100,25 +104,33 @@ export class Client {
     });
   }
 
-  /** `feedPassword` overrides the client's, for a feed that has its own password. `tags` label the note (at most 10, each 1 to 32 characters of letters, digits, `-`, `_`, `.`, `:`; not verified). `readId` is the read id the feed gets when this post creates it (3 to 64 characters of `a-z`, `0-9`, `-`, `_`; random when left out; ignored for a feed that exists; a `taken` error when another feed has it). */
-  async post(markdown: string, options: { feed?: string; feedPassword?: string; tags?: string[]; readId?: string } = {}): Promise<Created> {
+  /** `feedPassword` overrides the client's, for a feed that has its own password. `tags` label the note (at most 10, each 1 to 32 characters of letters, digits, `-`, `_`, `.`, `:`; not verified). `readId` is the read id the feed gets when this post creates it (3 to 64 characters of `a-z`, `0-9`, `-`, `_`; random when left out; ignored for a feed that exists; a `taken` error when another feed has it). `title` is the note's title (at most 100 characters, one line); left out, it is taken from the text. */
+  async post(markdown: string, options: { feed?: string; feedPassword?: string; tags?: string[]; readId?: string; title?: string } = {}): Promise<Created> {
     const feed = this.feedFor(options.feed);
-    const body = { markdown, ...(options.tags?.length && { tags: options.tags }), ...(options.readId && { read_id: options.readId }) };
+    const body = { markdown, ...(options.title && { title: options.title }), ...(options.tags?.length && { tags: options.tags }), ...(options.readId && { read_id: options.readId }) };
     return this.call(postNote({ client: this.api, path: { feed }, body, ...this.opts(options.feedPassword) }));
   }
 
-  /** Upload a PNG, JPEG, GIF or WebP image to an existing feed. The server decides the format by the bytes, so no content type is needed. `markdown` in the answer is `![](file)`, relative to the feed so it follows a changed read id, to put in a note; use `url` for a link outside notefeed. Same options as post(). */
-  async uploadImage(data: Uint8Array | Blob, options: { feed?: string; feedPassword?: string } = {}): Promise<ImageUploaded> {
+  /** Post a PNG, JPEG, GIF or WebP image as a note of its own (the feed is created by its first note). The server decides the format by the bytes, so no content type is needed. The answer has the note's `file`: write `![](file)` in a markdown note to show it (relative to the feed, so it follows a changed read id), or pass it as `image` to updateFeed; `file_url` is for a link outside notefeed. `title` and `alt` describe it. Same options as post(). */
+  async uploadImage(data: Uint8Array | Blob, options: { feed?: string; feedPassword?: string; tags?: string[]; title?: string; alt?: string; name?: string } = {}): Promise<Created> {
     const feed = this.feedFor(options.feed);
     const body = data instanceof Blob ? data : new Blob([data as BlobPart]);
-    const headers = { ...this.opts(options.feedPassword).headers, "Content-Type": "application/octet-stream" };
+    const headers = {
+      ...this.opts(options.feedPassword).headers,
+      "Content-Type": "application/octet-stream",
+      ...(options.tags?.length && { "X-Note-Tags": options.tags.join(",") }),
+      ...(options.title && { "X-Note-Title": headerValue(options.title) }),
+      ...(options.alt && { "X-Note-Alt": headerValue(options.alt) }),
+      ...(options.name && { "X-Note-Name": headerValue(options.name) }),
+    };
     return this.call(uploadImage({ client: this.api, path: { feed }, body, signal: AbortSignal.timeout(this.timeoutMs), headers }));
   }
 
-  /** Replace a note's markdown; its id and URLs stay. Same options as post(). */
-  async edit(id: string, markdown: string, options: { feed?: string; feedPassword?: string } = {}): Promise<Note> {
+  /** Replace a note's markdown; its id and URLs stay. `title` sets its title too ("" removes it: the title follows the text again). Same options as post(). */
+  async edit(id: string, markdown: string, options: { feed?: string; feedPassword?: string; title?: string } = {}): Promise<Note> {
     const feed = this.feedFor(options.feed);
-    return this.call(editNote({ client: this.api, path: { feed, id }, body: { markdown }, ...this.opts(options.feedPassword) }));
+    const body = { markdown, ...(options.title !== undefined && { title: options.title }) };
+    return this.call(editNote({ client: this.api, path: { feed, id }, body, ...this.opts(options.feedPassword) }));
   }
 
   /** Remove a note for good. The feed stays, even with no notes left. Same options as post(). */

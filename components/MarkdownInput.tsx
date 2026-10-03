@@ -1,80 +1,80 @@
 "use client";
 
-import { useRef, useState, useSyncExternalStore, type ClipboardEvent, type DragEvent, type ReactNode } from "react";
-import { ImagePlus } from "lucide-react";
-import { uploadImageFile } from "@/app/_lib/useApiForm";
+import { useRef, useSyncExternalStore, type ClipboardEvent, type DragEvent, type ReactNode } from "react";
+import { ImagePlus, X } from "lucide-react";
+import { type Pending, newPending, removeReference, uniqueToken } from "@/components/pendingFiles";
 
 const ACCEPT = "image/png,image/jpeg,image/gif,image/webp";
 
-// The note textarea of the compose box and the editor, with image upload: the "Add image" button, paste and
-// drag-and-drop each upload the files one after another and insert `![](file)` at the cursor. `images` is false
-// for a feed without a first note (nothing can be uploaded to it yet). The button only exists once hydrated,
+// The note textarea of the compose box and the editor, with pictures: the "Add image" button, paste and drag-and-drop each add the
+// files to `pending` (the parent owns the list and posts it, see usePendingImages) and write `![](name)` at the cursor, with the
+// file's own name. Nothing is uploaded here, so leaving the page uploads nothing. The button and the list only exist once hydrated,
 // so without JavaScript only the textarea renders.
-export function MarkdownInput({ id, name, label, value, onChange, feed, rows, placeholder, describedBy, className = "", images = true, onBusy, children }: {
+export function MarkdownInput({ id, name, label, value, onChange, rows, placeholder, describedBy, className = "", pending, onPendingChange, children }: {
   id: string;
   name: string;
   label: string;
   value: string;
   onChange: (value: string) => void;
-  feed: string;
   rows: number;
   placeholder?: string;
   describedBy?: string;
   className?: string;
-  images?: boolean;
-  onBusy?: (busy: boolean) => void; // an upload is running: the parent holds back posting, so the image is not left out
+  pending: Pending[];
+  onPendingChange: (pending: Pending[]) => void;
   children?: ReactNode; // more controls, rendered on the same row as the "Add image" button
 }) {
   const area = useRef<HTMLTextAreaElement>(null);
   const picker = useRef<HTMLInputElement>(null);
-  const [uploading, setUploading] = useState(false);
-  const [error, setError] = useState<string>();
   const hydrated = useSyncExternalStore(() => () => {}, () => true, () => false);
 
-  function insert(markdown: string) {
+  // `text` goes in at the cursor, on a line of its own.
+  function insert(text: string, current: string) {
     const ta = area.current;
-    if (!ta) return;
-    const { value: v, selectionStart: s, selectionEnd: e } = ta; // the DOM's value: `value` may be stale after an await
-    const before = v.slice(0, s);
-    const after = v.slice(e);
+    if (!ta) return current + text;
+    const { selectionStart: s, selectionEnd: e } = ta;
+    const before = current.slice(0, s);
+    const after = current.slice(e);
     const head = before && !before.endsWith("\n") ? "\n" : "";
     const tail = after && !after.startsWith("\n") ? "\n" : "";
-    const cursor = before.length + head.length + markdown.length;
-    onChange(before + head + markdown + tail + after);
+    const cursor = before.length + head.length + text.length;
     requestAnimationFrame(() => {
       ta.focus();
       ta.setSelectionRange(cursor, cursor);
     });
+    return before + head + text + tail + after;
   }
 
-  async function upload(files: File[]) {
-    setError(undefined);
-    setUploading(true);
-    onBusy?.(true);
-    for (const file of files) {
-      const result = await uploadImageFile(feed, file);
-      if ("error" in result) {
-        setError(result.error);
-        break;
-      }
-      insert(`![](${result.file})`); // by file name: it follows a changed read id
-    }
-    setUploading(false);
-    onBusy?.(false);
+  function add(files: File[]) {
+    const taken = new Set(pending.map((p) => p.token));
+    const added = files.map((file) => {
+      const token = uniqueToken(file.name, taken);
+      taken.add(token);
+      return newPending(file, token);
+    });
+    // By its own file name for now: posting swaps it for the note's.
+    onChange(insert(added.map((p) => `![](${p.token})`).join("\n"), area.current?.value ?? value));
+    onPendingChange([...pending, ...added]);
+  }
+
+  function remove(p: Pending) {
+    URL.revokeObjectURL(p.preview);
+    onChange(removeReference(area.current?.value ?? value, p.token));
+    onPendingChange(pending.filter((q) => q.key !== p.key));
   }
 
   const imageFiles = (list: FileList | null) => Array.from(list ?? []).filter((f) => f.type.startsWith("image/"));
   const paste = (e: ClipboardEvent) => {
     const files = imageFiles(e.clipboardData.files);
-    if (!images || !files.length || e.clipboardData.types.includes("text/plain")) return; // copied cells and text carry a picture too: paste the text
+    if (!files.length || e.clipboardData.types.includes("text/plain")) return; // copied cells and text carry a picture too: paste the text
     e.preventDefault();
-    upload(files);
+    add(files);
   };
   const drop = (e: DragEvent) => {
     const files = imageFiles(e.dataTransfer.files);
-    if (!images || !files.length) return;
+    if (!files.length) return;
     e.preventDefault();
-    upload(files);
+    add(files);
   };
 
   return (
@@ -89,51 +89,59 @@ export function MarkdownInput({ id, name, label, value, onChange, feed, rows, pl
         value={value}
         onChange={(e) => onChange(e.target.value)}
         onKeyDown={(e) => {
-          if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && !uploading) e.currentTarget.form?.requestSubmit();
+          if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) e.currentTarget.form?.requestSubmit();
         }}
         onPaste={paste}
-        onDragOver={(e) => images && e.dataTransfer.types.includes("Files") && e.preventDefault()} // a text control accepts file drops in Chromium only otherwise
+        onDragOver={(e) => e.dataTransfer.types.includes("Files") && e.preventDefault()} // a text control accepts file drops in Chromium only otherwise
         onDrop={drop}
         rows={rows}
         placeholder={placeholder}
         aria-describedby={describedBy}
         className={`block w-full resize-y rounded-sm border border-rule bg-transparent p-3 text-ink focus:border-carbon focus:outline-none ${className}`}
       />
-      {((hydrated && images) || children) && (
+      {hydrated && pending.length > 0 && (
+        <ul aria-label="Images to post" className="mt-2 flex flex-wrap gap-2 text-sm">
+          {pending.map((p) => (
+            <li key={p.key} className="flex items-center gap-2 rounded-sm border border-rule py-1 pl-1 pr-2">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={p.preview} alt="" className="h-10 w-10 rounded-sm object-cover" />
+              <span className="max-w-40 truncate">{p.token}</span>
+              <button type="button" onClick={() => remove(p)} aria-label={`Remove ${p.token}`} className="text-muted hover:text-ink">
+                <X aria-hidden className="h-4 w-4" />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {(hydrated || children) && (
         <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
-          {hydrated && images && (
+          {hydrated && (
             <>
-          <input
-            ref={picker}
-            type="file"
-            accept={ACCEPT}
-            multiple
-            hidden
-            aria-label="Image file"
-            onChange={(e) => {
-              const files = Array.from(e.target.files ?? []);
-              e.target.value = ""; // the same file can be chosen again
-              if (files.length) upload(files);
-            }}
-          />
-          <button
-            type="button"
-            disabled={uploading}
-            onClick={() => picker.current?.click()}
-            className="inline-flex items-center gap-1.5 rounded-sm border border-rule px-2.5 py-1 font-bold text-carbon hover:border-carbon disabled:opacity-60"
-          >
-            <ImagePlus aria-hidden className="h-4 w-4" />
-            {uploading ? "Uploading…" : "Add image"}
-          </button>
+              <input
+                ref={picker}
+                type="file"
+                accept={ACCEPT}
+                multiple
+                hidden
+                aria-label="Image file"
+                onChange={(e) => {
+                  const files = Array.from(e.target.files ?? []);
+                  e.target.value = ""; // the same file can be chosen again
+                  if (files.length) add(files);
+                }}
+              />
+              <button
+                type="button"
+                onClick={() => picker.current?.click()}
+                className="inline-flex items-center gap-1.5 rounded-sm border border-rule px-2.5 py-1 font-bold text-carbon hover:border-carbon"
+              >
+                <ImagePlus aria-hidden className="h-4 w-4" />
+                Add image
+              </button>
             </>
           )}
           {children}
         </div>
-      )}
-      {error && (
-        <p role="alert" className="mt-1 text-sm text-error">
-          {error}
-        </p>
       )}
     </>
   );

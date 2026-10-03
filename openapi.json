@@ -33,7 +33,7 @@
       "post": {
         "operationId": "postNote",
         "summary": "Post a note",
-        "description": "Creates the feed with its first note, optionally protected by its own password (`X-Feed-Password` header or a `password` field in the JSON or form body; 1 to 256 printable ASCII characters, with no space at the start or end). Posting to a protected feed needs that password. Also served at `POST /{feed}`, the short form the client packages and curl one-liners use. The body is at most 102400 bytes and must be UTF-8. `application/x-www-form-urlencoded` (what `curl -d` sends) is read as raw markdown, not as form fields. `read_id` (JSON or form field) is the feed's read id when this post creates it: random when left out, ignored for a feed that exists. Tags (at most 10 tags, each 1 to 32 characters of letters, digits, `-`, `_`, `.` and `:`; case is folded to lowercase, duplicates are removed) go in the JSON `tags` array, a repeated `tags` form field, or, for a raw body, the `X-Note-Tags` header.",
+        "description": "Creates the feed with its first note, optionally protected by its own password (`X-Feed-Password` header or a `password` field in the JSON or form body; 1 to 256 printable ASCII characters, with no space at the start or end). Posting to a protected feed needs that password. Also served at `POST /{feed}`, the short form the client packages and curl one-liners use. A markdown body is at most 102400 bytes and must be UTF-8. A body that is an image (`image/png`, `image/jpeg`, `image/gif`, `image/webp` or `application/octet-stream`) is posted as a note of its own: PNG, JPEG, GIF or WebP, recognized by its first bytes, whatever `Content-Type` is sent (SVG is refused). It is stored byte for byte, with no resizing and no metadata stripped (EXIF such as GPS position stays in the file), at most NOTEFEED_MAX_IMAGE_BYTES (default 5 MiB). The response has its `file` and a `file_url` under the feed's read id, public like the read link. `X-Note-Name` gives the picture's original file name. A multipart form may send a `file` part instead of `markdown`. `application/x-www-form-urlencoded` (what `curl -d` sends) is read as raw markdown, not as form fields. `read_id` (JSON or form field) is the feed's read id when this post creates it: random when left out, ignored for a feed that exists. Tags (at most 10 tags, each 1 to 32 characters of letters, digits, `-`, `_`, `.` and `:`; case is folded to lowercase, duplicates are removed) go in the JSON `tags` array, a repeated `tags` form field, or, for a raw body, the `X-Note-Tags` header.",
         "tags": [
           "Feeds"
         ],
@@ -71,6 +71,33 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "X-Note-Name",
+            "in": "header",
+            "required": false,
+            "description": "For an image body: the picture's original file name, kept with the note (at most 200 characters)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Note-Title",
+            "in": "header",
+            "required": false,
+            "description": "The note's title, for a raw body; a JSON or form body's own `title` wins. At most 100 characters, one line.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Note-Alt",
+            "in": "header",
+            "required": false,
+            "description": "For an image body: its alternative text; a form's own `alt` wins.",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "requestBody": {
@@ -99,6 +126,41 @@
             "multipart/form-data": {
               "schema": {
                 "$ref": "#/components/schemas/PostForm"
+              }
+            },
+            "image/png": {
+              "schema": {
+                "type": "string",
+                "format": "binary",
+                "description": "The image's bytes: PNG, JPEG, GIF or WebP, recognized by their first bytes, not by the Content-Type"
+              }
+            },
+            "image/jpeg": {
+              "schema": {
+                "type": "string",
+                "format": "binary",
+                "description": "The image's bytes: PNG, JPEG, GIF or WebP, recognized by their first bytes, not by the Content-Type"
+              }
+            },
+            "image/gif": {
+              "schema": {
+                "type": "string",
+                "format": "binary",
+                "description": "The image's bytes: PNG, JPEG, GIF or WebP, recognized by their first bytes, not by the Content-Type"
+              }
+            },
+            "image/webp": {
+              "schema": {
+                "type": "string",
+                "format": "binary",
+                "description": "The image's bytes: PNG, JPEG, GIF or WebP, recognized by their first bytes, not by the Content-Type"
+              }
+            },
+            "application/octet-stream": {
+              "schema": {
+                "type": "string",
+                "format": "binary",
+                "description": "The image's bytes: PNG, JPEG, GIF or WebP, recognized by their first bytes, not by the Content-Type"
               }
             }
           }
@@ -156,7 +218,7 @@
             }
           },
           "413": {
-            "description": "Body over 102400 bytes",
+            "description": "A markdown body over 102400 bytes, or an image over NOTEFEED_MAX_IMAGE_BYTES",
             "content": {
               "application/json": {
                 "schema": {
@@ -166,7 +228,7 @@
             }
           },
           "415": {
-            "description": "Unsupported content type",
+            "description": "Unsupported content type, or an image that is not a PNG, JPEG, GIF or WebP",
             "content": {
               "application/json": {
                 "schema": {
@@ -194,7 +256,7 @@
             }
           },
           "507": {
-            "description": "NOTEFEED_MAX_FEEDS or NOTEFEED_MAX_NOTES_PER_FEED reached",
+            "description": "NOTEFEED_MAX_FEEDS, NOTEFEED_MAX_NOTES_PER_FEED or NOTEFEED_MAX_IMAGES_PER_FEED reached",
             "content": {
               "application/json": {
                 "schema": {
@@ -257,7 +319,7 @@
             "description": "Only notes older than this id: the previous page's `next`",
             "schema": {
               "type": "string",
-              "pattern": "^\\d{8}T\\d{6}Z-[a-z0-9-]+$"
+              "pattern": "^[A-Za-z0-9_-]{1,128}$"
             }
           },
           {
@@ -322,6 +384,220 @@
         }
       }
     },
+    "/api/v1/feeds/{feed}/images": {
+      "post": {
+        "operationId": "uploadImage",
+        "summary": "Post an image",
+        "description": "The same as posting a note with an image body, for clients that send the picture itself: it becomes a note of its own. The body is PNG, JPEG, GIF or WebP, recognized by its first bytes, whatever `Content-Type` is sent (SVG is refused). Stored byte for byte, with no resizing and no metadata stripped (EXIF such as GPS position stays in the file). The response has the note's `file` and a `file_url` under the feed's read link, public like the read link, and `![](file)` in a markdown note shows it. Creates the feed if it does not exist, like a first note; a password given then protects it. Needs the same credentials as posting and counts against the post rate limit. The size limit is NOTEFEED_MAX_IMAGE_BYTES (default 5 MiB).",
+        "tags": [
+          "Feeds"
+        ],
+        "security": [
+          {},
+          {
+            "password": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "feed",
+            "in": "path",
+            "required": true,
+            "description": "The feed's name. It is the write key: anyone who knows it can post.",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9_-]{1,64}$"
+            }
+          },
+          {
+            "name": "X-Feed-Password",
+            "in": "header",
+            "required": false,
+            "description": "The feed's own password, when it has one: to post, list or get, and (as the current password) to change or remove it. On the `POST` that creates a feed it sets the feed's password; on a `POST` to an existing feed that has none it answers 409. An empty value is the same as no header, so a `POST` with an empty one creates an open feed.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Note-Tags",
+            "in": "header",
+            "required": false,
+            "description": "Tags for the note, comma-separated (`ci,deploy`): at most 10 tags, each 1 to 32 characters of letters, digits, `-`, `_`, `.` and `:`; case is folded to lowercase, duplicates are removed. For a raw markdown body; a JSON or form body's own `tags` wins. Empty is none.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Note-Name",
+            "in": "header",
+            "required": false,
+            "description": "For an image body: the picture's original file name, kept with the note (at most 200 characters)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Note-Title",
+            "in": "header",
+            "required": false,
+            "description": "The note's title, for a raw body; a JSON or form body's own `title` wins. At most 100 characters, one line.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Note-Alt",
+            "in": "header",
+            "required": false,
+            "description": "For an image body: its alternative text; a form's own `alt` wins.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "image/png": {
+              "schema": {
+                "type": "string",
+                "format": "binary",
+                "description": "The image's bytes: PNG, JPEG, GIF or WebP, recognized by their first bytes, not by the Content-Type"
+              }
+            },
+            "image/jpeg": {
+              "schema": {
+                "type": "string",
+                "format": "binary",
+                "description": "The image's bytes: PNG, JPEG, GIF or WebP, recognized by their first bytes, not by the Content-Type"
+              }
+            },
+            "image/gif": {
+              "schema": {
+                "type": "string",
+                "format": "binary",
+                "description": "The image's bytes: PNG, JPEG, GIF or WebP, recognized by their first bytes, not by the Content-Type"
+              }
+            },
+            "image/webp": {
+              "schema": {
+                "type": "string",
+                "format": "binary",
+                "description": "The image's bytes: PNG, JPEG, GIF or WebP, recognized by their first bytes, not by the Content-Type"
+              }
+            },
+            "application/octet-stream": {
+              "schema": {
+                "type": "string",
+                "format": "binary",
+                "description": "The image's bytes: PNG, JPEG, GIF or WebP, recognized by their first bytes, not by the Content-Type"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Stored",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Created"
+                }
+              }
+            }
+          },
+          "303": {
+            "description": "Only when the request accepts `text/html` (a browser navigating): back to the feed page with `?posted=<id>` or `?error=<code>`, or to the login page",
+            "headers": {
+              "Location": {
+                "description": "Where to go",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid or reserved feed name; a bad title or alt; a new password that is not printable ASCII; invalid tags",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The instance has a password, or the feed has its own, and it is missing or wrong",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "A password was sent for a feed that already exists without one: it can't be claimed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Body over NOTEFEED_MAX_IMAGE_BYTES",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Not a PNG, JPEG, GIF or WebP image",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many posts, or wrong passwords, from this client",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before trying again",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "507": {
+            "description": "NOTEFEED_MAX_FEEDS or NOTEFEED_MAX_IMAGES_PER_FEED reached",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/feeds/{feed}/notes/{id}": {
       "get": {
         "operationId": "getNote",
@@ -353,7 +629,7 @@
             "description": "The note's id",
             "schema": {
               "type": "string",
-              "pattern": "^\\d{8}T\\d{6}Z-[a-z0-9-]+$"
+              "pattern": "^[A-Za-z0-9_-]{1,128}$"
             }
           },
           {
@@ -430,7 +706,7 @@
       "put": {
         "operationId": "editNote",
         "summary": "Edit a note",
-        "description": "Replaces the note's markdown; its id and creation time stay, the title follows the new text. Needs the feed's password if it has one, and counts against the post rate limit. Read links can't edit. The body is as for posting: at most 102400 bytes, UTF-8, a `password` field is ignored.",
+        "description": "Changes the note: its markdown (only for a markdown note), its title (empty removes it: a markdown note's title follows its text again), its alt text (image notes). Its id and creation time stay. A raw text body is the new markdown. At least one of the three is needed. Needs the feed's password if it has one, and counts against the post rate limit. Read links can't edit. The body is at most 102400 bytes and UTF-8.",
         "tags": [
           "Feeds"
         ],
@@ -458,7 +734,7 @@
             "description": "The note's id",
             "schema": {
               "type": "string",
-              "pattern": "^\\d{8}T\\d{6}Z-[a-z0-9-]+$"
+              "pattern": "^[A-Za-z0-9_-]{1,128}$"
             }
           },
           {
@@ -491,12 +767,12 @@
             },
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/PostJson"
+                "$ref": "#/components/schemas/EditJson"
               }
             },
             "multipart/form-data": {
               "schema": {
-                "$ref": "#/components/schemas/PostForm"
+                "$ref": "#/components/schemas/EditForm"
               }
             }
           }
@@ -613,7 +889,7 @@
             "description": "The note's id",
             "schema": {
               "type": "string",
-              "pattern": "^\\d{8}T\\d{6}Z-[a-z0-9-]+$"
+              "pattern": "^[A-Za-z0-9_-]{1,128}$"
             }
           },
           {
@@ -670,173 +946,6 @@
                 }
               }
             },
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/feeds/{feed}/images": {
-      "post": {
-        "operationId": "uploadImage",
-        "summary": "Upload an image",
-        "description": "The body is the image itself: PNG, JPEG, GIF or WebP, recognized by its first bytes, whatever `Content-Type` is sent (SVG is refused). Stored byte-for-byte, with no resizing and no metadata stripped (EXIF such as GPS position stays in the file), as the first 32 hex characters of its SHA-256 plus an extension: the same bytes always give the same URL. The URL is under the feed's read id, so it works in the feed page, the read-only view and RSS readers without any password. Needs the same credentials as posting and counts against the post rate limit. The feed must exist: it is created by its first note. The size limit is NOTEFEED_MAX_IMAGE_BYTES (default 5 MiB); images deleted only with the feed.",
-        "tags": [
-          "Feeds"
-        ],
-        "security": [
-          {},
-          {
-            "password": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "feed",
-            "in": "path",
-            "required": true,
-            "description": "The feed's name. It is the write key: anyone who knows it can post.",
-            "schema": {
-              "type": "string",
-              "pattern": "^[a-z0-9_-]{1,64}$"
-            }
-          },
-          {
-            "name": "X-Feed-Password",
-            "in": "header",
-            "required": false,
-            "description": "The feed's own password, when it has one: to post, list or get, and (as the current password) to change or remove it. On the `POST` that creates a feed it sets the feed's password; on a `POST` to an existing feed that has none it answers 409. An empty value is the same as no header, so a `POST` with an empty one creates an open feed.",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "image/png": {
-              "schema": {
-                "type": "string",
-                "format": "binary",
-                "description": "The image's bytes: PNG, JPEG, GIF or WebP, recognized by their first bytes, not by the Content-Type"
-              }
-            },
-            "image/jpeg": {
-              "schema": {
-                "type": "string",
-                "format": "binary",
-                "description": "The image's bytes: PNG, JPEG, GIF or WebP, recognized by their first bytes, not by the Content-Type"
-              }
-            },
-            "image/gif": {
-              "schema": {
-                "type": "string",
-                "format": "binary",
-                "description": "The image's bytes: PNG, JPEG, GIF or WebP, recognized by their first bytes, not by the Content-Type"
-              }
-            },
-            "image/webp": {
-              "schema": {
-                "type": "string",
-                "format": "binary",
-                "description": "The image's bytes: PNG, JPEG, GIF or WebP, recognized by their first bytes, not by the Content-Type"
-              }
-            },
-            "application/octet-stream": {
-              "schema": {
-                "type": "string",
-                "format": "binary",
-                "description": "The image's bytes: PNG, JPEG, GIF or WebP, recognized by their first bytes, not by the Content-Type"
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "Stored (or already there)",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ImageUploaded"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Invalid or reserved feed name",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "The instance has a password, or the feed has its own, and it is missing or wrong",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "No such feed",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "413": {
-            "description": "Body over NOTEFEED_MAX_IMAGE_BYTES",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "415": {
-            "description": "Not a PNG, JPEG, GIF or WebP image",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "429": {
-            "description": "Too many posts, uploads, edits and deletes, or wrong passwords, from this client",
-            "headers": {
-              "Retry-After": {
-                "description": "Seconds to wait before trying again",
-                "schema": {
-                  "type": "integer"
-                }
-              }
-            },
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "507": {
-            "description": "NOTEFEED_MAX_IMAGES_PER_FEED reached",
             "content": {
               "application/json": {
                 "schema": {
@@ -1420,7 +1529,7 @@
             "description": "Only notes older than this id: the previous page's `next`",
             "schema": {
               "type": "string",
-              "pattern": "^\\d{8}T\\d{6}Z-[a-z0-9-]+$"
+              "pattern": "^[A-Za-z0-9_-]{1,128}$"
             }
           },
           {
@@ -1494,7 +1603,7 @@
             "description": "The note's id",
             "schema": {
               "type": "string",
-              "pattern": "^\\d{8}T\\d{6}Z-[a-z0-9-]+$"
+              "pattern": "^[A-Za-z0-9_-]{1,128}$"
             }
           }
         ],
@@ -1555,14 +1664,58 @@
       "Note": {
         "type": "object",
         "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "markdown",
+              "image"
+            ],
+            "description": "What the note is: a markdown text, or a picture (then `markdown` is empty and the picture is the file `file`)"
+          },
+          "file": {
+            "type": "string",
+            "description": "The note's file name, `<id>.<extension>`; served under the feed's read id, like the picture of an image note"
+          },
           "id": {
             "type": "string",
-            "pattern": "^\\d{8}T\\d{6}Z-[a-z0-9-]+$",
-            "description": "UTC time to the second plus a random UUID"
+            "pattern": "^[A-Za-z0-9_-]{1,128}$",
+            "description": "The note's id: a UTC time to the second plus a random UUID for notes made here; any name without a dot for a file placed by hand"
           },
           "title": {
             "type": "string",
-            "description": "The first heading, or the first non-empty line; may be empty"
+            "description": "The title set for the note, else the first heading or the first non-empty line of a markdown note; may be empty (an image without one)"
+          },
+          "alt": {
+            "description": "Alternative text of an image note",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "name": {
+            "description": "The file name an image was posted with",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "size": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991,
+            "description": "The size of the note's content in bytes"
+          },
+          "file_url": {
+            "description": "Where the note's file is served, absolute, under the feed's read id; null while the feed has no read link",
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uri"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "markdown": {
             "type": "string",
@@ -1595,8 +1748,11 @@
           }
         },
         "required": [
+          "kind",
+          "file",
           "id",
           "title",
+          "size",
           "markdown",
           "created_at",
           "url",
@@ -1633,7 +1789,7 @@
         "properties": {
           "id": {
             "type": "string",
-            "pattern": "^\\d{8}T\\d{6}Z-[a-z0-9-]+$"
+            "pattern": "^[A-Za-z0-9_-]{1,128}$"
           },
           "url": {
             "type": "string",
@@ -1656,6 +1812,22 @@
               }
             ],
             "description": "The feed's read-only RSS link, safe to share; null only if the server can't read the feed's stored read id, or if that id and the derived one both belong to other feeds"
+          },
+          "file": {
+            "description": "For an image note: its file name, `<id>.<extension>`; absent for markdown. Pass it as a feed's `image` setting",
+            "type": "string"
+          },
+          "file_url": {
+            "description": "For an image note: where the picture is served, absolute, under the feed's read id (public like the read link); absent for markdown",
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uri"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
@@ -1663,31 +1835,6 @@
           "url",
           "feed_url",
           "read_url"
-        ],
-        "additionalProperties": false
-      },
-      "ImageUploaded": {
-        "type": "object",
-        "properties": {
-          "file": {
-            "type": "string",
-            "pattern": "^[0-9a-f]{32}\\.(png|jpg|gif|webp)$",
-            "description": "The stored file's name: 32 hex characters of the SHA-256 plus the extension. Pass it as a feed's `image` setting"
-          },
-          "url": {
-            "type": "string",
-            "format": "uri",
-            "description": "Where the image is served, absolute, under the feed's read id; public like the read link"
-          },
-          "markdown": {
-            "type": "string",
-            "description": "`![](file)`, to paste into a note: relative to the feed, so it keeps working if the feed's read id changes. Use `url` instead for a link outside notefeed (that one is yours to update)"
-          }
-        },
-        "required": [
-          "file",
-          "url",
-          "markdown"
         ],
         "additionalProperties": false
       },
@@ -1732,6 +1879,10 @@
           "markdown": {
             "type": "string"
           },
+          "title": {
+            "type": "string",
+            "description": "The note's title, at most 100 characters, one line; empty or left out means the title is taken from the text (a markdown note) or there is none (an image)"
+          },
           "password": {
             "type": "string",
             "description": "Protects the feed: 1 to 256 printable ASCII characters, with no space at the start or end. Only honored on the post that creates the feed; an existing open feed answers 409. Empty is the same as leaving it out."
@@ -1757,7 +1908,16 @@
         "type": "object",
         "properties": {
           "markdown": {
-            "type": "string"
+            "type": "string",
+            "description": "The note; or send a `file` part with an image instead"
+          },
+          "title": {
+            "type": "string",
+            "description": "The note's title, at most 100 characters, one line; empty or left out means the title is taken from the text (a markdown note) or there is none (an image)"
+          },
+          "alt": {
+            "type": "string",
+            "description": "Alternative text of an image note, at most 500 characters, one line"
           },
           "password": {
             "type": "string",
@@ -1779,6 +1939,27 @@
           "markdown"
         ],
         "additionalProperties": false
+      },
+      "EditJson": {
+        "type": "object",
+        "properties": {
+          "markdown": {
+            "description": "The new text; only for a markdown note",
+            "type": "string"
+          },
+          "title": {
+            "type": "string",
+            "description": "The note's title, at most 100 characters, one line; empty or left out means the title is taken from the text (a markdown note) or there is none (an image)"
+          },
+          "alt": {
+            "type": "string",
+            "description": "Alternative text of an image note, at most 500 characters, one line"
+          }
+        },
+        "additionalProperties": false
+      },
+      "EditForm": {
+        "$ref": "#/components/schemas/EditJson"
       },
       "PasswordJson": {
         "type": "object",

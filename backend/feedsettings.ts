@@ -2,8 +2,7 @@
 import { readSettings, writeSettings } from "./data/settings";
 import { isErrno } from "./data/fs";
 import { InvalidBodyError, NotFoundError } from "./errors";
-import { knownImage } from "./images";
-import type { Note } from "./notes";
+import { hasImageNote, type Note } from "./notes";
 
 export type FeedSettings = { title: string; description: string; image: string; showSender: boolean };
 
@@ -36,7 +35,7 @@ export function checkSettings(input: unknown): Omit<FeedSettings, "image" | "sho
 }
 
 // What readers (RSS, the read API and pages) get: the sender only while the feed shows it.
-export const forReaders = (notes: Note[], s: { showSender: boolean }): Note[] => (s.showSender ? notes : notes.map((n) => Object.fromEntries(Object.entries(n).filter(([k]) => k !== "sender")) as Note));
+export const forReaders = (notes: Note[], s: { showSender: boolean }): Note[] => notes.map((n) => n.forReaders(s.showSender));
 
 // What is stored, whatever has become of the image file (the save path in posting.ts keeps it as it is).
 export const getStoredSettings = (feed: string): Promise<FeedSettings> => readSettings(feed);
@@ -44,7 +43,7 @@ export const getStoredSettings = (feed: string): Promise<FeedSettings> => readSe
 // What is shown: a title image whose file is gone (removed by hand) counts as none, so nothing points at a 404.
 export async function getSettings(feed: string): Promise<FeedSettings> {
   const s = await readSettings(feed);
-  return s.image && !(await knownImage(feed, s.image)) ? { ...s, image: "" } : s;
+  return s.image && !(await hasImageNote(feed, s.image)) ? { ...s, image: "" } : s;
 }
 
 export async function saveSettings(feed: string, s: FeedSettings): Promise<void> {

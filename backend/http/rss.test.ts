@@ -65,7 +65,7 @@ test("public even when the instance is locked", async () => {
 
 test("an edited note keeps its guid and shows the new text", async () => {
   const { note: n } = await createNote("test", "# Old\nbefore");
-  await updateNote("test", n.id, "# Old\nafter edit");
+  await updateNote("test", n.id, { markdown: "# Old\nafter edit" });
   const xml = await (await get((await readIdOf("test"))!)).text();
   expect(xml).toContain(`${n.id}</guid>`);
   expect(xml).toContain("after edit");

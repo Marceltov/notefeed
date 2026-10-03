@@ -7,9 +7,8 @@ import { InvalidBodyError, ReadIdTakenError } from "./errors";
 import { ensureFeed, feedForReadId, hasFeed, readIdOf, resetFeedsForTests, setReadId } from "./feeds";
 import { getFeed, getReadFeed } from "./index";
 import { dispatch, API_PREFIX } from "./http/api";
-import { imageRoute } from "./http/images";
-import { createNote } from "./notes";
-import { storeImage } from "./images";
+import { fileRoute } from "./http/files";
+import { createImageNote, createNote } from "./notes";
 import { resetRateLimitsForTests } from "./limits";
 
 const BASE = "http://localhost:3000";
@@ -152,15 +151,15 @@ describe("images follow the read id without editing a note", () => {
   const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 9, 9, 9]);
   test("the file is served under the new id and not the old; the title image URL follows; notes are untouched", async () => {
     await createNote("blog", "x");
-    const file = await storeImage("blog", PNG);
+    const file = (await createImageNote("blog", PNG, {})).note.file;
     const note = `![](${file})`;
     await createNote("blog", note);
     await call("PUT", "/feeds/blog", { title: "", description: "", image: file });
     const old = (await readIdOf("blog"))!;
-    expect((await imageRoute(old, file)).status).toBe(200);
+    expect((await fileRoute(old, file)).status).toBe(200);
     await setReadId("blog", "moved");
-    expect((await imageRoute("moved", file)).status).toBe(200);
-    expect((await imageRoute(old, file)).status).toBe(404);
+    expect((await fileRoute("moved", file)).status).toBe(200);
+    expect((await fileRoute(old, file)).status).toBe(404);
     expect((await getFeed("blog"))!.imageUrl).toBe(`/r/moved/${file}`);
     expect((await getFeed("blog"))!.notes.map((n) => n.markdown)).toContain(note);
   });

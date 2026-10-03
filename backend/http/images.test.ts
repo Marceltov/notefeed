@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readdir, rm, stat, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { beforeEach, describe, expect, test } from "vitest";
@@ -7,11 +7,11 @@ import { createProtected } from "../feedlock";
 import { getFeed, getReadFeed } from "../index";
 import { deleteFeed, resetFeedsForTests, readIdOf } from "../feeds";
 import { resetRateLimitsForTests } from "../limits";
+import { hasFeed } from "../feeds";
 import { createNote, listNotes, removeNote } from "../notes";
 import { API_PREFIX, dispatch } from "./api";
 import { feedSettingsRoute } from "./feedforms";
-import { IMAGE_FILE_RE } from "../images";
-import { imageRoute } from "./images";
+import { fileRoute } from "./files";
 import { rssRoute } from "./rss";
 
 const BASE = "http://localhost:3000";
@@ -31,41 +31,65 @@ async function call(method: string, path: string, init: { body?: BodyInit; heade
   const segments = url.pathname.slice(API_PREFIX.length + 1).split("/").map(decodeURIComponent);
   return dispatch(new Request(url, { method, body: init.body, headers: { host: "localhost:3000", ...init.headers } }), segments);
 }
+// An image is posted like any note: the body is the picture.
 const upload = (feed: string, body: BodyInit, type = "image/png", headers: Record<string, string> = {}) =>
-  call("POST", `/feeds/${feed}/images`, { body, headers: { "content-type": type, ...headers } });
-const get = (rid: string, file: string) => imageRoute(rid, file);
+  call("POST", `/feeds/${feed}/notes`, { body, headers: { "content-type": type, ...headers } });
+const IMAGE_FILE_RE = /^[A-Za-z0-9_-]+\.(png|jpg|gif|webp)$/;
+const imageFiles = async (feed: string) => (await readdir(join(process.env.DATA_DIR!, feed))).filter((f) => IMAGE_FILE_RE.test(f));
+const get = (rid: string, file: string) => fileRoute(rid, file);
 
-describe("POST /feeds/{feed}/images", () => {
-  test("201 with file, absolute url under the read id, and markdown", async () => {
+describe("POST /feeds/{feed}/notes with an image body", () => {
+  test("201 with the note's id, its file and an absolute file_url under the read id", async () => {
     await createNote("pics", "# x");
     const res = await upload("pics", PNG);
     expect(res.status).toBe(201);
     const body = await res.json();
     const rid = (await readIdOf("pics"))!;
-    expect(body.file).toMatch(/^[0-9a-f]{32}\.png$/);
-    expect(body.url).toBe(`${BASE}/r/${rid}/${body.file}`);
-    expect(body.markdown).toBe(`![](${body.file})`); // relative: follows a changed read id
-    expect(body.url).not.toContain("pics");
-    expect((await upload("pics", PNG)).status).toBe(201); // same bytes again
-    expect((await readdir(join(process.env.DATA_DIR!, "pics"))).filter((f) => IMAGE_FILE_RE.test(f))).toEqual([body.file]);
+    expect(body.file).toBe(`${body.id}.png`);
+    expect(body.file_url).toBe(`${BASE}/r/${rid}/${body.file}`);
+    expect(body.url).toBe(`${BASE}/pics/${body.id}`);
+    expect(body.file_url).not.toContain("pics/");
+    expect(await imageFiles("pics")).toEqual([body.file]);
+    expect((await upload("pics", PNG)).status).toBe(201); // the same bytes again are another note
+    expect(await imageFiles("pics")).toHaveLength(2);
   });
-  test("a feed without a read link is 404, says why, and stores nothing", async () => {
-    await mkdir(join(process.env.DATA_DIR!, "nolink", ".readid"), { recursive: true }); // unreadable .readid
-    await createNote("nolink", "# x");
-    const res = await upload("nolink", PNG);
-    expect(res.status).toBe(404);
-    expect((await res.json()).error).toContain("no read link");
-    expect((await readdir(join(process.env.DATA_DIR!, "nolink"))).filter((f) => IMAGE_FILE_RE.test(f))).toEqual([]);
+  test("a multipart file part is an image note, with the password and read id of the post that creates the feed", async () => {
+    const f = new FormData();
+    f.set("file", new File([PNG], "cat.png", { type: "image/png" }));
+    f.set("password", "hunter22");
+    f.set("read_id", "my-pics");
+    f.set("tags", "a, b");
+    const res = await call("POST", "/feeds/pics/notes", { body: f });
+    expect(res.status).toBe(201);
+    const body = await res.json();
+    expect(body.file).toBe(`${body.id}.png`);
+    expect(await readIdOf("pics")).toBe("my-pics");
+    expect((await get("my-pics", body.file)).status).toBe(200);
+    const sidecar = JSON.parse(await readFile(join(process.env.DATA_DIR!, "pics", `.${body.file}.json`), "utf8"));
+    expect(sidecar).toEqual({ tags: ["a", "b"], name: "cat.png" });
+    expect((await upload("pics", PNG)).status).toBe(401); // protected by the first post's password
   });
-  test("a feed that does not exist is 404 and no directory is made", async () => {
+  test("a form with both markdown and a file is 400", async () => {
+    const f = new FormData();
+    f.set("file", new File([PNG], "cat.png"));
+    f.set("markdown", "# x");
+    expect((await call("POST", "/feeds/pics/notes", { body: f })).status).toBe(400);
+    expect(await hasFeed("pics")).toBe(false);
+  });
+  test("X-Note-Name is kept as the picture's name, cleaned of path characters", async () => {
+    const res = await upload("pics", PNG, "image/png", { "x-note-name": "../my cat.png" });
+    const { file } = await res.json();
+    expect(JSON.parse(await readFile(join(process.env.DATA_DIR!, "pics", `.${file}.json`), "utf8"))).toEqual({ name: "..my cat.png" });
+  });
+  test("a feed that does not exist is created by its first image, like by a first note", async () => {
     const res = await upload("ghost", PNG);
-    expect(res.status).toBe(404);
-    expect(await res.json()).toEqual({ error: "no such feed", code: "not_found" });
-    await expect(stat(join(process.env.DATA_DIR!, "ghost"))).rejects.toThrow();
+    expect(res.status).toBe(201);
+    expect(await hasFeed("ghost")).toBe(true);
+    expect(await imageFiles("ghost")).toHaveLength(1);
   });
-  test("bytes decide: a PNG sent as text/plain is accepted, HTML sent as image/png is 415", async () => {
+  test("bytes decide: a PNG sent as application/octet-stream is accepted, HTML sent as image/png is 415", async () => {
     await createNote("pics", "# x");
-    expect((await upload("pics", PNG, "text/plain")).status).toBe(201);
+    expect((await upload("pics", PNG, "application/octet-stream")).status).toBe(201);
     const res = await upload("pics", "<html><script>x</script></html>", "image/png");
     expect(res.status).toBe(415);
     expect((await res.json()).code).toBe("unsupported_type");
@@ -76,7 +100,7 @@ describe("POST /feeds/{feed}/images", () => {
     const res = await upload("pics", new Uint8Array([...PNG, ...new Uint8Array(20)]));
     expect(res.status).toBe(413);
     expect((await res.json()).code).toBe("too_large");
-    expect((await readdir(join(process.env.DATA_DIR!, "pics"))).filter((f) => IMAGE_FILE_RE.test(f))).toEqual([]);
+    expect((await imageFiles("pics"))).toEqual([]);
   });
   test("a chunked body over the cap stops being read at the cap", async () => {
     process.env.NOTEFEED_MAX_IMAGE_BYTES = "20";
@@ -89,15 +113,16 @@ describe("POST /feeds/{feed}/images", () => {
         if (pulled > 1000) c.close();
       },
     });
-    const url = new URL(API_PREFIX + "/feeds/pics/images", BASE);
-    const res = await dispatch(new Request(url, { method: "POST", body, headers: { host: "localhost:3000" }, duplex: "half" } as RequestInit), ["feeds", "pics", "images"]);
+    const url = new URL(API_PREFIX + "/feeds/pics/notes", BASE);
+    const res = await dispatch(new Request(url, { method: "POST", body, headers: { host: "localhost:3000", "content-type": "image/png" }, duplex: "half" } as RequestInit), ["feeds", "pics", "notes"]);
     expect(res.status).toBe(413);
     expect(pulled).toBeLessThan(10);
   });
-  test("the image cap answers 507 image_limit", async () => {
+  test("the image cap answers 507 image_limit; markdown notes are not images", async () => {
     process.env.NOTEFEED_MAX_IMAGES_PER_FEED = "1";
     await createNote("pics", "# x");
     expect((await upload("pics", PNG)).status).toBe(201);
+    expect((await call("POST", "/feeds/pics/notes", { body: "# more", headers: { "content-type": "text/markdown" } })).status).toBe(201);
     const res = await upload("pics", new Uint8Array([...PNG, 9]));
     expect(res.status).toBe(507);
     expect((await res.json()).code).toBe("image_limit");
@@ -122,24 +147,6 @@ describe("POST /feeds/{feed}/images", () => {
     expect((await upload("pics", PNG)).status).toBe(201);
     expect((await upload("pics", PNG)).status).toBe(429);
   });
-  test("a feed deleted before the write is 404 and not re-created", async () => {
-    await createNote("pics", "# x");
-    // the feed vanishes while the body is being read
-    const url = new URL(API_PREFIX + "/feeds/pics/images", BASE);
-    const body = new ReadableStream(
-      {
-        async pull(c) {
-          await deleteFeed("pics");
-          c.enqueue(PNG);
-          c.close();
-        },
-      },
-      { highWaterMark: 0 }, // no pull until the handler reads
-    );
-    const res = await dispatch(new Request(url, { method: "POST", body, headers: { host: "localhost:3000" }, duplex: "half" } as RequestInit), ["feeds", "pics", "images"]);
-    expect(res.status).toBe(404);
-    await expect(stat(join(process.env.DATA_DIR!, "pics"))).rejects.toThrow();
-  });
 });
 
 describe("upload: body edge cases", () => {
@@ -147,7 +154,7 @@ describe("upload: body edge cases", () => {
     await createNote("pics", "# x");
     const res = await upload("pics", PNG, "image/png", { "content-length": String(PNG.length + 100) });
     expect(res.status).toBe(413);
-    expect((await readdir(join(process.env.DATA_DIR!, "pics"))).filter((f) => IMAGE_FILE_RE.test(f))).toEqual([]);
+    expect((await imageFiles("pics"))).toEqual([]);
   });
   test("a configured cap above 10 MiB behaves as 10 MiB (the proxy buffers no more)", async () => {
     process.env.NOTEFEED_MAX_IMAGE_BYTES = "20971520";
@@ -162,33 +169,7 @@ describe("upload: body edge cases", () => {
     expect(await listNotes("pics", 10)).toEqual([]);
     const res = await upload("pics", PNG);
     expect(res.status).toBe(201);
-    expect((await res.json()).url).toContain(`/r/${await readIdOf("pics")}/`);
-  });
-  test("a feed deleted and created again protected while the body is read gets no file", async () => {
-    await createNote("pics", "# x");
-    let finish!: () => void;
-    let started!: () => void;
-    const gate = new Promise<void>((r) => (finish = r));
-    const reading = new Promise<void>((r) => (started = r));
-    let pulls = 0;
-    const body = new ReadableStream<Uint8Array>({
-      async pull(c) {
-        if (pulls++ === 0) return c.enqueue(PNG.subarray(0, 6));
-        started();
-        await gate;
-        c.enqueue(PNG.subarray(6));
-        c.close();
-      },
-    });
-    const url = new URL(API_PREFIX + "/feeds/pics/images", BASE);
-    const res = dispatch(new Request(url, { method: "POST", body, headers: { host: "localhost:3000" }, duplex: "half" } as RequestInit), ["feeds", "pics", "images"]);
-    await reading;
-    await deleteFeed("pics");
-    await createProtected("pics", "hunter22");
-    await createNote("pics", "# again");
-    finish();
-    expect((await res).status).toBe(404);
-    expect((await readdir(join(process.env.DATA_DIR!, "pics"))).filter((f) => IMAGE_FILE_RE.test(f))).toEqual([]);
+    expect((await res.json()).file_url).toContain(`/r/${await readIdOf("pics")}/`);
   });
 });
 
@@ -221,7 +202,38 @@ describe("GET /r/{readId}/{file}", () => {
     expect((await get((await readIdOf("other"))!, file)).status).toBe(404);
     expect((await get("x".repeat(22), file)).status).toBe(404);
     const rid = (await readIdOf("pics"))!;
-    for (const bad of ["../x", ".password", file.toUpperCase(), "a".repeat(33) + ".png", "..%2Fx", "a".repeat(32) + ".png"]) expect((await get(rid, bad)).status).toBe(404);
+    for (const bad of ["../x", ".password", "a.b.png", "..%2Fx", "nope.png"]) expect((await get(rid, bad)).status).toBe(404);
+  });
+  test("every non-dot file of the feed is served: a markdown note as text, a hand-placed file as a download", async () => {
+    const { note } = await createNote("pics", "# Hi");
+    await writeFile(join(process.env.DATA_DIR!, "pics", "report.pdf"), "%PDF-1.4");
+    const rid = (await readIdOf("pics"))!;
+    const md = await get(rid, note.file);
+    expect(md.status).toBe(200);
+    expect(await md.text()).toBe("# Hi");
+    expect(md.headers.get("content-type")).toBe("text/plain; charset=utf-8");
+    expect(md.headers.get("cache-control")).toBe("no-cache");
+    expect(md.headers.get("content-disposition")).toBeNull();
+    const pdf = await get(rid, "report.pdf");
+    expect(pdf.status).toBe(200);
+    expect(pdf.headers.get("content-type")).toBe("application/octet-stream");
+    expect(pdf.headers.get("content-disposition")).toBe("attachment");
+    expect(pdf.headers.get("x-content-type-options")).toBe("nosniff");
+    expect(pdf.headers.get("content-security-policy")).toBe("default-src 'none'; sandbox");
+  });
+  test("dot files are never served: the read id, the password, the settings, a note's sidecar", async () => {
+    const { note } = await createNote("pics", "# Hi", undefined, "Ann");
+    const dir = join(process.env.DATA_DIR!, "pics");
+    await writeFile(join(dir, ".password"), "hash");
+    await writeFile(join(dir, ".feed.json"), "{}");
+    const rid = (await readIdOf("pics"))!;
+    for (const name of [".readid", ".password", ".feed.json", `.${note.file}.json`, "..", "."]) expect((await get(rid, name)).status).toBe(404);
+  });
+  test("a symbolic link in the feed folder is not followed", async () => {
+    await createNote("pics", "# Hi");
+    await writeFile(join(process.env.DATA_DIR!, "outside.txt"), "secret");
+    await symlink(join(process.env.DATA_DIR!, "outside.txt"), join(process.env.DATA_DIR!, "pics", "link.txt"));
+    expect((await get((await readIdOf("pics"))!, "link.txt")).status).toBe(404);
   });
   test("the feed's name never serves it", async () => {
     await createNote("pics", "# x");
@@ -241,7 +253,7 @@ describe("feed settings: image", () => {
   const put = (feed: string, body: unknown) => call("PUT", `/feeds/${feed}`, { body: JSON.stringify(body), headers: { "content-type": "application/json" } });
   test("round-trips and shows as image_url (API, read API, getFeed, RSS)", async () => {
     await createNote("pics", "# x");
-    const { file, url } = await (await upload("pics", PNG)).json();
+    const { file, file_url: url } = await (await upload("pics", PNG)).json();
     const res = await put("pics", { title: "T", description: "D", image: file });
     expect(res.status).toBe(200);
     expect((await res.json()).image_url).toBe(url);
@@ -272,6 +284,19 @@ describe("feed settings: image", () => {
     await createNote("other", "# y");
     const { file } = await (await upload("other", PNG)).json();
     expect((await put("pics", { title: "", description: "", image: file })).status).toBe(400);
+  });
+  test("deleting the image note removes the title image", async () => {
+    await createNote("pics", "# x");
+    const { id, file } = await (await upload("pics", PNG)).json();
+    await put("pics", { title: "T", description: "D", image: file });
+    expect((await getFeed("pics"))!.imageUrl).toContain(file);
+    expect((await call("DELETE", `/feeds/pics/notes/${id}`)).status).toBe(204);
+    expect((await getFeed("pics"))!.imageUrl).toBeNull();
+    expect((await (await call("GET", "/feeds/pics")).json()).image_url).toBeNull();
+  });
+  test("a markdown note is not an image: 400", async () => {
+    const { note } = await createNote("pics", "# x");
+    expect((await put("pics", { title: "", description: "", image: note.file })).status).toBe(400);
   });
   test("a title image removed by hand: saves keep working and it shows nowhere", async () => {
     await createNote("pics", "# x");

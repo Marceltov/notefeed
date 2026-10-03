@@ -24,7 +24,12 @@ test("postNote lists every body type the server reads", () => {
   const doc = openApiDocument("https://notefeed.me") as { paths: Record<string, { post?: { requestBody: { content: object } } }> };
   expect(Object.keys(doc.paths["/api/v1/feeds/{feed}/notes"].post!.requestBody.content).sort()).toEqual([
     "application/json",
+    "application/octet-stream",
     "application/x-www-form-urlencoded",
+    "image/gif",
+    "image/jpeg",
+    "image/png",
+    "image/webp",
     "multipart/form-data",
     "text/markdown",
     "text/plain",

@@ -3,6 +3,7 @@
 import { useState, type FormEvent } from "react";
 import { deleteNote, editNote } from "@/app/_lib/api";
 import { MarkdownInput } from "@/components/MarkdownInput";
+import { usePendingImages } from "@/components/usePendingImages";
 import { useApiForm } from "@/app/_lib/useApiForm";
 
 const summary = "cursor-pointer select-none text-muted hover:text-ink";
@@ -10,23 +11,34 @@ const summary = "cursor-pointer select-none text-muted hover:text-ink";
 // Edit and delete for a note: plain forms to POST /<feed>/<id>/edit and /delete. With JavaScript they go
 // through the generated API client and show refusals inline; without, the browser follows the 303 and the
 // note page shows the outcome (`error` is its message).
-export function NoteActions({ feed, id, markdown, error: initialError }: { feed: string; id: string; markdown: string; error?: string }) {
+export function NoteActions({ feed, id, kind, markdown, title: savedTitle, alt: savedAlt, error: initialError }: { feed: string; id: string; kind: string; markdown: string; title: string; alt: string; error?: string }) {
   const page = `/${feed}`;
   const { run, error, setError, pending, setPending, router } = useApiForm(page, initialError);
   const [text, setText] = useState(markdown);
-  const [busy, setBusy] = useState(false); // an image is uploading
+  const [title, setTitle] = useState(savedTitle); // the title set by hand: empty means the one the text gives
+  const [alt, setAlt] = useState(savedAlt);
+  const image = kind === "image";
+  const images = usePendingImages(feed);
   const [editing, setEditing] = useState(!!initialError);
   const base = `${page}/${id}`;
 
   const opts = () => ({ baseUrl: window.location.origin, path: { feed, id } }); // in handlers only: no window while rendering on the server
-  const save = (e: FormEvent) =>
-    run(e, () => editNote({ ...opts(), body: { markdown: text } }), () => {
+  async function save(e: FormEvent) {
+    e.preventDefault();
+    setPending(true);
+    const refused = await images.flush();
+    if (refused) {
+      setError(refused);
+      return setPending(false);
+    }
+    run(undefined, () => editNote({ ...opts(), body: image ? { title, alt } : { markdown: images.apply(text), title } }), () => {
       setError(undefined);
       setEditing(false);
       setPending(false);
       router.replace(`${base}?edited=1`);
       router.refresh();
     });
+  }
   const remove = (e: FormEvent) => run(e, () => deleteNote(opts()), () => router.replace(`${page}?deleted=${id}`), 404); // already gone: the goal is met
 
   return (
@@ -34,19 +46,33 @@ export function NoteActions({ feed, id, markdown, error: initialError }: { feed:
       <details open={editing} onToggle={(e) => setEditing(e.currentTarget.open)}>
         <summary className={summary}>Edit</summary>
         <form method="post" action={`${base}/edit`} encType="multipart/form-data" onSubmit={save} className="mt-3">
-          <MarkdownInput
-            id="edit-markdown"
-            name="markdown"
-            label="Note in markdown"
-            value={text}
-            onChange={setText}
-            feed={feed}
-            rows={10}
-            describedBy="note-actions-error"
-            className="font-mono"
-            onBusy={setBusy}
-          />
-          <button type="submit" disabled={pending || busy} className="mt-2 rounded-sm bg-carbon px-4 py-1.5 font-bold text-on-carbon disabled:opacity-60">
+          {!image && (
+            <MarkdownInput
+              id="edit-markdown"
+              name="markdown"
+              label="Note in markdown"
+              value={text}
+              onChange={setText}
+              rows={10}
+              describedBy="note-actions-error"
+              className="font-mono"
+              pending={images.pending}
+              onPendingChange={images.setPending}
+            />
+          )}
+          <label htmlFor="edit-title" className="mt-2 block text-muted">
+            Title {image ? "(optional)" : "(optional, otherwise taken from the text)"}
+          </label>
+          <input id="edit-title" name="title" maxLength={100} autoComplete="off" value={title} onChange={(e) => setTitle(e.target.value)} className="mt-1 w-full max-w-md rounded-sm border border-rule bg-transparent px-3 py-1.5 focus:border-carbon focus:outline-none" />
+          {image && (
+            <>
+              <label htmlFor="edit-alt" className="mt-2 block text-muted">
+                Alternative text (optional, for screen readers)
+              </label>
+              <input id="edit-alt" name="alt" maxLength={500} autoComplete="off" value={alt} onChange={(e) => setAlt(e.target.value)} className="mt-1 w-full max-w-md rounded-sm border border-rule bg-transparent px-3 py-1.5 focus:border-carbon focus:outline-none" />
+            </>
+          )}
+          <button type="submit" disabled={pending} className="mt-2 rounded-sm bg-carbon px-4 py-1.5 font-bold text-on-carbon disabled:opacity-60">
             {pending ? "Saving…" : "Save"}
           </button>
         </form>

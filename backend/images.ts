@@ -1,15 +1,8 @@
-// Images: format by the file's first bytes, the content-addressed name, the per-feed cap. Storage is data/images.ts.
-import { createHash } from "node:crypto";
-import { config } from "./config";
-import { countImages, hasImage, readImageFile, writeImage } from "./data/images";
-import { isErrno } from "./data/fs";
-import { ImageLimitError, NotFoundError, UnsupportedTypeError } from "./errors";
-import { capReached } from "./limits";
-
-export const IMAGE_FILE_RE = /^[0-9a-f]{32}\.(png|jpg|gif|webp)$/;
+// Images: the format by the file's first bytes, and the type an extension is served as. Image notes are stored like any note (backend/note/image.ts).
 export type ImageType = "png" | "jpg" | "gif" | "webp";
 
 const CONTENT_TYPES: Record<ImageType, string> = { png: "image/png", jpg: "image/jpeg", gif: "image/gif", webp: "image/webp" };
+export const IMAGE_EXTS = Object.keys(CONTENT_TYPES) as ImageType[];
 
 const starts = (b: Uint8Array, at: number, sig: number[] | string) =>
   (typeof sig === "string" ? [...sig].map((c) => c.charCodeAt(0)) : sig).every((v, i) => b[at + i] === v);
@@ -23,31 +16,6 @@ export function sniffImage(b: Uint8Array): ImageType | null {
   return null;
 }
 
-export const imageName = (b: Uint8Array, type: ImageType): string => `${createHash("sha256").update(b).digest("hex").slice(0, 32)}.${type}`;
-
-// Sniff, name, cap (a repeat of an existing image is never refused), write. The feed must exist (posting.ts
-// checks); one deleted meanwhile is "no such feed", and its directory is not made again.
-export async function storeImage(feed: string, bytes: Uint8Array): Promise<string> {
-  const type = sniffImage(bytes);
-  if (!type) throw new UnsupportedTypeError("send a PNG, JPEG, GIF or WebP image");
-  const name = imageName(bytes, type);
-  const max = config.maxImagesPerFeed();
-  // ponytail: checked, not locked; concurrent uploads can overshoot the cap by a few.
-  if (max && !(await hasImage(feed, name)) && (await countImages(feed, (n) => IMAGE_FILE_RE.test(n))) >= max) throw capReached("image", new ImageLimitError());
-  try {
-    await writeImage(feed, name, bytes);
-  } catch (e) {
-    if (isErrno(e, "ENOENT")) throw new NotFoundError("no such feed");
-    throw e;
-  }
-  return name;
-}
-
-// True only for a well-formed name of an image this feed has: the one check before a name becomes a path.
-export const knownImage = async (feed: string, name: string): Promise<boolean> => IMAGE_FILE_RE.test(name) && (await hasImage(feed, name));
-
-export async function loadImage(feed: string, file: string): Promise<{ bytes: Uint8Array; contentType: string } | null> {
-  if (!IMAGE_FILE_RE.test(file)) return null;
-  const bytes = await readImageFile(feed, file);
-  return bytes && { bytes, contentType: CONTENT_TYPES[file.split(".")[1] as ImageType] };
-}
+// What a file of a feed is served as, by its extension; a type we don't know is a download.
+export const contentTypeOf = (ext: string): string =>
+  CONTENT_TYPES[ext as ImageType] ?? (ext === "md" ? "text/plain; charset=utf-8" : "application/octet-stream");

@@ -58,6 +58,13 @@ describe("post", () => {
     expect(server.requests[0].path).toBe("/api/v1/feeds/other/notes");
     expect(server.requests[0].headers.authorization).toBe("Bearer pw");
   });
+  test("a title goes in the JSON body, left out sends no key", async () => {
+    const c = new Client({ url: server.url, feed: "inbox" });
+    await c.post("x", { title: "T" });
+    await c.post("x");
+    expect(JSON.parse(server.requests[0].body.toString())).toEqual({ markdown: "x", title: "T" });
+    expect(JSON.parse(server.requests[1].body.toString())).toEqual({ markdown: "x" });
+  });
   test("tags go in the JSON body, none sends no key; notes({ tag }) goes as ?tag=", async () => {
     const c = new Client({ url: server.url, feed: "inbox" });
     await c.post("x", { tags: ["ci", "deploy"] });
@@ -174,9 +181,9 @@ describe("feed settings and deletion", () => {
 });
 
 describe("images", () => {
-  const UPLOADED = { file: "a".repeat(32) + ".png", url: "https://n.example/r/X/images/" + "a".repeat(32) + ".png", markdown: "![](https://n.example/r/X/images/x.png)" };
+  const UPLOADED = { id: "20261003T101010Z-u", url: "https://n.example/inbox/20261003T101010Z-u", feed_url: "https://n.example/inbox", read_url: null, file: "20261003T101010Z-u.png", file_url: "https://n.example/r/X/20261003T101010Z-u.png" };
   const bytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0, 255]);
-  test("uploadImage POSTs the raw bytes as application/octet-stream and returns {file, url, markdown}", async () => {
+  test("uploadImage POSTs the raw bytes as application/octet-stream and returns the created note with its file", async () => {
     server.reply(201, UPLOADED);
     const c = new Client({ url: server.url, feed: "inbox", password: "pw", feedPassword: "fp" });
     expect(await c.uploadImage(bytes)).toEqual(UPLOADED);
@@ -186,6 +193,21 @@ describe("images", () => {
     expect([...req.body]).toEqual([...bytes]);
     expect(req.headers.authorization).toBe("Bearer pw");
     expect(req.headers["x-feed-password"]).toBe("fp");
+  });
+  test("uploadImage sends tags, title, alt and name as headers, and nothing else when they are left out", async () => {
+    server.reply(201, UPLOADED);
+    const c = new Client({ url: server.url, feed: "inbox" });
+    await c.uploadImage(bytes, { tags: ["a", "b"], title: "Cat", alt: "a cat", name: "cat.png" });
+    await c.uploadImage(bytes);
+    expect(server.requests[0].headers).toMatchObject({ "x-note-tags": "a,b", "x-note-title": "Cat", "x-note-alt": "a cat", "x-note-name": "cat.png" });
+    for (const h of ["x-note-tags", "x-note-title", "x-note-alt", "x-note-name"]) expect(server.requests[1].headers[h]).toBeUndefined();
+  });
+  test("a title, alt text or name that is not ASCII goes as its UTF-8 bytes, which fetch can send", async () => {
+    server.reply(201, UPLOADED);
+    await new Client({ url: server.url, feed: "inbox" }).uploadImage(bytes, { title: "Café 日本語", alt: "Größe", name: "Größe.png" });
+    const h = server.requests[0].headers;
+    const utf8 = (v: string | string[] | undefined) => Buffer.from(String(v), "latin1").toString("utf8"); // how a server reads the header bytes
+    expect([utf8(h["x-note-title"]), utf8(h["x-note-alt"]), utf8(h["x-note-name"])]).toEqual(["Café 日本語", "Größe", "Größe.png"]);
   });
   test("a Blob works, and a per-call feed and feedPassword win", async () => {
     server.reply(201, UPLOADED);

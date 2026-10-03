@@ -52,6 +52,10 @@ describe("GET /feeds/{feed}/notes", () => {
     expect(body.notes).toEqual([
       expect.objectContaining({ id: two.id, title: "Two", created_at: "2026-09-29T11:00:00.000Z" }),
       {
+        kind: "markdown",
+        file: `${one.id}.md`,
+        file_url: expect.stringMatching(new RegExp(`^${BASE}/r/[\\w-]+/${one.id}\\.md$`)),
+        size: 10,
         id: one.id,
         title: "One",
         markdown: "# One\nbody",

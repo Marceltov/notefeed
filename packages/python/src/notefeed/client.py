@@ -14,11 +14,11 @@ from ._generated import AuthenticatedClient
 from ._generated import Client as _GeneratedClient
 from ._generated.api.feeds import delete_feed, delete_note, edit_note, get_feed, get_note, list_notes, post_note, update_feed, upload_image
 from ._generated.api.read import get_read_note, list_read_notes
-from ._generated.models import Created, Feed, FeedSettings, ImageUploaded, Note, NoteList, PostJson
+from ._generated.models import Created, EditJson, Feed, FeedSettings, Note, NoteList, PostJson
 from ._generated.types import UNSET, File
 
 
-_M = TypeVar("_M", Created, Feed, ImageUploaded, Note, NoteList)
+_M = TypeVar("_M", Created, Feed, Note, NoteList)
 
 
 class NotefeedError(Exception):
@@ -98,6 +98,11 @@ def _check_feed(feed: str) -> str:
     return feed
 
 
+def _header_value(text: str) -> Any:
+    """A header holds bytes: text that may not be ASCII goes as its UTF-8 bytes, which the server reads back (httpx takes bytes values)."""
+    return text.encode("utf-8")
+
+
 class Client:
     """A notefeed server. The feed set here is the default for every call; each call can override it.
 
@@ -160,26 +165,46 @@ class Client:
         feed_password: str | None = None,
         tags: list[str] | None = None,
         read_id: str | None = None,
+        title: str | None = None,
     ) -> Created:
         """`feed_password` overrides the client's, for a feed that has its own password. `tags` label the note
         (at most 10, each 1 to 32 characters of letters, digits, `-`, `_`, `.`, `:`; not verified). `read_id` is the
         read id the feed gets when this post creates it (3 to 64 characters of `a-z`, `0-9`, `-`, `_`; random when
-        left out; ignored for a feed that exists; a `taken` error when another feed has it)."""
-        body = PostJson(markdown=markdown, tags=tags or UNSET, read_id=read_id or UNSET)
+        left out; ignored for a feed that exists; a `taken` error when another feed has it). `title` is the note's title
+        (at most 100 characters, one line); left out, it is taken from the text."""
+        body = PostJson(markdown=markdown, title=title or UNSET, tags=tags or UNSET, read_id=read_id or UNSET)
         kwargs = post_note._get_kwargs(feed=self._feed_for(feed), body=body, x_feed_password=self._fp(feed_password))
         return self._parse(Created, self._call(kwargs))
 
-    def upload_image(self, data: bytes, feed: str | None = None, feed_password: str | None = None) -> ImageUploaded:
-        """Upload a PNG, JPEG, GIF or WebP image to an existing feed. The server decides the format by the bytes. `.markdown` is `![](file)`, relative to the feed so it follows a changed read id, to put in a note; use `.url` for a link outside notefeed. Same options as post()."""
+    def upload_image(
+        self,
+        data: bytes,
+        feed: str | None = None,
+        feed_password: str | None = None,
+        tags: list[str] | None = None,
+        title: str | None = None,
+        alt: str | None = None,
+        name: str | None = None,
+    ) -> Created:
+        """Post a PNG, JPEG, GIF or WebP image as a note of its own (the feed is created by its first note). The server decides the format by the bytes. `.file` is the note's file: write `![](file)` in a markdown note to show it (relative to the feed, so it follows a changed read id), or pass it as `image` to update_feed; `.file_url` is for a link outside notefeed. `title` and `alt` describe it. Same options as post()."""
         kwargs = upload_image._get_kwargs(
-            feed=self._feed_for(feed), body=File(payload=data), x_feed_password=self._fp(feed_password)
+            feed=self._feed_for(feed),
+            body=File(payload=data),
+            x_feed_password=self._fp(feed_password),
+            x_note_tags=",".join(tags) if tags else UNSET,
+            x_note_title=_header_value(title) if title else UNSET,
+            x_note_alt=_header_value(alt) if alt else UNSET,
+            x_note_name=_header_value(name) if name else UNSET,
         )
-        return self._parse(ImageUploaded, self._call(kwargs))
+        return self._parse(Created, self._call(kwargs))
 
-    def edit(self, id: str, markdown: str, feed: str | None = None, feed_password: str | None = None) -> Note:
-        """Replace a note's markdown; its id and URLs stay. Same options as post()."""
+    def edit(self, id: str, markdown: str, feed: str | None = None, feed_password: str | None = None, title: str | None = None) -> Note:
+        """Replace a note's markdown; its id and URLs stay. `title` sets its title too ("" removes it: the title follows the text again). Same options as post()."""
         kwargs = edit_note._get_kwargs(
-            feed=self._feed_for(feed), id=id, body=PostJson(markdown=markdown), x_feed_password=self._fp(feed_password)
+            feed=self._feed_for(feed),
+            id=id,
+            body=EditJson(markdown=markdown, title=UNSET if title is None else title),
+            x_feed_password=self._fp(feed_password),
         )
         return self._parse(Note, self._call(kwargs))
 

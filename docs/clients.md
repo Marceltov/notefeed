@@ -79,14 +79,14 @@ A feed can also have its own password (see [A feed with its own password](postin
 
 | Python | Node | Does |
 |---|---|---|
-| `post(markdown, feed=None)` | `post(markdown, { feed })` | Posts a note; returns `id`, `url`, `feed_url`, `read_url` (`None`/`null` for a feed without a read link) |
+| `post(markdown, feed=None, title=None)` | `post(markdown, { feed, title })` | Posts a note, with an optional [title](posting.md#titles); returns `id`, `url`, `feed_url`, `read_url` (`None`/`null` for a feed without a read link) |
 | `notes(feed=None, page_size=50)` | `notes({ feed, pageSize })` | Every note in the feed, newest first. It fetches the next page only as you iterate, so stop whenever you have enough |
 | `note(id, feed=None)` | `note(id, { feed })` | One note |
-| `edit(id, markdown, feed=None)` | `edit(id, markdown, { feed })` | Replaces a note's markdown and returns the note. Its id and URLs stay; the title follows the new text. A missing note is a `NotFoundError` |
+| `edit(id, markdown, feed=None, title=None)` | `edit(id, markdown, { feed, title })` | Replaces a note's markdown and returns the note; `title` sets its title too (`""` removes it). Its id and URLs stay; the title follows the new text unless one is set. A missing note is a `NotFoundError` |
 | `delete(id, feed=None)` | `delete(id, { feed })` | Deletes a note for good; returns nothing. The feed stays, even with no notes left. A missing note is a `NotFoundError` |
 | `feed_info(feed=None)` | `feedInfo({ feed })` | The feed's `name`, `title`, `description`, `image_url`, `protected` and `read_url` (`None`/`null` while it has no notes or no title image) |
-| `update_feed(title, description, feed=None, image=None)` | `updateFeed({ title, description, image }, { feed })` | Replaces the feed's title and description, both at once (an empty string clears one), and returns the feed. `image` is the `file` of an uploaded image to use as the title image; `""` removes it, and leaving it out keeps it. The feed must already exist |
-| `upload_image(data, feed=None)` | `uploadImage(data, { feed })` | Uploads a PNG, JPEG, GIF or WebP image (`bytes` in Python, a `Uint8Array` or `Blob` in Node) to an existing feed and returns `file`, `url` and `markdown` (`![](url)`, to put in a note). The server recognizes the format by the bytes. See [Images](posting.md#images). A refused image is an `InvalidRequestError` (not an image), `NoteTooLargeError` (too large) or `LimitReachedError` (the feed's image cap) |
+| `update_feed(title, description, feed=None, image=None)` | `updateFeed({ title, description, image }, { feed })` | Replaces the feed's title and description, both at once (an empty string clears one), and returns the feed. `image` is the `file` of an image note to use as the title image; `""` removes it, and leaving it out keeps it. The feed must already exist |
+| `upload_image(data, feed=None, tags=None, title=None, alt=None, name=None)` | `uploadImage(data, { feed, tags, title, alt, name })` | Posts a PNG, JPEG, GIF or WebP image (`bytes` in Python, a `Uint8Array` or `Blob` in Node) as a note of its own, and returns what `post` returns plus `file` (write `![](file)` in a markdown note to show it, or pass it as `image` to `update_feed`) and `file_url`. The server recognizes the format by the bytes. See [Images](posting.md#images). A refused image is an `InvalidRequestError` (not an image), `NoteTooLargeError` (too large) or `LimitReachedError` (the feed's image cap) |
 | `delete_feed(feed=None)` | `deleteFeed({ feed })` | Deletes the feed with all its notes, settings, password and read link, for good; returns nothing. The name is free again |
 | `read_notes(read_id, page_size=50)` | `readNotes(readId, { pageSize })` | Like `notes()`, by the feed's [read id](feed.md): public, needs no password, never needs the name |
 | `read_note(read_id, id)` | `readNote(readId, id)` | One note by read id |
@@ -123,7 +123,7 @@ notefeed post "# Disk at 91%" --feed alerts-q9x2m7hd4k1pv
 notefeed edit 20260929T140512Z-backup-finished "# Backup finished, verified"
 notefeed edit 20260929T140512Z-backup-finished --file report.md   # or "-" for stdin
 notefeed delete 20260929T140512Z-backup-finished
-notefeed image photo.png                   # uploads it; prints ![](url) for a note
+notefeed image photo.png                   # posts it as a note; prints ![](file) for a markdown note
 notefeed notes                             # the newest 20: time, title, URL
 notefeed notes --limit 100 --json          # one JSON object per line
 notefeed notes --tag ci                     # only notes with this tag
@@ -132,7 +132,7 @@ notefeed --version
 
 Text that starts with `-`, like a list item, works as-is: `notefeed post "- buy milk"`. The usual `notefeed post -- "-x"` works too.
 
-`post` prints the new note's URL, and `edit` prints the edited note's URL; `edit` takes its text the same ways as `post`. `delete` prints nothing and exits `0` when the note is gone. `image <PATH>` reads the file, uploads it to the feed and prints the `markdown` (`![](url)`) to put in a note; the feed must already exist, and it takes the same flags and has the same exit codes as `post`. A note that does not exist is an exit code `1`, for `edit` and `delete` alike. Anyone who can post to a feed can edit and delete its notes, and a delete cannot be undone. `notes` prints one line per note, `2026-09-30T14:05:12Z  Backup finished  https://…`, with the time in UTC to the second (the same in both packages and in `--json`). On failure the command prints `notefeed: <reason>` to stderr and exits with:
+`post` prints the new note's URL, and `edit` prints the edited note's URL; `edit` takes its text the same ways as `post`. `delete` prints nothing and exits `0` when the note is gone. `image <PATH>` reads the file, posts it to the feed as a note of its own and prints `![](file)` to put in a markdown note; it takes the same flags and has the same exit codes as `post`. A note that does not exist is an exit code `1`, for `edit` and `delete` alike. Anyone who can post to a feed can edit and delete its notes, and a delete cannot be undone. `notes` prints one line per note, `2026-09-30T14:05:12Z  Backup finished  https://…`, with the time in UTC to the second (the same in both packages and in `--json`). On failure the command prints `notefeed: <reason>` to stderr and exits with:
 
 | Exit code | Meaning |
 |---|---|

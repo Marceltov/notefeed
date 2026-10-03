@@ -1,13 +1,13 @@
 from http import HTTPStatus
-from typing import Any
+from typing import Any, cast
 from urllib.parse import quote
 
 import httpx
 
 from ... import errors
 from ...client import AuthenticatedClient, Client
+from ...models.created import Created
 from ...models.error import Error
-from ...models.image_uploaded import ImageUploaded
 from ...types import UNSET, File, Response, Unset
 
 
@@ -16,10 +16,26 @@ def _get_kwargs(
     *,
     body: File,
     x_feed_password: str | Unset = UNSET,
+    x_note_tags: str | Unset = UNSET,
+    x_note_name: str | Unset = UNSET,
+    x_note_title: str | Unset = UNSET,
+    x_note_alt: str | Unset = UNSET,
 ) -> dict[str, Any]:
     headers: dict[str, Any] = {}
     if not isinstance(x_feed_password, Unset):
         headers["X-Feed-Password"] = x_feed_password
+
+    if not isinstance(x_note_tags, Unset):
+        headers["X-Note-Tags"] = x_note_tags
+
+    if not isinstance(x_note_name, Unset):
+        headers["X-Note-Name"] = x_note_name
+
+    if not isinstance(x_note_title, Unset):
+        headers["X-Note-Title"] = x_note_title
+
+    if not isinstance(x_note_alt, Unset):
+        headers["X-Note-Alt"] = x_note_alt
 
     _kwargs: dict[str, Any] = {
         "method": "post",
@@ -37,11 +53,15 @@ def _get_kwargs(
 
 def _parse_response(
     *, client: AuthenticatedClient | Client, response: httpx.Response
-) -> Error | ImageUploaded | None:
+) -> Any | Created | Error | None:
     if response.status_code == 201:
-        response_201 = ImageUploaded.from_dict(response.json())
+        response_201 = Created.from_dict(response.json())
 
         return response_201
+
+    if response.status_code == 303:
+        response_303 = cast(Any, None)
+        return response_303
 
     if response.status_code == 400:
         response_400 = Error.from_dict(response.json())
@@ -53,10 +73,10 @@ def _parse_response(
 
         return response_401
 
-    if response.status_code == 404:
-        response_404 = Error.from_dict(response.json())
+    if response.status_code == 409:
+        response_409 = Error.from_dict(response.json())
 
-        return response_404
+        return response_409
 
     if response.status_code == 413:
         response_413 = Error.from_dict(response.json())
@@ -86,7 +106,7 @@ def _parse_response(
 
 def _build_response(
     *, client: AuthenticatedClient | Client, response: httpx.Response
-) -> Response[Error | ImageUploaded]:
+) -> Response[Any | Created | Error]:
     return Response(
         status_code=HTTPStatus(response.status_code),
         content=response.content,
@@ -101,21 +121,29 @@ def sync_detailed(
     client: AuthenticatedClient,
     body: File,
     x_feed_password: str | Unset = UNSET,
-) -> Response[Error | ImageUploaded]:
-    """Upload an image
+    x_note_tags: str | Unset = UNSET,
+    x_note_name: str | Unset = UNSET,
+    x_note_title: str | Unset = UNSET,
+    x_note_alt: str | Unset = UNSET,
+) -> Response[Any | Created | Error]:
+    """Post an image
 
-     The body is the image itself: PNG, JPEG, GIF or WebP, recognized by its first bytes, whatever
-    `Content-Type` is sent (SVG is refused). Stored byte-for-byte, with no resizing and no metadata
-    stripped (EXIF such as GPS position stays in the file), as the first 32 hex characters of its
-    SHA-256 plus an extension: the same bytes always give the same URL. The URL is under the feed's read
-    id, so it works in the feed page, the read-only view and RSS readers without any password. Needs the
-    same credentials as posting and counts against the post rate limit. The feed must exist: it is
-    created by its first note. The size limit is NOTEFEED_MAX_IMAGE_BYTES (default 5 MiB); images
-    deleted only with the feed.
+     The same as posting a note with an image body, for clients that send the picture itself: it becomes
+    a note of its own. The body is PNG, JPEG, GIF or WebP, recognized by its first bytes, whatever
+    `Content-Type` is sent (SVG is refused). Stored byte for byte, with no resizing and no metadata
+    stripped (EXIF such as GPS position stays in the file). The response has the note's `file` and a
+    `file_url` under the feed's read link, public like the read link, and `![](file)` in a markdown note
+    shows it. Creates the feed if it does not exist, like a first note; a password given then protects
+    it. Needs the same credentials as posting and counts against the post rate limit. The size limit is
+    NOTEFEED_MAX_IMAGE_BYTES (default 5 MiB).
 
     Args:
         feed (str):
         x_feed_password (str | Unset):
+        x_note_tags (str | Unset):
+        x_note_name (str | Unset):
+        x_note_title (str | Unset):
+        x_note_alt (str | Unset):
         body (File): The image's bytes: PNG, JPEG, GIF or WebP, recognized by their first bytes,
             not by the Content-Type
 
@@ -124,13 +152,17 @@ def sync_detailed(
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Response[Error | ImageUploaded]
+        Response[Any | Created | Error]
     """
 
     kwargs = _get_kwargs(
         feed=feed,
         body=body,
         x_feed_password=x_feed_password,
+        x_note_tags=x_note_tags,
+        x_note_name=x_note_name,
+        x_note_title=x_note_title,
+        x_note_alt=x_note_alt,
     )
 
     response = client.get_httpx_client().request(
@@ -146,21 +178,29 @@ def sync(
     client: AuthenticatedClient,
     body: File,
     x_feed_password: str | Unset = UNSET,
-) -> Error | ImageUploaded | None:
-    """Upload an image
+    x_note_tags: str | Unset = UNSET,
+    x_note_name: str | Unset = UNSET,
+    x_note_title: str | Unset = UNSET,
+    x_note_alt: str | Unset = UNSET,
+) -> Any | Created | Error | None:
+    """Post an image
 
-     The body is the image itself: PNG, JPEG, GIF or WebP, recognized by its first bytes, whatever
-    `Content-Type` is sent (SVG is refused). Stored byte-for-byte, with no resizing and no metadata
-    stripped (EXIF such as GPS position stays in the file), as the first 32 hex characters of its
-    SHA-256 plus an extension: the same bytes always give the same URL. The URL is under the feed's read
-    id, so it works in the feed page, the read-only view and RSS readers without any password. Needs the
-    same credentials as posting and counts against the post rate limit. The feed must exist: it is
-    created by its first note. The size limit is NOTEFEED_MAX_IMAGE_BYTES (default 5 MiB); images
-    deleted only with the feed.
+     The same as posting a note with an image body, for clients that send the picture itself: it becomes
+    a note of its own. The body is PNG, JPEG, GIF or WebP, recognized by its first bytes, whatever
+    `Content-Type` is sent (SVG is refused). Stored byte for byte, with no resizing and no metadata
+    stripped (EXIF such as GPS position stays in the file). The response has the note's `file` and a
+    `file_url` under the feed's read link, public like the read link, and `![](file)` in a markdown note
+    shows it. Creates the feed if it does not exist, like a first note; a password given then protects
+    it. Needs the same credentials as posting and counts against the post rate limit. The size limit is
+    NOTEFEED_MAX_IMAGE_BYTES (default 5 MiB).
 
     Args:
         feed (str):
         x_feed_password (str | Unset):
+        x_note_tags (str | Unset):
+        x_note_name (str | Unset):
+        x_note_title (str | Unset):
+        x_note_alt (str | Unset):
         body (File): The image's bytes: PNG, JPEG, GIF or WebP, recognized by their first bytes,
             not by the Content-Type
 
@@ -169,7 +209,7 @@ def sync(
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Error | ImageUploaded
+        Any | Created | Error
     """
 
     return sync_detailed(
@@ -177,6 +217,10 @@ def sync(
         client=client,
         body=body,
         x_feed_password=x_feed_password,
+        x_note_tags=x_note_tags,
+        x_note_name=x_note_name,
+        x_note_title=x_note_title,
+        x_note_alt=x_note_alt,
     ).parsed
 
 
@@ -186,21 +230,29 @@ async def asyncio_detailed(
     client: AuthenticatedClient,
     body: File,
     x_feed_password: str | Unset = UNSET,
-) -> Response[Error | ImageUploaded]:
-    """Upload an image
+    x_note_tags: str | Unset = UNSET,
+    x_note_name: str | Unset = UNSET,
+    x_note_title: str | Unset = UNSET,
+    x_note_alt: str | Unset = UNSET,
+) -> Response[Any | Created | Error]:
+    """Post an image
 
-     The body is the image itself: PNG, JPEG, GIF or WebP, recognized by its first bytes, whatever
-    `Content-Type` is sent (SVG is refused). Stored byte-for-byte, with no resizing and no metadata
-    stripped (EXIF such as GPS position stays in the file), as the first 32 hex characters of its
-    SHA-256 plus an extension: the same bytes always give the same URL. The URL is under the feed's read
-    id, so it works in the feed page, the read-only view and RSS readers without any password. Needs the
-    same credentials as posting and counts against the post rate limit. The feed must exist: it is
-    created by its first note. The size limit is NOTEFEED_MAX_IMAGE_BYTES (default 5 MiB); images
-    deleted only with the feed.
+     The same as posting a note with an image body, for clients that send the picture itself: it becomes
+    a note of its own. The body is PNG, JPEG, GIF or WebP, recognized by its first bytes, whatever
+    `Content-Type` is sent (SVG is refused). Stored byte for byte, with no resizing and no metadata
+    stripped (EXIF such as GPS position stays in the file). The response has the note's `file` and a
+    `file_url` under the feed's read link, public like the read link, and `![](file)` in a markdown note
+    shows it. Creates the feed if it does not exist, like a first note; a password given then protects
+    it. Needs the same credentials as posting and counts against the post rate limit. The size limit is
+    NOTEFEED_MAX_IMAGE_BYTES (default 5 MiB).
 
     Args:
         feed (str):
         x_feed_password (str | Unset):
+        x_note_tags (str | Unset):
+        x_note_name (str | Unset):
+        x_note_title (str | Unset):
+        x_note_alt (str | Unset):
         body (File): The image's bytes: PNG, JPEG, GIF or WebP, recognized by their first bytes,
             not by the Content-Type
 
@@ -209,13 +261,17 @@ async def asyncio_detailed(
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Response[Error | ImageUploaded]
+        Response[Any | Created | Error]
     """
 
     kwargs = _get_kwargs(
         feed=feed,
         body=body,
         x_feed_password=x_feed_password,
+        x_note_tags=x_note_tags,
+        x_note_name=x_note_name,
+        x_note_title=x_note_title,
+        x_note_alt=x_note_alt,
     )
 
     response = await client.get_async_httpx_client().request(**kwargs)
@@ -229,21 +285,29 @@ async def asyncio(
     client: AuthenticatedClient,
     body: File,
     x_feed_password: str | Unset = UNSET,
-) -> Error | ImageUploaded | None:
-    """Upload an image
+    x_note_tags: str | Unset = UNSET,
+    x_note_name: str | Unset = UNSET,
+    x_note_title: str | Unset = UNSET,
+    x_note_alt: str | Unset = UNSET,
+) -> Any | Created | Error | None:
+    """Post an image
 
-     The body is the image itself: PNG, JPEG, GIF or WebP, recognized by its first bytes, whatever
-    `Content-Type` is sent (SVG is refused). Stored byte-for-byte, with no resizing and no metadata
-    stripped (EXIF such as GPS position stays in the file), as the first 32 hex characters of its
-    SHA-256 plus an extension: the same bytes always give the same URL. The URL is under the feed's read
-    id, so it works in the feed page, the read-only view and RSS readers without any password. Needs the
-    same credentials as posting and counts against the post rate limit. The feed must exist: it is
-    created by its first note. The size limit is NOTEFEED_MAX_IMAGE_BYTES (default 5 MiB); images
-    deleted only with the feed.
+     The same as posting a note with an image body, for clients that send the picture itself: it becomes
+    a note of its own. The body is PNG, JPEG, GIF or WebP, recognized by its first bytes, whatever
+    `Content-Type` is sent (SVG is refused). Stored byte for byte, with no resizing and no metadata
+    stripped (EXIF such as GPS position stays in the file). The response has the note's `file` and a
+    `file_url` under the feed's read link, public like the read link, and `![](file)` in a markdown note
+    shows it. Creates the feed if it does not exist, like a first note; a password given then protects
+    it. Needs the same credentials as posting and counts against the post rate limit. The size limit is
+    NOTEFEED_MAX_IMAGE_BYTES (default 5 MiB).
 
     Args:
         feed (str):
         x_feed_password (str | Unset):
+        x_note_tags (str | Unset):
+        x_note_name (str | Unset):
+        x_note_title (str | Unset):
+        x_note_alt (str | Unset):
         body (File): The image's bytes: PNG, JPEG, GIF or WebP, recognized by their first bytes,
             not by the Content-Type
 
@@ -252,7 +316,7 @@ async def asyncio(
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Error | ImageUploaded
+        Any | Created | Error
     """
 
     return (
@@ -261,5 +325,9 @@ async def asyncio(
             client=client,
             body=body,
             x_feed_password=x_feed_password,
+            x_note_tags=x_note_tags,
+            x_note_name=x_note_name,
+            x_note_title=x_note_title,
+            x_note_alt=x_note_alt,
         )
     ).parsed

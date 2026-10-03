@@ -14,7 +14,10 @@ T = TypeVar("T", bound="PostForm")
 class PostForm:
     """
     Attributes:
-        markdown (str):
+        markdown (str): The note; or send a `file` part with an image instead
+        title (str | Unset): The note's title, at most 100 characters, one line; empty or left out means the title is
+            taken from the text (a markdown note) or there is none (an image)
+        alt (str | Unset): Alternative text of an image note, at most 500 characters, one line
         password (str | Unset): Protects the feed: 1 to 256 printable ASCII characters, with no space at the start or
             end. Only honored on the post that creates the feed; an existing open feed answers 409. Empty is the same as
             leaving it out.
@@ -27,12 +30,18 @@ class PostForm:
     """
 
     markdown: str
+    title: str | Unset = UNSET
+    alt: str | Unset = UNSET
     password: str | Unset = UNSET
     tags: list[str] | Unset = UNSET
     read_id: str | Unset = UNSET
 
     def to_dict(self) -> dict[str, Any]:
         markdown = self.markdown
+
+        title = self.title
+
+        alt = self.alt
 
         password = self.password
 
@@ -49,6 +58,10 @@ class PostForm:
                 "markdown": markdown,
             }
         )
+        if title is not UNSET:
+            field_dict["title"] = title
+        if alt is not UNSET:
+            field_dict["alt"] = alt
         if password is not UNSET:
             field_dict["password"] = password
         if tags is not UNSET:
@@ -63,6 +76,10 @@ class PostForm:
         d = dict(src_dict)
         markdown = d.pop("markdown")
 
+        title = d.pop("title", UNSET)
+
+        alt = d.pop("alt", UNSET)
+
         password = d.pop("password", UNSET)
 
         tags = cast(list[str], d.pop("tags", UNSET))
@@ -71,6 +88,8 @@ class PostForm:
 
         post_form = cls(
             markdown=markdown,
+            title=title,
+            alt=alt,
             password=password,
             tags=tags,
             read_id=read_id,
