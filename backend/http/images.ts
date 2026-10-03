@@ -1,4 +1,4 @@
-// GET /r/<readId>/images/<file>: an uploaded image, public like the read link (no password, even on a locked
+// GET /r/<readId>/<file> (next.config.ts rewrites a name with an extension here; note ids have none): an uploaded image, public like the read link (no password, even on a locked
 // instance; proxy.ts skips /r/). Served as its extension's type and nothing else, whatever follows the header.
 import { feedForReadId } from "../feeds";
 import { loadImage } from "../images";

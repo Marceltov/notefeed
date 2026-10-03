@@ -40,7 +40,7 @@ export default async function ReadPage({ params, searchParams }: PageProps<"/r/[
       {notes.length === 0 ? (
         <p className="text-muted">{tag ? "No notes with this tag." : "No notes yet."}</p>
       ) : (
-        <NoteList notes={notes} base={readPath(readId)} />
+        <NoteList notes={notes} base={readPath(readId)} imageBase={`${readPath(readId)}/`} />
       )}
     </>
   );

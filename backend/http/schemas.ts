@@ -98,7 +98,7 @@ export const ImageUploaded = z
   .object({
     file: z.string().regex(IMAGE_FILE_RE).describe("The stored file's name: 32 hex characters of the SHA-256 plus the extension. Pass it as a feed's `image` setting"),
     url: z.url().describe("Where the image is served, absolute, under the feed's read id; public like the read link"),
-    markdown: z.string().describe("`![](url)`, to paste into a note"),
+    markdown: z.string().describe("`![](file)`, to paste into a note: relative to the feed, so it keeps working if the feed's read id changes. Use `url` instead for a link outside notefeed (that one is yours to update)"),
   })
   .meta({ id: "ImageUploaded" });
 // A raw request body, not JSON.

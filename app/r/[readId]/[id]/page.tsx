@@ -17,7 +17,7 @@ export default async function ReadNotePage({ params }: PageProps<"/r/[readId]/[i
   return (
     <>
       <Header rss={rssPath(readId)} />
-      <NoteArticle note={note} back={readPath(readId)} />
+      <NoteArticle note={note} back={readPath(readId)} imageBase={`${readPath(readId)}/`} />
     </>
   );
 }

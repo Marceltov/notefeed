@@ -275,7 +275,8 @@ const OPS: AnyOp[] = [
   }).handle(async ({ req, params }) => {
     const { file, readId } = await uploadImage(params.feed, clientIp(req.headers), () => readCapped(req, config.maxImageBytes()), feedAccess(req.headers, params.feed));
     const url = publicUrl(req.headers) + imagePath(readId, file);
-    return { status: 201, body: { file, url, markdown: `![](${url})` } };
+    // `markdown` is relative to the feed: it follows a changed read id; `url` is for use outside notefeed.
+    return { status: 201, body: { file, url, markdown: `![](${file})` } };
   }),
 
   op({

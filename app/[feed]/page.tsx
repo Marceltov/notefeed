@@ -70,7 +70,7 @@ export default async function FeedPage({ params, searchParams }: PageProps<"/[fe
           <pre className="mt-3 overflow-x-auto font-mono text-sm text-ink">{curlExample}</pre>
         </section>
       ) : (
-        <NoteList notes={notes} base={feedPath(feed)} posted={typeof posted === "string" ? posted : undefined} />
+        <NoteList notes={notes} base={feedPath(feed)} imageBase={readId ? `${readPath(readId)}/` : undefined} posted={typeof posted === "string" ? posted : undefined} />
       )}
     </>
   );

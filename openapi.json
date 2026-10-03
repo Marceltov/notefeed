@@ -1671,7 +1671,7 @@
           },
           "markdown": {
             "type": "string",
-            "description": "`![](url)`, to paste into a note"
+            "description": "`![](file)`, to paste into a note: relative to the feed, so it keeps working if the feed's read id changes. Use `url` instead for a link outside notefeed (that one is yours to update)"
           }
         },
         "required": [

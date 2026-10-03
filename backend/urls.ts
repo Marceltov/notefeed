@@ -17,7 +17,8 @@ export const API_PREFIX = "/api/v1";
 export const feedPath = (feed: string) => `/${feed}`;
 export const settingsPath = (feed: string) => `/${feed}/settings`;
 export const readPath = (readId: string) => `/r/${readId}`;
-export const imagePath = (readId: string, file: string) => `${readPath(readId)}/images/${file}`;
+// A file of the feed (an image): served under the read id like the notes, never under the feed name.
+export const imagePath = (readId: string, file: string) => `${readPath(readId)}/${file}`;
 export const rssPath = (readId: string) => `${readPath(readId)}/feed.xml`;
 
 // Where to go after login: a same-origin path, else "/". A second "/" or any "\" would make it

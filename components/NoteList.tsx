@@ -38,8 +38,8 @@ function Tags({ tags, base }: { tags: string[]; base: string }) {
   ));
 }
 
-// Notes grouped by day; each title links to `${base}/${id}`.
-export function NoteList({ notes, base, posted }: { notes: Note[]; base: string; posted?: string }) {
+// Notes grouped by day; each title links to `${base}/${id}`. `imageBase` is where a note's relative image links point.
+export function NoteList({ notes, base, imageBase, posted }: { notes: Note[]; base: string; imageBase?: string; posted?: string }) {
   return groupByDay(notes).map(([day, items]) => (
     <section key={day} aria-labelledby={`day-${dayKey(items[0].createdAt)}`} className="mb-10">
       <h2 id={`day-${dayKey(items[0].createdAt)}`} className="mb-3 border-b border-rule pb-1 font-bold">
@@ -62,7 +62,7 @@ export function NoteList({ notes, base, posted }: { notes: Note[]; base: string;
               <Tags tags={n.tags} base={base} />
               {bodyAfterTitle(n.markdown) && (
                 <div className="mt-1">
-                  <NoteView markdown={bodyAfterTitle(n.markdown)} />
+                  <NoteView markdown={bodyAfterTitle(n.markdown)} imageBase={imageBase} />
                 </div>
               )}
             </div>
@@ -73,7 +73,7 @@ export function NoteList({ notes, base, posted }: { notes: Note[]; base: string;
   ));
 }
 
-export function NoteArticle({ note, back }: { note: Note; back: string }) {
+export function NoteArticle({ note, back, imageBase }: { note: Note; back: string; imageBase?: string }) {
   return (
     <>
       <article>
@@ -83,7 +83,7 @@ export function NoteArticle({ note, back }: { note: Note; back: string }) {
         {note.sender && <span className="text-sm text-muted"> by {note.sender}</span>}
         <Tags tags={note.tags} base={back} />
         <div className="mt-2">
-          <NoteView markdown={note.markdown} />
+          <NoteView markdown={note.markdown} imageBase={imageBase} />
         </div>
       </article>
       <p className="mt-10 text-sm">

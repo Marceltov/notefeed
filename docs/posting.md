@@ -74,7 +74,7 @@ curl -H "Content-Type: application/json" -d '{"markdown": "# Deploy finished", "
 
 ## Images
 
-A note can show images. They are not part of the note's file: you upload an image to the feed, get a URL back, and put that URL in the note as ordinary markdown, `![](url)`. The note stays a plain markdown file.
+A note can show images. They are not part of the note's file: you upload an image to the feed, get its markdown back, and put that in the note as ordinary markdown. The note stays a plain markdown file. The image is a file in the feed's folder, and a note refers to it by file name: `![](3b1f….png)` shows it from the feed's current read link, even after the read id changes. A full URL (`![](https://…)`) is shown as written; if the read id changes, updating a full URL in a note is up to you.
 
 `POST /api/v1/feeds/<feed>/images` takes the image itself as the body:
 
@@ -88,14 +88,14 @@ It answers `201 Created`:
 ```json
 {
   "file": "3b1f0c9d5a7e42c8b6d1e0f4a9c27d58.png",
-  "url": "https://notes.example.com/r/q2Zc9kD0bTnVx4LmAe7sWp/images/3b1f0c9d5a7e42c8b6d1e0f4a9c27d58.png",
-  "markdown": "![](https://notes.example.com/r/q2Zc9kD0bTnVx4LmAe7sWp/images/3b1f0c9d5a7e42c8b6d1e0f4a9c27d58.png)"
+  "url": "https://notes.example.com/r/q2Zc9kD0bTnVx4LmAe7sWp/3b1f0c9d5a7e42c8b6d1e0f4a9c27d58.png",
+  "markdown": "![](3b1f0c9d5a7e42c8b6d1e0f4a9c27d58.png)"
 }
 ```
 
 - `file`: the stored file's name. It is what a feed's [title image](#feed-settings-and-deleting-a-feed) is set with.
 - `url`: where the image is served. It is absolute, built from `PUBLIC_URL` like the other links.
-- `markdown`: `![](url)`, ready to put in a note.
+- `markdown`: `![](file)`, ready to put in a note. It is relative to the feed, so it keeps working if the feed's read id changes. Use `url` for a link outside notefeed.
 
 Post a note that contains it and the image shows in the feed page, the read-only view and RSS readers that render images.
 
@@ -107,7 +107,7 @@ What to know:
 - **Same bytes, same URL.** The file is named after a hash of its contents, so uploading the same image twice gives the same URL and stores one file. A URL's content never changes, so browsers may keep it for a year.
 - **Who may upload:** whoever may post to the feed: the instance password, then the [feed's password](#a-feed-with-its-own-password), in the same order as for a note. Uploads count toward the same per-client [rate limit](configuration.md#rate-limits-and-caps) as posts.
 - **The feed must exist.** A feed is created by its first note, so upload after the first note. Uploading to a feed that does not exist answers `404` and creates nothing, and so does uploading to [a feed without a read link](operations.md#a-feed-without-a-read-link): an image's URL is built from the read id, so nothing is stored.
-- **Images are as public as the read link.** An image is served under the feed's read id, `/r/<read id>/images/<file>`, with no password, even on a locked instance or a protected feed, so that it shows in the read-only view and in feed readers, which have no password to send. Anyone who has the read link, or an image's URL, can fetch it, and the feed's name never appears in the URL. Don't upload anything you would not give to everyone who has the read link.
+- **Images are as public as the read link.** An image is served under the feed's read id, `/r/<read id>/<file>`, with no password, even on a locked instance or a protected feed, so that it shows in the read-only view and in feed readers, which have no password to send. Anyone who has the read link, or an image's URL, can fetch it, and the feed's name never appears in the URL. Don't upload anything you would not give to everyone who has the read link.
 - **No list or delete yet.** There is no endpoint to list or delete images. They stay until the feed is [deleted](#feed-settings-and-deleting-a-feed), and deleting a note does not delete the images it used. To remove one by hand, see [Operations](operations.md#images).
 - **Errors:** `400` for an invalid or reserved feed name; `401` when a password is missing or wrong; `404` when the feed does not exist; `413` (`too_large`) when the image is over the size limit; `415` (`unsupported_type`) when it is not a PNG, JPEG, GIF or WebP image, which includes an empty body; `429` over the rate limit; `507` (`image_limit`) when the feed already has `NOTEFEED_MAX_IMAGES_PER_FEED` images. Uploading an image the feed already has is never refused for the cap.
 
