@@ -5,9 +5,11 @@ import { config } from "./config";
 import { identityOn, providers } from "./oidc/config";
 import { forReaders, getSettings } from "./feedsettings";
 import { isReadId, checkFeed, feedForReadId, hasFeed, readIdOf } from "./feeds";
-import { countNotes, getNote, listNotes, type Note } from "./notes";
+import { countNotes, getNote, ImageNote, listNotes, MarkdownNote, type Note } from "./notes";
 import { imagePath } from "./urls";
 
+// The notes the backend hands out; the classes are exported so a component test can build one.
+export { ImageNote, MarkdownNote };
 export type { Note };
 export { IDENTITY_COOKIE, SESSION_COOKIE, identitySender, locked, sessionOk } from "./auth";
 export { checkFeed, isHeldBack as isReservedFeed, readIdOf } from "./feeds";
