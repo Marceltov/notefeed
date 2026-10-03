@@ -118,7 +118,8 @@ def _place_images(markdown: str, sent: dict[str, str]) -> str:
         return m.group(1) + sent[m.group(2)] + m.group(3)
 
     text = re.sub(r"(!\[[^\]]*\]\()([^)\s]+)(\))", swap, markdown)
-    return "\n\n".join(p for p in [text.rstrip(), *(f"![]({f})" for n, f in sent.items() if n not in used)] if p)
+    rest = [f"![]({f})" for n, f in sent.items() if n not in used]
+    return "\n\n".join(p for p in [text.rstrip(), *rest] if p) if rest else text
 
 
 # Same rule as the server; reserved names still come back as a 400.
@@ -262,7 +263,11 @@ class Client:
                 raise
             posted.append(done)
             sent[a.name] = done.file
-        text = self._post_one(_place_images(content, sent), *own, type, title, tags, alt, name, read_id)
+        try:
+            text = self._post_one(_place_images(content, sent), *own, type, title, tags, alt, name, read_id)
+        except NotefeedError as e:
+            e.posted = posted  # the text failed: the images stay, `attachment` stays None
+            raise
         return Posted(**attrs.asdict(text, recurse=False), attachments=posted)
 
     def _post_one(self, content, feed, feed_password, type, title, tags, alt, name, read_id) -> Created:

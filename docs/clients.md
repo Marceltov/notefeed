@@ -140,7 +140,7 @@ Text that starts with `-`, like a list item, works as-is: `notefeed post "- buy 
 |---|---|
 | `0` | Done |
 | `1` | The server refused (including a wrong password, a rate limit or a full cap), or couldn't be reached |
-| `2` | Usage or configuration problem: no text or image path, an unreadable image file, an unreadable or non-UTF-8 file or stdin, no URL or feed, an invalid feed name or `--limit`, a password with control characters |
+| `2` | Usage or configuration problem: no text or image path, an unreadable image file or `--attach` picture (or one that is not a picture), an unreadable or non-UTF-8 file or stdin, no URL or feed, an invalid feed name or `--limit`, a password with control characters |
 
 ## Errors
 
@@ -156,7 +156,7 @@ Every error is a `NotefeedError` with `status` (the HTTP status) and `code` (the
 | `RateLimitedError` | `rate_limited`, `too_many_attempts` | Too many posts or wrong passwords. `retry_after` / `retryAfter` is the wait in seconds from `Retry-After`, or `None`/`null` |
 | `LimitReachedError` | `feed_limit`, `note_limit`, `image_limit` | The instance's feed cap, or the feed's note or image cap, is reached |
 
-When a post with `attachments` fails on one of them, the error is the one the server gave, with `attachment` (the picture's name) and `posted` (the `Created` of the pictures already posted, which stay) set, and its message starts with `attachment "name":`. The CLI prints that message, then `posted: <url>` for each. The text note is not posted.
+When a post with `attachments` fails on one of them, the error is the one the server gave, with `attachment` (the picture's name) and `posted` (the `Created` of the pictures already posted, which stay) set, and its message starts with `attachment "name":`. If the text note fails after the pictures, `posted` is set and `attachment` is empty. The CLI prints that message, then `posted: <url>` for each. The text note is not posted.
 
 The message is the server's own reason. See the [REST API](api.md) for every status and code.
 

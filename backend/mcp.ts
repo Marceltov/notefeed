@@ -89,6 +89,7 @@ function server(h: Headers): McpServer {
         if (names.has(a.name)) throw new InvalidBodyError(`attachment "${a.name}" is given twice`);
         names.add(a.name);
         if (parseMediaType(a.type)?.type.name !== "image") throw new UnsupportedTypeError(`attachment "${a.name}" must be a picture`);
+        if (Buffer.from(a.data, "base64").length > config.maxImageBytes()) throw new ImageTooLargeError();
       }
       const posted: { id: string; file: string; url: string }[] = [];
       const sent = new Map<string, string>();
@@ -103,7 +104,14 @@ function server(h: Headers): McpServer {
         }
       }
       const text = new TextEncoder().encode(placeImages(markdown, sent));
-      const { note, readId } = await postNote(feed, clientIp(h), async () => ({ body: text, mediaType: "text/markdown", title, tags, readId: read_id }), { password }, sender(h));
+      let done;
+      try {
+        done = await postNote(feed, clientIp(h), async () => ({ body: text, mediaType: "text/markdown", title, tags, readId: read_id }), { password }, sender(h));
+      } catch (e) {
+        if (e instanceof NotefeedError && posted.length) e.message = `${e.message} (already posted: ${posted.map((p) => p.file).join(", ")})`;
+        throw e;
+      }
+      const { note, readId } = done;
       const feedUrl = base + feedPath(feed);
       return ok({ id: note.id, url: `${feedUrl}/${note.id}`, feed_url: feedUrl, read_url: readId && base + rssPath(readId), attachments: posted });
     }),

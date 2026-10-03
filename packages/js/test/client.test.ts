@@ -484,4 +484,19 @@ describe("post with attachments", () => {
     expect(err).toBeInstanceOf(RateLimitedError);
     expect(err).toMatchObject({ retryAfter: 7, attachment: "b.png", posted: [created(1)] });
   });
+
+  test("a failed text post still carries the images already posted", async () => {
+    let n = 0;
+    server.route((r) => (r.headers["content-type"] === "text/markdown" ? [429, { error: "slow down", code: "rate_limited" }, { "Retry-After": "7" }] : [201, created(++n)]));
+    const err = await c().post("x", { attachments: [{ name: "a.png", content: png, type: "image/png" }] }).catch((e) => e);
+    expect(err).toBeInstanceOf(RateLimitedError);
+    expect(err).toMatchObject({ retryAfter: 7, attachment: null, posted: [created(1)] });
+  });
+
+  test("a name referenced twice is uploaded once and keeps the text's trailing newline", async () => {
+    route();
+    await c().post("![](a.png) and ![](a.png)\n", { attachments: [{ name: "a.png", content: png, type: "image/png" }] });
+    expect(server.requests).toHaveLength(2);
+    expect(server.requests[1].body.toString()).toBe("![](F1.png) and ![](F1.png)\n");
+  });
 });

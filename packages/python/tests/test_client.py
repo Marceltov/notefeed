@@ -533,3 +533,18 @@ def test_a_rate_limit_keeps_retry_after(server):
     with pytest.raises(RateLimitedError) as e:
         Client(server.url, "inbox").post("x", attachments=[Attachment("a.png", PNG, "image/png"), Attachment("b.png", PNG, "image/png")])
     assert (e.value.retry_after, e.value.attachment, len(e.value.posted)) == (7, "b.png", 1)
+
+
+def test_a_failed_text_post_still_carries_the_images_already_posted(server):
+    server.reply(201, img(1))
+    server.reply(429, {"error": "slow down", "code": "rate_limited"}, headers={"Retry-After": "7"})
+    with pytest.raises(RateLimitedError) as e:
+        Client(server.url, "inbox").post("x", attachments=[Attachment("a.png", PNG, "image/png")])
+    assert (e.value.retry_after, e.value.attachment, [p.id for p in e.value.posted]) == (7, None, ["I1"])
+
+
+def test_a_name_referenced_twice_is_uploaded_once_and_keeps_the_texts_trailing_newline(server):
+    server.reply(201, img(1))
+    Client(server.url, "inbox").post("![](a.png) and ![](a.png)\n", attachments=[Attachment("a.png", PNG, "image/png")])
+    assert len(server.requests) == 2
+    assert server.requests[1]["body"] == b"![](F1.png) and ![](F1.png)\n"

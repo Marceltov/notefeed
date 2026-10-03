@@ -98,7 +98,7 @@ function placeImages(markdown: string, sent: Map<string, string>): string {
     return head + sent.get(dest) + tail;
   });
   const rest = [...sent].filter(([name]) => !used.has(name)).map(([, file]) => `![](${file})`);
-  return [text.trimEnd(), ...rest].filter((p) => p !== "").join("\n\n");
+  return rest.length === 0 ? text : [text.trimEnd(), ...rest].filter((p) => p !== "").join("\n\n");
 }
 
 export class Client {
@@ -180,7 +180,12 @@ export class Client {
         throw e;
       }
     }
-    return { ...(await this.postOne(placeImages(content, sent), own)), attachments: posted };
+    try {
+      return { ...(await this.postOne(placeImages(content, sent), own)), attachments: posted };
+    } catch (e) {
+      if (e instanceof NotefeedError) e.posted = posted; // the text failed: the images stay, `attachment` stays null
+      throw e;
+    }
   }
 
   private async postOne(

@@ -112,7 +112,7 @@ In the browser, the compose box and the note editor take pictures with the [Add 
 
 The API takes one note per request, so a note with pictures is the pictures first, then the text. The [clients](clients.md#from-code), the `notefeed post --attach` command and the [MCP](mcp.md) `post_note` tool do that in one call: each picture is posted as a note of its own, in order, and the text follows with `![](name)` swapped for the picture's file name. A picture the text never refers to is added at the end, so none is dropped. Names are letters, digits, `.`, `_` and `-`; the text is markdown; everything that can be checked locally is checked before the first request.
 
-If one picture is refused, the call fails with that picture's name and the pictures already posted, and the text is not posted. Nothing is rolled back: the pictures posted before it stay in the feed as notes of their own, and you can post again or delete them.
+If one picture is refused, the call fails with that picture's name and the pictures already posted, and the text is not posted. If the text itself is refused after the pictures, the call fails with the pictures already posted. Nothing is rolled back: the pictures posted before it stay in the feed as notes of their own, and you can post again or delete them.
 
 ## Feed settings and deleting a feed
 

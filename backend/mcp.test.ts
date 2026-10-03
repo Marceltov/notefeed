@@ -394,6 +394,25 @@ describe("post_note attachments", () => {
     expect(r.content[0].text).toContain('attachment "b.png"');
     expect(r.content[0].text).toContain(notes[0].file);
   });
+  test("an oversized image is refused before the first image is posted", async () => {
+    process.env.NOTEFEED_MAX_IMAGE_BYTES = "10";
+    const small = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]).toString("base64");
+    const r = await call("post_note", { feed: "f", markdown: "x", attachments: [att("a.png", { data: small }), att("b.png")] });
+    delete process.env.NOTEFEED_MAX_IMAGE_BYTES;
+    expect(r.isError).toBe(true);
+    expect(await hasFeed("f")).toBe(false);
+  });
+  test("a failed text post still lists the images already posted", async () => {
+    const r = await call("post_note", { feed: "f", markdown: "x".repeat(110_000), attachments: [att("a.png")] });
+    const notes = await listNotes("f", 10);
+    expect(r.isError).toBe(true);
+    expect(notes).toHaveLength(1);
+    expect(r.content[0].text).toContain(`already posted: ${notes[0].file}`);
+  });
+  test("empty markdown posts only the references", async () => {
+    const r = (await call("post_note", { feed: "f", markdown: "", attachments: [att("a.png")] })).structuredContent;
+    expect((await getNote("f", r.id))!.content).toBe(`![](${r.attachments[0].file})`);
+  });
   test("the feed password goes on every request", async () => {
     await call("post_note", { feed: "p", markdown: "x", password: "pw", attachments: [att("a.png")] });
     expect((await call("list_notes", { feed: "p" })).isError).toBe(true);
