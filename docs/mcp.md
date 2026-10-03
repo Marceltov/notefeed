@@ -4,7 +4,7 @@ notefeed has an [MCP](https://modelcontextprotocol.io) endpoint, so AI assistant
 
 | Tool | What it does |
 |---|---|
-| `post_note` | Posts a markdown note to a feed. Takes `feed` and `markdown`, optionally a `title` (see [Titles](posting.md#titles)), `tags` (a list of [tags](posting.md#tags)) and `read_id` (the [read id](posting.md#choosing-a-feeds-read-id) of the feed this post creates). |
+| `post_note` | Posts a markdown note to a feed. Takes `feed` and `markdown`, optionally a `title` (see [Titles](posting.md#titles)), `tags` (a list of [tags](posting.md#tags)) and `read_id` (the [read id](posting.md#choosing-a-feeds-read-id) of the feed this post creates). Optionally `attachments`: a list of `{ name, type, data, alt }` (`data` is base64) with pictures to post first, each as a note of its own; write `![](name)` in `markdown` where one goes, and one the text never refers to is added at the end. The answer lists them as `attachments` (`id`, `file`, `url`). If one fails, the error names it and the ones already posted, which stay, and the text is not posted: see [Posting a note with its pictures](posting.md#posting-a-note-with-its-pictures). |
 | `list_notes` | Lists a feed's notes, newest first, without their text. Takes `feed`, optionally `limit` (1–100, default 20), `before` and `tag` (only notes carrying it). Each note lists its `tags`. |
 | `get_note` | Reads one note with its content. Takes `feed` and `id`. |
 | `edit_note` | Replaces a note's markdown or sets its title (an empty title removes it), or both; its id stays. Takes `feed`, `id` and `markdown` and/or `title`, and returns the note. |

@@ -2,7 +2,8 @@
 
 import { useRef, useState } from "react";
 import { postFile } from "@/app/_lib/useApiForm";
-import { type Pending, substitute } from "@/components/pendingFiles";
+import { type Pending } from "@/components/pendingFiles";
+import { substitute } from "@/shared/links";
 
 // The pictures waiting in a note box, and what posting them takes: `flush` uploads the ones not yet sent (each becomes a note of its
 // own), `apply` swaps the local names in the text for the notes' file names. A picture that was sent stays sent when a later step

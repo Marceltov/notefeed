@@ -5,6 +5,7 @@ from importlib.metadata import version as _version
 __version__ = _version("notefeed")
 
 from .client import (  # noqa: E402
+    Attachment,
     AuthError,
     Client,
     ConfigError,
@@ -16,10 +17,12 @@ from .client import (  # noqa: E402
     NotefeedError,
     NotFoundError,
     NoteTooLargeError,
+    Posted,
     RateLimitedError,
 )
 
 __all__ = [
+    "Attachment",
     "AuthError",
     "Client",
     "ConfigError",
@@ -31,5 +34,6 @@ __all__ = [
     "NotefeedError",
     "NotFoundError",
     "NoteTooLargeError",
+    "Posted",
     "RateLimitedError",
 ]

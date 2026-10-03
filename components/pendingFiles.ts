@@ -19,12 +19,6 @@ export function uniqueToken(name: string, taken: ReadonlySet<string>): string {
   }
 }
 
-const IMAGE_REF = /(!\[[^\]]*\]\()([^)\s]+)(\))/g;
-
-/** Swaps the destination of each image whose destination is exactly a key of `sent` (token → file name). Nothing else changes. */
-export const substitute = (text: string, sent: ReadonlyMap<string, string>): string =>
-  sent.size === 0 ? text : text.replace(IMAGE_REF, (m, head: string, dest: string, tail: string) => (sent.has(dest) ? head + sent.get(dest) + tail : m));
-
 const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 /** Whether the text holds nothing but pictures from `tokens`: posting it makes their notes and no text note. */

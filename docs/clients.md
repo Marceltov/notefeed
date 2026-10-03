@@ -79,7 +79,7 @@ A feed can also have its own password (see [A feed with its own password](postin
 
 | Python | Node | Does |
 |---|---|---|
-| `post(content, feed=None, type=None, title=None, tags=None, alt=None, name=None, read_id=None)` | `post(content, { feed, type, title, tags, alt, name, readId })` | Posts a note. A string is markdown; bytes (`bytes` in Python, a `Uint8Array` or `Blob` in Node) are a file whose media type is `type` (`text/markdown`, `image/png`, `image/jpeg`, `image/gif` or `image/webp`; a Blob's own type is used if you leave it out). Returns `id`, `url`, `feed_url`, `read_url` (`None`/`null` for a feed without a read link), and the note's `file` and `file_url`: write `![](file)` in a markdown note to show a picture, or pass it as `image` to `update_feed`. See [Types](posting.md#types) and [Pictures](posting.md#pictures). A refused file is an `InvalidRequestError` (not accepted, or not what the type says), `NoteTooLargeError` (too large) or `LimitReachedError` (the feed's picture cap) |
+| `post(content, feed=None, type=None, title=None, tags=None, alt=None, name=None, read_id=None, attachments=None)` | `post(content, { feed, type, title, tags, alt, name, readId, attachments })` | Posts a note. A string is markdown; bytes (`bytes` in Python, a `Uint8Array` or `Blob` in Node) are a file whose media type is `type` (`text/markdown`, `image/png`, `image/jpeg`, `image/gif` or `image/webp`; a Blob's own type is used if you leave it out). Returns `id`, `url`, `feed_url`, `read_url` (`None`/`null` for a feed without a read link), and the note's `file` and `file_url`: write `![](file)` in a markdown note to show a picture, or pass it as `image` to `update_feed`. See [Types](posting.md#types) and [Pictures](posting.md#pictures). A refused file is an `InvalidRequestError` (not accepted, or not what the type says), `NoteTooLargeError` (too large) or `LimitReachedError` (the feed's picture cap). `attachments` posts pictures with a markdown note: `Attachment(name, content, type=None, alt=None)` in Python, `{ name, content, type, alt }` in Node. Each is posted first as a note of its own, and `![](name)` in the text is swapped for its file name (a picture the text never refers to is added at the end). The result also has `attachments`, the `Created` of each picture. See [Posting a note with its pictures](posting.md#posting-a-note-with-its-pictures) |
 | `notes(feed=None, page_size=50)` | `notes({ feed, pageSize })` | Every note in the feed, newest first. It fetches the next page only as you iterate, so stop whenever you have enough |
 | `note(id, feed=None)` | `note(id, { feed })` | One note |
 | `edit(id, content, feed=None, type=None)` | `edit(id, content, { feed, type })` | Replaces a note's content and returns the note: a string is markdown, bytes need the note's own `type`. Its id, URLs and metadata stay. A missing note is a `NotFoundError` |
@@ -124,6 +124,7 @@ notefeed edit 20260929T140512Z-backup-finished "# Backup finished, verified"
 notefeed edit 20260929T140512Z-backup-finished --file report.md   # or "-" for stdin
 notefeed delete 20260929T140512Z-backup-finished
 notefeed post --file photo.png --title Cat # a picture is a note too (the type comes from the extension)
+notefeed post "Result: ![](chart.png)" --attach out/chart.png   # a note with its pictures, posted first
 notefeed update 20260929T140512Z-backup-finished --title "Backup" --alt "…"
 notefeed notes                             # the newest 20: time, title, URL
 notefeed notes --limit 100 --json          # one JSON object per line
@@ -133,13 +134,13 @@ notefeed --version
 
 Text that starts with `-`, like a list item, works as-is: `notefeed post "- buy milk"`. The usual `notefeed post -- "-x"` works too.
 
-`post` prints the new note's URL, and `edit` prints the edited note's URL; `edit` takes its text the same ways as `post`. `delete` prints nothing and exits `0` when the note is gone. `post --file PATH` sends the file as it is, with the type its extension says (`.md`, `.png`, `.jpg`, `.gif`, `.webp`) or `--type`. `update` sets `--title` and/or `--alt` and prints the note's URL. A note that does not exist is an exit code `1`, for `edit` and `delete` alike. Anyone who can post to a feed can edit and delete its notes, and a delete cannot be undone. `notes` prints one line per note, `2026-09-30T14:05:12Z  Backup finished  https://…`, with the time in UTC to the second (the same in both packages and in `--json`). On failure the command prints `notefeed: <reason>` to stderr and exits with:
+`post` prints the new note's URL (then one URL per `--attach` picture, in order; the name the text refers to is the file's own name, the type its extension), and `edit` prints the edited note's URL; `edit` takes its text the same ways as `post`. `delete` prints nothing and exits `0` when the note is gone. `post --file PATH` sends the file as it is, with the type its extension says (`.md`, `.png`, `.jpg`, `.gif`, `.webp`) or `--type`. `update` sets `--title` and/or `--alt` and prints the note's URL. A note that does not exist is an exit code `1`, for `edit` and `delete` alike. Anyone who can post to a feed can edit and delete its notes, and a delete cannot be undone. `notes` prints one line per note, `2026-09-30T14:05:12Z  Backup finished  https://…`, with the time in UTC to the second (the same in both packages and in `--json`). On failure the command prints `notefeed: <reason>` to stderr and exits with:
 
 | Exit code | Meaning |
 |---|---|
 | `0` | Done |
 | `1` | The server refused (including a wrong password, a rate limit or a full cap), or couldn't be reached |
-| `2` | Usage or configuration problem: no text or image path, an unreadable image file, an unreadable or non-UTF-8 file or stdin, no URL or feed, an invalid feed name or `--limit`, a password with control characters |
+| `2` | Usage or configuration problem: no text or image path, an unreadable image file or `--attach` picture (or one that is not a picture), an unreadable or non-UTF-8 file or stdin, no URL or feed, an invalid feed name or `--limit`, a password with control characters |
 
 ## Errors
 
@@ -147,13 +148,15 @@ Every error is a `NotefeedError` with `status` (the HTTP status) and `code` (the
 
 | Type | Codes | When |
 |---|---|---|
-| `ConfigError` | – | Empty URL; no feed given; an invalid feed name; a password with control characters (the password itself is never shown) |
+| `ConfigError` | – | Empty URL; no feed given; an invalid feed name; a password with control characters (the password itself is never shown); invalid `attachments` (a name that is not letters, digits, `.`, `_`, `-`, a duplicate, not a picture, or with a note that is not a markdown string) |
 | `InvalidRequestError` | `invalid_feed`, `reserved_feed`, `empty_note`, `invalid_body`, `invalid_request`, `unsupported_type` | The server refused the request itself |
 | `AuthError` | `auth` | The instance or the feed has a password and it's missing or wrong |
 | `NotFoundError` | `not_found` | No such note (also for `edit` and `delete`), no such feed (for `feed_info`, `update_feed` and `delete_feed`), or a malformed read id |
 | `NoteTooLargeError` | `too_large` | A note over 100 KB, or an image over the size limit |
 | `RateLimitedError` | `rate_limited`, `too_many_attempts` | Too many posts or wrong passwords. `retry_after` / `retryAfter` is the wait in seconds from `Retry-After`, or `None`/`null` |
 | `LimitReachedError` | `feed_limit`, `note_limit`, `image_limit` | The instance's feed cap, or the feed's note or image cap, is reached |
+
+When a post with `attachments` fails on one of them, the error is the one the server gave, with `attachment` (the picture's name) and `posted` (the `Created` of the pictures already posted, which stay) set, and its message starts with `attachment "name":`. If the text note fails after the pictures, `posted` is set and `attachment` is empty. The CLI prints that message, then `posted: <url>` for each. The text note is not posted.
 
 The message is the server's own reason. See the [REST API](api.md) for every status and code.
 

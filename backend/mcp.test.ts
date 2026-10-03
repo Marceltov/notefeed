@@ -2,10 +2,10 @@ import { mkdir, mkdtemp, readdir, rm, symlink, writeFile } from "node:fs/promise
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import { readIdOf, resetFeedsForTests } from "./feeds";
+import { hasFeed, readIdOf, resetFeedsForTests } from "./feeds";
 import { resetRateLimitsForTests } from "./limits";
 import { logTo } from "./log";
-import { createNote, getNote } from "./notes";
+import { createNote, getNote, listNotes } from "./notes";
 import { mcpRoute } from "./mcp";
 import { sign } from "./oauth/tokens";
 
@@ -96,6 +96,7 @@ describe("tools", () => {
       url: `http://localhost:3000/a/${id}`,
       feed_url: "http://localhost:3000/a",
       read_url: `http://localhost:3000/r/${(await readIdOf("a"))!}/feed.xml`,
+      attachments: [],
     });
     expect(JSON.parse(r.content[0].text)).toEqual(r.structuredContent);
   });
@@ -360,6 +361,62 @@ describe("feed tools", () => {
       expect((await call(tool, { feed: "p", ...args })).content[0].text).toBe("missing or wrong password");
     }
     expect((await call("delete_feed", { feed: "p", password: "pw" })).structuredContent).toEqual({ deleted: true });
+  });
+});
+
+describe("post_note attachments", () => {
+  const png = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.from("rest")]).toString("base64");
+  const att = (name: string, extra: Record<string, unknown> = {}) => ({ name, type: "image/png", data: png, ...extra });
+  test("posts the images, then the text with the references swapped or appended", async () => {
+    const r = (await call("post_note", { feed: "f", markdown: "hi ![](a.png)", attachments: [att("a.png"), att("b.png", { alt: "B" })] })).structuredContent;
+    expect(r.attachments).toHaveLength(2);
+    const [a, b] = r.attachments;
+    expect(a.file).not.toBe(b.file);
+    expect((await getNote("f", r.id))!.content).toBe(`hi ![](${a.file})\n\n![](${b.file})`);
+    expect((await listNotes("f", 10)).length).toBe(3);
+    expect(await getNote("f", b.id)).toMatchObject({ type: "image/png", alt: "B" });
+  });
+  test("without attachments the answer has an empty list", async () => {
+    expect((await call("post_note", { feed: "f", markdown: "x" })).structuredContent.attachments).toEqual([]);
+  });
+  test("validation refuses before anything is posted", async () => {
+    for (const attachments of [[att("a.png"), att("a.png")], [att("a b.png")], [att("..")], [att("a.md", { type: "text/markdown" })], [att("a.svg", { type: "image/svg+xml" })]]) {
+      expect((await call("post_note", { feed: "f", markdown: "x", attachments })).isError).toBe(true);
+    }
+    expect(await hasFeed("f")).toBe(false);
+  });
+  test("a failed upload names the attachment and lists the posted ones, and the text is not posted", async () => {
+    const bad = att("b.png", { data: Buffer.from("not a png").toString("base64") });
+    const r = await call("post_note", { feed: "f", markdown: "x", attachments: [att("a.png"), bad] });
+    expect(r.isError).toBe(true);
+    const notes = await listNotes("f", 10);
+    expect(notes).toHaveLength(1);
+    expect(r.content[0].text).toContain('attachment "b.png"');
+    expect(r.content[0].text).toContain(notes[0].file);
+  });
+  test("an oversized image is refused before the first image is posted", async () => {
+    process.env.NOTEFEED_MAX_IMAGE_BYTES = "10";
+    const small = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]).toString("base64");
+    const r = await call("post_note", { feed: "f", markdown: "x", attachments: [att("a.png", { data: small }), att("b.png")] });
+    delete process.env.NOTEFEED_MAX_IMAGE_BYTES;
+    expect(r.isError).toBe(true);
+    expect(await hasFeed("f")).toBe(false);
+  });
+  test("a failed text post still lists the images already posted", async () => {
+    const r = await call("post_note", { feed: "f", markdown: "x".repeat(110_000), attachments: [att("a.png")] });
+    const notes = await listNotes("f", 10);
+    expect(r.isError).toBe(true);
+    expect(notes).toHaveLength(1);
+    expect(r.content[0].text).toContain(`already posted: ${notes[0].file}`);
+  });
+  test("empty markdown posts only the references", async () => {
+    const r = (await call("post_note", { feed: "f", markdown: "", attachments: [att("a.png")] })).structuredContent;
+    expect((await getNote("f", r.id))!.content).toBe(`![](${r.attachments[0].file})`);
+  });
+  test("the feed password goes on every request", async () => {
+    await call("post_note", { feed: "p", markdown: "x", password: "pw", attachments: [att("a.png")] });
+    expect((await call("list_notes", { feed: "p" })).isError).toBe(true);
+    expect((await call("list_notes", { feed: "p", password: "pw" })).structuredContent.notes).toHaveLength(2);
   });
 });
 
