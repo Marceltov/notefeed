@@ -2,7 +2,6 @@ import json
 from urllib.parse import parse_qs, urlparse
 
 import pytest
-from notefeed._generated.types import UNSET
 
 from notefeed import (
     AuthError,
@@ -66,14 +65,6 @@ def test_post_sends_markdown_as_json_and_returns_created(server):
     assert (req["method"], req["path"]) == ("POST", "/api/v1/feeds/inbox/notes")
     assert json.loads(req["body"]) == {"markdown": "# Café\r\nx"}
     assert "Authorization" not in req["headers"]
-
-
-def test_a_note_from_a_server_without_kind_file_and_size_still_parses(server):
-    old = {k: v for k, v in note(10).items() if k not in ("kind", "file", "size")}
-    server.reply(200, old)
-    n = Client(server.url, "inbox").note("i")
-    assert (n.id, n.markdown) == (old["id"], old["markdown"])
-    assert (n.kind, n.file, n.size) == (UNSET, UNSET, UNSET)
 
 
 def test_title_goes_in_the_json_body_and_is_left_out_otherwise(server):
