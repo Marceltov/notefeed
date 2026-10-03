@@ -108,7 +108,8 @@ test("a refused upload keeps the box as it was, and posting again continues", as
   await note(page).fill("# Two pictures");
   await drop(page, "one.png", "two.png");
   let calls = 0;
-  await page.route("**/images", async (route) => {
+  await page.route("**/notes", async (route) => {
+    if (!route.request().headers()["content-type"]?.startsWith("image/")) return route.continue(); // the text note
     calls++;
     if (calls === 2) return route.fulfill({ status: 415, contentType: "application/json", body: JSON.stringify({ error: "x", code: "unsupported_type" }) });
     return route.continue();

@@ -39,7 +39,7 @@ export function useApiForm(page: string, initialError?: string, message = errorM
 // Posts one image to the feed as a note of its own (the generated client; the server checks the bytes against the declared type) and returns the
 // note's id and file name, or the refusal's message. `password` is only for the post that creates a protected feed; `meta` is a title and tags to put on the picture. Shared by the
 // markdown boxes and the title image.
-export async function uploadImageFile(feed: string, file: File, password?: string, meta: { title?: string; tags?: string[] } = {}): Promise<{ id: string; file: string; url: string } | { error: string }> {
+export async function postFile(feed: string, file: File, password?: string, meta: { title?: string; tags?: string[] } = {}): Promise<{ id: string; file: string; url: string } | { error: string }> {
   try {
     const { data, error, response } = await postNote({
       baseUrl: window.location.origin,

@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { uploadImageFile } from "@/app/_lib/useApiForm";
+import { postFile } from "@/app/_lib/useApiForm";
 import { type Pending, substitute } from "@/components/pendingFiles";
 
 // The pictures waiting in a note box, and what posting them takes: `flush` uploads the ones not yet sent (each becomes a note of its
@@ -16,7 +16,7 @@ export function usePendingImages(feed: string) {
   async function flush(password?: string, meta?: { title?: string; tags?: string[] }): Promise<string | undefined> {
     for (const p of pending) {
       if (sent.current.has(p.key)) continue;
-      const result = await uploadImageFile(feed, p.file, password, meta);
+      const result = await postFile(feed, p.file, password, meta);
       if ("error" in result) return result.error;
       sent.current.set(p.key, { id: result.id, file: result.file });
       last.current = result.id;

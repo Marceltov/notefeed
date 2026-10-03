@@ -5,7 +5,7 @@ import { useRef, useState, useSyncExternalStore, type FormEvent, type ReactNode 
 import { deleteFeed, updateFeed } from "@/app/_lib/api";
 import { heading } from "@/components/styles";
 import { feedDetailsErrorMessage } from "@/app/_lib/messages";
-import { uploadImageFile, useApiForm } from "@/app/_lib/useApiForm";
+import { postFile, useApiForm } from "@/app/_lib/useApiForm";
 
 const input = "w-full rounded-sm border border-rule bg-transparent px-3 py-1.5 focus:border-carbon focus:outline-none";
 const secondary = "inline-flex items-center gap-1.5 rounded-sm border border-rule px-3 py-1 font-bold hover:border-carbon disabled:opacity-60";
@@ -40,7 +40,7 @@ export function FeedDetails({ feed, title: savedTitle, description: savedDescrip
   async function choose(file: File) {
     setError(undefined);
     setPending(true);
-    const up = await uploadImageFile(feed, file);
+    const up = await postFile(feed, file);
     if ("error" in up) {
       setError(up.error);
       setPending(false);
