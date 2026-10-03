@@ -1,11 +1,12 @@
-import { mkdtemp, readdir, writeFile } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { beforeEach, describe, expect, test } from "vitest";
-import { ImageLimitError, UnsupportedTypeError } from "./errors";
+import { UnsupportedTypeError } from "./errors";
 import { resetFeedsForTests } from "./feeds";
-import { IMAGE_FILE_RE, imageName, loadImage, sniffImage, storeImage } from "./images";
-import { createNote } from "./notes";
+import { contentTypeOf, sniffImage } from "./images";
+import { createImageNote, createNote, getNote, hasImageNote, listNotes, removeNote } from "./notes";
+import { ImageNote } from "./note/image";
 
 beforeEach(async () => {
   process.env.DATA_DIR = await mkdtemp(join(tmpdir(), "notefeed-img-"));
@@ -37,60 +38,64 @@ describe("sniffImage", () => {
   ])("%s is not an image", (_n, b) => expect(sniffImage(b)).toBeNull());
 });
 
-test("the name is 32 hex of the SHA-256 plus the extension", () => {
-  expect(imageName(PNG, "png")).toMatch(IMAGE_FILE_RE);
-  expect(imageName(PNG, "png")).toBe(imageName(PNG.slice(), "png"));
-  expect(imageName(PNG, "png")).not.toBe(imageName(png(9), "png"));
+test("contentTypeOf names the served type of an extension", () => {
+  expect(contentTypeOf("png")).toBe("image/png");
+  expect(contentTypeOf("jpg")).toBe("image/jpeg");
+  expect(contentTypeOf("md")).toBe("text/plain; charset=utf-8");
+  expect(contentTypeOf("pdf")).toBe("application/octet-stream");
 });
 
-describe("storeImage / loadImage", () => {
-  test("same bytes twice: same name, one file", async () => {
-    await createNote("pics", "# x");
-    const a = await storeImage("pics", PNG);
-    const b = await storeImage("pics", PNG);
-    expect(a).toBe(b);
-    expect((await readdir(join(process.env.DATA_DIR!, "pics"))).filter((f) => IMAGE_FILE_RE.test(f))).toEqual([a]);
-    expect((await loadImage("pics", a))!.contentType).toBe("image/png");
-    expect(Array.from((await loadImage("pics", a))!.bytes)).toEqual(Array.from(PNG));
+describe("createImageNote", () => {
+  const feedDir = () => join(process.env.DATA_DIR!, "pics");
+  test("stores the bytes as <id>.png with a sidecar, and creates the feed", async () => {
+    const { note, readId } = await createImageNote("pics", PNG, { sender: "Ann", tags: ["a"], name: "cat.png" });
+    expect(note).toBeInstanceOf(ImageNote);
+    expect(note.file).toBe(`${note.id}.png`);
+    expect(readId).toBeTruthy();
+    expect(Array.from(await readFile(join(feedDir(), note.file)))).toEqual(Array.from(PNG));
+    expect(JSON.parse(await readFile(join(feedDir(), `.${note.file}.json`), "utf8"))).toEqual({ sender: "Ann", tags: ["a"], name: "cat.png" });
+    expect(note.size).toBe(PNG.length);
   });
-  test("an unsupported type is refused and writes nothing", async () => {
-    await createNote("pics", "# x");
-    await expect(storeImage("pics", new TextEncoder().encode("<html>"))).rejects.toBeInstanceOf(UnsupportedTypeError);
-    expect((await readdir(join(process.env.DATA_DIR!, "pics"))).filter((f) => IMAGE_FILE_RE.test(f))).toEqual([]);
+  test("an unsupported type is refused and creates nothing", async () => {
+    await expect(createImageNote("pics", new TextEncoder().encode("<svg/>"), {})).rejects.toBeInstanceOf(UnsupportedTypeError);
+    await expect(stat(feedDir())).rejects.toThrow();
   });
-  test("per-feed cap: a new image is refused, a repeat is not", async () => {
+  test("two images with the same bytes are two notes", async () => {
+    const a = await createImageNote("pics", PNG, {});
+    const b = await createImageNote("pics", PNG, {});
+    expect(a.note.id).not.toBe(b.note.id);
+  });
+  test("it lists with markdown notes, reads back as an image, and has no title unless set", async () => {
+    await createNote("pics", "# Text", new Date("2026-01-01T00:00:00Z"));
+    const { note } = await createImageNote("pics", PNG, { alt: "a cat" }, new Date("2026-01-02T00:00:00Z"));
+    const got = await getNote("pics", note.id);
+    expect(got).toBeInstanceOf(ImageNote);
+    expect(got).toMatchObject({ kind: "image", alt: "a cat", title: "", file: note.file });
+    expect((await listNotes("pics")).map((n) => n.kind)).toEqual(["image", "markdown"]);
+    expect((await createImageNote("pics", PNG, { title: "T" })).note.title).toBe("T");
+  });
+  test("hasImageNote is true for an image note's file only", async () => {
+    const { note } = await createImageNote("pics", PNG, {});
+    const { note: md } = await createNote("pics", "# x");
+    expect(await hasImageNote("pics", note.file)).toBe(true);
+    expect(await hasImageNote("pics", md.file)).toBe(false);
+    expect(await hasImageNote("pics", "../x.png")).toBe(false);
+    expect(await hasImageNote("pics", "nope.png")).toBe(false);
+    await removeNote("pics", note.id);
+    expect(await hasImageNote("pics", note.file)).toBe(false);
+  });
+  test("the image cap counts image notes, not markdown notes", async () => {
     process.env.NOTEFEED_MAX_IMAGES_PER_FEED = "2";
     await createNote("pics", "# x");
-    await storeImage("pics", png(1));
-    await storeImage("pics", png(2));
-    await expect(storeImage("pics", png(3))).rejects.toBeInstanceOf(ImageLimitError);
-    await expect(storeImage("pics", png(1))).resolves.toMatch(IMAGE_FILE_RE);
+    await createImageNote("pics", png(1), {});
+    await createImageNote("pics", png(2), {});
+    const { countNotes } = await import("./notes");
+    expect(await countNotes("pics", "image")).toBe(2);
+    expect(await countNotes("pics", "markdown")).toBe(1);
+    expect(await countNotes("pics")).toBe(3);
   });
-  test("a missing feed is not created", async () => {
-    await expect(storeImage("ghost", PNG)).rejects.toMatchObject({ code: "not_found" });
-    await expect(readdir(join(process.env.DATA_DIR!, "ghost"))).rejects.toThrow();
+  test("a note's files are in the feed folder", async () => {
+    const { note } = await createImageNote("pics", JPG, {});
+    expect((await readdir(feedDir())).filter((f) => !f.startsWith("."))).toEqual([`${note.id}.jpg`]);
   });
-  test.each(["../x", "../../etc/passwd", ".password", "0".repeat(31) + "A.png", "a".repeat(32) + ".svg", "a".repeat(33) + ".png", "a%2Fb", ""])(
-    "loadImage(%j) is null",
-    async (name) => {
-      await createNote("pics", "# x");
-      expect(await loadImage("pics", name)).toBeNull();
-    },
-  );
-  test("a valid name that is missing is null", async () => {
-    await createNote("pics", "# x");
-    expect(await loadImage("pics", "a".repeat(32) + ".png")).toBeNull();
-  });
-});
-
-// The names above would also miss on a missing file; here real files sit where a bad name would reach them.
-test("loadImage never reads a planted file through a bad name", async () => {
-  await createNote("pics", "# x");
-  const feed = join(process.env.DATA_DIR!, "pics");
-  await writeFile(join(feed, ".password"), "secret");
-  const upper = "A".repeat(32) + ".png";
-  const long = "a".repeat(33) + ".png";
-  const svg = "a".repeat(32) + ".svg";
-  for (const f of [upper, long, svg]) await writeFile(join(feed, f), PNG);
-  for (const name of ["../.password", upper, long, svg]) expect(await loadImage("pics", name)).toBeNull();
 });

@@ -369,7 +369,8 @@ describe("upload_image", () => {
     await call("post_note", { feed: "i", markdown: "# Hi" });
     const r = (await call("upload_image", { feed: "i", data: png })).structuredContent;
     expect(r.url).toBe(`http://localhost:3000/r/${(await readIdOf("i"))!}/${r.file}`);
-    expect(r.markdown).toBe(`![](${r.url})`);
+    expect(r.markdown).toBe(`![](${r.file})`); // by file name: it follows a changed read id
+    expect(r.file).toBe(`${r.id}.png`);
     const f = await call("update_feed", { feed: "i", title: "", description: "", image: r.file });
     expect(f.structuredContent.image_url).toBe(r.url);
   });

@@ -13,7 +13,7 @@ import { PASSWORD_RULE } from "../../shared/password";
 import { TAG_RULE } from "../tags";
 import { API_PREFIX, feedPath, imagePath, publicUrl, readPath, rssPath } from "../urls";
 import { createDispatcher, op, type AnyOp, type ResponseSpec } from "./dispatch";
-import { deleteFeed, deleteNote, editNote, updateFeed, uploadImage } from "../posting";
+import { deleteFeed, deleteNote, editNote, updateFeed } from "../posting";
 import { handlePostNote, readMarkdown } from "./notes";
 import { authorize, feedAccess, readCapped } from "./request";
 import {
@@ -26,7 +26,7 @@ import {
   FeedPasswordHeader,
   FeedSettingsJson,
   ImageBody,
-  ImageUploaded,
+  NoteNameHeader,
   NoteIdParam,
   NoteJson,
   NoteList,
@@ -59,6 +59,8 @@ async function passwordFeedAndFeedPassword(input: { req: Request; params: Record
 
 // Wire form of a note; `base` is the absolute URL its page lives under.
 const noteJson = (n: Note, base: string): NoteJson => ({
+  kind: n.kind as NoteJson["kind"],
+  file: n.file,
   id: n.id,
   title: n.title,
   markdown: n.markdown,
@@ -103,14 +105,17 @@ const OPS: AnyOp[] = [
       "Creates the feed with its first note, optionally protected by its own password (`X-Feed-Password` header or a `password` field in the JSON or form body; " +
       `${PASSWORD_RULE}). ` +
       "Posting to a protected feed needs that password. Also served at `POST /{feed}`, the short form the client packages and curl one-liners use. " +
-      `The body is at most ${MAX_BYTES} bytes and must be UTF-8. ` +
+      `A markdown body is at most ${MAX_BYTES} bytes and must be UTF-8. ` +
+      "A body that is an image (`image/png`, `image/jpeg`, `image/gif`, `image/webp` or `application/octet-stream`) is posted as a note of its own: PNG, JPEG, GIF or WebP, recognized by its first bytes, whatever `Content-Type` is sent (SVG is refused). " +
+      "It is stored byte for byte, with no resizing and no metadata stripped (EXIF such as GPS position stays in the file), at most NOTEFEED_MAX_IMAGE_BYTES (default 5 MiB). The response has its `file` and a `file_url` under the feed's read id, public like the read link. " +
+      "`X-Note-Name` gives the picture's original file name. A multipart form may send a `file` part instead of `markdown`. " +
       "`application/x-www-form-urlencoded` (what `curl -d` sends) is read as raw markdown, not as form fields. " +
       "`read_id` (JSON or form field) is the feed's read id when this post creates it: random when left out, ignored for a feed that exists. " +
       `Tags (${TAG_RULE}) go in the JSON \`tags\` array, a repeated \`tags\` form field, or, for a raw body, the \`X-Note-Tags\` header.`,
     tags: ["Feeds"],
     password: true,
     params: { feed: FeedParam },
-    headers: { "X-Feed-Password": FeedPasswordHeader, "X-Note-Tags": NoteTagsHeader },
+    headers: { "X-Feed-Password": FeedPasswordHeader, "X-Note-Tags": NoteTagsHeader, "X-Note-Name": NoteNameHeader },
     body: {
       "text/markdown": z.string(),
       "text/plain": z.string(),
@@ -118,6 +123,11 @@ const OPS: AnyOp[] = [
       "application/x-www-form-urlencoded": z.string(),
       "application/json": PostJson,
       "multipart/form-data": PostForm,
+      "image/png": ImageBody,
+      "image/jpeg": ImageBody,
+      "image/gif": ImageBody,
+      "image/webp": ImageBody,
+      "application/octet-stream": ImageBody,
     },
     responses: {
       201: { description: "Stored", schema: Created },
@@ -129,10 +139,10 @@ const OPS: AnyOp[] = [
       400: err("Invalid or reserved feed name; empty note; bad JSON, form or UTF-8; a new password that is not printable ASCII; invalid tags"),
       401: UNAUTHORIZED,
       409: err("A password was sent for a feed that already exists without one: it can't be claimed; or the chosen `read_id` is taken"),
-      413: err(`Body over ${MAX_BYTES} bytes`),
-      415: err("Unsupported content type"),
+      413: err(`A markdown body over ${MAX_BYTES} bytes, or an image over NOTEFEED_MAX_IMAGE_BYTES`),
+      415: err("Unsupported content type, or an image that is not a PNG, JPEG, GIF or WebP"),
       429: { ...err("Too many posts, or wrong passwords, from this client"), headers: RETRY },
-      507: err("NOTEFEED_MAX_FEEDS or NOTEFEED_MAX_NOTES_PER_FEED reached"),
+      507: err("NOTEFEED_MAX_FEEDS, NOTEFEED_MAX_NOTES_PER_FEED or NOTEFEED_MAX_IMAGES_PER_FEED reached"),
     },
   }).handle(({ req, params }) => handlePostNote(req, params.feed)),
 
@@ -200,6 +210,11 @@ const OPS: AnyOp[] = [
       "application/x-www-form-urlencoded": z.string(),
       "application/json": PostJson,
       "multipart/form-data": PostForm,
+      "image/png": ImageBody,
+      "image/jpeg": ImageBody,
+      "image/gif": ImageBody,
+      "image/webp": ImageBody,
+      "application/octet-stream": ImageBody,
     },
     responses: {
       200: { description: "The note as it is now", schema: NoteJson },
@@ -238,46 +253,6 @@ const OPS: AnyOp[] = [
   }).handle(async ({ req, params }) => {
     await deleteNote(params.feed, params.id, clientIp(req.headers), feedAccess(req.headers, params.feed));
     return { status: 204, body: undefined };
-  }),
-
-  op({
-    method: "POST",
-    path: `${API_PREFIX}/feeds/{feed}/images`,
-    operationId: "uploadImage",
-    summary: "Upload an image",
-    description:
-      "The body is the image itself: PNG, JPEG, GIF or WebP, recognized by its first bytes, whatever `Content-Type` is sent (SVG is refused). " +
-      "Stored byte-for-byte, with no resizing and no metadata stripped (EXIF such as GPS position stays in the file), as the first 32 hex characters of its SHA-256 plus an extension: " +
-      "the same bytes always give the same URL. The URL is under the feed's read id, so it works in the feed page, the read-only view and RSS readers without any password. " +
-      "Needs the same credentials as posting and counts against the post rate limit. The feed must exist: it is created by its first note. " +
-      "The size limit is NOTEFEED_MAX_IMAGE_BYTES (default 5 MiB); images deleted only with the feed.",
-    tags: ["Feeds"],
-    password: true,
-    params: { feed: FeedParam },
-    headers: { "X-Feed-Password": FeedPasswordHeader },
-    body: {
-      "image/png": ImageBody,
-      "image/jpeg": ImageBody,
-      "image/gif": ImageBody,
-      "image/webp": ImageBody,
-      "application/octet-stream": ImageBody,
-    },
-    responses: {
-      201: { description: "Stored (or already there)", schema: ImageUploaded },
-      400: err("Invalid or reserved feed name"),
-      401: UNAUTHORIZED,
-      404: err("No such feed"),
-      413: err("Body over NOTEFEED_MAX_IMAGE_BYTES"),
-      415: err("Not a PNG, JPEG, GIF or WebP image"),
-      429: { ...err("Too many posts, uploads, edits and deletes, or wrong passwords, from this client"), headers: RETRY },
-      507: err("NOTEFEED_MAX_IMAGES_PER_FEED reached"),
-    },
-    before: passwordAndFeed,
-  }).handle(async ({ req, params }) => {
-    const { file, readId } = await uploadImage(params.feed, clientIp(req.headers), () => readCapped(req, config.maxImageBytes()), feedAccess(req.headers, params.feed));
-    const url = publicUrl(req.headers) + imagePath(readId, file);
-    // `markdown` is relative to the feed: it follows a changed read id; `url` is for use outside notefeed.
-    return { status: 201, body: { file, url, markdown: `![](${file})` } };
   }),
 
   op({

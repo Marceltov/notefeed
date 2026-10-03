@@ -3,14 +3,15 @@ import { randomBytes } from "node:crypto";
 import { idStamp } from "../shared/notes";
 import { isErrno } from "./data/fs";
 import { deleteNoteFile, replaceNote, writeNote, listNoteFiles, readNote, type Meta } from "./data/notes";
-import { EmptyNoteError, NoteTooLargeError } from "./errors";
+import { EmptyNoteError, NoteTooLargeError, UnsupportedTypeError } from "./errors";
 import { assertFeed, checkFeed, ensureFeed, forgetFeed } from "./feeds";
+import { sniffImage } from "./images";
+import { ImageNote } from "./note/image";
 import { MarkdownNote } from "./note/markdown";
+import { Note } from "./note/note";
 import { typeForExt } from "./note/types";
 
-export { MarkdownNote } from "./note/markdown";
-// ponytail: only markdown notes exist until image notes (Task 3 widens these to Note).
-export type Note = MarkdownNote;
+export { ImageNote, MarkdownNote, Note };
 
 export const MAX_BYTES = 102400;
 
@@ -51,20 +52,18 @@ export function checkMarkdown(markdown: string): void {
   if (Buffer.byteLength(markdown, "utf8") > MAX_BYTES) throw new NoteTooLargeError();
 }
 
+// What a new note is made of; the feed is created if it doesn't exist (`wantedReadId` is used only then, see feeds.ts).
+type NewNote = { ext: string; content: string | Uint8Array; meta: Meta };
+
 // `readId`: the read id of the feed the note went into (null: that feed has no read link).
-// `wantedReadId` is used only if this call creates the feed (feeds.ts).
-export async function createNote(feed: string, markdown: string, now = new Date(), sender?: string, tags: string[] = [], wantedReadId?: string): Promise<{ note: Note; readId: string | null }> {
-  assertFeed(feed);
-  checkMarkdown(markdown);
+async function store(feed: string, { ext, content, meta }: NewNote, now: Date, wantedReadId?: string): Promise<{ id: string; readId: string | null }> {
   // ponytail: checked, not locked. A post that is past ensureFeed when its feed is deleted and the name
   // re-created lands in the new feed (as do settings written after hasFeed); a per-feed lock would close it.
   const base = `${idStamp(now)}-${uuidV7(now)}`;
   for (let retried = false; ; retried = true) {
     const readId = await ensureFeed(feed, wantedReadId);
     try {
-      const meta: Meta = { ...(sender !== undefined && { sender }), ...(tags.length && { tags }) };
-      const id = await writeNote(feed, base, "md", markdown, meta);
-      return { note: new MarkdownNote({ id, ext: "md", meta, createdAt: stampOf(id)!, size: Buffer.byteLength(markdown) }, markdown), readId };
+      return { id: await writeNote(feed, base, ext, content, meta), readId };
     } catch (e) {
       // The listed feed's directory is gone (deleted since ensureFeed, or removed by hand): this is a new
       // feed. Once only: gone again means another delete, and that is an error.
@@ -72,6 +71,30 @@ export async function createNote(feed: string, markdown: string, now = new Date(
       await forgetFeed(feed, readId);
     }
   }
+}
+
+export async function createNote(feed: string, markdown: string, now = new Date(), sender?: string, tags: string[] = [], wantedReadId?: string, extra: Pick<Meta, "title"> = {}): Promise<{ note: MarkdownNote; readId: string | null }> {
+  assertFeed(feed);
+  checkMarkdown(markdown);
+  const meta: Meta = { ...(sender !== undefined && { sender }), ...(tags.length && { tags }), ...extra };
+  const { id, readId } = await store(feed, { ext: "md", content: markdown, meta }, now, wantedReadId);
+  return { note: new MarkdownNote({ id, ext: "md", meta, createdAt: stampOf(id)!, size: Buffer.byteLength(markdown) }, markdown), readId };
+}
+
+/** An image as a note of its own. The format is decided by the bytes (UnsupportedTypeError for anything else, SVG included). */
+export async function createImageNote(
+  feed: string,
+  bytes: Uint8Array,
+  opts: { sender?: string; tags?: string[]; title?: string; alt?: string; name?: string; wantedReadId?: string },
+  now = new Date(),
+): Promise<{ note: ImageNote; readId: string | null }> {
+  assertFeed(feed);
+  const ext = sniffImage(bytes);
+  if (!ext) throw new UnsupportedTypeError("send a PNG, JPEG, GIF or WebP image");
+  const { sender, tags = [], title, alt, name } = opts;
+  const meta: Meta = { ...(sender !== undefined && { sender }), ...(tags.length && { tags }), ...(title && { title }), ...(alt && { alt }), ...(name && { name }) };
+  const { id, readId } = await store(feed, { ext, content: bytes, meta }, now, opts.wantedReadId);
+  return { note: new ImageNote({ id, ext, meta, createdAt: stampOf(id)!, size: bytes.length }), readId };
 }
 
 async function noteIds(feed: string): Promise<string[]> {
@@ -102,21 +125,31 @@ export async function listNotes(feed: string, limit = 50, before?: string, tag?:
   return found.slice(0, limit);
 }
 
-export async function countNotes(feed: string): Promise<number> {
-  return (await noteIds(feed)).length;
+export async function countNotes(feed: string, kind?: Note["kind"]): Promise<number> {
+  if (kind === undefined) return (await noteIds(feed)).length;
+  if (checkFeed(feed)) return 0;
+  return (await listNoteFiles(feed)).filter((e) => typeForExt(e.ext)?.kind === kind && isValidId(e.id)).length;
+}
+
+/** Whether `file` (`<id>.<ext>`) is an image note of this feed: the check before a title image points at it. */
+export async function hasImageNote(feed: string, file: string): Promise<boolean> {
+  const m = /^([A-Za-z0-9_-]{1,128})\.([A-Za-z0-9]{1,16})$/.exec(file);
+  const note = m && !checkFeed(feed) ? await getNote(feed, m[1]) : null;
+  return note instanceof ImageNote && note.file === file;
 }
 
 export async function getNote(feed: string, id: string): Promise<Note | null> {
   if (checkFeed(feed) || !isValidId(id)) return null;
   const stored = await readNote(feed, id);
   const type = stored && typeForExt(stored.ext);
-  return stored && type ? (type.read({ id, ext: stored.ext, meta: stored.meta, createdAt: createdAt(id, stored.meta, stored.mtime), size: stored.content.length }, stored.content) as MarkdownNote) : null;
+  return stored && type ? type.read({ id, ext: stored.ext, meta: stored.meta, createdAt: createdAt(id, stored.meta, stored.mtime), size: stored.content.length }, stored.content) : null;
 }
 
 // The id never changes, so neither does createdAt. null: invalid feed or id, or no such note.
 export async function updateNote(feed: string, id: string, markdown: string): Promise<Note | null> {
   checkMarkdown(markdown);
   if (checkFeed(feed) || !isValidId(id)) return null;
+  if (!((await getNote(feed, id)) instanceof MarkdownNote)) return null; // an image is not edited by text
   return (await replaceNote(feed, id, markdown)) ? getNote(feed, id) : null;
 }
 

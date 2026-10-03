@@ -2,8 +2,7 @@
 import { readSettings, writeSettings } from "./data/settings";
 import { isErrno } from "./data/fs";
 import { InvalidBodyError, NotFoundError } from "./errors";
-import { knownImage } from "./images";
-import type { Note } from "./notes";
+import { hasImageNote, type Note } from "./notes";
 
 export type FeedSettings = { title: string; description: string; image: string; showSender: boolean };
 
@@ -44,7 +43,7 @@ export const getStoredSettings = (feed: string): Promise<FeedSettings> => readSe
 // What is shown: a title image whose file is gone (removed by hand) counts as none, so nothing points at a 404.
 export async function getSettings(feed: string): Promise<FeedSettings> {
   const s = await readSettings(feed);
-  return s.image && !(await knownImage(feed, s.image)) ? { ...s, image: "" } : s;
+  return s.image && !(await hasImageNote(feed, s.image)) ? { ...s, image: "" } : s;
 }
 
 export async function saveSettings(feed: string, s: FeedSettings): Promise<void> {

@@ -6,6 +6,7 @@ from typing import Any, Self, TypeVar, cast
 
 from attrs import define as _attrs_define
 
+from ..models.note_kind import NoteKind
 from ..types import UNSET, Unset
 
 T = TypeVar("T", bound="Note")
@@ -15,6 +16,10 @@ T = TypeVar("T", bound="Note")
 class Note:
     """
     Attributes:
+        kind (NoteKind): What the note is: a markdown text, or a picture (then `markdown` is empty and the picture is
+            the file `file`)
+        file (str): The note's file name, `<id>.<extension>`; served under the feed's read id, like the picture of an
+            image note
         id (str): The note's id: a UTC time to the second plus a random UUID for notes made here; any name without a dot
             for a file placed by hand
         title (str): The first heading, or the first non-empty line; may be empty
@@ -27,6 +32,8 @@ class Note:
             sign-in
     """
 
+    kind: NoteKind
+    file: str
     id: str
     title: str
     markdown: str
@@ -36,6 +43,10 @@ class Note:
     sender: None | str | Unset = UNSET
 
     def to_dict(self) -> dict[str, Any]:
+        kind = self.kind.value
+
+        file = self.file
+
         id = self.id
 
         title = self.title
@@ -58,6 +69,8 @@ class Note:
 
         field_dict.update(
             {
+                "kind": kind,
+                "file": file,
                 "id": id,
                 "title": title,
                 "markdown": markdown,
@@ -74,6 +87,10 @@ class Note:
     @classmethod
     def from_dict(cls, src_dict: Mapping[str, Any]) -> Self:
         d = dict(src_dict)
+        kind = NoteKind(d.pop("kind"))
+
+        file = d.pop("file")
+
         id = d.pop("id")
 
         title = d.pop("title")
@@ -96,6 +113,8 @@ class Note:
         sender = _parse_sender(d.pop("sender", UNSET))
 
         note = cls(
+            kind=kind,
+            file=file,
             id=id,
             title=title,
             markdown=markdown,

@@ -14,7 +14,7 @@ T = TypeVar("T", bound="PostForm")
 class PostForm:
     """
     Attributes:
-        markdown (str):
+        markdown (str): The note; or send a `file` part with an image instead
         password (str | Unset): Protects the feed: 1 to 256 printable ASCII characters, with no space at the start or
             end. Only honored on the post that creates the feed; an existing open feed answers 409. Empty is the same as
             leaving it out.

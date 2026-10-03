@@ -6,6 +6,14 @@ export type ClientOptions = {
 
 export type Note = {
     /**
+     * What the note is: a markdown text, or a picture (then `markdown` is empty and the picture is the file `file`)
+     */
+    kind: 'markdown' | 'image';
+    /**
+     * The note's file name, `<id>.<extension>`; served under the feed's read id, like the picture of an image note
+     */
+    file: string;
+    /**
      * The note's id: a UTC time to the second plus a random UUID for notes made here; any name without a dot for a file placed by hand
      */
     id: string;
@@ -60,21 +68,14 @@ export type Created = {
      * The feed's read-only RSS link, safe to share; null only if the server can't read the feed's stored read id, or if that id and the derived one both belong to other feeds
      */
     read_url: string | null;
-};
-
-export type ImageUploaded = {
     /**
-     * The stored file's name: 32 hex characters of the SHA-256 plus the extension. Pass it as a feed's `image` setting
+     * For an image note: its file name, `<id>.<extension>`; absent for markdown. Pass it as a feed's `image` setting
      */
-    file: string;
+    file?: string;
     /**
-     * Where the image is served, absolute, under the feed's read id; public like the read link
+     * For an image note: where the picture is served, absolute, under the feed's read id (public like the read link); absent for markdown
      */
-    url: string;
-    /**
-     * `![](file)`, to paste into a note: relative to the feed, so it keeps working if the feed's read id changes. Use `url` instead for a link outside notefeed (that one is yours to update)
-     */
-    markdown: string;
+    file_url?: string | null;
 };
 
 export type Error = {
@@ -105,6 +106,9 @@ export type PostJson = {
 };
 
 export type PostForm = {
+    /**
+     * The note; or send a `file` part with an image instead
+     */
     markdown: string;
     /**
      * Protects the feed: 1 to 256 printable ASCII characters, with no space at the start or end. Only honored on the post that creates the feed; an existing open feed answers 409. Empty is the same as leaving it out.
@@ -264,6 +268,10 @@ export type PostNoteData = {
          * Tags for the note, comma-separated (`ci,deploy`): at most 10 tags, each 1 to 32 characters of letters, digits, `-`, `_`, `.` and `:`; case is folded to lowercase, duplicates are removed. For a raw markdown body; a JSON or form body's own `tags` wins. Empty is none.
          */
         'X-Note-Tags'?: string;
+        /**
+         * For an image body: the picture's original file name, kept with the note (at most 200 characters)
+         */
+        'X-Note-Name'?: string;
     };
     path: {
         /**
@@ -289,11 +297,11 @@ export type PostNoteErrors = {
      */
     409: Error;
     /**
-     * Body over 102400 bytes
+     * A markdown body over 102400 bytes, or an image over NOTEFEED_MAX_IMAGE_BYTES
      */
     413: Error;
     /**
-     * Unsupported content type
+     * Unsupported content type, or an image that is not a PNG, JPEG, GIF or WebP
      */
     415: Error;
     /**
@@ -301,7 +309,7 @@ export type PostNoteErrors = {
      */
     429: Error;
     /**
-     * NOTEFEED_MAX_FEEDS or NOTEFEED_MAX_NOTES_PER_FEED reached
+     * NOTEFEED_MAX_FEEDS, NOTEFEED_MAX_NOTES_PER_FEED or NOTEFEED_MAX_IMAGES_PER_FEED reached
      */
     507: Error;
 };
@@ -480,69 +488,6 @@ export type EditNoteResponses = {
 };
 
 export type EditNoteResponse = EditNoteResponses[keyof EditNoteResponses];
-
-export type UploadImageData = {
-    /**
-     * The image's bytes: PNG, JPEG, GIF or WebP, recognized by their first bytes, not by the Content-Type
-     */
-    body: Blob | File;
-    headers?: {
-        /**
-         * The feed's own password, when it has one: to post, list or get, and (as the current password) to change or remove it. On the `POST` that creates a feed it sets the feed's password; on a `POST` to an existing feed that has none it answers 409. An empty value is the same as no header, so a `POST` with an empty one creates an open feed.
-         */
-        'X-Feed-Password'?: string;
-    };
-    path: {
-        /**
-         * The feed's name. It is the write key: anyone who knows it can post.
-         */
-        feed: string;
-    };
-    query?: never;
-    url: '/api/v1/feeds/{feed}/images';
-};
-
-export type UploadImageErrors = {
-    /**
-     * Invalid or reserved feed name
-     */
-    400: Error;
-    /**
-     * The instance has a password, or the feed has its own, and it is missing or wrong
-     */
-    401: Error;
-    /**
-     * No such feed
-     */
-    404: Error;
-    /**
-     * Body over NOTEFEED_MAX_IMAGE_BYTES
-     */
-    413: Error;
-    /**
-     * Not a PNG, JPEG, GIF or WebP image
-     */
-    415: Error;
-    /**
-     * Too many posts, uploads, edits and deletes, or wrong passwords, from this client
-     */
-    429: Error;
-    /**
-     * NOTEFEED_MAX_IMAGES_PER_FEED reached
-     */
-    507: Error;
-};
-
-export type UploadImageError = UploadImageErrors[keyof UploadImageErrors];
-
-export type UploadImageResponses = {
-    /**
-     * Stored (or already there)
-     */
-    201: ImageUploaded;
-};
-
-export type UploadImageResponse = UploadImageResponses[keyof UploadImageResponses];
 
 export type DeleteFeedData = {
     body?: never;

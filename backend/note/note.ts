@@ -33,6 +33,8 @@ export abstract class Note {
     return this.meta.alt;
   }
   /** What lists and links show: the metadata's title, else what the kind derives from its content; may be empty. */
+  /** The text of the note; empty for a kind that has none. */
+  abstract readonly markdown: string;
   abstract get title(): string;
   /** The same note with other metadata. */
   abstract withMeta(meta: Meta): Note;

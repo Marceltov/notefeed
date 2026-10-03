@@ -52,6 +52,8 @@ describe("GET /feeds/{feed}/notes", () => {
     expect(body.notes).toEqual([
       expect.objectContaining({ id: two.id, title: "Two", created_at: "2026-09-29T11:00:00.000Z" }),
       {
+        kind: "markdown",
+        file: `${one.id}.md`,
         id: one.id,
         title: "One",
         markdown: "# One\nbody",

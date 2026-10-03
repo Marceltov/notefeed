@@ -3,7 +3,7 @@ import { McpServer, createMcpHandler, type AuthInfo } from "@modelcontextprotoco
 import * as z from "zod";
 import { bearerOf, checkBearer, locked } from "./auth";
 import { config } from "./config";
-import { AuthError, NotefeedError, NotFoundError, TooManyAttemptsError } from "./errors";
+import { AuthError, ImageTooLargeError, NotefeedError, NotFoundError, TooManyAttemptsError } from "./errors";
 import { checkFeedAccess } from "./feedlock";
 import { assertFeed, FEED_RE, hasFeed } from "./feeds";
 import { feedJson } from "./http/api";
@@ -13,7 +13,7 @@ import { logger } from "./log";
 import { getNote, listNotes, type Note } from "./notes";
 import { verify } from "./oauth/tokens";
 import { TAG_RULE } from "./tags";
-import { deleteFeed, deleteNote, editNote, postNote, updateFeed, uploadImage } from "./posting";
+import { deleteFeed, deleteNote, editNote, postNote, updateFeed } from "./posting";
 import { feedPath, imagePath, mcpResource, publicUrl, rssPath } from "./urls";
 
 const log = logger("mcp");
@@ -174,18 +174,15 @@ function server(h: Headers): McpServer {
   s.registerTool(
     "upload_image",
     {
-      description: `Upload a PNG, JPEG, GIF or WebP image (not SVG) to an existing feed, as base64 in data, and get back a URL and the markdown ![](url) to put in a note. The URL is public like the feed's read link. Stored as sent, EXIF included. The feed must have notes. ${PROTECTED} ${SECRET_NOTE}`,
+      description: `Post a PNG, JPEG, GIF or WebP image (not SVG) as a note of its own, as base64 in data, and get back its id, file name, public URL and the markdown ![](file) to put in a markdown note. The feed is created by its first note. The URL is public like the feed's read link. Stored as sent, EXIF included. ${PROTECTED} ${SECRET_NOTE}`,
       inputSchema: z.object({ feed, data: z.string().describe("The image's bytes, base64"), password }),
-      outputSchema: z.object({ file: z.string(), url: z.string(), markdown: z.string() }),
+      outputSchema: z.object({ id: z.string(), file: z.string(), url: z.string(), markdown: z.string() }),
     },
     guard(async ({ feed, data, password }) => {
-      const read = async () => {
-        const bytes = Buffer.from(data, "base64");
-        return bytes.length > config.maxImageBytes() ? null : bytes;
-      };
-      const { file, readId } = await uploadImage(feed, clientIp(h), read, { password });
-      const url = base + imagePath(readId, file);
-      return ok({ file, url, markdown: `![](${url})` });
+      const image = Buffer.from(data, "base64");
+      if (image.length > config.maxImageBytes()) throw new ImageTooLargeError();
+      const { note, readId } = await postNote(feed, clientIp(h), async () => ({ image }), { password }, sender(h));
+      return ok({ id: note.id, file: note.file, url: readId ? base + imagePath(readId, note.file) : "", markdown: `![](${note.file})` });
     }),
   );
   return s;

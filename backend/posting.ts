@@ -1,16 +1,19 @@
 // The one way a note gets posted, edited or deleted, for the HTTP API, MCP and the web UI alike. Credentials are the
 // caller's job (bearer vs. session cookie); everything after that is here, in this order.
 import { config } from "./config";
-import { FeedExistsError, FeedLimitError, ImageTooLargeError, InvalidBodyError, NotFoundError, NoteLimitError, RateLimitedError } from "./errors";
+import { FeedExistsError, FeedLimitError, ImageLimitError, InvalidBodyError, NotFoundError, NoteLimitError, RateLimitedError, UnsupportedTypeError } from "./errors";
 import { type FeedAccess, checkFeedAccess, createProtected } from "./feedlock";
 import { type FeedSettings, checkSettings, getStoredSettings, saveSettings } from "./feedsettings";
 import { assertFeed, deleteFeed as removeWholeFeed, feedCount, hasFeed, isHeldBack, readIdOf, setReadId } from "./feeds";
-import { knownImage, storeImage } from "./images";
+import { sniffImage } from "./images";
 import { capReached, rateLimit } from "./limits";
 import { checkTags } from "./tags";
-import { checkMarkdown, countNotes, createNote, removeNote, updateNote, type Note } from "./notes";
+import { checkMarkdown, countNotes, createImageNote, createNote, hasImageNote, removeNote, updateNote, type Note } from "./notes";
 
-// `readMarkdown` runs only once the post is admitted, so a refused request never has its body read.
+// What a post carries besides the note itself. `name` is the file name an image came with.
+export type PostInput = { password?: string; tags?: string[]; readId?: string; name?: string } & ({ markdown: string } | { image: Uint8Array });
+
+// `read` runs only once the post is admitted, so a refused request never has its body read.
 // A password (header, or body `password`) is set only by the post that creates the feed.
 // `created`: this post created the feed protected, so its sender is the one who chose the password.
 // `readId` (in what `read` gives): the read id the new feed should get; ignored when the feed exists, random when empty or left out.
@@ -18,7 +21,7 @@ import { checkMarkdown, countNotes, createNote, removeNote, updateNote, type Not
 export async function postNote(
   feed: string,
   ip: string,
-  read: () => Promise<{ markdown: string; password?: string; tags?: string[]; readId?: string }>,
+  read: () => Promise<PostInput>,
   access: FeedAccess,
   sender?: string, // verified by the caller (identity cookie or OAuth token), never taken from a request body
 ): Promise<{ note: Note; created: boolean; readId: string | null }> {
@@ -30,13 +33,21 @@ export async function postNote(
   // ponytail: caps are checked, not locked; concurrent posts can overshoot by a few.
   const maxFeeds = config.maxFeeds();
   const maxNotes = config.maxNotesPerFeed();
+  const maxImages = config.maxImagesPerFeed();
   const exists = await hasFeed(feed);
   if (maxFeeds && !exists && (await feedCount()) >= maxFeeds) throw capReached("feed", new FeedLimitError());
-  if (maxNotes && exists && (await countNotes(feed)) >= maxNotes) throw capReached("note", new NoteLimitError());
 
-  const { markdown, password: bodyPassword, tags: given, readId: asked } = await read();
+  const input = await read();
+  const { password: bodyPassword, tags: given, readId: asked } = input;
+  const isImage = "image" in input;
+  // The caps are per kind: images have their own, the notes limit counts the markdown ones.
+  if (exists && isImage && maxImages && (await countNotes(feed, "image")) >= maxImages) throw capReached("image", new ImageLimitError());
+  if (exists && !isImage && maxNotes && (await countNotes(feed, "markdown")) >= maxNotes) throw capReached("note", new NoteLimitError());
   const wantedReadId = exists || !asked?.trim() ? undefined : asked.trim();
-  checkMarkdown(markdown); // before createProtected: a refused note must not leave a protected, empty feed
+  // Before createProtected: a refused note must not leave a protected, empty feed.
+  if (isImage) {
+    if (!sniffImage(input.image)) throw new UnsupportedTypeError("send a PNG, JPEG, GIF or WebP image");
+  } else checkMarkdown(input.markdown);
   const tags = checkTags(given);
   const password = (access.password ?? bodyPassword) || undefined; // empty means none
   let created = false;
@@ -52,7 +63,8 @@ export async function postNote(
   // ponytail: checked, not locked. A protected creation can still complete in the few microseconds between
   // this check and createNote's ensureFeed, which then finds the feed and writes into it: this one note is
   // then in the protected feed. A lock around creation, per feed, would close it.
-  return { ...(await createNote(feed, markdown, undefined, sender, tags, wantedReadId)), created };
+  const made = isImage ? await createImageNote(feed, input.image, { sender, tags, name: input.name, wantedReadId }) : await createNote(feed, input.markdown, undefined, sender, tags, wantedReadId);
+  return { ...made, created };
 }
 
 // Same gate as posting, minus the caps. An edit or delete targets an existing note, so its feed
@@ -86,7 +98,7 @@ export async function updateFeed(feed: string, ip: string, read: () => Promise<u
   const given = checkSettings(await read()); // after admit: a refused request never has its body read
   if (!(await hasFeed(feed))) throw new NotFoundError("no such feed");
   // Only a given image is checked; an omitted one stays as stored, even if its file has been removed by hand.
-  if (given.image && !(await knownImage(feed, given.image))) throw new InvalidBodyError("image must be empty or the name of an image uploaded to this feed");
+  if (given.image && !(await hasImageNote(feed, given.image))) throw new InvalidBodyError("image must be empty or the file of an image note of this feed");
   const stored = await getStoredSettings(feed);
   const { readId, ...rest } = given;
   const newId = readId === undefined || readId === (await readIdOf(feed)) ? undefined : readId; // the page sends the current one back: no change
@@ -96,22 +108,6 @@ export async function updateFeed(feed: string, ip: string, read: () => Promise<u
   const checked = { ...rest, image: rest.image ?? stored.image, showSender: given.showSender ?? stored.showSender };
   await saveSettings(feed, checked);
   return checked;
-}
-
-// Uploading an image: the same gate as posting, and the feed must exist (it is created by its first note).
-// `read` runs once admitted and gives null for a body over the cap. Returns the stored file's name and the feed's
-// read id, which its URL is built from; a feed without one (ADR 0010) can't have an image URL, so nothing is stored.
-export async function uploadImage(feed: string, ip: string, read: () => Promise<Uint8Array | null>, access: FeedAccess): Promise<{ file: string; readId: string }> {
-  await admit(feed, ip, access);
-  if (!(await hasFeed(feed))) throw new NotFoundError("no such feed");
-  const readId = await readIdOf(feed);
-  if (!readId) throw new NotFoundError("this feed has no read link, so an image of it has no URL");
-  const bytes = await read();
-  if (!bytes) throw new ImageTooLargeError();
-  // The sender decides how long read() takes: the feed may have been deleted and created again meanwhile.
-  // (An open feed that lost all its notes keeps its read id and still takes uploads; that is fine, ADR 0011.)
-  if ((await readIdOf(feed)) !== readId) throw new NotFoundError("no such feed");
-  return { file: await storeImage(feed, bytes), readId };
 }
 
 export async function deleteFeed(feed: string, ip: string, access: FeedAccess): Promise<void> {

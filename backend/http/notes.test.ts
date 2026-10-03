@@ -81,7 +81,7 @@ test("400 for JSON without a markdown string, or invalid JSON", async () => {
 });
 
 test("415 for other content types", async () => {
-  const res = await post("x", { "content-type": "image/png" });
+  const res = await post("x", { "content-type": "application/pdf" });
   expect(res.status).toBe(415);
   expect(await res.json()).toEqual({ error: "send text/markdown, text/plain, application/json or a form with a markdown field", code: "unsupported_type" });
 });
