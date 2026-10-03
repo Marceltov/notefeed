@@ -10,6 +10,8 @@ import type { Created, Error as ApiError, Feed, FeedSettings, Note, NoteList } f
 export type ErrorCode = NonNullable<ApiError["code"]>;
 
 export type { Created, Feed, FeedSettings, Note };
+/** A picture posted with a note: `![](name)` in the markdown refers to it. `type` as for post(). */
+export type Attachment = { name: string; content: Uint8Array | Blob; type?: string; alt?: string };
 /** `timeoutMs` (default 10000) limits each whole request, including reading the answer. */
 export type ClientOptions = { url: string; feed?: string; password?: string; feedPassword?: string; timeoutMs?: number };
 
@@ -23,6 +25,9 @@ export class NotefeedError extends Error {
     super(message);
     this.name = new.target.name;
   }
+  /** Set when a post with `attachments` failed on one of them: its name, and the images already posted (the text note is not). */
+  attachment: string | null = null;
+  posted: Created[] = [];
 }
 /** Raised before sending: no URL, no feed, an invalid feed name or password. */
 export class ConfigError extends NotefeedError {}
@@ -65,6 +70,9 @@ const BY_CODE: Partial<Record<ErrorCode, typeof NotefeedError>> = {
   unsupported_type: InvalidRequestError,
 };
 
+const ATTACHMENT_NAME = /^[A-Za-z0-9._-]+$/; // same rule as the server's MCP tool: safe to write in ![](name)
+const IMAGE_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"];
+
 const FEED_RE = /^[a-z0-9_-]{1,64}$/; // same rule as the server; reserved names still come back as a 400
 
 type Result<T> = { data?: T; error?: unknown; response?: Response };
@@ -79,6 +87,18 @@ function asFile(content: string | Uint8Array | Blob, type?: string): { body: Blo
   const media = type ?? (content instanceof Blob ? content.type : "");
   if (!media) throw new ConfigError("give the file's media type as `type`, e.g. image/png");
   return { body: content instanceof Blob ? content : new Blob([content as BlobPart]), type: media };
+}
+
+// The markdown with each `![](name)` of `sent` (name → file) pointing at its file; a name the text never refers to is appended as `![](file)`.
+function placeImages(markdown: string, sent: Map<string, string>): string {
+  const used = new Set<string>();
+  const text = markdown.replace(/(!\[[^\]]*\]\()([^)\s]+)(\))/g, (m, head: string, dest: string, tail: string) => {
+    if (!sent.has(dest)) return m;
+    used.add(dest);
+    return head + sent.get(dest) + tail;
+  });
+  const rest = [...sent].filter(([name]) => !used.has(name)).map(([, file]) => `![](${file})`);
+  return [text.trimEnd(), ...rest].filter((p) => p !== "").join("\n\n");
 }
 
 export class Client {
@@ -122,10 +142,50 @@ export class Client {
    * letters, digits, `-`, `_`, `.`, `:`; not verified). `title` is its title (at most 100 characters, one line); left out, it is taken from the
    * text. `alt` is a picture's alternative text, `name` the file's original name. `readId` is the read id the feed gets when this post creates it
    * (3 to 64 characters of `a-z`, `0-9`, `-`, `_`; random when left out; ignored for a feed that exists; a `taken` error when another feed has it).
+   *
+   * `attachments` (only with a markdown string) are pictures posted first, one note each, in order: `![](name)` in the markdown shows one (an
+   * attachment the text never refers to is added at the end), and `Created.attachments` lists them. `tags` label the images too. The options
+   * are checked before anything is sent. If an upload fails, its error is thrown with `attachment` (the name) and `posted` (the images already
+   * posted, which stay) set; the text note is not posted.
    */
   async post(
     content: string | Uint8Array | Blob,
-    options: { feed?: string; feedPassword?: string; type?: string; title?: string; tags?: string[]; alt?: string; name?: string; readId?: string } = {},
+    options: { feed?: string; feedPassword?: string; type?: string; title?: string; tags?: string[]; alt?: string; name?: string; readId?: string; attachments?: Attachment[] } = {},
+  ): Promise<Created & { attachments: Created[] }> {
+    const { attachments = [], ...own } = options;
+    if (attachments.length === 0) return { ...(await this.postOne(content, own)), attachments: [] };
+    if (typeof content !== "string") throw new ConfigError("attachments go with a markdown string");
+    if ((own.type ?? "text/markdown") !== "text/markdown") throw new ConfigError("attachments go with a markdown string");
+    const types = attachments.map((a) => {
+      if (!ATTACHMENT_NAME.test(a.name)) throw new ConfigError(`attachment name "${a.name}": use letters, digits, ., _ and - only`);
+      const type = asFile(a.content, a.type).type;
+      if (!IMAGE_TYPES.includes(type)) throw new ConfigError(`attachment "${a.name}" must be a picture (${IMAGE_TYPES.join(", ")})`);
+      return type;
+    });
+    const dup = attachments.find((a, i) => attachments.findIndex((b) => b.name === a.name) !== i);
+    if (dup) throw new ConfigError(`attachment "${dup.name}" is given twice`);
+    const posted: Created[] = [];
+    const sent = new Map<string, string>();
+    for (const [i, a] of attachments.entries()) {
+      try {
+        const done = await this.postOne(a.content, { feed: own.feed, feedPassword: own.feedPassword, type: types[i], alt: a.alt, name: a.name, tags: own.tags, readId: own.readId });
+        posted.push(done);
+        sent.set(a.name, done.file);
+      } catch (e) {
+        if (e instanceof NotefeedError) {
+          e.message = `attachment "${a.name}": ${e.message}`;
+          e.attachment = a.name;
+          e.posted = posted;
+        }
+        throw e;
+      }
+    }
+    return { ...(await this.postOne(placeImages(content, sent), own)), attachments: posted };
+  }
+
+  private async postOne(
+    content: string | Uint8Array | Blob,
+    options: { feed?: string; feedPassword?: string; type?: string; title?: string; tags?: string[]; alt?: string; name?: string; readId?: string },
   ): Promise<Created> {
     const feed = this.feedFor(options.feed);
     const { body, type } = asFile(content, options.type);
