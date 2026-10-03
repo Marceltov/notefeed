@@ -12,7 +12,7 @@ from datetime import timezone
 from pathlib import Path
 
 from . import __version__
-from .client import Client, ConfigError, Note, NotefeedError
+from .client import Attachment, Client, ConfigError, Note, NotefeedError
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -25,6 +25,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--type", help="the file's media type, when the extension does not say")
     p.add_argument("--title", help="the note's title (default: taken from the text)")
     p.add_argument("--tag", action="append", help="label the note with this tag (repeat for several)")
+    p.add_argument("--attach", action="append", metavar="PATH", help="a picture to post first and refer to as ![](its file name); repeat for several")
     e = sub.add_parser("edit", help="replace a note's content; prints its URL")
     e.add_argument("id", help="the note's id")
     e.add_argument("text", nargs="?", help='the new markdown, or "-" to read stdin')
@@ -49,7 +50,9 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if args.command == "post":
             content, media, name = _read(args)
-            print(_client(args).post(content, type=media, title=args.title, tags=args.tag, name=name).url)
+            attachments = [_attachment(path) for path in args.attach or []]
+            note = _client(args).post(content, type=media, title=args.title, tags=args.tag, name=name, attachments=attachments)
+            print("\n".join([note.url, *(a.url for a in note.attachments)]))
         elif args.command == "edit":
             content, media, _ = _read(args)
             print(_client(args).edit(args.id, content, type=media).url)
@@ -77,6 +80,8 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     except NotefeedError as e:
         print(f"notefeed: {e}", file=sys.stderr)
+        for p in e.posted:
+            print(f"posted: {p.url}", file=sys.stderr)
         return 1
     return 0
 
@@ -113,6 +118,17 @@ class _UsageError(Exception):
 
 # The media type of a file by its extension: the types the server accepts.
 _TYPES = {".md": "text/markdown", ".markdown": "text/markdown", ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif", ".webp": "image/webp"}
+
+
+def _attachment(path: str) -> Attachment:
+    """A picture to post first: its name is the file's, its type comes from the extension."""
+    media = _TYPES.get(Path(path).suffix.lower())
+    if not media or media == "text/markdown":
+        raise _UsageError(f"cannot attach {path}: a picture ({', '.join(e for e, t in _TYPES.items() if t != 'text/markdown')}) is expected")
+    try:
+        return Attachment(Path(path).name, Path(path).read_bytes(), media)
+    except OSError as e:
+        raise _UsageError(f"cannot read {path}: {e.strerror}") from None
 
 
 def _read(args: argparse.Namespace) -> tuple[str | bytes, str | None, str | None]:

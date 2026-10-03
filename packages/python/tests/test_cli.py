@@ -345,3 +345,50 @@ def test_edit_a_picture_file_sends_it_as_its_type(server, tmp_path):
     server.reply(200, NOTE)
     assert main(["edit", "i", "--file", str(f), "--url", server.url, "--feed", "inbox"]) == 0
     assert (server.requests[0]["method"], type_of(server)) == ("PUT", "image/webp")
+
+
+# --attach: pictures posted first; the text refers to them by file name.
+PNG = bytes([0x89, 0x50, 0x4E, 0x47])
+
+
+def _img(n):
+    return {"id": f"I{n}", "url": f"https://n.example/inbox/I{n}", "feed_url": "https://n.example/inbox", "read_url": None, "file": f"F{n}.png", "file_url": "x"}
+
+
+_TEXT = {"id": "T", "url": "https://n.example/inbox/T", "feed_url": "https://n.example/inbox", "read_url": None, "file": "T.md", "file_url": "x"}
+
+
+def _pics(tmp_path):
+    for name, data in (("chart.png", PNG), ("t.webp", PNG), ("notes.md", b"# x")):
+        (tmp_path / name).write_bytes(data)
+    return tmp_path
+
+
+def test_attach_posts_images_then_text_and_prints_the_text_url_then_the_image_urls(server, capsys, tmp_path):
+    d = _pics(tmp_path)
+    server.reply(201, _img(1))
+    server.reply(201, _img(2))
+    server.reply(201, _TEXT)
+    assert main(["post", "see ![](chart.png)", "--attach", str(d / "chart.png"), "--attach", str(d / "t.webp"), "--url", server.url, "--feed", "inbox"]) == 0
+    assert capsys.readouterr().out.split() == ["https://n.example/inbox/T", "https://n.example/inbox/I1", "https://n.example/inbox/I2"]
+    assert [type_of(server, i) for i in range(3)] == ["image/png", "image/webp", "text/markdown"]
+    assert server.requests[0]["headers"]["X-Note-Name"] == "chart.png"
+    assert sent(server, 2) == "see ![](F1.png)\n\n![](F2.png)"
+
+
+def test_attach_unreadable_markdown_or_unknown_extension_exits_2_and_posts_nothing(server, capsys, tmp_path):
+    d = _pics(tmp_path)
+    for path in ("/nonexistent/x.png", str(d / "notes.md"), str(d / "chart.xyz")):
+        assert main(["post", "hi", "--attach", path, "--url", server.url, "--feed", "inbox"]) == 2
+        assert capsys.readouterr().err.startswith("notefeed: cannot ")
+    assert server.requests == []
+
+
+def test_attach_failed_upload_exits_1_naming_the_attachment_and_the_posted_images(server, capsys, tmp_path):
+    d = _pics(tmp_path)
+    server.reply(201, _img(1))
+    server.reply(400, {"error": "bad image", "code": "invalid_body"})
+    assert main(["post", "hi", "--attach", str(d / "chart.png"), "--attach", str(d / "t.webp"), "--url", server.url, "--feed", "inbox"]) == 1
+    out = capsys.readouterr()
+    assert out.out == ""
+    assert out.err.splitlines() == ['notefeed: attachment "t.webp": bad image', "posted: https://n.example/inbox/I1"]
