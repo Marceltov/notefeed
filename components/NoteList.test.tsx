@@ -1,7 +1,13 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { expect, test } from "vitest";
-import { imgNote, mdNote } from "@/backend/note/testing";
+import { ImageNote, MarkdownNote } from "@/backend";
 import { NoteArticle, NoteList } from "./NoteList";
+
+// A note as the backend hands it out, without touching the disk.
+const at0 = new Date(0);
+const mdNote = ({ id, markdown, createdAt = at0 }: { id: string; markdown: string; createdAt?: Date }) => new MarkdownNote({ id, ext: "md", meta: {}, createdAt, size: markdown.length }, markdown);
+const imgNote = ({ id, ext = "png", createdAt = at0, title, alt }: { id: string; ext?: string; createdAt?: Date; title?: string; alt?: string }) =>
+  new ImageNote({ id, ext, meta: { ...(title && { title }), ...(alt && { alt }) }, createdAt, size: 12 });
 
 const list = (notes: Parameters<typeof NoteList>[0]["notes"], imageBase = "/r/rid/") => renderToStaticMarkup(<NoteList notes={notes} base="/feed" imageBase={imageBase} />);
 

@@ -25,7 +25,13 @@ const onDisk = (feed: string) => readFile(join(dir, feed, ".readid"), "utf8");
 async function call(method: string, path: string, body?: unknown) {
   const url = new URL(API_PREFIX + path, BASE);
   const segments = url.pathname.slice(API_PREFIX.length + 1).split("/");
-  return dispatch(new Request(url, { method, body: body === undefined ? undefined : JSON.stringify(body), headers: { host: "localhost:3000", "content-type": "application/json" } }), segments);
+  const headers: Record<string, string> = { host: "localhost:3000", "content-type": "application/json" };
+  // A post is the markdown as the body; the feed's password and read id are headers.
+  if (method === "POST" && typeof body === "object" && body !== null && "markdown" in body) {
+    const { markdown, password, read_id } = body as { markdown: string; password?: string; read_id?: string };
+    return dispatch(new Request(url, { method, body: markdown, headers: { host: headers.host, "content-type": "text/markdown", ...(password && { "x-feed-password": password }), ...(read_id !== undefined && { "x-read-id": read_id }) } }), segments);
+  }
+  return dispatch(new Request(url, { method, body: body === undefined ? undefined : JSON.stringify(body), headers }), segments);
 }
 
 describe("choosing it at creation", () => {
@@ -161,6 +167,6 @@ describe("images follow the read id without editing a note", () => {
     expect((await fileRoute("moved", file)).status).toBe(200);
     expect((await fileRoute(old, file)).status).toBe(404);
     expect((await getFeed("blog"))!.imageUrl).toBe(`/r/moved/${file}`);
-    expect((await getFeed("blog"))!.notes.map((n) => n.markdown)).toContain(note);
+    expect((await getFeed("blog"))!.notes.map((n) => n.content)).toContain(note);
   });
 });

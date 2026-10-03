@@ -12,9 +12,9 @@ import httpx
 
 from ._generated import AuthenticatedClient
 from ._generated import Client as _GeneratedClient
-from ._generated.api.feeds import delete_feed, delete_note, edit_note, get_feed, get_note, list_notes, post_note, update_feed, upload_image
+from ._generated.api.feeds import delete_feed, delete_note, edit_note, get_feed, get_note, list_notes, patch_note, post_note, update_feed
 from ._generated.api.read import get_read_note, list_read_notes
-from ._generated.models import Created, EditJson, Feed, FeedSettings, Note, NoteList, PostJson
+from ._generated.models import Created, Feed, FeedSettings, Note, NoteList, NoteMeta
 from ._generated.types import UNSET, File
 
 
@@ -98,6 +98,15 @@ def _check_feed(feed: str) -> str:
     return feed
 
 
+def _as_file(content: str | bytes, type: str | None) -> tuple[bytes, str]:
+    """What a post sends: a string is markdown; bytes need a media type."""
+    if isinstance(content, str):
+        return content.encode("utf-8"), type or "text/markdown"
+    if not type:
+        raise ConfigError("give the file's media type as `type`, e.g. image/png")
+    return content, type
+
+
 def _header_value(text: str) -> Any:
     """A header holds bytes: text that may not be ASCII goes as its UTF-8 bytes, which the server reads back (httpx takes bytes values)."""
     return text.encode("utf-8")
@@ -160,52 +169,51 @@ class Client:
 
     def post(
         self,
-        markdown: str,
+        content: str | bytes,
         feed: str | None = None,
         feed_password: str | None = None,
-        tags: list[str] | None = None,
-        read_id: str | None = None,
+        type: str | None = None,
         title: str | None = None,
-    ) -> Created:
-        """`feed_password` overrides the client's, for a feed that has its own password. `tags` label the note
-        (at most 10, each 1 to 32 characters of letters, digits, `-`, `_`, `.`, `:`; not verified). `read_id` is the
-        read id the feed gets when this post creates it (3 to 64 characters of `a-z`, `0-9`, `-`, `_`; random when
-        left out; ignored for a feed that exists; a `taken` error when another feed has it). `title` is the note's title
-        (at most 100 characters, one line); left out, it is taken from the text."""
-        body = PostJson(markdown=markdown, title=title or UNSET, tags=tags or UNSET, read_id=read_id or UNSET)
-        kwargs = post_note._get_kwargs(feed=self._feed_for(feed), body=body, x_feed_password=self._fp(feed_password))
-        return self._parse(Created, self._call(kwargs))
-
-    def upload_image(
-        self,
-        data: bytes,
-        feed: str | None = None,
-        feed_password: str | None = None,
         tags: list[str] | None = None,
-        title: str | None = None,
         alt: str | None = None,
         name: str | None = None,
+        read_id: str | None = None,
     ) -> Created:
-        """Post a PNG, JPEG, GIF or WebP image as a note of its own (the feed is created by its first note). The server decides the format by the bytes. `.file` is the note's file: write `![](file)` in a markdown note to show it (relative to the feed, so it follows a changed read id), or pass it as `image` to update_feed; `.file_url` is for a link outside notefeed. `title` and `alt` describe it. Same options as post()."""
-        kwargs = upload_image._get_kwargs(
+        """Post a note: a `str` is markdown, `bytes` are a file whose media type is `type` (`text/markdown`, `image/png`,
+        `image/jpeg`, `image/gif` or `image/webp`; the server accepts nothing else and checks that the body is what the type
+        says). The feed is created by its first note. `.file` is the note's file name: write `![](file)` in a markdown
+        note to show a picture, or pass it as `image` to update_feed; `.file_url` is for a link outside notefeed.
+
+        `feed_password` overrides the client's, for a feed that has its own password. `tags` label the note (at most 10,
+        each 1 to 32 characters of letters, digits, `-`, `_`, `.`, `:`; not verified). `title` is its title (at most 100
+        characters, one line); left out, it is taken from the text. `alt` is a picture's alternative text, `name` the
+        file's original name. `read_id` is the read id the feed gets when this post creates it (3 to 64 characters of
+        `a-z`, `0-9`, `-`, `_`; random when left out; ignored for a feed that exists; a `taken` error when another feed has it)."""
+        payload, media = _as_file(content, type)
+        kwargs = post_note._get_kwargs(
             feed=self._feed_for(feed),
-            body=File(payload=data),
+            body=File(payload=payload),
             x_feed_password=self._fp(feed_password),
-            x_note_tags=",".join(tags) if tags else UNSET,
+            x_read_id=read_id or UNSET,
             x_note_title=_header_value(title) if title else UNSET,
+            x_note_tags=",".join(tags) if tags else UNSET,
             x_note_alt=_header_value(alt) if alt else UNSET,
             x_note_name=_header_value(name) if name else UNSET,
         )
+        kwargs["headers"]["Content-Type"] = media  # the generated client only knows octet-stream
         return self._parse(Created, self._call(kwargs))
 
-    def edit(self, id: str, markdown: str, feed: str | None = None, feed_password: str | None = None, title: str | None = None) -> Note:
-        """Replace a note's markdown; its id and URLs stay. `title` sets its title too ("" removes it: the title follows the text again). Same options as post()."""
-        kwargs = edit_note._get_kwargs(
-            feed=self._feed_for(feed),
-            id=id,
-            body=EditJson(markdown=markdown, title=UNSET if title is None else title),
-            x_feed_password=self._fp(feed_password),
-        )
+    def edit(self, id: str, content: str | bytes, feed: str | None = None, feed_password: str | None = None, type: str | None = None) -> Note:
+        """Replace a note's content (a `str` is markdown; `bytes` need the note's own `type`, as for post()). Its id, URLs and metadata stay. Same options as post()."""
+        payload, media = _as_file(content, type)
+        kwargs = edit_note._get_kwargs(feed=self._feed_for(feed), id=id, body=File(payload=payload), x_feed_password=self._fp(feed_password))
+        kwargs["headers"]["Content-Type"] = media
+        return self._parse(Note, self._call(kwargs))
+
+    def update(self, id: str, title: str | None = None, alt: str | None = None, feed: str | None = None, feed_password: str | None = None) -> Note:
+        """Set a note's title and/or alt text (alt for pictures); "" removes one, so a markdown note's title follows its text again; None leaves it. Same options as post()."""
+        meta = NoteMeta(title=UNSET if title is None else title, alt=UNSET if alt is None else alt)
+        kwargs = patch_note._get_kwargs(feed=self._feed_for(feed), id=id, body=meta, x_feed_password=self._fp(feed_password))
         return self._parse(Note, self._call(kwargs))
 
     def delete(self, id: str, feed: str | None = None, feed_password: str | None = None) -> None:

@@ -2,7 +2,7 @@
 
 import type { Client, ClientMeta, Options as Options2, RequestResult, TDataShape } from './client';
 import { client } from './client.gen';
-import type { ChangeFeedPasswordData, ChangeFeedPasswordErrors, ChangeFeedPasswordResponses, DeleteFeedData, DeleteFeedErrors, DeleteFeedResponses, DeleteNoteData, DeleteNoteErrors, DeleteNoteResponses, EditNoteData, EditNoteErrors, EditNoteResponses, GetFeedData, GetFeedErrors, GetFeedResponses, GetNoteData, GetNoteErrors, GetNoteResponses, GetOpenApiData, GetOpenApiResponses, GetReadFeedData, GetReadFeedErrors, GetReadFeedResponses, GetReadNoteData, GetReadNoteErrors, GetReadNoteResponses, ListNotesData, ListNotesErrors, ListNotesResponses, ListReadNotesData, ListReadNotesErrors, ListReadNotesResponses, PostNoteData, PostNoteErrors, PostNoteResponses, RemoveFeedPasswordData, RemoveFeedPasswordErrors, RemoveFeedPasswordResponses, UpdateFeedData, UpdateFeedErrors, UpdateFeedResponses, UploadImageData, UploadImageErrors, UploadImageResponses } from './types.gen';
+import type { ChangeFeedPasswordData, ChangeFeedPasswordErrors, ChangeFeedPasswordResponses, DeleteFeedData, DeleteFeedErrors, DeleteFeedResponses, DeleteNoteData, DeleteNoteErrors, DeleteNoteResponses, EditNoteData, EditNoteErrors, EditNoteResponses, GetFeedData, GetFeedErrors, GetFeedResponses, GetNoteData, GetNoteErrors, GetNoteResponses, GetOpenApiData, GetOpenApiResponses, GetReadFeedData, GetReadFeedErrors, GetReadFeedResponses, GetReadNoteData, GetReadNoteErrors, GetReadNoteResponses, ListNotesData, ListNotesErrors, ListNotesResponses, ListReadNotesData, ListReadNotesErrors, ListReadNotesResponses, PatchNoteData, PatchNoteErrors, PatchNoteResponses, PostNoteData, PostNoteErrors, PostNoteResponses, RemoveFeedPasswordData, RemoveFeedPasswordErrors, RemoveFeedPasswordResponses, UpdateFeedData, UpdateFeedErrors, UpdateFeedResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -32,30 +32,15 @@ export const listNotes = <ThrowOnError extends boolean = false>(options: Options
 /**
  * Post a note
  *
- * Creates the feed with its first note, optionally protected by its own password (`X-Feed-Password` header or a `password` field in the JSON or form body; 1 to 256 printable ASCII characters, with no space at the start or end). Posting to a protected feed needs that password. Also served at `POST /{feed}`, the short form the client packages and curl one-liners use. A markdown body is at most 102400 bytes and must be UTF-8. A body that is an image (`image/png`, `image/jpeg`, `image/gif`, `image/webp` or `application/octet-stream`) is posted as a note of its own: PNG, JPEG, GIF or WebP, recognized by its first bytes, whatever `Content-Type` is sent (SVG is refused). It is stored byte for byte, with no resizing and no metadata stripped (EXIF such as GPS position stays in the file), at most NOTEFEED_MAX_IMAGE_BYTES (default 5 MiB). The response has its `file` and a `file_url` under the feed's read id, public like the read link. `X-Note-Name` gives the picture's original file name. A multipart form may send a `file` part instead of `markdown`. `application/x-www-form-urlencoded` (what `curl -d` sends) is read as raw markdown, not as form fields. `read_id` (JSON or form field) is the feed's read id when this post creates it: random when left out, ignored for a feed that exists. Tags (at most 10 tags, each 1 to 32 characters of letters, digits, `-`, `_`, `.` and `:`; case is folded to lowercase, duplicates are removed) go in the JSON `tags` array, a repeated `tags` form field, or, for a raw body, the `X-Note-Tags` header.
+ * The body is the note, a file, and `Content-Type` says which kind: `text/markdown` (UTF-8, at most 102400 bytes), or an image, `image/png`, `image/jpeg`, `image/gif` or `image/webp` (at most NOTEFEED_MAX_IMAGE_BYTES, default 5 MiB). Nothing is guessed: any other type, or none, is `415`, and so is a body that is not what the type says (an image is recognized by its first bytes; SVG is refused). It is stored byte for byte, with no resizing and no metadata stripped (EXIF such as GPS position stays in an image). Creates the feed with its first note, optionally protected by its own password (`X-Feed-Password`; 1 to 256 printable ASCII characters, with no space at the start or end) and with the read id in `X-Read-Id`; both are only used by the post that creates the feed. Posting to a protected feed needs its password. Also served at `POST /{feed}`, the short form curl one-liners use. The response names the note's `file` and where it is served, `file_url`, under the feed's read id (public like the read link). Metadata goes in headers: `X-Note-Title`, `X-Note-Tags` (at most 10 tags, each 1 to 32 characters of letters, digits, `-`, `_`, `.` and `:`; case is folded to lowercase, duplicates are removed), `X-Note-Alt` (images), `X-Note-Name` (the original file name).
  */
 export const postNote = <ThrowOnError extends boolean = false>(options: Options<PostNoteData, ThrowOnError>): RequestResult<PostNoteResponses, PostNoteErrors, ThrowOnError> => (options.client ?? client).post<PostNoteResponses, PostNoteErrors, ThrowOnError>({
+    bodySerializer: null,
     security: [{ scheme: 'bearer', type: 'http' }],
     url: '/api/v1/feeds/{feed}/notes',
     ...options,
     headers: {
-        'Content-Type': 'application/json',
-        ...options.headers
-    }
-});
-
-/**
- * Post an image
- *
- * The same as posting a note with an image body, for clients that send the picture itself: it becomes a note of its own. The body is PNG, JPEG, GIF or WebP, recognized by its first bytes, whatever `Content-Type` is sent (SVG is refused). Stored byte for byte, with no resizing and no metadata stripped (EXIF such as GPS position stays in the file). The response has the note's `file` and a `file_url` under the feed's read link, public like the read link, and `![](file)` in a markdown note shows it. Creates the feed if it does not exist, like a first note; a password given then protects it. Needs the same credentials as posting and counts against the post rate limit. The size limit is NOTEFEED_MAX_IMAGE_BYTES (default 5 MiB).
- */
-export const uploadImage = <ThrowOnError extends boolean = false>(options: Options<UploadImageData, ThrowOnError>): RequestResult<UploadImageResponses, UploadImageErrors, ThrowOnError> => (options.client ?? client).post<UploadImageResponses, UploadImageErrors, ThrowOnError>({
-    bodySerializer: null,
-    security: [{ scheme: 'bearer', type: 'http' }],
-    url: '/api/v1/feeds/{feed}/images',
-    ...options,
-    headers: {
-        'Content-Type': 'image/png',
+        'Content-Type': 'text/markdown',
         ...options.headers
     }
 });
@@ -81,16 +66,32 @@ export const getNote = <ThrowOnError extends boolean = false>(options: Options<G
 });
 
 /**
- * Edit a note
+ * Change a note's title or alt text
  *
- * Changes the note: its markdown (only for a markdown note), its title (empty removes it: a markdown note's title follows its text again), its alt text (image notes). Its id and creation time stay. A raw text body is the new markdown. At least one of the three is needed. Needs the feed's password if it has one, and counts against the post rate limit. Read links can't edit. The body is at most 102400 bytes and UTF-8.
+ * Sets the note's title and/or alt text (alt only for images). An empty string removes one: a markdown note's title follows its text again. At least one is needed. Needs the feed's password if it has one, and counts against the post rate limit. Read links can't change notes.
  */
-export const editNote = <ThrowOnError extends boolean = false>(options: Options<EditNoteData, ThrowOnError>): RequestResult<EditNoteResponses, EditNoteErrors, ThrowOnError> => (options.client ?? client).put<EditNoteResponses, EditNoteErrors, ThrowOnError>({
+export const patchNote = <ThrowOnError extends boolean = false>(options: Options<PatchNoteData, ThrowOnError>): RequestResult<PatchNoteResponses, PatchNoteErrors, ThrowOnError> => (options.client ?? client).patch<PatchNoteResponses, PatchNoteErrors, ThrowOnError>({
     security: [{ scheme: 'bearer', type: 'http' }],
     url: '/api/v1/feeds/{feed}/notes/{id}',
     ...options,
     headers: {
         'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Replace a note's content
+ *
+ * The body is the new file, with the same rules as posting: a `Content-Type` that is one of the accepted types, a body that is what it declares. A note keeps its type, so the type must be the note's own (`415` otherwise). Id, creation time and metadata stay: the title of a markdown note without one set follows the new text. Change the title or alt text with `PATCH`. Needs the feed's password if it has one, and counts against the post rate limit. Read links can't edit.
+ */
+export const editNote = <ThrowOnError extends boolean = false>(options: Options<EditNoteData, ThrowOnError>): RequestResult<EditNoteResponses, EditNoteErrors, ThrowOnError> => (options.client ?? client).put<EditNoteResponses, EditNoteErrors, ThrowOnError>({
+    bodySerializer: null,
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/api/v1/feeds/{feed}/notes/{id}',
+    ...options,
+    headers: {
+        'Content-Type': 'text/markdown',
         ...options.headers
     }
 });

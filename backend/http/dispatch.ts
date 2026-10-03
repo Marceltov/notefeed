@@ -23,7 +23,7 @@ export type Reply<R> = {
 type QueryOf<Q> = Q extends z.ZodObject ? z.infer<Q> : Record<string, never>;
 
 type Meta<R, Q> = {
-  method: "GET" | "POST" | "PUT" | "DELETE";
+  method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   path: string; // OpenAPI template including /api/v1, e.g. "/api/v1/feeds/{feed}/notes"
   operationId: string;
   summary: string;

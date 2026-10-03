@@ -6,7 +6,6 @@ from typing import Any, Self, TypeVar, cast
 
 from attrs import define as _attrs_define
 
-from ..models.note_kind import NoteKind
 from ..types import UNSET, Unset
 
 T = TypeVar("T", bound="Note")
@@ -16,54 +15,55 @@ T = TypeVar("T", bound="Note")
 class Note:
     """
     Attributes:
-        kind (NoteKind): What the note is: a markdown text, or a picture (then `markdown` is empty and the picture is
-            the file `file`)
-        file (str): The note's file name, `<id>.<extension>`; served under the feed's read id, like the picture of an
-            image note
         id (str): The note's id: a UTC time to the second plus a random UUID for notes made here; any name without a dot
             for a file placed by hand
-        title (str): The title set for the note, else the first heading or the first non-empty line of a markdown note;
-            may be empty (an image without one)
-        size (int): The size of the note's content in bytes
-        markdown (str): The note, byte-for-byte as posted
+        type_ (str): The media type of the note's file: `text/markdown`, `image/png`, `image/jpeg`, `image/gif` or
+            `image/webp`
+        file (str): The note's file name, `<id>.<extension>`
+        file_url (None | str): Where the note's file is served, absolute, under the feed's read id (public like the read
+            link); null while the feed has no read link
+        size (int): The size of the note's file in bytes
+        title (str): The title set for the note, else the first heading or the first non-empty line of a markdown note,
+            else the picture's alt text; may be empty
         created_at (datetime.datetime): When the note was posted (UTC)
         url (str): The note's page in the web UI
         tags (list[str]): Labels the poster gave the note (not verified, and shown to readers like the note itself);
             empty when none
-        alt (None | str | Unset): Alternative text of an image note
-        name (None | str | Unset): The file name an image was posted with
-        file_url (None | str | Unset): Where the note's file is served, absolute, under the feed's read id; null while
-            the feed has no read link
+        content (str | Unset): The note's text, byte-for-byte as posted: for a text type (markdown) only; absent for a
+            picture
+        alt (str | Unset): Alternative text of an image note, when it has one
+        name (str | Unset): The file name an image was posted with, when it came with one
         sender (None | str | Unset): Verified sign-in name of the poster; absent when the note was posted without a
             sign-in
     """
 
-    kind: NoteKind
-    file: str
     id: str
-    title: str
+    type_: str
+    file: str
+    file_url: None | str
     size: int
-    markdown: str
+    title: str
     created_at: datetime.datetime
     url: str
     tags: list[str]
-    alt: None | str | Unset = UNSET
-    name: None | str | Unset = UNSET
-    file_url: None | str | Unset = UNSET
+    content: str | Unset = UNSET
+    alt: str | Unset = UNSET
+    name: str | Unset = UNSET
     sender: None | str | Unset = UNSET
 
     def to_dict(self) -> dict[str, Any]:
-        kind = self.kind.value
+        id = self.id
+
+        type_ = self.type_
 
         file = self.file
 
-        id = self.id
-
-        title = self.title
+        file_url: None | str
+        file_url = self.file_url
 
         size = self.size
 
-        markdown = self.markdown
+        title = self.title
 
         created_at = self.created_at.isoformat()
 
@@ -71,23 +71,11 @@ class Note:
 
         tags = self.tags
 
-        alt: None | str | Unset
-        if isinstance(self.alt, Unset):
-            alt = UNSET
-        else:
-            alt = self.alt
+        content = self.content
 
-        name: None | str | Unset
-        if isinstance(self.name, Unset):
-            name = UNSET
-        else:
-            name = self.name
+        alt = self.alt
 
-        file_url: None | str | Unset
-        if isinstance(self.file_url, Unset):
-            file_url = UNSET
-        else:
-            file_url = self.file_url
+        name = self.name
 
         sender: None | str | Unset
         if isinstance(self.sender, Unset):
@@ -99,23 +87,23 @@ class Note:
 
         field_dict.update(
             {
-                "kind": kind,
-                "file": file,
                 "id": id,
-                "title": title,
+                "type": type_,
+                "file": file,
+                "file_url": file_url,
                 "size": size,
-                "markdown": markdown,
+                "title": title,
                 "created_at": created_at,
                 "url": url,
                 "tags": tags,
             }
         )
+        if content is not UNSET:
+            field_dict["content"] = content
         if alt is not UNSET:
             field_dict["alt"] = alt
         if name is not UNSET:
             field_dict["name"] = name
-        if file_url is not UNSET:
-            field_dict["file_url"] = file_url
         if sender is not UNSET:
             field_dict["sender"] = sender
 
@@ -124,17 +112,22 @@ class Note:
     @classmethod
     def from_dict(cls, src_dict: Mapping[str, Any]) -> Self:
         d = dict(src_dict)
-        kind = NoteKind(d.pop("kind"))
+        id = d.pop("id")
+
+        type_ = d.pop("type")
 
         file = d.pop("file")
 
-        id = d.pop("id")
+        def _parse_file_url(data: object) -> None | str:
+            if data is None:
+                return data
+            return cast(None | str, data)
 
-        title = d.pop("title")
+        file_url = _parse_file_url(d.pop("file_url"))
 
         size = d.pop("size")
 
-        markdown = d.pop("markdown")
+        title = d.pop("title")
 
         created_at = datetime.datetime.fromisoformat(d.pop("created_at"))
 
@@ -142,32 +135,11 @@ class Note:
 
         tags = cast(list[str], d.pop("tags"))
 
-        def _parse_alt(data: object) -> None | str | Unset:
-            if data is None:
-                return data
-            if isinstance(data, Unset):
-                return data
-            return cast(None | str | Unset, data)
+        content = d.pop("content", UNSET)
 
-        alt = _parse_alt(d.pop("alt", UNSET))
+        alt = d.pop("alt", UNSET)
 
-        def _parse_name(data: object) -> None | str | Unset:
-            if data is None:
-                return data
-            if isinstance(data, Unset):
-                return data
-            return cast(None | str | Unset, data)
-
-        name = _parse_name(d.pop("name", UNSET))
-
-        def _parse_file_url(data: object) -> None | str | Unset:
-            if data is None:
-                return data
-            if isinstance(data, Unset):
-                return data
-            return cast(None | str | Unset, data)
-
-        file_url = _parse_file_url(d.pop("file_url", UNSET))
+        name = d.pop("name", UNSET)
 
         def _parse_sender(data: object) -> None | str | Unset:
             if data is None:
@@ -179,18 +151,18 @@ class Note:
         sender = _parse_sender(d.pop("sender", UNSET))
 
         note = cls(
-            kind=kind,
-            file=file,
             id=id,
-            title=title,
+            type_=type_,
+            file=file,
+            file_url=file_url,
             size=size,
-            markdown=markdown,
+            title=title,
             created_at=created_at,
             url=url,
             tags=tags,
+            content=content,
             alt=alt,
             name=name,
-            file_url=file_url,
             sender=sender,
         )
 

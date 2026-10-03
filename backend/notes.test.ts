@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { beforeEach, describe, expect, test } from "vitest";
 import { EmptyNoteError, InvalidFeedError, NoteTooLargeError, ReservedFeedError } from "./errors";
 import { hasFeed } from "./feeds";
-import { countNotes, createImageNote, createNote, getNote, isValidId, listNotes, removeNote, updateNote } from "./notes";
+import { countNotes, createImageNote, createNote, getNote, isValidId, listNotes, removeNote, replaceContent } from "./notes";
 
 let root: string;
 let dir: string; // the "test" feed's directory
@@ -200,21 +200,21 @@ describe("sender", () => {
     expect(await readFile(join(dir, `${note.id}.md`), "utf8")).toBe("# Hi");
     expect(JSON.parse(await readFile(join(dir, `.${note.id}.md.json`), "utf8"))).toEqual({ sender: "Ann" });
     const got = await getNote("test", note.id);
-    expect(got?.markdown).toBe("# Hi");
+    expect(got?.content).toBe("# Hi");
     expect(got?.sender).toBe("Ann");
     expect(got?.title).toBe("Hi");
   });
   test("updateNote keeps the sender", async () => {
     const { note } = await createNote("test", "# Old", undefined, "Ann");
-    const u = await updateNote("test", note.id, { markdown: "# New" });
+    const u = await replaceContent("test", note.id, new TextEncoder().encode("# New"), "text/markdown");
     expect(u?.sender).toBe("Ann");
     expect((await getNote("test", note.id))?.sender).toBe("Ann");
-    expect((await getNote("test", note.id))?.markdown).toBe("# New");
+    expect((await getNote("test", note.id))?.content).toBe("# New");
   });
   test.each(["a\u2028b", "a\u2029b", "a\rb"])("sender %j survives create, get and update", async (sender) => {
     const { note } = await createNote("test", "# Hi", undefined, sender);
     expect((await getNote("test", note.id))?.sender).toBe(sender);
-    expect((await updateNote("test", note.id, { markdown: "# New" }))?.sender).toBe(sender);
+    expect((await replaceContent("test", note.id, new TextEncoder().encode("# New"), "text/markdown"))?.sender).toBe(sender);
     expect(await getNote("test", note.id)).toMatchObject({ markdown: "# New", sender });
   });
   test("a typed block in the body is body: no sender from it, with or without ours", async () => {
@@ -230,7 +230,7 @@ describe("sender", () => {
     await createNote("test", "# Seed");
     await writeFile(join(dir, "20260101T000000Z-k.md"), "old");
     await writeFile(join(dir, ".20260101T000000Z-k.md.json"), '{"sender":"Ann","extra":1}');
-    expect((await updateNote("test", "20260101T000000Z-k", { markdown: "new" }))?.sender).toBe("Ann");
+    expect((await replaceContent("test", "20260101T000000Z-k", new TextEncoder().encode("new"), "text/markdown"))?.sender).toBe("Ann");
     expect(await readFile(join(dir, ".20260101T000000Z-k.md.json"), "utf8")).toBe('{"sender":"Ann","extra":1}');
   });
   test("a sidecar title wins over the one derived from the text", async () => {
@@ -249,7 +249,7 @@ describe("sender", () => {
     const { note } = await createNote("test", "# One");
     await writeFile(join(dir, "20260101T000000Z-hand.md"), "# Hand");
     const all = await listNotes("test");
-    expect(all.map((n) => n.markdown).sort()).toEqual(["# Hand", "# One"]);
+    expect(all.map((n) => n.content).sort()).toEqual(["# Hand", "# One"]);
     expect(all.every((n) => n.sender === undefined)).toBe(true);
     expect(note.sender).toBeUndefined();
   });
@@ -265,7 +265,7 @@ describe("getNote", () => {
   test("reads an existing note", async () => {
     const { note: created } = await createNote("test", "# Hi\nthere");
     const note = await getNote("test", created.id);
-    expect(note?.markdown).toBe("# Hi\nthere");
+    expect(note?.content).toBe("# Hi\nthere");
     expect(note?.title).toBe("Hi");
   });
 });
@@ -274,18 +274,18 @@ describe("updateNote and removeNote", () => {
   const now = at("2026-09-29T14:05:12Z");
   test("an edit keeps the id and createdAt, changes markdown and title", async () => {
     const { note: n } = await createNote("test", "# Old", now);
-    const u = await updateNote("test", n.id, { markdown: "# New\nbody" });
+    const u = await replaceContent("test", n.id, new TextEncoder().encode("# New\nbody"), "text/markdown");
     expect(u).toMatchObject({ id: n.id, title: "New", markdown: "# New\nbody", createdAt: now, tags: [] });
-    expect((await getNote("test", n.id))?.markdown).toBe("# New\nbody");
+    expect((await getNote("test", n.id))?.content).toBe("# New\nbody");
   });
   test("a missing note is null and creates no file", async () => {
     await createNote("test", "# Old", now);
-    expect(await updateNote("test", "20260101T000000Z-x", { markdown: "# New" })).toBeNull();
+    expect(await replaceContent("test", "20260101T000000Z-x", new TextEncoder().encode("# New"), "text/markdown")).toBeNull();
     expect(await files()).toHaveLength(1);
   });
   test("a refused edit leaves the file and no temp file", async () => {
     const { note: n } = await createNote("test", "# Old", now);
-    await expect(updateNote("test", n.id, { markdown: "  " })).rejects.toThrow(EmptyNoteError);
+    await expect(replaceContent("test", n.id, new TextEncoder().encode("  "), "text/markdown")).rejects.toThrow(EmptyNoteError);
     expect(await readFile(join(dir, `${n.id}.md`), "utf8")).toBe("# Old");
     expect(await files()).toEqual([`${n.id}.md`]);
   });
@@ -298,7 +298,7 @@ describe("updateNote and removeNote", () => {
   test.each(["../x", ".password", "a/b"])("id %j touches nothing", async (id) => {
     await createNote("test", "# Old", now);
     await writeFile(join(dir, ".password"), "hash");
-    expect(await updateNote("test", id, { markdown: "# New" })).toBeNull();
+    expect(await replaceContent("test", id, new TextEncoder().encode("# New"), "text/markdown")).toBeNull();
     expect(await removeNote("test", id)).toBe(false);
     expect(await readFile(join(dir, ".password"), "utf8")).toBe("hash");
     expect(await files()).toHaveLength(2);
@@ -306,10 +306,21 @@ describe("updateNote and removeNote", () => {
 });
 
 test("editing a note whose feed was deleted meanwhile is no such note, not a crash", async () => {
-  const { updateNote } = await import("./notes");
+  const { replaceContent } = await import("./notes");
   const { deleteFeed } = await import("./feeds");
   const { note: n } = await createNote("gone", "# a");
-  const p = updateNote("gone", n.id, { markdown: "# b" }); // stat has passed by the time the directory goes
+  const p = replaceContent("gone", n.id, new TextEncoder().encode("# b"), "text/markdown"); // stat has passed by the time the directory goes
   await deleteFeed("gone");
   expect(await p).toBeNull();
+});
+
+describe("type and content", () => {
+  test("a markdown note has the type text/markdown and its text as content; an image note has its media type and no content", async () => {
+    const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1]);
+    const { note: md } = await createNote("test", "# Hi\nbody");
+    const { note: img } = await createImageNote("test", png, {});
+    expect([md.type, md.content]).toEqual(["text/markdown", "# Hi\nbody"]);
+    expect([img.type, img.content]).toEqual(["image/png", undefined]);
+    expect((await getNote("test", img.id))?.type).toBe("image/png");
+  });
 });

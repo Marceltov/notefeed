@@ -3,17 +3,17 @@ import { randomBytes } from "node:crypto";
 import { idStamp } from "../shared/notes";
 import { isErrno } from "./data/fs";
 import { deleteNoteFile, replaceNote, updateMeta, writeNote, listNoteFiles, readNote, type Meta } from "./data/notes";
-import { EmptyNoteError, InvalidBodyError, NoteTooLargeError, UnsupportedTypeError } from "./errors";
+import { InvalidBodyError, UnsupportedTypeError } from "./errors";
 import { assertFeed, checkFeed, ensureFeed, forgetFeed } from "./feeds";
 import { sniffImage } from "./images";
 import { ImageNote } from "./note/image";
 import { MarkdownNote } from "./note/markdown";
 import { Note } from "./note/note";
-import { typeForExt } from "./note/types";
+import { parseMediaType, typeForExt, type NoteType } from "./note/types";
 
+export { checkMarkdown, MAX_BYTES } from "./note/markdown";
 export { ImageNote, MarkdownNote, Note };
 
-export const MAX_BYTES = 102400;
 export const MAX_NOTE_TITLE = 100;
 export const MAX_ALT = 500;
 
@@ -57,12 +57,6 @@ function createdAt(id: string, meta: Meta, mtime: Date): Date {
   return stampOf(id) ?? (Number.isNaN(created) ? mtime : new Date(created));
 }
 
-// Storage only: no auth, rate limit or caps (that is posting.ts).
-export function checkMarkdown(markdown: string): void {
-  if (markdown.trim() === "") throw new EmptyNoteError();
-  if (Buffer.byteLength(markdown, "utf8") > MAX_BYTES) throw new NoteTooLargeError();
-}
-
 // What a new note is made of; the feed is created if it doesn't exist (`wantedReadId` is used only then, see feeds.ts).
 type NewNote = { ext: string; content: string | Uint8Array; meta: Meta };
 
@@ -84,36 +78,49 @@ async function store(feed: string, { ext, content, meta }: NewNote, now: Date, w
   }
 }
 
-export async function createNote(feed: string, markdown: string, now = new Date(), sender?: string, tags: string[] = [], wantedReadId?: string, title?: string): Promise<{ note: MarkdownNote; readId: string | null }> {
+/** A file's original name as kept with the note: no control characters or slashes, trimmed, at most 200 characters. */
+export const cleanName = (name: string | undefined): string | undefined => (name ?? "").replace(/[\x00-\x1f\x7f/\\]/g, "").trim().slice(0, 200) || undefined;
+
+export type NewNoteOptions = { sender?: string; tags?: string[]; title?: string; alt?: string; name?: string; wantedReadId?: string };
+
+/**
+ * A new note of any type: `body` is its file, `ext` the extension its type stores it under. The type's own rules (`checkBody`) apply; a
+ * title or alt text must be one short line. The feed is created if it does not exist. Whether the body is what the poster declared is
+ * posting.ts's business (`verify`).
+ */
+export async function createNoteOf(feed: string, type: NoteType, ext: string, body: Uint8Array, opts: NewNoteOptions = {}, now = new Date()): Promise<{ note: Note; readId: string | null }> {
   assertFeed(feed);
-  checkMarkdown(markdown);
-  const given = checkLine("title", title, MAX_NOTE_TITLE);
-  const meta: Meta = { ...(sender !== undefined && { sender }), ...(tags.length && { tags }), ...(given && { title: given }) };
-  const { id, readId } = await store(feed, { ext: "md", content: markdown, meta }, now, wantedReadId);
-  return { note: new MarkdownNote({ id, ext: "md", meta, createdAt: stampOf(id)!, size: Buffer.byteLength(markdown) }, markdown), readId };
+  type.checkBody(body);
+  const title = checkLine("title", opts.title, MAX_NOTE_TITLE);
+  const alt = checkLine("alt", opts.alt, MAX_ALT);
+  if (alt && !type.hasAlt) throw new InvalidBodyError("alt is for image notes");
+  const { sender, tags = [] } = opts;
+  const name = cleanName(opts.name);
+  const meta: Meta = { ...(sender !== undefined && { sender }), ...(tags.length && { tags }), ...(title && { title }), ...(alt && { alt }), ...(name && { name }) };
+  const { id, readId } = await store(feed, { ext, content: body, meta }, now, opts.wantedReadId);
+  return { note: type.read({ id, ext, meta, createdAt: stampOf(id)!, size: body.length }, Buffer.from(body)), readId };
+}
+
+const MARKDOWN = typeForExt("md")!;
+const encoder = new TextEncoder();
+
+/** A markdown note from its text. */
+export async function createNote(feed: string, markdown: string, now = new Date(), sender?: string, tags: string[] = [], wantedReadId?: string, title?: string): Promise<{ note: MarkdownNote; readId: string | null }> {
+  const made = await createNoteOf(feed, MARKDOWN, "md", encoder.encode(markdown), { sender, tags, title, wantedReadId }, now);
+  return { note: made.note as MarkdownNote, readId: made.readId };
 }
 
 /** An image as a note of its own. The format is decided by the bytes (UnsupportedTypeError for anything else, SVG included). */
-export async function createImageNote(
-  feed: string,
-  bytes: Uint8Array,
-  opts: { sender?: string; tags?: string[]; title?: string; alt?: string; name?: string; wantedReadId?: string },
-  now = new Date(),
-): Promise<{ note: ImageNote; readId: string | null }> {
-  assertFeed(feed);
+export async function createImageNote(feed: string, bytes: Uint8Array, opts: NewNoteOptions, now = new Date()): Promise<{ note: ImageNote; readId: string | null }> {
   const ext = sniffImage(bytes);
-  if (!ext) throw new UnsupportedTypeError("send a PNG, JPEG, GIF or WebP image");
-  const { sender, tags = [], name } = opts;
-  const title = checkLine("title", opts.title, MAX_NOTE_TITLE);
-  const alt = checkLine("alt", opts.alt, MAX_ALT);
-  const meta: Meta = { ...(sender !== undefined && { sender }), ...(tags.length && { tags }), ...(title && { title }), ...(alt && { alt }), ...(name && { name }) };
-  const { id, readId } = await store(feed, { ext, content: bytes, meta }, now, opts.wantedReadId);
-  return { note: new ImageNote({ id, ext, meta, createdAt: stampOf(id)!, size: bytes.length }), readId };
+  if (!ext) throw new UnsupportedTypeError();
+  const made = await createNoteOf(feed, typeForExt(ext)!, ext, bytes, opts, now);
+  return { note: made.note as ImageNote, readId: made.readId };
 }
 
-async function noteIds(feed: string, kind?: Note["kind"]): Promise<string[]> {
+async function noteIds(feed: string, typeName?: string): Promise<string[]> {
   if (checkFeed(feed)) return [];
-  return (await listNoteFiles(feed)).filter((e) => { const type = typeForExt(e.ext); return type && (kind === undefined || type.kind === kind) && isValidId(e.id); }).map((e) => e.id);
+  return (await listNoteFiles(feed)).filter((e) => { const type = typeForExt(e.ext); return type && (typeName === undefined || type.name === typeName) && isValidId(e.id); }).map((e) => e.id);
 }
 
 // Newest first, ties by id. An id with a time is placed without reading anything; the others are looked up.
@@ -126,8 +133,8 @@ async function newestFirst(feed: string, ids: string[]): Promise<string[]> {
 
 // `before` (a note id) pages backwards: the notes after it in that order. A `before` that is gone ends the list.
 // `tag`: only notes carrying it; the files are read newest first until `limit` match.
-export async function listNotes(feed: string, limit = 50, before?: string, tag?: string, kind?: Note["kind"]): Promise<Note[]> {
-  let ids = await newestFirst(feed, await noteIds(feed, kind));
+export async function listNotes(feed: string, limit = 50, before?: string, tag?: string, typeName?: string): Promise<Note[]> {
+  let ids = await newestFirst(feed, await noteIds(feed, typeName));
   if (before !== undefined) ids = ids.slice(ids.indexOf(before) + 1 || ids.length);
   const read = async (page: string[]) => (await Promise.all(page.map((id) => getNote(feed, id)))).filter((n) => n !== null); // null: deleted between readdir and read
   if (tag === undefined) return read(ids.slice(0, limit));
@@ -139,8 +146,8 @@ export async function listNotes(feed: string, limit = 50, before?: string, tag?:
   return found.slice(0, limit);
 }
 
-export async function countNotes(feed: string, kind?: Note["kind"]): Promise<number> {
-  return (await noteIds(feed, kind)).length;
+export async function countNotes(feed: string, typeName?: string): Promise<number> {
+  return (await noteIds(feed, typeName)).length;
 }
 
 /** Whether `file` (`<id>.<ext>`) is an image note of this feed: the check before a title image points at it. */
@@ -157,24 +164,34 @@ export async function getNote(feed: string, id: string): Promise<Note | null> {
   return stored && type ? type.read({ id, ext: stored.ext, meta: stored.meta, createdAt: createdAt(id, stored.meta, stored.mtime), size: stored.size }, stored.content) : null;
 }
 
-/** What an edit may change; at least one field. `markdown` only for a markdown note. "" removes a title or alt. */
-export type NoteEdit = { markdown?: string; title?: string; alt?: string };
+/**
+ * Replaces a note's content with `body`, declared as `mediaType`. A note keeps its type, so the declared type must be the note's own
+ * (UnsupportedTypeError otherwise); the body gets the checks a new note gets. Id, date and metadata stay. null: invalid feed or id, or no
+ * such note.
+ */
+export async function replaceContent(feed: string, id: string, body: Uint8Array, mediaType: string): Promise<Note | null> {
+  const parsed = parseMediaType(mediaType);
+  if (!parsed) throw new UnsupportedTypeError();
+  if (!parsed.type.verify(body, parsed.ext)) throw new UnsupportedTypeError(`the body is not ${parsed.mediaType}`);
+  parsed.type.checkBody(body);
+  if (checkFeed(feed) || !isValidId(id)) return null;
+  const note = await getNote(feed, id);
+  if (!note) return null;
+  if (note.type !== parsed.mediaType) throw new UnsupportedTypeError(`this note is ${note.type}: send that Content-Type`);
+  return (await replaceNote(feed, id, body)) ? getNote(feed, id) : null;
+}
 
-// The id never changes, so neither does createdAt. null: invalid feed or id, or no such note. A refusal (blank or big markdown,
-// a bad title, markdown for an image, alt for a text, nothing to change) throws and changes nothing.
-export async function updateNote(feed: string, id: string, edit: NoteEdit): Promise<Note | null> {
-  if (edit.markdown === undefined && edit.title === undefined && edit.alt === undefined) throw new InvalidBodyError("nothing to change: send markdown, title or alt");
-  if (edit.markdown !== undefined) checkMarkdown(edit.markdown);
+/** Sets the title and/or alt text of a note; "" removes one. At least one is needed; alt only for types that have it. null: no such note. */
+export async function changeMeta(feed: string, id: string, edit: { title?: string; alt?: string }): Promise<Note | null> {
+  if (edit.title === undefined && edit.alt === undefined) throw new InvalidBodyError("nothing to change: send title or alt");
   const title = checkLine("title", edit.title, MAX_NOTE_TITLE);
   const alt = checkLine("alt", edit.alt, MAX_ALT);
   if (checkFeed(feed) || !isValidId(id)) return null;
   const note = await getNote(feed, id);
   if (!note) return null;
-  if (edit.markdown !== undefined && !(note instanceof MarkdownNote)) throw new InvalidBodyError("an image note has no markdown to replace");
-  if (alt !== undefined && !(note instanceof ImageNote)) throw new InvalidBodyError("alt is for image notes");
-  if (edit.markdown !== undefined && !(await replaceNote(feed, id, edit.markdown))) return null;
-  if ((title !== undefined || alt !== undefined) && !(await updateMeta(feed, id, { ...(title !== undefined && { title }), ...(alt !== undefined && { alt }) }))) return null;
-  return getNote(feed, id);
+  if (alt !== undefined && !typeForExt(note.ext)?.hasAlt) throw new InvalidBodyError("alt is for image notes");
+  const patch = { ...(title !== undefined && { title }), ...(alt !== undefined && { alt }) };
+  return (await updateMeta(feed, id, patch)) ? getNote(feed, id) : null;
 }
 
 export async function removeNote(feed: string, id: string): Promise<boolean> {

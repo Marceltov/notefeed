@@ -3,7 +3,7 @@ import { fileRoute } from "@/backend";
 export const dynamic = "force-dynamic";
 
 // Reached as /r/<readId>/<file>, see the rewrite in next.config.ts.
-export async function GET(_req: Request, { params }: RouteContext<"/r/[readId]/files/[file]">) {
+export async function GET(req: Request, { params }: RouteContext<"/r/[readId]/files/[file]">) {
   const { readId, file } = await params;
-  return fileRoute(readId, file);
+  return fileRoute(readId, file, req.headers.get("if-none-match"));
 }

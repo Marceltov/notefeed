@@ -2,6 +2,7 @@
 // `code` the stable key the web UI words itself (shared/errors.ts). Each adapter maps the class to
 // its own form; nothing parses a message.
 import type { ErrorCode } from "../shared/errors";
+import { ACCEPTED_TYPES } from "./note/media";
 
 export class NotefeedError extends Error {
   constructor(
@@ -92,7 +93,7 @@ export class NoteTooLargeError extends NotefeedError {
 }
 /** The request body can't be read as a note: the content type, or (InvalidBodyError) not UTF-8 or bad JSON. */
 export class UnsupportedTypeError extends NotefeedError {
-  constructor(message = "send text/markdown, text/plain, application/json or a form with a markdown field") {
+  constructor(message = `send a Content-Type of ${ACCEPTED_TYPES} (markdown as UTF-8)`) {
     super("unsupported_type", message);
   }
 }

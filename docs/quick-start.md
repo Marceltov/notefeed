@@ -31,7 +31,7 @@ Your notes are plain files in `data`, one folder per feed, owned by you: read th
 **3. Open <http://localhost:3000>**, pick a feed name (it suggests a random one), and write a note. Or post your first note from a shell:
 
 ```sh
-curl --data-binary $'# Hello\nMy first note.' http://localhost:3000/homelab-7f3k2q9x4m8wz
+curl -H "Content-Type: text/markdown" --data-binary $'# Hello\nMy first note.' http://localhost:3000/homelab-7f3k2q9x4m8wz
 ```
 
 The answer holds the feed's `read_url`. Add it to any feed reader.

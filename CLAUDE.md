@@ -9,7 +9,7 @@ Run every test locally, as often as useful, always through `scripts/quiet.sh`: i
 - e2e: `scripts/quiet.sh npm run test:e2e`.
 - Docker builds are left to CI.
 
-CI is still the gate. When a branch is finished, push it, open the PR and wait for CI (`gh pr checks <number> --watch`); if everything is green, merge. If something fails, read the failed job's log first (`gh run view <run> --log-failed`) and reproduce locally only when that is not enough.
+CI is still the gate, and I decide when a branch is finished and when it is merged. When a branch seems finished, ask me before doing anything with it: do not push it, open the PR or merge on your own. When I say to, push it, open the PR and wait for CI (`gh pr checks <number> --watch`), then tell me the result and stop: I review the PR. Merge only when I say "merge", and check CI first: if everything is green, merge; if anything is red or still running, tell me which jobs and wait for my answer, do not merge. If something fails, read the failed job's log first (`gh run view <run> --log-failed`) and reproduce locally only when that is not enough.
 
 ## Releases
 

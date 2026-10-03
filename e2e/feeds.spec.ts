@@ -109,12 +109,12 @@ test("a refused save says why", async ({ page }) => {
   await expect(page.getByRole("alert").filter({ hasText: "seconds" })).toContainText("Too many requests, try again in 7 seconds.");
 });
 
-test("without JavaScript, settings and delete still work", async ({ browser, baseURL }: { browser: Browser; baseURL?: string }) => {
+test("without JavaScript, the settings and delete forms still work", async ({ browser, baseURL }: { browser: Browser; baseURL?: string }) => {
   const page = await (await browser.newContext({ baseURL, javaScriptEnabled: false })).newPage();
   const name = feedName();
+  // Posting needs the web UI's JavaScript; the settings forms do not.
+  expect((await page.request.post(`/${name}`, { data: "# Plain note", headers: { "content-type": "text/markdown" } })).status()).toBe(201);
   await page.goto(`/${name}`);
-  await page.getByLabel("Note in markdown").fill("# Plain note");
-  await page.getByRole("button", { name: "Post note" }).click();
   await page.getByRole("link", { name: "Settings" }).click();
   await page.getByLabel("Title", { exact: true }).fill("Plain title");
   await page.getByRole("button", { name: "Save" }).click();

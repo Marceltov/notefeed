@@ -24,11 +24,18 @@ const CREATED = {
   url: "https://n.example/inbox/20260930T100000Z-cafe",
   feed_url: "https://n.example/inbox",
   read_url: "https://n.example/r/AAAAAAAAAAAAAAAAAAAAAA/feed.xml",
+  file: "20260930T100000Z-cafe.md",
+  file_url: "https://n.example/r/AAAAAAAAAAAAAAAAAAAAAA/20260930T100000Z-cafe.md",
 };
 const note = (h: number): Note => ({
   id: `20260930T${String(h).padStart(2, "0")}0000Z-n${h}`,
+  type: "text/markdown",
+  file: `20260930T${String(h).padStart(2, "0")}0000Z-n${h}.md`,
+  file_url: `https://n.example/r/X/20260930T${String(h).padStart(2, "0")}0000Z-n${h}.md`,
+  size: 4,
   title: `N${h}`,
-  markdown: `# N${h}`,
+  content: `# N${h}`,
+  tags: [],
   created_at: `2026-09-30T${String(h).padStart(2, "0")}:00:00.000Z`,
   url: `https://n.example/inbox/n${h}`,
 });
@@ -40,15 +47,28 @@ const collect = async <T>(it: AsyncIterable<T>) => {
 const url = (r: Recorded) => new URL(r.path, "http://x");
 
 describe("post", () => {
-  test("sends {markdown} as JSON to the feed and returns the created note", async () => {
+  test("a string is markdown: the body is the text, Content-Type text/markdown, and the answer is the created note", async () => {
     server.reply(201, CREATED);
     expect(await new Client({ url: server.url, feed: "inbox" }).post("# Café\r\nx")).toEqual(CREATED);
     const req = server.requests[0];
     expect([req.method, req.path]).toEqual(["POST", "/api/v1/feeds/inbox/notes"]);
-    expect(JSON.parse(req.body.toString())).toEqual({ markdown: "# Café\r\nx" });
+    expect(req.body.toString()).toBe("# Café\r\nx");
+    expect(req.headers["content-type"]).toBe("text/markdown");
     expect(req.headers.authorization).toBeUndefined();
   });
-
+  test("bytes and Blobs are a file of the given type; without a type it is a ConfigError", async () => {
+    server.reply(201, CREATED);
+    const c = new Client({ url: server.url, feed: "inbox" });
+    const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0, 255]);
+    await c.post(png, { type: "image/png" });
+    await c.post(new Blob([png], { type: "image/png" }));
+    for (const r of server.requests) {
+      expect(r.headers["content-type"]).toBe("image/png");
+      expect([...r.body]).toEqual([...png]);
+    }
+    await expect(c.post(png)).rejects.toBeInstanceOf(ConfigError);
+    await expect(c.post(new Blob([png]))).rejects.toBeInstanceOf(ConfigError);
+  });
   test("a feed without a read link: read_url is null", async () => {
     server.reply(201, { ...CREATED, read_url: null });
     expect((await new Client({ url: server.url, feed: "inbox" }).post("# Hi")).read_url).toBeNull();
@@ -58,24 +78,27 @@ describe("post", () => {
     expect(server.requests[0].path).toBe("/api/v1/feeds/other/notes");
     expect(server.requests[0].headers.authorization).toBe("Bearer pw");
   });
-  test("a title goes in the JSON body, left out sends no key", async () => {
+  test("title, tags, alt, name and read id go as headers, and nothing is sent for what is left out", async () => {
+    server.reply(201, CREATED);
     const c = new Client({ url: server.url, feed: "inbox" });
-    await c.post("x", { title: "T" });
-    await c.post("x");
-    expect(JSON.parse(server.requests[0].body.toString())).toEqual({ markdown: "x", title: "T" });
-    expect(JSON.parse(server.requests[1].body.toString())).toEqual({ markdown: "x" });
-  });
-  test("tags go in the JSON body, none sends no key; notes({ tag }) goes as ?tag=", async () => {
-    const c = new Client({ url: server.url, feed: "inbox" });
-    await c.post("x", { tags: ["ci", "deploy"] });
+    await c.post("x", { title: "T", tags: ["ci", "deploy"], readId: "my-feed" });
     await c.post("x", { tags: [] });
-    expect(JSON.parse(server.requests[0].body.toString())).toEqual({ markdown: "x", tags: ["ci", "deploy"] });
-    expect(JSON.parse(server.requests[1].body.toString())).toEqual({ markdown: "x" });
+    expect(server.requests[0].headers).toMatchObject({ "x-note-title": "T", "x-note-tags": "ci,deploy", "x-read-id": "my-feed" });
+    for (const h of ["x-note-title", "x-note-tags", "x-note-alt", "x-note-name", "x-read-id"]) expect(server.requests[1].headers[h]).toBeUndefined();
+  });
+  test("a title, alt text or name that is not ASCII goes as its UTF-8 bytes, which fetch can send", async () => {
+    server.reply(201, CREATED);
+    await new Client({ url: server.url, feed: "inbox" }).post(new Blob([new Uint8Array([1])], { type: "image/png" }), { title: "Café 日本語", alt: "Größe", name: "Größe.png" });
+    const h = server.requests[0].headers;
+    const utf8 = (v: string | string[] | undefined) => Buffer.from(String(v), "latin1").toString("utf8"); // how a server reads the header bytes
+    expect([utf8(h["x-note-title"]), utf8(h["x-note-alt"]), utf8(h["x-note-name"])]).toEqual(["Café 日本語", "Größe", "Größe.png"]);
+  });
+  test("notes({ tag }) goes as ?tag=", async () => {
+    const c = new Client({ url: server.url, feed: "inbox" });
     server.reply(200, { notes: [], next: null });
     for await (const _ of c.notes({ tag: "ci" })) void _;
-    expect(new URL(server.requests[2].path, "http://x").searchParams.get("tag")).toBe("ci");
+    expect(new URL(server.requests[0].path, "http://x").searchParams.get("tag")).toBe("ci");
   });
-
   test("feedPassword goes as X-Feed-Password on post, notes and note; a per-call one wins; none sends no header", async () => {
     server.route((r) => (r.path.includes("/notes/") ? [200, note(10)] : r.method === "GET" ? [200, { notes: [], next: null }] : [201, CREATED]));
     const c = new Client({ url: server.url, feed: "inbox", feedPassword: "fp" });
@@ -99,19 +122,30 @@ describe("post", () => {
 
 describe("edit and delete", () => {
   const ID = "20260930T100000Z-n10";
-  test("edit PUTs {markdown} to the note and returns it; feed and feedPassword work as for post", async () => {
+  test("edit PUTs the new content, as the note's type, and returns the note; feed and feedPassword work as for post", async () => {
     server.reply(200, note(10));
     const c = new Client({ url: server.url, feed: "inbox", password: "pw", feedPassword: "fp" });
     expect(await c.edit(ID, "# New\r\nx")).toEqual(note(10));
     const req = server.requests[0];
     expect([req.method, req.path]).toEqual(["PUT", `/api/v1/feeds/inbox/notes/${ID}`]);
-    expect(JSON.parse(req.body.toString())).toEqual({ markdown: "# New\r\nx" });
+    expect(req.body.toString()).toBe("# New\r\nx");
+    expect(req.headers["content-type"]).toBe("text/markdown");
     expect(req.headers.authorization).toBe("Bearer pw");
     expect(req.headers["x-feed-password"]).toBe("fp");
     server.reply(200, note(10));
-    await c.edit(ID, "x", { feed: "other", feedPassword: "o" });
+    await c.edit(ID, new Uint8Array([1, 2]), { type: "image/png", feed: "other", feedPassword: "o" });
     expect(server.requests[1].path).toBe(`/api/v1/feeds/other/notes/${ID}`);
+    expect(server.requests[1].headers["content-type"]).toBe("image/png");
     expect(server.requests[1].headers["x-feed-password"]).toBe("o");
+  });
+  test("update PATCHes the title and alt text as JSON", async () => {
+    server.reply(200, note(10));
+    const c = new Client({ url: server.url, feed: "inbox", password: "pw" });
+    expect(await c.update(ID, { title: "T", alt: "" })).toEqual(note(10));
+    const req = server.requests[0];
+    expect([req.method, req.path]).toEqual(["PATCH", `/api/v1/feeds/inbox/notes/${ID}`]);
+    expect(JSON.parse(req.body.toString())).toEqual({ title: "T", alt: "" });
+    expect(req.headers.authorization).toBe("Bearer pw");
   });
   test("delete sends DELETE and resolves to nothing on 204", async () => {
     server.reply(204, "", "text/plain");
@@ -180,47 +214,23 @@ describe("feed settings and deletion", () => {
   });
 });
 
-describe("images", () => {
-  const UPLOADED = { id: "20261003T101010Z-u", url: "https://n.example/inbox/20261003T101010Z-u", feed_url: "https://n.example/inbox", read_url: null, file: "20261003T101010Z-u.png", file_url: "https://n.example/r/X/20261003T101010Z-u.png" };
+describe("pictures", () => {
+  const UPLOADED = { ...CREATED, id: "20261003T101010Z-u", file: "20261003T101010Z-u.png", file_url: "https://n.example/r/X/20261003T101010Z-u.png" };
   const bytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0, 255]);
-  test("uploadImage POSTs the raw bytes as application/octet-stream and returns the created note with its file", async () => {
+  test("a picture is posted like any note, with its type; the answer names its file", async () => {
     server.reply(201, UPLOADED);
     const c = new Client({ url: server.url, feed: "inbox", password: "pw", feedPassword: "fp" });
-    expect(await c.uploadImage(bytes)).toEqual(UPLOADED);
+    expect((await c.post(bytes, { type: "image/png", alt: "a cat" })).file).toBe(UPLOADED.file);
     const req = server.requests[0];
-    expect([req.method, req.path]).toEqual(["POST", "/api/v1/feeds/inbox/images"]);
-    expect(req.headers["content-type"]).toBe("application/octet-stream");
+    expect([req.method, req.path]).toEqual(["POST", "/api/v1/feeds/inbox/notes"]);
+    expect(req.headers["content-type"]).toBe("image/png");
+    expect(req.headers["x-note-alt"]).toBe("a cat");
     expect([...req.body]).toEqual([...bytes]);
     expect(req.headers.authorization).toBe("Bearer pw");
     expect(req.headers["x-feed-password"]).toBe("fp");
   });
-  test("uploadImage sends tags, title, alt and name as headers, and nothing else when they are left out", async () => {
-    server.reply(201, UPLOADED);
-    const c = new Client({ url: server.url, feed: "inbox" });
-    await c.uploadImage(bytes, { tags: ["a", "b"], title: "Cat", alt: "a cat", name: "cat.png" });
-    await c.uploadImage(bytes);
-    expect(server.requests[0].headers).toMatchObject({ "x-note-tags": "a,b", "x-note-title": "Cat", "x-note-alt": "a cat", "x-note-name": "cat.png" });
-    for (const h of ["x-note-tags", "x-note-title", "x-note-alt", "x-note-name"]) expect(server.requests[1].headers[h]).toBeUndefined();
-  });
-  test("a title, alt text or name that is not ASCII goes as its UTF-8 bytes, which fetch can send", async () => {
-    server.reply(201, UPLOADED);
-    await new Client({ url: server.url, feed: "inbox" }).uploadImage(bytes, { title: "Café 日本語", alt: "Größe", name: "Größe.png" });
-    const h = server.requests[0].headers;
-    const utf8 = (v: string | string[] | undefined) => Buffer.from(String(v), "latin1").toString("utf8"); // how a server reads the header bytes
-    expect([utf8(h["x-note-title"]), utf8(h["x-note-alt"]), utf8(h["x-note-name"])]).toEqual(["Café 日本語", "Größe", "Größe.png"]);
-  });
-  test("a Blob works, and a per-call feed and feedPassword win", async () => {
-    server.reply(201, UPLOADED);
-    await new Client({ url: server.url, feed: "inbox", feedPassword: "fp" }).uploadImage(new Blob([bytes], { type: "image/png" }), { feed: "other", feedPassword: "o" });
-    const req = server.requests[0];
-    expect(req.path).toBe("/api/v1/feeds/other/images");
-    expect(req.headers["content-type"]).toBe("application/octet-stream");
-    expect([...req.body]).toEqual([...bytes]);
-    expect(req.headers["x-feed-password"]).toBe("o");
-  });
   test("no feed is a ConfigError; 415, 413, 507 and 404 map to the usual classes", async () => {
-    await expect(new Client({ url: server.url }).uploadImage(bytes)).rejects.toBeInstanceOf(ConfigError);
-    const c = new Client({ url: server.url, feed: "inbox" });
+    await expect(new Client({ url: server.url }).post(bytes, { type: "image/png" })).rejects.toBeInstanceOf(ConfigError);
     for (const [status, code, cls] of [
       [415, "unsupported_type", InvalidRequestError],
       [413, "too_large", NoteTooLargeError],
@@ -228,7 +238,7 @@ describe("images", () => {
       [404, "not_found", NotFoundError],
     ] as const) {
       server.reply(status, { error: code, code });
-      await expect(c.uploadImage(bytes)).rejects.toBeInstanceOf(cls);
+      await expect(new Client({ url: server.url, feed: "inbox" }).post(bytes, { type: "image/png" })).rejects.toBeInstanceOf(cls);
     }
   });
   test("updateFeed sends image when given (an empty string clears it) and leaves it out otherwise", async () => {

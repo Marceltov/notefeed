@@ -3,6 +3,7 @@
 import { Send } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import { postNote } from "@/app/_lib/api";
+import { encodeHeaderValue } from "@/shared/headers";
 import { MarkdownInput } from "@/components/MarkdownInput";
 import { onlyReferences } from "@/components/pendingFiles";
 import { usePendingImages } from "@/components/usePendingImages";
@@ -38,11 +39,26 @@ export function Compose({ feed, action, error: initialError, isNew, sender }: { 
     const posted = images.lastId();
     if (posted && picturesOnly) return router.push(`${action}?posted=${posted}`); // only pictures: no note of text
     // The page remounts this box empty.
-    run(undefined, () => postNote({ baseUrl: window.location.origin, path: { feed }, body: { markdown: images.apply(text), ...(title.trim() && { title: title.trim() }), ...(password && { password }), ...(tagList.length && { tags: tagList }) } }), ({ data }) => router.push(`${action}?posted=${data?.id}`));
+    run(
+      undefined,
+      () =>
+        postNote({
+          baseUrl: window.location.origin,
+          path: { feed },
+          body: new Blob([images.apply(text)], { type: "text/markdown" }),
+          headers: {
+            "Content-Type": "text/markdown",
+            ...(title.trim() && { "X-Note-Title": encodeHeaderValue(title.trim()) }),
+            ...(password && { "X-Feed-Password": password }),
+            ...(tagList.length && { "X-Note-Tags": tagList.join(",") }),
+          },
+        }),
+      ({ data }) => router.push(`${action}?posted=${data?.id}`),
+    );
   }
 
   return (
-    <form method="post" action={action} encType="multipart/form-data" onSubmit={submit} className="mb-12">
+    <form onSubmit={submit} className="mb-12">
       <MarkdownInput
         id="markdown"
         name="markdown"

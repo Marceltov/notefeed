@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, test } from "vitest";
 import { resetFeedsForTests, readIdOf } from "../feeds";
 import { resetRateLimitsForTests } from "../limits";
 import { getNote } from "../notes";
-import { editNote } from "../posting";
+import { editContent } from "../posting";
 import { checkTags, tagsFromHeader } from "../tags";
 import { dispatch } from "./api";
 import { rssRoute } from "./rss";
@@ -23,8 +23,8 @@ beforeEach(async () => {
 
 const send = (path: string[], init: RequestInit = {}, query = "") =>
   dispatch(new Request(`${BASE}/${path.join("/")}${query}`, { ...init, headers: { host: "localhost:3000", ...init.headers } }), path);
-const post = (body: BodyInit, headers: Record<string, string> = {}) => send(["feeds", "t", "notes"], { method: "POST", body, headers });
-const json = (tags: unknown, markdown = "# Hi") => post(JSON.stringify({ markdown, tags }), { "content-type": "application/json" });
+const post = (body: BodyInit, headers: Record<string, string> = {}) => send(["feeds", "t", "notes"], { method: "POST", body, headers: { "content-type": "text/markdown", ...headers } });
+const json = (tags: string[], markdown = "# Hi") => post(markdown, { "x-note-tags": tags.join(",") });
 const list = async (query = "") => (await (await send(["feeds", "t", "notes"], {}, query)).json()).notes as { id: string; tags: string[] }[];
 
 describe("checkTags", () => {
@@ -40,7 +40,7 @@ describe("checkTags", () => {
 });
 
 describe("posting tags", () => {
-  test("JSON body, stored in the sidecar and read back", async () => {
+  test("the X-Note-Tags header, stored in the sidecar and read back", async () => {
     const res = await json(["CI", "env:prod"]);
     expect(res.status).toBe(201);
     const { id } = await res.json();
@@ -50,21 +50,6 @@ describe("posting tags", () => {
   });
   test("X-Note-Tags header on a raw body", async () => {
     await post("# Raw", { "x-note-tags": "ci,Deploy" });
-    expect((await list())[0].tags).toEqual(["ci", "deploy"]);
-  });
-  test("a repeated multipart field", async () => {
-    const f = new FormData();
-    f.append("markdown", "# Form");
-    f.append("tags", "a");
-    f.append("tags", "b");
-    await post(f);
-    expect((await list())[0].tags).toEqual(["a", "b"]);
-  });
-  test("a multipart tags value may be comma-separated, as the compose box sends it", async () => {
-    const f = new FormData();
-    f.append("markdown", "# Form");
-    f.append("tags", "ci, Deploy,");
-    await post(f);
     expect((await list())[0].tags).toEqual(["ci", "deploy"]);
   });
   test("no tags is an empty list and no sidecar", async () => {
@@ -80,13 +65,13 @@ describe("posting tags", () => {
     expect(await list()).toEqual([]);
   });
   test("an invalid tag does not leave a protected feed behind", async () => {
-    const res = await post(JSON.stringify({ markdown: "# x", tags: ["no good"], password: "secret1" }), { "content-type": "application/json" });
+    const res = await post("# x", { "x-note-tags": "no good", "x-feed-password": "secret1" });
     expect(res.status).toBe(400);
     expect((await send(["feeds", "t"], {})).status).not.toBe(200);
   });
   test("an edit keeps the tags", async () => {
     const { id } = await (await json(["keep"])).json();
-    await editNote("t", id, "1.2.3.4", async () => ({ markdown: "# Changed" }), {});
+    await editContent("t", id, "1.2.3.4", async () => ({ body: new TextEncoder().encode("# Changed"), mediaType: "text/markdown" }), {});
     expect((await getNote("t", id))!.tags).toEqual(["keep"]);
   });
 });

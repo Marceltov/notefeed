@@ -113,24 +113,6 @@ test("the read link shows the notes but not the feed name, and serves RSS", asyn
   expect(await page.content()).not.toContain(name);
 });
 
-test.describe("without JavaScript", () => {
-  test.use({ javaScriptEnabled: false });
-
-  test("the compose box is a plain form: posting and errors work", async ({ page }) => {
-    const name = feedName();
-    await page.goto(`/${name}`);
-    await page.getByLabel("Note in markdown").fill("# Posted without JS");
-    await page.getByRole("button", { name: "Post note" }).click();
-    await expect(page).toHaveURL(new RegExp(`/${name}\\?posted=\\d{8}T\\d{6}Z-[0-9a-f-]{36}$`));
-    await expect(page.getByRole("listitem").first()).toContainText("Posted without JS");
-
-    await page.getByLabel("Note in markdown").fill("   ");
-    await page.getByRole("button", { name: "Post note" }).click();
-    await expect(page).toHaveURL(`/${name}?error=empty_note`);
-    await expect(page.locator("#compose-error")).toHaveText("The note is empty.");
-  });
-});
-
 test("the REST API: post with the short form, read back as JSON, by name and by read id", async ({ request }) => {
   const name = feedName();
   const created = await request.post(`/${name}`, { data: "# Via the API", headers: { "content-type": "text/markdown" } });
@@ -142,7 +124,7 @@ test("the REST API: post with the short form, read back as JSON, by name and by 
 
   const rid = new URL(read_url).pathname.split("/")[2];
   const byReadId = await request.get(`/api/v1/read/${rid}/notes/${id}`);
-  expect((await byReadId.json()).markdown).toBe("# Via the API");
+  expect((await byReadId.json()).content).toBe("# Via the API");
   expect(await byReadId.text()).not.toContain(name);
 
   const spec = await (await request.get("/api/v1/openapi.json")).json();
@@ -184,4 +166,17 @@ test("MCP: a note posted over /mcp appears on the feed page; OAuth is off", asyn
     expect((await request.get(path)).status(), path).toBe(404);
   for (const path of ["/oauth/register", "/.well-known/oauth-authorization-server", "/.well-known/oauth-protected-resource/mcp"])
     expect((await request.fetch(path, { method: "OPTIONS" })).status(), `OPTIONS ${path}`).toBe(404);
+});
+
+test("the curl line on an empty feed declares the note's type, and posting with it works", async ({ page, request, baseURL }) => {
+  const name = feedName();
+  await page.goto(`/${name}`);
+  const curl = await page.locator("pre").first().innerText();
+  expect(curl).toContain('-H "Content-Type: text/markdown"');
+  const posted = await request.post(`${baseURL}/${name}`, { data: "# From the snippet", headers: { "content-type": "text/markdown" } });
+  expect(posted.status()).toBe(201);
+  // Without the header, curl's default type is refused, and the answer says what to send.
+  const refused = await request.post(`${baseURL}/${name}`, { data: "# x", headers: { "content-type": "application/x-www-form-urlencoded" } });
+  expect(refused.status()).toBe(415);
+  expect((await refused.json()).error).toContain("text/markdown");
 });

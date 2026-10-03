@@ -59,20 +59,6 @@ test("Ctrl+Enter saves an edit", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "Quick edited" })).toBeVisible();
 });
 
-test("without JavaScript, a large non-ASCII note saves unchanged", async ({ browser, baseURL }) => {
-  const page = await (await browser.newContext({ baseURL, javaScriptEnabled: false })).newPage();
-  const name = feedName();
-  await postAndOpen(page, name, "# Plain");
-  await page.getByText("Edit", { exact: true }).click();
-  await page.getByLabel("Note in markdown").fill(`# Plain\n\n${"あ".repeat(16_000)}`); // 48 KB of UTF-8, 144 KB urlencoded
-  await page.getByRole("button", { name: "Save" }).click();
-  await expect(page).toHaveURL(/\?edited=1$/);
-  await page.getByText("Edit", { exact: true }).click();
-  await page.getByRole("button", { name: "Save" }).click();
-  await expect(page).toHaveURL(/\?edited=1$/);
-  await expect(page.getByRole("status")).toHaveText("Saved.");
-});
-
 test("the read-only view has no edit or delete", async ({ page }) => {
   const name = feedName();
   await postAndOpen(page, name, "# Read me");
@@ -84,24 +70,6 @@ test("the read-only view has no edit or delete", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "Read me" })).toBeVisible();
   await expect(page.getByText("Edit", { exact: true })).toHaveCount(0);
   await expect(page.getByText("Delete", { exact: true })).toHaveCount(0);
-});
-
-test("without JavaScript, edit and delete still work", async ({ browser, baseURL }) => {
-  const page = await (await browser.newContext({ baseURL, javaScriptEnabled: false })).newPage();
-  const name = feedName();
-  await postAndOpen(page, name, "# Plain note");
-  await page.getByText("Edit", { exact: true }).click(); // a native disclosure, no script needed
-  await page.getByLabel("Note in markdown").fill("# Plain edited");
-  await page.getByRole("button", { name: "Save" }).click();
-  await expect(page).toHaveURL(/\?edited=1$/);
-  await expect(page.getByRole("status")).toHaveText("Saved.");
-  await expect(page.getByRole("heading", { name: "Plain edited" })).toBeVisible();
-
-  await page.getByText("Delete", { exact: true }).click();
-  await page.getByRole("button", { name: "Delete note" }).click();
-  await expect(page).toHaveURL(new RegExp(`/${name}\\?deleted=`));
-  await expect(page.getByRole("status")).toHaveText("Note deleted.");
-  await expect(page.getByText("Plain edited")).toHaveCount(0);
 });
 
 test("tags typed in the compose box show as links that filter the feed", async ({ page }) => {
@@ -123,4 +91,27 @@ test("the browser refuses a tag with a space in it", async ({ page }) => {
   await page.getByLabel("Tags (optional, separated by commas)").fill("two words");
   await page.getByRole("button", { name: "Post note" }).click();
   await expect(page.getByRole("link", { name: "Nope" })).toHaveCount(0);
+});
+
+test("saving an edit sends only what changed: nothing, the title, or the text", async ({ page }) => {
+  const name = feedName();
+  await postAndOpen(page, name, "# Edited");
+  const writes: string[] = [];
+  page.on("request", (r) => /\/notes\/[^/]+$/.test(r.url()) && ["PUT", "PATCH"].includes(r.method()) && writes.push(r.method()));
+  await page.getByText("Edit", { exact: true }).click();
+  await page.getByRole("button", { name: "Save" }).click();
+  await expect(page.getByLabel("Note in markdown")).toBeHidden(); // the editor closed without a request
+  expect(writes).toEqual([]);
+
+  await page.getByText("Edit", { exact: true }).click();
+  await page.getByLabel("Title (optional, otherwise taken from the text)").fill("Only the title");
+  await page.getByRole("button", { name: "Save" }).click();
+  await expect(page.getByRole("status")).toHaveText("Saved.");
+  expect(writes).toEqual(["PATCH"]);
+
+  await page.getByText("Edit", { exact: true }).click();
+  await page.getByLabel("Note in markdown").fill("# Edited\nmore text");
+  await page.getByRole("button", { name: "Save" }).click();
+  await expect(page.getByText("more text")).toBeVisible();
+  expect(writes).toEqual(["PATCH", "PUT"]);
 });

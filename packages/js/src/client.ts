@@ -3,7 +3,7 @@
  * OpenAPI description (./generated, `npm run generate` in the repo). No runtime dependencies.
  */
 import { createClient, createConfig } from "./generated/client/index.js";
-import { deleteFeed, deleteNote, editNote, getFeed, getNote, getReadNote, listNotes, listReadNotes, postNote, updateFeed, uploadImage } from "./generated/sdk.gen.js";
+import { deleteFeed, deleteNote, editNote, getFeed, getNote, getReadNote, listNotes, listReadNotes, patchNote, postNote, updateFeed } from "./generated/sdk.gen.js";
 import type { Created, Error as ApiError, Feed, FeedSettings, Note, NoteList } from "./generated/types.gen.js";
 
 /** The stable error codes the API answers with. */
@@ -73,6 +73,14 @@ type Result<T> = { data?: T; error?: unknown; response?: Response };
 // latin1 characters, which is what the server reads back.
 const headerValue = (text: string): string => Array.from(new TextEncoder().encode(text), (b) => String.fromCharCode(b)).join("");
 
+// What a post sends: a string is markdown; bytes and Blobs need a media type (a Blob's own, if it has one).
+function asFile(content: string | Uint8Array | Blob, type?: string): { body: Blob; type: string } {
+  if (typeof content === "string") return { body: new Blob([content]), type: type ?? "text/markdown" };
+  const media = type ?? (content instanceof Blob ? content.type : "");
+  if (!media) throw new ConfigError("give the file's media type as `type`, e.g. image/png");
+  return { body: content instanceof Blob ? content : new Blob([content as BlobPart]), type: media };
+}
+
 export class Client {
   readonly url: string;
   readonly feed: string | null;
@@ -104,33 +112,47 @@ export class Client {
     });
   }
 
-  /** `feedPassword` overrides the client's, for a feed that has its own password. `tags` label the note (at most 10, each 1 to 32 characters of letters, digits, `-`, `_`, `.`, `:`; not verified). `readId` is the read id the feed gets when this post creates it (3 to 64 characters of `a-z`, `0-9`, `-`, `_`; random when left out; ignored for a feed that exists; a `taken` error when another feed has it). `title` is the note's title (at most 100 characters, one line); left out, it is taken from the text. */
-  async post(markdown: string, options: { feed?: string; feedPassword?: string; tags?: string[]; readId?: string; title?: string } = {}): Promise<Created> {
+  /**
+   * Post a note: a string is markdown, bytes or a Blob are a file whose media type is `type` (a Blob's own `type` if left out): `text/markdown`,
+   * `image/png`, `image/jpeg`, `image/gif` or `image/webp`. The server accepts nothing else and checks that the body is what the type says.
+   * The feed is created by its first note. `Created.file` is the note's file name: write `![](file)` in a markdown note to show a picture, or
+   * pass it as `image` to updateFeed; `file_url` is for a link outside notefeed.
+   *
+   * `feedPassword` overrides the client's, for a feed that has its own password. `tags` label the note (at most 10, each 1 to 32 characters of
+   * letters, digits, `-`, `_`, `.`, `:`; not verified). `title` is its title (at most 100 characters, one line); left out, it is taken from the
+   * text. `alt` is a picture's alternative text, `name` the file's original name. `readId` is the read id the feed gets when this post creates it
+   * (3 to 64 characters of `a-z`, `0-9`, `-`, `_`; random when left out; ignored for a feed that exists; a `taken` error when another feed has it).
+   */
+  async post(
+    content: string | Uint8Array | Blob,
+    options: { feed?: string; feedPassword?: string; type?: string; title?: string; tags?: string[]; alt?: string; name?: string; readId?: string } = {},
+  ): Promise<Created> {
     const feed = this.feedFor(options.feed);
-    const body = { markdown, ...(options.title && { title: options.title }), ...(options.tags?.length && { tags: options.tags }), ...(options.readId && { read_id: options.readId }) };
-    return this.call(postNote({ client: this.api, path: { feed }, body, ...this.opts(options.feedPassword) }));
-  }
-
-  /** Post a PNG, JPEG, GIF or WebP image as a note of its own (the feed is created by its first note). The server decides the format by the bytes, so no content type is needed. The answer has the note's `file`: write `![](file)` in a markdown note to show it (relative to the feed, so it follows a changed read id), or pass it as `image` to updateFeed; `file_url` is for a link outside notefeed. `title` and `alt` describe it. Same options as post(). */
-  async uploadImage(data: Uint8Array | Blob, options: { feed?: string; feedPassword?: string; tags?: string[]; title?: string; alt?: string; name?: string } = {}): Promise<Created> {
-    const feed = this.feedFor(options.feed);
-    const body = data instanceof Blob ? data : new Blob([data as BlobPart]);
+    const { body, type } = asFile(content, options.type);
     const headers = {
       ...this.opts(options.feedPassword).headers,
-      "Content-Type": "application/octet-stream",
-      ...(options.tags?.length && { "X-Note-Tags": options.tags.join(",") }),
+      "Content-Type": type,
       ...(options.title && { "X-Note-Title": headerValue(options.title) }),
+      ...(options.tags?.length && { "X-Note-Tags": options.tags.join(",") }),
       ...(options.alt && { "X-Note-Alt": headerValue(options.alt) }),
       ...(options.name && { "X-Note-Name": headerValue(options.name) }),
+      ...(options.readId && { "X-Read-Id": options.readId }),
     };
-    return this.call(uploadImage({ client: this.api, path: { feed }, body, signal: AbortSignal.timeout(this.timeoutMs), headers }));
+    return this.call(postNote({ client: this.api, path: { feed }, body, headers, signal: AbortSignal.timeout(this.timeoutMs) }));
   }
 
-  /** Replace a note's markdown; its id and URLs stay. `title` sets its title too ("" removes it: the title follows the text again). Same options as post(). */
-  async edit(id: string, markdown: string, options: { feed?: string; feedPassword?: string; title?: string } = {}): Promise<Note> {
+  /** Replace a note's content (a string is markdown; bytes and Blobs need the note's own `type`, as for post()). Its id, URLs and metadata stay. Same options as post(). */
+  async edit(id: string, content: string | Uint8Array | Blob, options: { feed?: string; feedPassword?: string; type?: string } = {}): Promise<Note> {
     const feed = this.feedFor(options.feed);
-    const body = { markdown, ...(options.title !== undefined && { title: options.title }) };
-    return this.call(editNote({ client: this.api, path: { feed, id }, body, ...this.opts(options.feedPassword) }));
+    const { body, type } = asFile(content, options.type);
+    const headers = { ...this.opts(options.feedPassword).headers, "Content-Type": type };
+    return this.call(editNote({ client: this.api, path: { feed, id }, body, headers, signal: AbortSignal.timeout(this.timeoutMs) }));
+  }
+
+  /** Set a note's title and/or alt text (alt for pictures); `""` removes one, so a markdown note's title follows its text again. Same options as post(). */
+  async update(id: string, meta: { title?: string; alt?: string }, options: { feed?: string; feedPassword?: string } = {}): Promise<Note> {
+    const feed = this.feedFor(options.feed);
+    return this.call(patchNote({ client: this.api, path: { feed, id }, body: meta, ...this.opts(options.feedPassword) }));
   }
 
   /** Remove a note for good. The feed stays, even with no notes left. Same options as post(). */

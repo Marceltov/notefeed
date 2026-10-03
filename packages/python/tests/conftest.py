@@ -24,7 +24,7 @@ class FakeServer:
                 elif fake.replies:
                     status, payload, ctype, headers = fake.replies.pop(0)
                 else:
-                    status, payload, ctype, headers = 201, {"id": "20260930T100000Z-i", "url": "http://n/u", "feed_url": "http://n/f", "read_url": "http://n/r"}, "application/json", {}
+                    status, payload, ctype, headers = 201, {"id": "20260930T100000Z-i", "url": "http://n/u", "feed_url": "http://n/f", "read_url": "http://n/r", "file": "20260930T100000Z-i.md", "file_url": "http://n/r/20260930T100000Z-i.md"}, "application/json", {}
                 data = b"" if status == 204 else payload.encode() if isinstance(payload, str) else json.dumps(payload).encode()
                 self.send_response(status)
                 self.send_header("Content-Type", ctype)
@@ -42,6 +42,8 @@ class FakeServer:
 
             def do_PUT(self):
                 self._handle("PUT")
+            def do_PATCH(self):
+                self._handle("PATCH")
 
             def do_DELETE(self):
                 self._handle("DELETE")

@@ -8,14 +8,15 @@ from ... import errors
 from ...client import AuthenticatedClient, Client
 from ...models.error import Error
 from ...models.note import Note
-from ...types import UNSET, File, Response, Unset
+from ...models.note_meta import NoteMeta
+from ...types import UNSET, Response, Unset
 
 
 def _get_kwargs(
     feed: str,
     id: str,
     *,
-    body: File,
+    body: NoteMeta,
     x_feed_password: str | Unset = UNSET,
 ) -> dict[str, Any]:
     headers: dict[str, Any] = {}
@@ -23,15 +24,16 @@ def _get_kwargs(
         headers["X-Feed-Password"] = x_feed_password
 
     _kwargs: dict[str, Any] = {
-        "method": "put",
+        "method": "patch",
         "url": "/api/v1/feeds/{feed}/notes/{id}".format(
             feed=quote(str(feed), safe=""),
             id=quote(str(id), safe=""),
         ),
     }
 
-    _kwargs["content"] = body.payload
-    headers["Content-Type"] = "application/octet-stream"
+    _kwargs["json"] = body.to_dict()
+
+    headers["Content-Type"] = "application/json"
 
     _kwargs["headers"] = headers
     return _kwargs
@@ -59,11 +61,6 @@ def _parse_response(
         response_404 = Error.from_dict(response.json())
 
         return response_404
-
-    if response.status_code == 413:
-        response_413 = Error.from_dict(response.json())
-
-        return response_413
 
     if response.status_code == 415:
         response_415 = Error.from_dict(response.json())
@@ -97,22 +94,20 @@ def sync_detailed(
     id: str,
     *,
     client: AuthenticatedClient,
-    body: File,
+    body: NoteMeta,
     x_feed_password: str | Unset = UNSET,
 ) -> Response[Error | Note]:
-    """Replace a note's content
+    """Change a note's title or alt text
 
-     The body is the new file, with the same rules as posting: a `Content-Type` that is one of the
-    accepted types, a body that is what it declares. A note keeps its type, so the type must be the
-    note's own (`415` otherwise). Id, creation time and metadata stay: the title of a markdown note
-    without one set follows the new text. Change the title or alt text with `PATCH`. Needs the feed's
-    password if it has one, and counts against the post rate limit. Read links can't edit.
+     Sets the note's title and/or alt text (alt only for images). An empty string removes one: a markdown
+    note's title follows its text again. At least one is needed. Needs the feed's password if it has
+    one, and counts against the post rate limit. Read links can't change notes.
 
     Args:
         feed (str):
         id (str):
         x_feed_password (str | Unset):
-        body (File): The note, a file: its bytes, of the type `Content-Type` declares
+        body (NoteMeta):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -141,22 +136,20 @@ def sync(
     id: str,
     *,
     client: AuthenticatedClient,
-    body: File,
+    body: NoteMeta,
     x_feed_password: str | Unset = UNSET,
 ) -> Error | Note | None:
-    """Replace a note's content
+    """Change a note's title or alt text
 
-     The body is the new file, with the same rules as posting: a `Content-Type` that is one of the
-    accepted types, a body that is what it declares. A note keeps its type, so the type must be the
-    note's own (`415` otherwise). Id, creation time and metadata stay: the title of a markdown note
-    without one set follows the new text. Change the title or alt text with `PATCH`. Needs the feed's
-    password if it has one, and counts against the post rate limit. Read links can't edit.
+     Sets the note's title and/or alt text (alt only for images). An empty string removes one: a markdown
+    note's title follows its text again. At least one is needed. Needs the feed's password if it has
+    one, and counts against the post rate limit. Read links can't change notes.
 
     Args:
         feed (str):
         id (str):
         x_feed_password (str | Unset):
-        body (File): The note, a file: its bytes, of the type `Content-Type` declares
+        body (NoteMeta):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -180,22 +173,20 @@ async def asyncio_detailed(
     id: str,
     *,
     client: AuthenticatedClient,
-    body: File,
+    body: NoteMeta,
     x_feed_password: str | Unset = UNSET,
 ) -> Response[Error | Note]:
-    """Replace a note's content
+    """Change a note's title or alt text
 
-     The body is the new file, with the same rules as posting: a `Content-Type` that is one of the
-    accepted types, a body that is what it declares. A note keeps its type, so the type must be the
-    note's own (`415` otherwise). Id, creation time and metadata stay: the title of a markdown note
-    without one set follows the new text. Change the title or alt text with `PATCH`. Needs the feed's
-    password if it has one, and counts against the post rate limit. Read links can't edit.
+     Sets the note's title and/or alt text (alt only for images). An empty string removes one: a markdown
+    note's title follows its text again. At least one is needed. Needs the feed's password if it has
+    one, and counts against the post rate limit. Read links can't change notes.
 
     Args:
         feed (str):
         id (str):
         x_feed_password (str | Unset):
-        body (File): The note, a file: its bytes, of the type `Content-Type` declares
+        body (NoteMeta):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -222,22 +213,20 @@ async def asyncio(
     id: str,
     *,
     client: AuthenticatedClient,
-    body: File,
+    body: NoteMeta,
     x_feed_password: str | Unset = UNSET,
 ) -> Error | Note | None:
-    """Replace a note's content
+    """Change a note's title or alt text
 
-     The body is the new file, with the same rules as posting: a `Content-Type` that is one of the
-    accepted types, a body that is what it declares. A note keeps its type, so the type must be the
-    note's own (`415` otherwise). Id, creation time and metadata stay: the title of a markdown note
-    without one set follows the new text. Change the title or alt text with `PATCH`. Needs the feed's
-    password if it has one, and counts against the post rate limit. Read links can't edit.
+     Sets the note's title and/or alt text (alt only for images). An empty string removes one: a markdown
+    note's title follows its text again. At least one is needed. Needs the feed's password if it has
+    one, and counts against the post rate limit. Read links can't change notes.
 
     Args:
         feed (str):
         id (str):
         x_feed_password (str | Unset):
-        body (File): The note, a file: its bytes, of the type `Content-Type` declares
+        body (NoteMeta):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.

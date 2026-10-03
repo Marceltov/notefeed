@@ -3,17 +3,19 @@ import { McpServer, createMcpHandler, type AuthInfo } from "@modelcontextprotoco
 import * as z from "zod";
 import { bearerOf, checkBearer, locked } from "./auth";
 import { config } from "./config";
-import { AuthError, ImageTooLargeError, NotefeedError, NotFoundError, TooManyAttemptsError } from "./errors";
+import { AuthError, ImageTooLargeError, InvalidBodyError, NotefeedError, NotFoundError, TooManyAttemptsError, UnsupportedTypeError } from "./errors";
 import { checkFeedAccess } from "./feedlock";
 import { assertFeed, FEED_RE, hasFeed } from "./feeds";
 import { feedJson } from "./http/api";
 import { sender } from "./http/request";
 import { clientIp } from "./limits";
+import { ACCEPTED_TYPES } from "./note/media";
+import { parseMediaType } from "./note/types";
 import { logger } from "./log";
-import { getNote, listNotes, type Note } from "./notes";
+import { checkLine, getNote, listNotes, MAX_NOTE_TITLE, type Note } from "./notes";
 import { verify } from "./oauth/tokens";
 import { TAG_RULE } from "./tags";
-import { deleteFeed, deleteNote, editNote, postNote, updateFeed } from "./posting";
+import { deleteFeed, deleteNote, editContent, editMeta, postNote, updateFeed } from "./posting";
 import { feedPath, imagePath, mcpResource, publicUrl, rssPath } from "./urls";
 
 const log = logger("mcp");
@@ -22,8 +24,8 @@ const SECRET_NOTE = "The feed name works like a password: anyone who knows it ca
 const feed = z.string().regex(FEED_RE);
 const password = z.string().optional();
 const PROTECTED = "A protected feed needs its password as password.";
-const NoteSummary = z.object({ id: z.string(), title: z.string(), created_at: z.string(), url: z.string(), sender: z.string().optional(), tags: z.array(z.string()) });
-const NoteFull = NoteSummary.extend({ markdown: z.string() });
+const NoteSummary = z.object({ id: z.string(), type: z.string(), title: z.string(), created_at: z.string(), url: z.string(), sender: z.string().optional(), tags: z.array(z.string()) });
+const NoteFull = NoteSummary.extend({ content: z.string().optional() }); // the text of a text type; a picture has none
 
 // A tool result: the body as structured content and, for clients that only read text, as JSON text.
 const ok = <T extends object>(body: T) => ({ structuredContent: body, content: [{ type: "text" as const, text: JSON.stringify(body) }] });
@@ -44,7 +46,7 @@ function guard<A, R>(f: (args: A) => Promise<R>) {
 
 function server(h: Headers): McpServer {
   const base = publicUrl(h);
-  const summary = (feed: string, n: Note) => ({ id: n.id, title: n.title, created_at: n.createdAt.toISOString(), url: `${base}${feedPath(feed)}/${n.id}`, ...(n.sender !== undefined && { sender: n.sender }), tags: n.tags });
+  const summary = (feed: string, n: Note) => ({ id: n.id, type: n.type, title: n.title, created_at: n.createdAt.toISOString(), url: `${base}${feedPath(feed)}/${n.id}`, ...(n.sender !== undefined && { sender: n.sender }), tags: n.tags });
   // A reserved name must not reach the filesystem lookup, so it is checked first.
   const checkAccess = async (feed: string, password?: string) => {
     assertFeed(feed);
@@ -60,7 +62,7 @@ function server(h: Headers): McpServer {
       outputSchema: z.object({ id: z.string(), url: z.string(), feed_url: z.string(), read_url: z.string().nullable() }),
     },
     guard(async ({ feed, markdown, title, password, tags, read_id }) => {
-      const { note, readId } = await postNote(feed, clientIp(h), async () => ({ markdown, title, tags, readId: read_id }), { password }, sender(h));
+      const { note, readId } = await postNote(feed, clientIp(h), async () => ({ body: new TextEncoder().encode(markdown), mediaType: "text/markdown", title, tags, readId: read_id }), { password }, sender(h));
       const feedUrl = base + feedPath(feed);
       return ok({ id: note.id, url: `${feedUrl}/${note.id}`, feed_url: feedUrl, read_url: readId && base + rssPath(readId) });
     }),
@@ -69,7 +71,7 @@ function server(h: Headers): McpServer {
   s.registerTool(
     "list_notes",
     {
-      description: `List a feed's notes, newest first, without their markdown. Pass the returned next as before for the next page. ${PROTECTED} ${SECRET_NOTE}`,
+      description: `List a feed's notes, newest first, without their content. Pass the returned next as before for the next page. ${PROTECTED} ${SECRET_NOTE}`,
       inputSchema: z.object({ feed, limit: z.number().int().min(1).max(100).default(20), before: z.string().optional(), tag: z.string().optional().describe("Only notes carrying this tag"), password }),
       outputSchema: z.object({ notes: z.array(NoteSummary), next: z.string().nullable() }),
       annotations: { readOnlyHint: true },
@@ -85,7 +87,7 @@ function server(h: Headers): McpServer {
   s.registerTool(
     "get_note",
     {
-      description: `Get one note with its markdown. ${PROTECTED} ${SECRET_NOTE}`,
+      description: `Get one note with its content (the text of a text note; a picture has none, use its URL). ${PROTECTED} ${SECRET_NOTE}`,
       inputSchema: z.object({ feed, id: z.string(), password }),
       outputSchema: NoteFull,
       annotations: { readOnlyHint: true },
@@ -94,7 +96,7 @@ function server(h: Headers): McpServer {
       await checkAccess(feed, password);
       const note = await getNote(feed, id);
       if (!note) throw new NotFoundError("no such note");
-      return ok({ ...summary(feed, note), markdown: note.markdown });
+      return ok({ ...summary(feed, note), ...(note.content !== undefined && { content: note.content }) });
     }),
   );
 
@@ -107,8 +109,11 @@ function server(h: Headers): McpServer {
       annotations: { destructiveHint: true, idempotentHint: true },
     },
     guard(async ({ feed, id, markdown, title, password }) => {
-      const note = await editNote(feed, id, clientIp(h), async () => ({ markdown, title }), { password });
-      return ok({ ...summary(feed, note), markdown: note.markdown });
+      if (markdown === undefined && title === undefined) throw new InvalidBodyError("nothing to change: send markdown, title or both");
+      checkLine("title", title, MAX_NOTE_TITLE); // before the content is replaced: a bad title must not leave a half edit
+      let note = markdown === undefined ? undefined : await editContent(feed, id, clientIp(h), async () => ({ body: new TextEncoder().encode(markdown), mediaType: "text/markdown" }), { password });
+      if (title !== undefined) note = await editMeta(feed, id, clientIp(h), async () => ({ title }), { password });
+      return ok({ ...summary(feed, note!), ...(note!.content !== undefined && { content: note!.content }) });
     }),
   );
 
@@ -172,17 +177,27 @@ function server(h: Headers): McpServer {
   );
 
   s.registerTool(
-    "upload_image",
+    "post_file",
     {
-      description: `Post a PNG, JPEG, GIF or WebP image (not SVG) as a note of its own, as base64 in data, and get back its id, file name, public URL and the markdown ![](file) to put in a markdown note. The feed is created by its first note. The URL is public like the feed's read link. Stored as sent, EXIF included. ${PROTECTED} ${SECRET_NOTE}`,
-      inputSchema: z.object({ feed, data: z.string().describe("The image's bytes, base64"), password }),
-      outputSchema: z.object({ id: z.string(), file: z.string(), url: z.string(), markdown: z.string() }),
+      description: `Post a file as a note, as base64 in data, with its media type in type: ${ACCEPTED_TYPES}. Nothing is guessed: the data must be what type says (an image has its format's signature, markdown is UTF-8). The feed is created by its first note. Returns the note's id, its file name and its public URL (public like the feed's read link). Pictures are stored as sent, EXIF included. ${PROTECTED} ${SECRET_NOTE}`,
+      inputSchema: z.object({
+        feed,
+        type: z.string().describe("The file's media type"),
+        data: z.string().describe("The file's bytes, base64"),
+        title: z.string().optional().describe("The note's title (at most 100 characters, one line)"),
+        alt: z.string().optional().describe("Alternative text of a picture (at most 500 characters, one line)"),
+        name: z.string().optional().describe("The file's original name"),
+        password,
+      }),
+      outputSchema: z.object({ id: z.string(), file: z.string(), url: z.string() }),
     },
-    guard(async ({ feed, data, password }) => {
-      const image = Buffer.from(data, "base64");
-      if (image.length > config.maxImageBytes()) throw new ImageTooLargeError();
-      const { note, readId } = await postNote(feed, clientIp(h), async () => ({ image }), { password }, sender(h));
-      return ok({ id: note.id, file: note.file, url: readId ? base + imagePath(readId, note.file) : "", markdown: `![](${note.file})` });
+    guard(async ({ feed, type, data, title, alt, name, password }) => {
+      const parsed = parseMediaType(type);
+      if (!parsed) throw new UnsupportedTypeError();
+      const body = Buffer.from(data, "base64");
+      if (parsed.type.name === "image" && body.length > config.maxImageBytes()) throw new ImageTooLargeError();
+      const { note, readId } = await postNote(feed, clientIp(h), async () => ({ body, mediaType: parsed.mediaType, title, alt, name }), { password }, sender(h));
+      return ok({ id: note.id, file: note.file, url: readId ? base + imagePath(readId, note.file) : "" });
     }),
   );
   return s;

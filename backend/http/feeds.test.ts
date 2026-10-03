@@ -266,7 +266,7 @@ describe("a feed whose directory was removed by hand while notefeed runs", () =>
 
   test("settings, a note's edit and delete, and the feed's delete answer 404, never 500", async () => {
     expect((await put("hand", { title: "T", description: "" })).status).toBe(404);
-    expect((await call("PUT", `/feeds/hand/notes/${id}`, { body: JSON.stringify({ markdown: "# two" }), headers: json })).status).toBe(404);
+    expect((await call("PUT", `/feeds/hand/notes/${id}`, { body: "# two", headers: { "content-type": "text/markdown" } })).status).toBe(404);
     expect((await call("DELETE", `/feeds/hand/notes/${id}`)).status).toBe(404);
     expect((await call("PUT", "/feeds/hand/password", { body: JSON.stringify({ password: "new password" }), headers: { ...json, "x-feed-password": "x" } })).status).toBe(409); // "has no password"
     expect(await exists("hand")).toBe(false); // none of them made the directory again

@@ -1,6 +1,7 @@
-/** `notefeed post`, `edit`, `delete`, `notes` and `image`: post, change, remove and read notes, and upload images, from the command line. */
+/** `notefeed post`, `edit`, `update`, `delete` and `notes`: post, change, remove and read notes, markdown or any accepted file, from the command line. */
 import { readFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
+import { basename, extname } from "node:path";
 import { parseArgs } from "node:util";
 import { Client, ConfigError, NotefeedError } from "./client.js";
 
@@ -13,12 +14,15 @@ type Io = {
 class UsageError extends Error {}
 
 const USAGE = [
-  "usage: notefeed post <text | - | --file PATH> [--tag TAG]... [--url URL] [--feed FEED] [--password PASSWORD]",
-  "       notefeed edit <id> <text | - | --file PATH> [--url URL] [--feed FEED] [--password PASSWORD]",
+  "usage: notefeed post <text | - | --file PATH> [--type MEDIA_TYPE] [--title TITLE] [--tag TAG]... [--url URL] [--feed FEED] [--password PASSWORD]",
+  "       notefeed edit <id> <text | - | --file PATH> [--type MEDIA_TYPE] [--url URL] [--feed FEED] [--password PASSWORD]",
+  "       notefeed update <id> [--title TITLE] [--alt ALT] [--url URL] [--feed FEED] [--password PASSWORD]",
   "       notefeed delete <id> [--url URL] [--feed FEED] [--password PASSWORD]",
-  "       notefeed image <PATH> [--url URL] [--feed FEED] [--password PASSWORD]",
   "       notefeed notes [--limit N] [--tag TAG] [--json] [--url URL] [--feed FEED] [--password PASSWORD]",
 ].join("\n");
+
+// The media type of a file by its extension: the types the server accepts.
+const TYPES: Record<string, string> = { ".md": "text/markdown", ".markdown": "text/markdown", ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif", ".webp": "image/webp" };
 
 /** Returns the exit code: 0 ok, 1 server/network error, 2 usage/config error. */
 export async function main(argv: string[], io: Io = process): Promise<number> {
@@ -31,6 +35,9 @@ export async function main(argv: string[], io: Io = process): Promise<number> {
         feed: { type: "string" },
         password: { type: "string" },
         file: { type: "string" },
+        type: { type: "string" },
+        title: { type: "string" },
+        alt: { type: "string" },
         tag: { type: "string", multiple: true },
         limit: { type: "string" },
         json: { type: "boolean" },
@@ -49,28 +56,25 @@ export async function main(argv: string[], io: Io = process): Promise<number> {
     }
     const [command, text, ...rest] = positionals;
     if (command === "post" && !rest.length) {
-      const markdown = await read(text, values.file, io);
-      const note = await client(values).post(markdown, { tags: values.tag });
+      const input = await read(text, values.file, values.type, io);
+      const note = await client(values).post(input.content, { type: input.type, title: values.title, tags: values.tag, name: input.name });
       io.stdout.write(`${note.url}\n`);
       return 0;
     }
     if (command === "edit" && text !== undefined && rest.length <= 1) {
-      const note = await client(values).edit(text, await read(rest[0], values.file, io));
+      const input = await read(rest[0], values.file, values.type, io);
+      const note = await client(values).edit(text, input.content, { type: input.type });
+      io.stdout.write(`${note.url}\n`);
+      return 0;
+    }
+    if (command === "update" && text !== undefined && !rest.length) {
+      if (values.title === undefined && values.alt === undefined) throw new UsageError("give --title and/or --alt");
+      const note = await client(values).update(text, { title: values.title, alt: values.alt });
       io.stdout.write(`${note.url}\n`);
       return 0;
     }
     if (command === "delete" && text !== undefined && !rest.length) {
       await client(values).delete(text);
-      return 0;
-    }
-    if (command === "image" && text !== undefined && !rest.length) {
-      let bytes: Buffer;
-      try {
-        bytes = await readFile(text);
-      } catch (e) {
-        throw new UsageError(`cannot read ${text}: ${(e as NodeJS.ErrnoException).code ?? (e as Error).message}`);
-      }
-      io.stdout.write(`![](${(await client(values).uploadImage(bytes)).file})\n`);
       return 0;
     }
     if (command === "notes" && text === undefined) {
@@ -81,7 +85,7 @@ export async function main(argv: string[], io: Io = process): Promise<number> {
         // To the second, UTC: the same form as the Python CLI, so scripts read either the same way.
         const when = new Date(n.created_at).toISOString().replace(/\.\d+Z$/, "Z");
         // --json: exactly the documented fields, like the Python CLI, even if the server adds more.
-        const fields = { id: n.id, title: n.title, markdown: n.markdown, created_at: when, url: n.url };
+        const fields = { id: n.id, type: n.type, title: n.title, ...(n.content !== undefined && { content: n.content }), file: n.file, file_url: n.file_url, size: n.size, tags: n.tags, created_at: when, url: n.url };
         io.stdout.write(values.json ? `${JSON.stringify(fields)}\n` : `${when}  ${n.title || n.id}  ${n.url}\n`);
         if (--left === 0) break;
       }
@@ -110,22 +114,26 @@ function client(values: { url?: string; feed?: string; password?: string }): Cli
   });
 }
 
-async function read(text: string | undefined, file: string | undefined, io: Io): Promise<string> {
+// What a post or an edit sends: text on the command line or stdin is markdown; a file is sent as it is, as `--type` or its extension says.
+async function read(text: string | undefined, file: string | undefined, type: string | undefined, io: Io): Promise<{ content: string | Uint8Array; type?: string; name?: string }> {
   if (file) {
+    const media = type ?? TYPES[extname(file).toLowerCase()];
+    if (!media) throw new UsageError(`cannot tell the type of ${file}: pass --type (${Object.values(TYPES).filter((t, i, a) => a.indexOf(t) === i).join(", ")})`);
+    let bytes: Buffer;
     try {
-      return utf8(await readFile(file), file);
+      bytes = await readFile(file);
     } catch (e) {
-      if (e instanceof UsageError) throw e;
       throw new UsageError(`cannot read ${file}: ${(e as NodeJS.ErrnoException).code ?? (e as Error).message}`);
     }
+    return { content: media === "text/markdown" ? utf8(bytes, file) : bytes, type: media, name: basename(file) };
   }
   if (text === "-") {
     const chunks: Buffer[] = [];
     for await (const c of io.stdin) chunks.push(typeof c === "string" ? Buffer.from(c) : c);
-    return utf8(Buffer.concat(chunks), "stdin");
+    return { content: utf8(Buffer.concat(chunks), "stdin"), type: type ?? "text/markdown" };
   }
   if (text === undefined) throw new UsageError('give the note text, "-" for stdin, or --file PATH');
-  return text;
+  return { content: text, type: type ?? "text/markdown" };
 }
 
 function utf8(bytes: Uint8Array, source: string): string {

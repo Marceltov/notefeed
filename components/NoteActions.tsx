@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import { deleteNote, editNote } from "@/app/_lib/api";
+import { deleteNote, editNote, patchNote } from "@/app/_lib/api";
 import { MarkdownInput } from "@/components/MarkdownInput";
 import { usePendingImages } from "@/components/usePendingImages";
 import { useApiForm } from "@/app/_lib/useApiForm";
@@ -25,13 +25,28 @@ export function NoteActions({ feed, id, kind, markdown, title: savedTitle, alt: 
   const opts = () => ({ baseUrl: window.location.origin, path: { feed, id } }); // in handlers only: no window while rendering on the server
   async function save(e: FormEvent) {
     e.preventDefault();
+    // Only what changed is sent: a text note's content is replaced (PUT) when its text changed or pictures were added, and its title set (PATCH)
+    // when that changed; a picture has no text, only a title and an alt text. Nothing changed: nothing is sent.
+    const textChanged = !image && (text !== markdown || images.pending.length > 0);
+    const meta = { ...(title !== savedTitle && { title }), ...(image && alt !== savedAlt && { alt }) };
+    const metaChanged = Object.keys(meta).length > 0;
+    if (!textChanged && !metaChanged) return setEditing(false);
     setPending(true);
     const refused = await images.flush();
     if (refused) {
       setError(refused);
       return setPending(false);
     }
-    run(undefined, () => editNote({ ...opts(), body: image ? { title, alt } : { markdown: images.apply(text), title } }), () => {
+    const call = async () => {
+      let last: { response?: Response; error?: { code?: string } } | undefined;
+      if (textChanged) {
+        last = await editNote({ ...opts(), body: new Blob([images.apply(text)], { type: "text/markdown" }), headers: { "Content-Type": "text/markdown" } });
+        if (!last.response?.ok) return last;
+      }
+      if (metaChanged) last = await patchNote({ ...opts(), body: meta });
+      return last!;
+    };
+    run(undefined, call, () => {
       setError(undefined);
       setEditing(false);
       setPending(false);
@@ -45,7 +60,7 @@ export function NoteActions({ feed, id, kind, markdown, title: savedTitle, alt: 
     <section aria-label="Edit or delete this note" className="mt-8 space-y-3 text-sm">
       <details open={editing} onToggle={(e) => setEditing(e.currentTarget.open)}>
         <summary className={summary}>Edit</summary>
-        <form method="post" action={`${base}/edit`} encType="multipart/form-data" onSubmit={save} className="mt-3">
+        <form onSubmit={save} className="mt-3">
           {!image && (
             <MarkdownInput
               id="edit-markdown"
@@ -79,7 +94,7 @@ export function NoteActions({ feed, id, kind, markdown, title: savedTitle, alt: 
       </details>
       <details>
         <summary className={summary}>Delete</summary>
-        <form method="post" action={`${base}/delete`} onSubmit={remove} className="mt-3">
+        <form onSubmit={remove} className="mt-3">
           <p className="text-muted">Delete this note? This can&apos;t be undone.</p>
           <button type="submit" disabled={pending} className="mt-2 rounded-sm border border-error px-4 py-1.5 font-bold text-error disabled:opacity-60">
             Delete note

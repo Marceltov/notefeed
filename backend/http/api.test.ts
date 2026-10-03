@@ -52,13 +52,13 @@ describe("GET /feeds/{feed}/notes", () => {
     expect(body.notes).toEqual([
       expect.objectContaining({ id: two.id, title: "Two", created_at: "2026-09-29T11:00:00.000Z" }),
       {
-        kind: "markdown",
+        type: "text/markdown",
         file: `${one.id}.md`,
         file_url: expect.stringMatching(new RegExp(`^${BASE}/r/[\\w-]+/${one.id}\\.md$`)),
         size: 10,
         id: one.id,
         title: "One",
-        markdown: "# One\nbody",
+        content: "# One\nbody",
         created_at: "2026-09-29T10:00:00.000Z",
         url: `${BASE}/backups/${one.id}`,
         tags: [],
@@ -122,7 +122,7 @@ test("a percent-encoded or non-ASCII feed name is a 400 invalid_feed", async () 
 describe("GET /feeds/{feed}/notes/{id}", () => {
   test("one note, or 404", async () => {
     const { note: n } = await createNote("backups", "# Hi");
-    expect((await json(await call("GET", `/feeds/backups/notes/${n.id}`))).markdown).toBe("# Hi");
+    expect((await json(await call("GET", `/feeds/backups/notes/${n.id}`))).content).toBe("# Hi");
     const res = await call("GET", "/feeds/backups/notes/20260101T000000Z-nope");
     expect(res.status).toBe(404);
     expect((await json(res)).code).toBe("not_found");
@@ -312,18 +312,16 @@ describe("editing and deleting notes", () => {
   const md = { "content-type": "text/markdown" };
   const put = (path: string, body: string, headers: Record<string, string> = {}) => call("PUT", path, { body, headers: { ...md, ...headers } });
   const make = async (feed = "backups", headers: Record<string, string> = {}) => (await json(await post(feed, "# Old", headers))).id as string;
-  const markdownOf = async (feed: string, id: string, headers: Record<string, string> = {}) => (await json(await call("GET", `/feeds/${feed}/notes/${id}`, { headers }))).markdown;
+  const markdownOf = async (feed: string, id: string, headers: Record<string, string> = {}) => (await json(await call("GET", `/feeds/${feed}/notes/${id}`, { headers }))).content;
 
-  test("PUT with markdown or JSON: 200, same id and created_at, new title, readable everywhere", async () => {
+  test("PUT with markdown: 200, same id and created_at, new title, readable everywhere", async () => {
     const id = await make();
     const before = await json(await call("GET", `/feeds/backups/notes/${id}`));
     const res = await put(`/feeds/backups/notes/${id}`, "# New");
     expect(res.status).toBe(200);
-    expect(await json(res)).toEqual({ ...before, title: "New", markdown: "# New" });
-    const viaJson = await put(`/feeds/backups/notes/${id}`, JSON.stringify({ markdown: "# Json" }), { "content-type": "application/json" });
-    expect((await json(viaJson)).title).toBe("Json");
-    expect(await markdownOf("backups", id)).toBe("# Json");
-    expect((await json(await call("GET", `/read/${(await readIdOf("backups"))!}/notes/${id}`))).markdown).toBe("# Json");
+    expect(await json(res)).toEqual({ ...before, title: "New", content: "# New" });
+    expect(await markdownOf("backups", id)).toBe("# New");
+    expect((await json(await call("GET", `/read/${(await readIdOf("backups"))!}/notes/${id}`))).content).toBe("# New");
   });
 
   test("PUT empty is 400 empty_note, over 100 KB is 413, both leave the note", async () => {
