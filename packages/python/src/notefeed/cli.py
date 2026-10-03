@@ -81,8 +81,6 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     except NotefeedError as e:
         print(f"notefeed: {e}", file=sys.stderr)
-        for p in e.posted:
-            print(f"posted: {p.url}", file=sys.stderr)
         return 1
     return 0
 
