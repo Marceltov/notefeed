@@ -4,7 +4,7 @@
 import { createHash } from "node:crypto";
 import { readFeedFile } from "../data/notes";
 import { feedForReadId } from "../feeds";
-import { IMAGE_EXTS, contentTypeOf } from "../images";
+import { IMAGE_EXTS, contentTypeOf } from "../../shared/images";
 
 const NAME_RE = /^[A-Za-z0-9_-]{1,128}\.([A-Za-z0-9]{1,16})$/;
 
