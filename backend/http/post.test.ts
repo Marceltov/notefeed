@@ -312,14 +312,15 @@ describe("multipart: a text with its pictures", () => {
       expect(text).toBe(`\uFEFF# Hi\n\n![](${attachments[0].file})\n`);
     }
   });
-  test("a text file part of another type is 415, invalid UTF-8 is 400; nothing is created", async () => {
+  test("a text file part may be application/octet-stream; another type is 415, invalid UTF-8 is 400, and they store nothing", async () => {
     const as = (bytes: BlobPart, type: string) => sendForm([["text", new File([bytes], "t.md", { type })], ["file", png("a.png")]]);
+    expect((await as("# curl", "application/octet-stream")).status).toBe(201); // curl's label for a .md file
     const wrong = await as("# a", "image/png");
     expect([wrong.status, (await wrong.json()).code]).toEqual([415, "unsupported_type"]);
     expect((await as("# a", "text/markdown; charset=iso-8859-1")).status).toBe(415);
     const bad = await as(new Uint8Array([0xff, 0xfe, 0x41]) as BlobPart, "text/markdown");
     expect([bad.status, (await bad.json()).code]).toEqual([400, "invalid_body"]);
-    expect(await hasFeed("f")).toBe(false);
+    expect(await countNotes("f")).toBe(2);
   });
   test("a protected feed: the first multipart post creates it, a refused one leaves none, a later post needs the password", async () => {
     const refused = await sendForm([["text", "# a"], ["file", png("a.png")], ["file", png("b.png", JPG)]], { "x-feed-password": "hunter22" }, "g");

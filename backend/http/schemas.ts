@@ -56,7 +56,7 @@ export const NoteEdited = NoteJson.extend({ attachments: Attachments }).meta({ i
 // A note with its pictures, as multipart/form-data. `alt.<file name>` fields can't be listed by name: they are described in text.
 export const MultipartNote = z
   .object({
-    text: z.string().optional().describe("The markdown note (UTF-8): a field, or a file part (its name is ignored; its type, if any, `text/markdown`) to keep its line breaks as they are, since a form field's are sent as CRLF. At most one; required on a PUT. Its references to the files (`![](chart.png)`, `[x]: chart.png`) are swapped for the stored files; a file it never refers to is appended as `![](file)`"),
+    text: z.string().optional().describe("The markdown note (UTF-8): a field, or a file part (its name is ignored; its type, if any, `text/markdown` or `application/octet-stream`) to keep its line breaks as they are, since a form field's are sent as CRLF. At most one; required on a PUT. Its references to the files (`![](chart.png)`, `[x]: chart.png`) are swapped for the stored files; a file it never refers to is appended as `![](file)`"),
     file: z
       .array(z.string().meta({ format: "binary" }))
       .max(MAX_ATTACHMENTS)

@@ -45,9 +45,11 @@ export async function readPost(req: Request): Promise<PostInput> {
 export const MULTIPART_SLACK = 64 * 1024;
 
 // A `text` sent as a file part: its bytes as UTF-8, kept as they are (a browser's FormData sends a string field's line breaks as
-// CRLF, a file part's bytes untouched). The file name is ignored; a type, when given, must be markdown.
+// CRLF, a file part's bytes untouched). The file name is ignored; a type, when given, must be markdown, or application/octet-stream
+// (what curl labels a .md file: the part's name already says it is markdown).
 async function textFile(file: File): Promise<string> {
-  if (file.type && parseMedia(file.type)?.mediaType !== "text/markdown") throw new UnsupportedTypeError("send the text part as text/markdown (UTF-8)");
+  const typed = file.type && file.type.toLowerCase() !== "application/octet-stream";
+  if (typed && parseMedia(file.type)?.mediaType !== "text/markdown") throw new UnsupportedTypeError("send the text part as text/markdown (UTF-8)");
   try {
     return new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(await file.arrayBuffer());
   } catch {
