@@ -6,8 +6,10 @@ from __future__ import annotations
 import os
 import re
 from collections.abc import Callable, Iterator, Mapping
+from dataclasses import dataclass
 from typing import Any, TypeVar
 
+import attrs
 import httpx
 
 from ._generated import AuthenticatedClient
@@ -22,12 +24,15 @@ _M = TypeVar("_M", Created, Feed, Note, NoteList)
 
 
 class NotefeedError(Exception):
-    """Any failure talking to notefeed. `status` and `code` are None when there was no API answer."""
+    """Any failure talking to notefeed. `status` and `code` are None when there was no API answer.
+    `attachment` and `posted` are set when a post with `attachments` failed on one of them: its name, and the images already posted (the text note is not)."""
 
     def __init__(self, message: str, status: int | None = None, code: str | None = None):
         super().__init__(message)
         self.status = status
         self.code = code
+        self.attachment: str | None = None
+        self.posted: list[Created] = []
 
 
 class ConfigError(NotefeedError):
@@ -80,6 +85,41 @@ _BY_CODE: dict[str, type[NotefeedError]] = {
     "taken": InvalidRequestError,
     "unsupported_type": InvalidRequestError,
 }
+
+_ATTACHMENT_NAME = re.compile(r"[A-Za-z0-9._-]+")  # safe to write in ![](name)
+_IMAGE_TYPES = ("image/png", "image/jpeg", "image/gif", "image/webp")
+
+
+@dataclass(frozen=True)
+class Attachment:
+    """A picture posted with a note: `![](name)` in the markdown refers to it. `type` as for post()."""
+
+    name: str
+    content: bytes
+    type: str | None = None
+    alt: str | None = None
+
+
+@attrs.define
+class Posted(Created):
+    """What post() returns: the text note's `Created`, and `attachments`, the `Created` of each picture posted with it."""
+
+    attachments: list[Created] = attrs.field(factory=list)
+
+
+def _place_images(markdown: str, sent: dict[str, str]) -> str:
+    """The markdown with each `![](name)` of `sent` (name -> file) pointing at its file; a name the text never refers to is appended as `![](file)`."""
+    used: set[str] = set()
+
+    def swap(m: re.Match[str]) -> str:
+        if m.group(2) not in sent:
+            return m.group(0)
+        used.add(m.group(2))
+        return m.group(1) + sent[m.group(2)] + m.group(3)
+
+    text = re.sub(r"(!\[[^\]]*\]\()([^)\s]+)(\))", swap, markdown)
+    return "\n\n".join(p for p in [text.rstrip(), *(f"![]({f})" for n, f in sent.items() if n not in used)] if p)
+
 
 # Same rule as the server; reserved names still come back as a 400.
 _FEED_RE = re.compile(r"[a-z0-9_-]{1,64}")
@@ -178,7 +218,8 @@ class Client:
         alt: str | None = None,
         name: str | None = None,
         read_id: str | None = None,
-    ) -> Created:
+        attachments: list[Attachment] | None = None,
+    ) -> Posted:
         """Post a note: a `str` is markdown, `bytes` are a file whose media type is `type` (`text/markdown`, `image/png`,
         `image/jpeg`, `image/gif` or `image/webp`; the server accepts nothing else and checks that the body is what the type
         says). The feed is created by its first note. `.file` is the note's file name: write `![](file)` in a markdown
@@ -188,7 +229,43 @@ class Client:
         each 1 to 32 characters of letters, digits, `-`, `_`, `.`, `:`; not verified). `title` is its title (at most 100
         characters, one line); left out, it is taken from the text. `alt` is a picture's alternative text, `name` the
         file's original name. `read_id` is the read id the feed gets when this post creates it (3 to 64 characters of
-        `a-z`, `0-9`, `-`, `_`; random when left out; ignored for a feed that exists; a `taken` error when another feed has it)."""
+        `a-z`, `0-9`, `-`, `_`; random when left out; ignored for a feed that exists; a `taken` error when another feed has it).
+
+        `attachments` (only with a markdown `str`) are pictures posted first, one note each, in order: `![](name)` in the markdown
+        shows one (an attachment the text never refers to is added at the end), and `.attachments` of the result lists them.
+        `tags` label the images too. Everything is checked before anything is sent. If an upload fails, its error is raised with
+        `.attachment` (the name) and `.posted` (the images already posted, which stay) set; the text note is not posted."""
+        own = (feed, feed_password)
+        if not attachments:
+            return Posted(**attrs.asdict(self._post_one(content, *own, type, title, tags, alt, name, read_id), recurse=False))
+        if not isinstance(content, str) or (type or "text/markdown") != "text/markdown":
+            raise ConfigError("attachments go with a markdown string")
+        types = []
+        for a in attachments:
+            if not _ATTACHMENT_NAME.fullmatch(a.name):
+                raise ConfigError(f'attachment name "{a.name}": use letters, digits, ., _ and - only')
+            media = _as_file(a.content, a.type)[1]
+            if media not in _IMAGE_TYPES:
+                raise ConfigError(f'attachment "{a.name}" must be a picture ({", ".join(_IMAGE_TYPES)})')
+            types.append(media)
+        names = [a.name for a in attachments]
+        if len(set(names)) != len(names):
+            raise ConfigError(f'attachment "{next(n for n in names if names.count(n) > 1)}" is given twice')
+        posted: list[Created] = []
+        sent: dict[str, str] = {}
+        for a, media in zip(attachments, types):
+            try:
+                done = self._post_one(a.content, *own, media, None, tags, a.alt, a.name, read_id)
+            except NotefeedError as e:
+                e.args = (f'attachment "{a.name}": {e}',)
+                e.attachment, e.posted = a.name, posted
+                raise
+            posted.append(done)
+            sent[a.name] = done.file
+        text = self._post_one(_place_images(content, sent), *own, type, title, tags, alt, name, read_id)
+        return Posted(**attrs.asdict(text, recurse=False), attachments=posted)
+
+    def _post_one(self, content, feed, feed_password, type, title, tags, alt, name, read_id) -> Created:
         payload, media = _as_file(content, type)
         kwargs = post_note._get_kwargs(
             feed=self._feed_for(feed),

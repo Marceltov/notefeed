@@ -5,6 +5,7 @@ import pytest
 
 from notefeed import (
     AuthError,
+    Attachment,
     Client,
     ConfigError,
     Created,
@@ -462,3 +463,73 @@ def test_update_feed_sends_image_only_when_given(server):
         c.update_feed("t", "d", **kw)
     assert [json.loads(r["body"]) for r in server.requests] == [
         {"title": "t", "description": "d", "image": "a.png"}, {"title": "t", "description": "d", "image": ""}, {"title": "t", "description": "d"}]
+
+
+PNG = bytes([0x89, 0x50, 0x4E, 0x47])
+
+
+def img(n):
+    return {"id": f"I{n}", "url": f"https://n.example/inbox/I{n}", "feed_url": "https://n.example/inbox", "read_url": None, "file": f"F{n}.png", "file_url": f"https://n.example/r/X/F{n}.png"}
+
+
+def test_attachments_are_uploaded_in_order_then_the_text_with_the_references_placed(server):
+    server.reply(201, img(1))
+    server.reply(201, img(2))
+    server.reply(201, CREATED)
+    r = Client(server.url, "inbox", feed_password="pw").post(
+        "hi ![](a.png)", title="T", tags=["x"], read_id="my-read",
+        attachments=[Attachment("a.png", PNG, "image/png", alt="A"), Attachment("b.png", PNG, "image/png")],
+    )
+    assert [q["headers"]["Content-Type"] for q in server.requests] == ["image/png", "image/png", "text/markdown"]
+    first, _, text = (q["headers"] for q in server.requests)
+    assert (first["X-Note-Name"], first["X-Note-Alt"], first["X-Note-Tags"], first["X-Feed-Password"], first["X-Read-Id"]) == ("a.png", "A", "x", "pw", "my-read")
+    assert "X-Note-Title" not in first
+    assert (text["X-Note-Title"], text["X-Note-Tags"], text["X-Feed-Password"], text["X-Read-Id"]) == ("T", "x", "pw", "my-read")
+    assert server.requests[2]["body"] == b"hi ![](F1.png)\n\n![](F2.png)"
+    assert r.id == CREATED["id"]
+    assert [a.id for a in r.attachments] == ["I1", "I2"]
+
+
+def test_no_attachments_gives_an_empty_list(server):
+    assert Client(server.url, "inbox").post("x").attachments == []
+
+
+def test_empty_markdown_with_attachments_posts_only_the_references(server):
+    server.reply(201, img(1))
+    Client(server.url, "inbox").post("", attachments=[Attachment("a.png", PNG, "image/png")])
+    assert server.requests[1]["body"] == b"![](F1.png)"
+
+
+@pytest.mark.parametrize(
+    "content, attachments",
+    [
+        ("x", [Attachment("a.png", PNG, "image/png"), Attachment("a.png", PNG, "image/png")]),
+        ("x", [Attachment("a b.png", PNG, "image/png")]),
+        ("x", [Attachment("a.md", PNG, "text/markdown")]),
+        ("x", [Attachment("a.png", PNG)]),
+        (PNG, [Attachment("a.png", PNG, "image/png")]),
+    ],
+)
+def test_invalid_attachments_are_refused_before_anything_is_sent(server, content, attachments):
+    with pytest.raises(ConfigError):
+        Client(server.url, "inbox").post(content, type="image/png" if isinstance(content, bytes) else None, attachments=attachments)
+    assert server.requests == []
+
+
+def test_a_failed_upload_raises_the_original_error_with_the_attachment_and_the_posted_images(server):
+    server.reply(201, img(1))
+    server.reply(400, {"error": "bad image", "code": "invalid_body"})
+    with pytest.raises(InvalidRequestError) as e:
+        Client(server.url, "inbox").post("x", attachments=[Attachment("a.png", PNG, "image/png"), Attachment("b.png", PNG, "image/png")])
+    assert (e.value.attachment, e.value.status, e.value.code) == ("b.png", 400, "invalid_body")
+    assert [p.id for p in e.value.posted] == ["I1"]
+    assert "b.png" in str(e.value)
+    assert len(server.requests) == 2
+
+
+def test_a_rate_limit_keeps_retry_after(server):
+    server.reply(201, img(1))
+    server.reply(429, {"error": "slow down", "code": "rate_limited"}, headers={"Retry-After": "7"})
+    with pytest.raises(RateLimitedError) as e:
+        Client(server.url, "inbox").post("x", attachments=[Attachment("a.png", PNG, "image/png"), Attachment("b.png", PNG, "image/png")])
+    assert (e.value.retry_after, e.value.attachment, len(e.value.posted)) == (7, "b.png", 1)
