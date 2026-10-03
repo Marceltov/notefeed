@@ -2,7 +2,7 @@
 
 ## Where notes live
 
-Every feed is a folder in `DATA_DIR` (`/data` in the container), named after the feed, and every note is a plain markdown file in it, named `<id>.md`. New notes start with a small `---` header block (empty without a sender), then the body; older note files are untouched:
+Every feed is a folder in `DATA_DIR` (`/data` in the container), named after the feed, and every note is a file in it, named `<id>.<ext>`: `.md` for a markdown note, `.png`, `.jpg`, `.gif` or `.webp` for an image. The file is the note exactly as posted. The note's metadata (sender, tags, title, an image's alternative text and original name) is in a small JSON file next to it, `.<id>.<ext>.json`; a note without any has none.
 
 ```
 data/
@@ -11,14 +11,15 @@ data/
 │   ├── .readid                              # the feed's read id (feeds created since feed deletion was added; older ones have none). A reserved feed's holds its name
 │   ├── .feed.json                           # title, description and title image, if set
 │   ├── .password                            # only on a protected feed
-│   ├── 3b1f0c9d5a7e42c8b6d1e0f4a9c27d58.png     # an uploaded image, next to the notes
 │   ├── 20260929T140512Z-backup-finished.md
+│   ├── .20260929T140512Z-backup-finished.md.json   # its metadata, if it has any
+│   ├── 20261003T101010Z-01a1013e-b2b6-7102-8a41-0d2f7a8b9c31.png   # an image note
 │   └── 20260930T081500Z-deploy-done.md
 └── alerts-q9x2m7hd4k1pv/
     └── 20260930T090210Z-disk-space-low.md
 ```
 
-The three dot files in a feed's folder are part of the feed. `.readid` is its read link, `.feed.json` its title, description and title image, `.password` its [password](#a-lost-feed-password). They are plain files you can read and copy; don't edit `.readid` by hand, because the feed's read link changes with it. If you copy a feed's folder to make another feed, remove `.readid` from the copy: two feeds can't share a read link, and at the next start the folder whose name sorts first keeps it, which can be the copy, and the original's readers would then get the copy's notes. The other folder gets the read link computed from its name.
+Every dot file in a feed's folder is the feed's or a note's metadata, and none is ever served or listed as a note. Three belong to the feed: `.readid` is its read link, `.feed.json` its title, description and title image, `.password` its [password](#a-lost-feed-password). They are plain files you can read and copy; don't edit `.readid` by hand, because the feed's read link changes with it. If you copy a feed's folder to make another feed, remove `.readid` from the copy: two feeds can't share a read link, and at the next start the folder whose name sorts first keeps it, which can be the copy, and the original's readers would then get the copy's notes. The other folder gets the read link computed from its name.
 
 With the quick start's `compose.yaml` that's the `data` folder next to it. You can read, grep or copy the files directly.
 
@@ -26,18 +27,23 @@ notefeed writes them as the **owner of that folder**: create it yourself (`mkdir
 
 notefeed only reads folders with valid feed names and files named like notes. Anything else in `DATA_DIR`, such as `.git` or loose files, is ignored. So are symlinks, even to a folder: a feed must be a real folder inside `DATA_DIR`, so a link can't expose files from elsewhere on the disk.
 
-## Images
+## Images and other files
 
-Uploaded images are in the feed's folder next to the notes, each named by the first 32 characters of its SHA-256 hash and an extension (`png`, `jpg`, `gif` or `webp`), and stored exactly as uploaded. Back them up with the rest of `data`: they are in the feed's folder, so a `tar` of `data` includes them. A note that links to an image that was lost shows a broken image.
+An image is a note: its file is in the feed's folder next to the markdown notes, stored exactly as posted, with its metadata beside it. Back them up with the rest of `data`: a `tar` of `data` includes them. A note that links to an image that was lost shows a broken image.
+
+A file you put in the folder yourself is a note too, if its name is a name without dots, a dot, and an extension notefeed knows (`holiday.png`, `todo.md`): it is listed, dated by `created` in an optional metadata file (an ISO time) and otherwise by the file's modification time, and served under the read link. Ids are not enforced; the ones notefeed makes are a UTC time and a random UUID.
 
 Two things to know:
 
-- **Metadata stays.** notefeed does not resize, re-encode or clean images, so EXIF data in a photo, including GPS position, camera and time, is in the stored file and in what readers download. The image is public to anyone with the feed's read link, so strip metadata before uploading if the photo is sensitive. For example, `exiftool -all= photo.jpg` removes it.
-- **Images are not removed with notes.** Deleting a note leaves its images, because another note may use them, and notefeed has no endpoint to list or delete one image. They go when the feed is [deleted](#deleting-notes-and-feeds). To remove one image sooner, delete its file; the image then answers `404`, and notes that link to it show a broken image. If it was the feed's title image, remove the title image in the feed settings first.
+- **Metadata stays.** notefeed does not resize, re-encode or clean images, so EXIF data in a photo, including GPS position, camera and time, is in the stored file and in what readers download. The image is public to anyone with the feed's read link, so strip metadata before posting if the photo is sensitive. For example, `exiftool -all= photo.jpg` removes it.
+- **Deleting an image note deletes the file.** Deleting a note that merely shows an image does not: the image is a note of its own. If an image was the feed's title image, deleting it clears the title image.
+
+To remove one by hand, delete the file and the metadata file next to it (content first):
 
 ```sh
 ls -l data/homelab-7f3k2q9x4m8wz/*.png
-rm data/homelab-7f3k2q9x4m8wz/3b1f0c9d5a7e42c8b6d1e0f4a9c27d58.png
+rm data/homelab-7f3k2q9x4m8wz/20261003T101010Z-01a1013e-b2b6-7102-8a41-0d2f7a8b9c31.png \
+   data/homelab-7f3k2q9x4m8wz/.20261003T101010Z-01a1013e-b2b6-7102-8a41-0d2f7a8b9c31.png.json
 ```
 
 ## Keeping notes in git
@@ -62,7 +68,7 @@ tar czf notefeed-notes.tgz -C data .
 
 ## Deleting notes and feeds
 
-A feed's owner can delete it from the web UI or the [API](posting.md#feed-settings-and-deleting-a-feed). That removes the notes, the uploaded images, the settings, the password and the read link, frees the name, and takes the feed out of the `NOTEFEED_MAX_FEEDS` count at once. notefeed first renames the folder to `.deleted-<random>` in `DATA_DIR` and then removes it; if it stops in between, the leftover folder is removed at the next start. A new feed's folder is likewise made as `.<random>.tmp` and renamed into place, and one left by a crash is removed at the next start too.
+A feed's owner can delete it from the web UI or the [API](posting.md#feed-settings-and-deleting-a-feed). That removes the notes, the images, the settings, the password and the read link, frees the name, and takes the feed out of the `NOTEFEED_MAX_FEEDS` count at once. notefeed first renames the folder to `.deleted-<random>` in `DATA_DIR` and then removes it; if it stops in between, the leftover folder is removed at the next start. A new feed's folder is likewise made as `.<random>.tmp` and renamed into place, and one left by a crash is removed at the next start too.
 
 Reserved feeds ([Configuration](configuration.md#reserved-feeds)) are created at every start if they are missing, so one deleted or removed by hand comes back, empty and with the same read link, at the next start. They count toward `NOTEFEED_MAX_FEEDS` like any feed.
 

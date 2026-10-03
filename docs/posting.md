@@ -10,7 +10,7 @@ curl --data-binary @note.md https://notes.example.com/homelab-7f3k2q9x4m8wz
 
 A note posted with the password has no sender. Only a person signed in through [sign-in](identity.md), which is opt-in, posts with one.
 
-The feed is created by its first note; there's nothing to set up first. The API returns the body exactly as posted. The file on disk starts with a small `---` header block (empty unless the note has a sender or tags), then the body, so a `---` block you type at the start of a body stays body text. notefeed answers `201 Created`:
+The feed is created by its first note; there's nothing to set up first. The API returns the body exactly as posted, and so does the file on disk: the note's metadata (sender, tags, title) is kept in a small file next to it, never inside the text, so a `---` block you type at the start of a body is body text. notefeed answers `201 Created`:
 
 ```json
 {
@@ -32,7 +32,7 @@ The feed is created by its first note; there's nothing to set up first. The API 
 
 A note can be changed or removed after it was posted. Both use the note's URL in the API, `/api/v1/feeds/<feed>/notes/<id>`, where `<id>` is the `id` that posting returned.
 
-`PUT` replaces the note's markdown with the body, which is read as for posting (same formats and the same 100 KB limit), and answers `200` with the note as it is now:
+`PUT` changes the note and answers `200` with the note as it is now. A raw text body replaces the note's markdown (read as for posting: same formats and the same 100 KB limit). A JSON body may carry `markdown`, `title` and `alt` (at least one); a form the same as fields. `title` sets the note's [title](#titles) (an empty one removes it), `alt` the alternative text of an [image note](#images), and `markdown` is for markdown notes only (`400` for an image):
 
 ```sh
 curl -X PUT --data-binary @note.md \
@@ -55,6 +55,10 @@ What to know:
 - **Limits:** edits and deletes count toward the same per-client [rate limit](configuration.md#rate-limits-and-caps) as posts. An edit must pass the same checks as a post: not empty, UTF-8, at most 100 KB. A refused edit leaves the note unchanged. A `password` field in the body of an edit is ignored.
 - **Errors:** `404` (`not_found`) means no note has that id in that feed. That includes a feed that does not exist and an id that could not belong to a note. A protected feed answers `401` before it says anything about its notes. The other statuses are those of posting: `400`, `401`, `413`, `415` and `429`. Neither request creates a feed.
 
+## Titles
+
+Every note can have a title of its own, up to 100 characters on one line. Without one, a markdown note is titled by its first heading or first line, and a note that starts with a picture by that picture's alt text; an image note has no title and shows as its picture. To set one, send `title` with the post: a `title` field in a JSON or form body, or the `X-Note-Title` header for a raw body. In the web UI it is the **Title** field of the compose box and of the editor. The title is metadata, not part of the markdown: editing the text leaves it, and an empty title removes it so the title follows the text again.
+
 ## Tags
 
 A note can carry tags: short labels that say what it is, such as `ci`, `deploy` or `failed`, so readers and tools can tell notes apart and filter them. Set them when you post:
@@ -70,48 +74,45 @@ curl -H "Content-Type: application/json" -d '{"markdown": "# Deploy finished", "
 - **Where they show:** the `tags` array of the note in the API (an empty list for a note without any, including every note posted before tags existed), the [web UI](web-ui.md#tags), the [MCP](mcp.md) tools, and the RSS item as one `<category>` per tag.
 - **Filtering:** `?tag=ci` on the note list (`GET /api/v1/feeds/<feed>/notes`, the read API, the feed page and the read-only page) and on the RSS feed (`/r/<read id>/feed.xml?tag=ci`), so a reader can subscribe to one kind of note. A tag nobody used gives an empty list.
 - **Editing:** an edit keeps the note's tags; there is no way to change them after posting. A `tags` field sent with an edit is ignored.
-- **Stored** in the note file's `---` header block as `tags: ["ci","deploy"]`.
+- **Stored** in the note's metadata file, as `tags: ["ci","deploy"]` (see [Operations](operations.md#where-notes-live)).
 
 ## Images
 
-A note can show images. They are not part of the note's file: you upload an image to the feed, get its markdown back, and put that in the note as ordinary markdown. The note stays a plain markdown file. The image is a file in the feed's folder, and a note refers to it by file name: `![](3b1f….png)` shows it from the feed's current read link, even after the read id changes. A full URL (`![](https://…)`) is shown as written; if the read id changes, updating a full URL in a note is up to you.
-
-`POST /api/v1/feeds/<feed>/images` takes the image itself as the body:
+An image is a note of its own. Post the picture and notefeed stores it next to the markdown notes; the feed lists it, the read-only view shows it and RSS readers get it as an enclosure. A markdown note can show it too, by writing `![](<file>)` with the `file` that the post returned.
 
 ```sh
 curl --data-binary @photo.png -H "Content-Type: image/png" \
-  https://notes.example.com/api/v1/feeds/homelab-7f3k2q9x4m8wz/images
+  https://notes.example.com/homelab-7f3k2q9x4m8wz
 ```
 
-It answers `201 Created`:
+A body of type `image/png`, `image/jpeg`, `image/gif`, `image/webp` or `application/octet-stream` posted to `POST /<feed>` (or `POST /api/v1/feeds/<feed>/notes`) is an image; a multipart form may send a `file` part instead of `markdown`. `POST /api/v1/feeds/<feed>/images` does the same for clients that send the picture itself, and is what the [client packages](clients.md) and the web UI call. It answers `201 Created` like any post, with the image's `file` and `file_url` added:
 
 ```json
 {
-  "file": "3b1f0c9d5a7e42c8b6d1e0f4a9c27d58.png",
-  "url": "https://notes.example.com/r/q2Zc9kD0bTnVx4LmAe7sWp/3b1f0c9d5a7e42c8b6d1e0f4a9c27d58.png",
-  "markdown": "![](3b1f0c9d5a7e42c8b6d1e0f4a9c27d58.png)"
+  "id": "20261003T101010Z-01a1013e-b2b6-7102-8a41-0d2f7a8b9c31",
+  "url": "https://notes.example.com/homelab-7f3k2q9x4m8wz/20261003T101010Z-01a1013e-b2b6-7102-8a41-0d2f7a8b9c31",
+  "feed_url": "https://notes.example.com/homelab-7f3k2q9x4m8wz",
+  "read_url": "https://notes.example.com/r/q2Zc9kD0bTnVx4LmAe7sWp/feed.xml",
+  "file": "20261003T101010Z-01a1013e-b2b6-7102-8a41-0d2f7a8b9c31.png",
+  "file_url": "https://notes.example.com/r/q2Zc9kD0bTnVx4LmAe7sWp/20261003T101010Z-01a1013e-b2b6-7102-8a41-0d2f7a8b9c31.png"
 }
 ```
 
-- `file`: the stored file's name. It is what a feed's [title image](#feed-settings-and-deleting-a-feed) is set with.
-- `url`: where the image is served. It is absolute, built from `PUBLIC_URL` like the other links.
-- `markdown`: `![](file)`, ready to put in a note. It is relative to the feed, so it keeps working if the feed's read id changes. Use `url` for a link outside notefeed.
-
-Post a note that contains it and the image shows in the feed page, the read-only view and RSS readers that render images.
+- `file`: the note's file name. `![](file)` in a markdown note shows the picture from the feed's current read link, so it keeps working if the read id changes; a full URL (`![](https://…)`) is shown as written and is yours to update. It is also what a feed's [title image](#feed-settings-and-deleting-a-feed) is set with.
+- `file_url`: where the picture is served, absolute (built from `PUBLIC_URL` like the other links), for use outside notefeed.
+- `X-Note-Name` (or the file part's name) keeps the original file name, `X-Note-Title` sets a [title](#titles), `X-Note-Alt` the alternative text, `X-Note-Tags` [tags](#tags).
 
 What to know:
 
-- **Formats:** PNG, JPEG, GIF and WebP. notefeed looks at the first bytes of the file, not at the `Content-Type` you send, so `Content-Type` can be anything (`application/octet-stream` is fine) and a file that is not one of those four formats is refused even if it says `image/png`. SVG is not accepted, because it can carry script.
-- **Size:** at most 5 MiB (5242880 bytes) by default, set with `NOTEFEED_MAX_IMAGE_BYTES`. An optional cap on the number of images per feed is `NOTEFEED_MAX_IMAGES_PER_FEED`, off by default. See [Configuration](configuration.md#rate-limits-and-caps).
-- **Stored as sent.** The image is kept byte for byte: no resizing, no re-encoding, and no metadata removed. A photo's EXIF data, which can include where it was taken, stays in the file, and the file is public (see below). Remove it before you upload if that matters.
-- **Same bytes, same URL.** The file is named after a hash of its contents, so uploading the same image twice gives the same URL and stores one file. A URL's content never changes, so browsers may keep it for a year.
-- **Who may upload:** whoever may post to the feed: the instance password, then the [feed's password](#a-feed-with-its-own-password), in the same order as for a note. Uploads count toward the same per-client [rate limit](configuration.md#rate-limits-and-caps) as posts.
-- **The feed must exist.** A feed is created by its first note, so upload after the first note. Uploading to a feed that does not exist answers `404` and creates nothing, and so does uploading to [a feed without a read link](operations.md#a-feed-without-a-read-link): an image's URL is built from the read id, so nothing is stored.
-- **Images are as public as the read link.** An image is served under the feed's read id, `/r/<read id>/<file>`, with no password, even on a locked instance or a protected feed, so that it shows in the read-only view and in feed readers, which have no password to send. Anyone who has the read link, or an image's URL, can fetch it, and the feed's name never appears in the URL. Don't upload anything you would not give to everyone who has the read link.
-- **No list or delete yet.** There is no endpoint to list or delete images. They stay until the feed is [deleted](#feed-settings-and-deleting-a-feed), and deleting a note does not delete the images it used. To remove one by hand, see [Operations](operations.md#images).
-- **Errors:** `400` for an invalid or reserved feed name; `401` when a password is missing or wrong; `404` when the feed does not exist; `413` (`too_large`) when the image is over the size limit; `415` (`unsupported_type`) when it is not a PNG, JPEG, GIF or WebP image, which includes an empty body; `429` over the rate limit; `507` (`image_limit`) when the feed already has `NOTEFEED_MAX_IMAGES_PER_FEED` images. Uploading an image the feed already has is never refused for the cap.
+- **Formats:** PNG, JPEG, GIF and WebP. notefeed looks at the first bytes of the file, not at the `Content-Type` you send, so a file that is not one of those four formats is refused even if it says `image/png`. SVG is not accepted, because it can carry script.
+- **Size:** at most 5 MiB (5242880 bytes) by default, set with `NOTEFEED_MAX_IMAGE_BYTES`. An optional cap on the number of images per feed is `NOTEFEED_MAX_IMAGES_PER_FEED`, off by default; image notes do not count toward `NOTEFEED_MAX_NOTES_PER_FEED`. See [Configuration](configuration.md#rate-limits-and-caps).
+- **Stored as sent.** The picture is kept byte for byte: no resizing, no re-encoding, and no metadata removed. A photo's EXIF data, which can include where it was taken, stays in the file, and the file is public (see below). Remove it before you post if that matters.
+- **Who may post:** whoever may post to the feed, in the same order as for a note: the instance password, then the [feed's password](#a-feed-with-its-own-password). Posts count toward the same per-client [rate limit](configuration.md#rate-limits-and-caps). The first image can create the feed, with a password, like a first note.
+- **Pictures are as public as the read link.** A picture is served under the feed's read id, `/r/<read id>/<file>`, with no password, even on a locked instance or a protected feed, so that it shows in the read-only view and in feed readers, which have no password to send. Anyone who has the read link, or the file's URL, can fetch it, and the feed's name never appears in the URL. Don't post anything you would not give to everyone who has the read link.
+- **Deleting and editing.** An image note is deleted like any note (`DELETE` on its URL), which removes the file. It can't be edited as text: `PUT` may change its title and alt text, and a picture is replaced by deleting it and posting again.
+- **Errors:** `400` for an invalid or reserved feed name or a bad title; `401` when a password is missing or wrong; `413` (`too_large`) over the size limit; `415` (`unsupported_type`) when it is not a PNG, JPEG, GIF or WebP image, which includes an empty body; `429` over the rate limit; `507` (`image_limit`) when the feed already has `NOTEFEED_MAX_IMAGES_PER_FEED` images.
 
-In the browser, the compose box and the note editor have an [Add image](web-ui.md#adding-an-image) button.
+In the browser, the compose box and the note editor take pictures with the [Add image](web-ui.md#adding-an-image) button, by paste or by drop.
 
 ## Feed settings and deleting a feed
 
@@ -127,9 +128,9 @@ curl -X PUT -H "Content-Type: application/json" \
 
 `show_sender` (a boolean, on by default) matters only when [sign-in](identity.md) is on: set to `false` in the `PUT` body, it leaves the sender out of the public read view, the RSS feed and the public read API. Leaving it out keeps the current value.
 
-The feed's **title image** is an image [uploaded to this feed](#images). Add `"image": "<file>"` to the body, with the `file` the upload returned, to show it in the page header, the read-only view and as the RSS channel image. `"image": ""` removes it, and leaving `image` out keeps the one the feed has. A name that is not an existing image of this feed is a `400`. The title image is public, like the title.
+The feed's **title image** is one of the feed's [image notes](#images). Add `"image": "<file>"` to the body, with the `file` of the image note, to show it in the page header, the read-only view and as the RSS channel image. `"image": ""` removes it, and leaving `image` out keeps the one the feed has. A name that is not an image note of this feed is a `400`, and deleting that note takes the title image away. The title image is public, like the title.
 
-`DELETE` removes the feed for good and answers `204` with no body: every note, every uploaded image, the title and description, the password and the read link. There is no undo and no trash:
+`DELETE` removes the feed for good and answers `204` with no body: every note, every image, the title and description, the password and the read link. There is no undo and no trash:
 
 ```sh
 curl -X DELETE https://notes.example.com/api/v1/feeds/homelab-7f3k2q9x4m8wz
