@@ -285,6 +285,15 @@ describe("feed settings: image", () => {
     const { file } = await (await upload("other", PNG)).json();
     expect((await put("pics", { title: "", description: "", image: file })).status).toBe(400);
   });
+  test("deleting the image note removes the title image", async () => {
+    await createNote("pics", "# x");
+    const { id, file } = await (await upload("pics", PNG)).json();
+    await put("pics", { title: "T", description: "D", image: file });
+    expect((await getFeed("pics"))!.imageUrl).toContain(file);
+    expect((await call("DELETE", `/feeds/pics/notes/${id}`)).status).toBe(204);
+    expect((await getFeed("pics"))!.imageUrl).toBeNull();
+    expect((await (await call("GET", "/feeds/pics")).json()).image_url).toBeNull();
+  });
   test("a markdown note is not an image: 400", async () => {
     const { note } = await createNote("pics", "# x");
     expect((await put("pics", { title: "", description: "", image: note.file })).status).toBe(400);
