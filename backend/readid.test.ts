@@ -7,7 +7,7 @@ import { InvalidBodyError, ReadIdTakenError } from "./errors";
 import { ensureFeed, feedForReadId, hasFeed, readIdOf, resetFeedsForTests, setReadId } from "./feeds";
 import { getFeed, getReadFeed } from "./index";
 import { dispatch, API_PREFIX } from "./http/api";
-import { imageRoute } from "./http/images";
+import { fileRoute } from "./http/files";
 import { createImageNote, createNote } from "./notes";
 import { resetRateLimitsForTests } from "./limits";
 
@@ -156,10 +156,10 @@ describe("images follow the read id without editing a note", () => {
     await createNote("blog", note);
     await call("PUT", "/feeds/blog", { title: "", description: "", image: file });
     const old = (await readIdOf("blog"))!;
-    expect((await imageRoute(old, file)).status).toBe(200);
+    expect((await fileRoute(old, file)).status).toBe(200);
     await setReadId("blog", "moved");
-    expect((await imageRoute("moved", file)).status).toBe(200);
-    expect((await imageRoute(old, file)).status).toBe(404);
+    expect((await fileRoute("moved", file)).status).toBe(200);
+    expect((await fileRoute(old, file)).status).toBe(404);
     expect((await getFeed("blog"))!.imageUrl).toBe(`/r/moved/${file}`);
     expect((await getFeed("blog"))!.notes.map((n) => n.markdown)).toContain(note);
   });

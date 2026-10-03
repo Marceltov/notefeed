@@ -20,7 +20,7 @@ export { feedDeleteRoute, feedSettingsRoute } from "./http/feedforms";
 export { feedAccessRoute } from "./http/feedsession";
 export { noteFormRoute } from "./http/noteforms";
 export { loginRoute, logoutRoute } from "./http/session";
-export { imageRoute } from "./http/images";
+export { fileRoute } from "./http/files";
 export { rssRoute } from "./http/rss";
 export { mcpRoute } from "./mcp";
 export { oidcCallbackRoute, oidcStartRoute } from "./oidc/routes";

@@ -2,7 +2,7 @@
 // its metadata, `.<id>.<ext>.json` (the content file's complete name plus `.json`). Dot files are never notes. Which
 // extensions are notes is the caller's business (backend/note/types.ts); nothing here knows about types.
 import { randomBytes } from "node:crypto";
-import { link, readdir, readFile, rename, stat, unlink, writeFile } from "node:fs/promises";
+import { link, lstat, readdir, readFile, rename, stat, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { feedDir, isErrno, orMissing } from "./fs";
 
@@ -86,6 +86,15 @@ export async function readNote(feed: string, id: string): Promise<{ ext: string;
   const mtime = (await orMissing(stat(/*turbopackIgnore: true*/ path), null))?.mtime ?? new Date(0);
   const raw = await orMissing(readFile(/*turbopackIgnore: true*/ sidecar(feed, id, entry.ext), "utf8"), "{}");
   return { ext: entry.ext, content, meta: parseMeta(raw), mtime };
+}
+
+// A file of the feed by its name (`<stem>.<ext>`, no dot at the start): the bytes of a regular file, null for anything else. A
+// symbolic link is not followed, so nothing outside the feed folder is reachable.
+export async function readFeedFile(feed: string, name: string): Promise<Buffer | null> {
+  if (!NAME_RE.test(name)) return null;
+  const path = join(feedDir(feed), name);
+  const info = await orMissing(lstat(/*turbopackIgnore: true*/ path), null);
+  return info?.isFile() ? orMissing(readFile(/*turbopackIgnore: true*/ path), null) : null;
 }
 
 // Replaces an existing note's content atomically (temp file, then rename over it); the sidecar is not touched. False, and

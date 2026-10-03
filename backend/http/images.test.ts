@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { beforeEach, describe, expect, test } from "vitest";
@@ -11,7 +11,7 @@ import { hasFeed } from "../feeds";
 import { createNote, listNotes, removeNote } from "../notes";
 import { API_PREFIX, dispatch } from "./api";
 import { feedSettingsRoute } from "./feedforms";
-import { imageRoute } from "./images";
+import { fileRoute } from "./files";
 import { rssRoute } from "./rss";
 
 const BASE = "http://localhost:3000";
@@ -36,7 +36,7 @@ const upload = (feed: string, body: BodyInit, type = "image/png", headers: Recor
   call("POST", `/feeds/${feed}/notes`, { body, headers: { "content-type": type, ...headers } });
 const IMAGE_FILE_RE = /^[A-Za-z0-9_-]+\.(png|jpg|gif|webp)$/;
 const imageFiles = async (feed: string) => (await readdir(join(process.env.DATA_DIR!, feed))).filter((f) => IMAGE_FILE_RE.test(f));
-const get = (rid: string, file: string) => imageRoute(rid, file);
+const get = (rid: string, file: string) => fileRoute(rid, file);
 
 describe("POST /feeds/{feed}/notes with an image body", () => {
   test("201 with the note's id, its file and an absolute file_url under the read id", async () => {
@@ -203,6 +203,37 @@ describe("GET /r/{readId}/{file}", () => {
     expect((await get("x".repeat(22), file)).status).toBe(404);
     const rid = (await readIdOf("pics"))!;
     for (const bad of ["../x", ".password", "a.b.png", "..%2Fx", "nope.png"]) expect((await get(rid, bad)).status).toBe(404);
+  });
+  test("every non-dot file of the feed is served: a markdown note as text, a hand-placed file as a download", async () => {
+    const { note } = await createNote("pics", "# Hi");
+    await writeFile(join(process.env.DATA_DIR!, "pics", "report.pdf"), "%PDF-1.4");
+    const rid = (await readIdOf("pics"))!;
+    const md = await get(rid, note.file);
+    expect(md.status).toBe(200);
+    expect(await md.text()).toBe("# Hi");
+    expect(md.headers.get("content-type")).toBe("text/plain; charset=utf-8");
+    expect(md.headers.get("cache-control")).toBe("no-cache");
+    expect(md.headers.get("content-disposition")).toBeNull();
+    const pdf = await get(rid, "report.pdf");
+    expect(pdf.status).toBe(200);
+    expect(pdf.headers.get("content-type")).toBe("application/octet-stream");
+    expect(pdf.headers.get("content-disposition")).toBe("attachment");
+    expect(pdf.headers.get("x-content-type-options")).toBe("nosniff");
+    expect(pdf.headers.get("content-security-policy")).toBe("default-src 'none'; sandbox");
+  });
+  test("dot files are never served: the read id, the password, the settings, a note's sidecar", async () => {
+    const { note } = await createNote("pics", "# Hi", undefined, "Ann");
+    const dir = join(process.env.DATA_DIR!, "pics");
+    await writeFile(join(dir, ".password"), "hash");
+    await writeFile(join(dir, ".feed.json"), "{}");
+    const rid = (await readIdOf("pics"))!;
+    for (const name of [".readid", ".password", ".feed.json", `.${note.file}.json`, "..", "."]) expect((await get(rid, name)).status).toBe(404);
+  });
+  test("a symbolic link in the feed folder is not followed", async () => {
+    await createNote("pics", "# Hi");
+    await writeFile(join(process.env.DATA_DIR!, "outside.txt"), "secret");
+    await symlink(join(process.env.DATA_DIR!, "outside.txt"), join(process.env.DATA_DIR!, "pics", "link.txt"));
+    expect((await get((await readIdOf("pics"))!, "link.txt")).status).toBe(404);
   });
   test("the feed's name never serves it", async () => {
     await createNote("pics", "# x");
