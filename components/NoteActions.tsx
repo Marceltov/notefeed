@@ -3,6 +3,7 @@
 import { useState, type FormEvent } from "react";
 import { deleteNote, editNote } from "@/app/_lib/api";
 import { MarkdownInput } from "@/components/MarkdownInput";
+import { usePendingImages } from "@/components/usePendingImages";
 import { useApiForm } from "@/app/_lib/useApiForm";
 
 const summary = "cursor-pointer select-none text-muted hover:text-ink";
@@ -14,19 +15,27 @@ export function NoteActions({ feed, id, kind, markdown, error: initialError }: {
   const page = `/${feed}`;
   const { run, error, setError, pending, setPending, router } = useApiForm(page, initialError);
   const [text, setText] = useState(markdown);
-  const [busy, setBusy] = useState(false); // an image is uploading
+  const images = usePendingImages(feed);
   const [editing, setEditing] = useState(!!initialError);
   const base = `${page}/${id}`;
 
   const opts = () => ({ baseUrl: window.location.origin, path: { feed, id } }); // in handlers only: no window while rendering on the server
-  const save = (e: FormEvent) =>
-    run(e, () => editNote({ ...opts(), body: { markdown: text } }), () => {
+  async function save(e: FormEvent) {
+    e.preventDefault();
+    setPending(true);
+    const refused = await images.flush();
+    if (refused) {
+      setError(refused);
+      return setPending(false);
+    }
+    run(undefined, () => editNote({ ...opts(), body: { markdown: images.apply(text) } }), () => {
       setError(undefined);
       setEditing(false);
       setPending(false);
       router.replace(`${base}?edited=1`);
       router.refresh();
     });
+  }
   const remove = (e: FormEvent) => run(e, () => deleteNote(opts()), () => router.replace(`${page}?deleted=${id}`), 404); // already gone: the goal is met
 
   return (
@@ -41,13 +50,13 @@ export function NoteActions({ feed, id, kind, markdown, error: initialError }: {
             label="Note in markdown"
             value={text}
             onChange={setText}
-            feed={feed}
             rows={10}
             describedBy="note-actions-error"
             className="font-mono"
-            onBusy={setBusy}
+            pending={images.pending}
+            onPendingChange={images.setPending}
           />
-          <button type="submit" disabled={pending || busy} className="mt-2 rounded-sm bg-carbon px-4 py-1.5 font-bold text-on-carbon disabled:opacity-60">
+          <button type="submit" disabled={pending} className="mt-2 rounded-sm bg-carbon px-4 py-1.5 font-bold text-on-carbon disabled:opacity-60">
             {pending ? "Saving…" : "Save"}
           </button>
         </form>

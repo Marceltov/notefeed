@@ -4,6 +4,7 @@ import { Send } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import { postNote } from "@/app/_lib/api";
 import { MarkdownInput } from "@/components/MarkdownInput";
+import { usePendingImages } from "@/components/usePendingImages";
 import { useApiForm } from "@/app/_lib/useApiForm";
 import { PASSWORD_HINT, SENDER_NOTICE } from "@/app/_lib/messages";
 import { PASSWORD_PATTERN } from "@/shared/password";
@@ -12,18 +13,29 @@ import { TAGS_HINT, TAGS_PATTERN } from "@/shared/tags";
 // A plain multipart form to POST /<feed>, the same endpoint scripts use: without JavaScript the browser
 // follows the 303 back to the feed page. With JavaScript the box posts through the API client generated
 // from openapi.json (JSON, the session cookie rides along same-origin) and shows refusals inline.
-// `exists`: false for a feed without a first note, which cannot take image uploads yet.
+// Pictures dropped, pasted or picked wait in the box (usePendingImages) and are posted, as notes of their own, when the note is.
 // `isNew`: a feed that doesn't exist yet, so the box offers to protect it with a password.
-export function Compose({ feed, action, error: initialError, isNew, exists = true, sender }: { feed: string; action: string; error?: string; isNew?: boolean; exists?: boolean; sender?: boolean }) {
-  const { run, error, pending, router } = useApiForm(action, initialError);
+export function Compose({ feed, action, error: initialError, isNew, sender }: { feed: string; action: string; error?: string; isNew?: boolean; sender?: boolean }) {
+  const { run, error, setError, pending, setPending, router } = useApiForm(action, initialError);
+  const images = usePendingImages(feed);
   const [text, setText] = useState("");
   const [password, setPassword] = useState("");
   const [tags, setTags] = useState("");
-  const [busy, setBusy] = useState(false); // an image is uploading
 
   const tagList = tags.split(",").map((t) => t.trim()).filter(Boolean);
-  const submit = (e: FormEvent) =>
-    run(e, () => postNote({ baseUrl: window.location.origin, path: { feed }, body: { markdown: text, ...(password && { password }), ...(tagList.length && { tags: tagList }) } }), ({ data }) => router.push(`${action}?posted=${data?.id}`)); // the page remounts this box empty
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    setPending(true);
+    const refused = await images.flush(password); // the first one of these creates the feed, with its password
+    if (refused) {
+      setError(refused);
+      return setPending(false);
+    }
+    const posted = images.lastId();
+    if (!text.trim() && posted) return router.push(`${action}?posted=${posted}`); // only pictures
+    // The page remounts this box empty.
+    run(undefined, () => postNote({ baseUrl: window.location.origin, path: { feed }, body: { markdown: images.apply(text), ...(password && { password }), ...(tagList.length && { tags: tagList }) } }), ({ data }) => router.push(`${action}?posted=${data?.id}`));
+  }
 
   return (
     <form method="post" action={action} encType="multipart/form-data" onSubmit={submit} className="mb-12">
@@ -33,12 +45,11 @@ export function Compose({ feed, action, error: initialError, isNew, exists = tru
         label="Note in markdown"
         value={text}
         onChange={setText}
-        feed={feed}
         rows={5}
         placeholder="# Write a note in markdown"
         describedBy="compose-hint compose-error"
-        images={exists}
-        onBusy={setBusy}
+        pending={images.pending}
+        onPendingChange={images.setPending}
       >
         <label htmlFor="note-tags" className="sr-only">
           Tags (optional, separated by commas)
@@ -60,7 +71,7 @@ export function Compose({ feed, action, error: initialError, isNew, exists = tru
         <p id="compose-hint" className="min-w-0 break-all text-sm text-muted" />
         <button
           type="submit"
-          disabled={pending || busy}
+          disabled={pending}
           className="inline-flex items-center gap-2 rounded-sm bg-carbon px-4 py-1.5 font-bold text-on-carbon disabled:opacity-60"
         >
           <Send aria-hidden className="h-4 w-4" />
