@@ -3,7 +3,7 @@
 import { InvalidBodyError } from "../errors";
 import { deleteNote, editNote } from "../posting";
 import { feedPath } from "../urls";
-import { readMarkdown } from "./notes";
+import { readEdit } from "./notes";
 import { feedAccess, formPost, mediaType, seeOther } from "./request";
 
 export async function noteFormRoute(req: Request, feed: string, id: string, action: string): Promise<Response> {
@@ -22,7 +22,7 @@ export async function noteFormRoute(req: Request, feed: string, id: string, acti
         // Multipart, like the compose box: a urlencoded body is a third bigger for non-ASCII text and
         // readMarkdown would take it for raw markdown.
         if (mediaType(h) !== "multipart/form-data") throw new InvalidBodyError("form must be multipart");
-        return readMarkdown(req);
+        return readEdit(req);
       },
       feedAccess(h, feed),
     );

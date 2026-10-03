@@ -2,8 +2,8 @@
 import { randomBytes } from "node:crypto";
 import { idStamp } from "../shared/notes";
 import { isErrno } from "./data/fs";
-import { deleteNoteFile, replaceNote, writeNote, listNoteFiles, readNote, type Meta } from "./data/notes";
-import { EmptyNoteError, NoteTooLargeError, UnsupportedTypeError } from "./errors";
+import { deleteNoteFile, replaceNote, updateMeta, writeNote, listNoteFiles, readNote, type Meta } from "./data/notes";
+import { EmptyNoteError, InvalidBodyError, NoteTooLargeError, UnsupportedTypeError } from "./errors";
 import { assertFeed, checkFeed, ensureFeed, forgetFeed } from "./feeds";
 import { sniffImage } from "./images";
 import { ImageNote } from "./note/image";
@@ -14,6 +14,17 @@ import { typeForExt } from "./note/types";
 export { ImageNote, MarkdownNote, Note };
 
 export const MAX_BYTES = 102400;
+export const MAX_NOTE_TITLE = 100;
+export const MAX_ALT = 500;
+
+// A note's title or alt text: trimmed, one line of at most `max` characters (an emoji is one). "" means none.
+export function checkLine(name: string, value: string | undefined, max: number): string | undefined {
+  if (value === undefined) return undefined;
+  const v = value.trim();
+  if (/[\x00-\x1f\x7f]/.test(v)) throw new InvalidBodyError(`${name} must be one line`);
+  if ([...v].length > max) throw new InvalidBodyError(`${name} must be at most ${max} characters`);
+  return v;
+}
 
 // A UUID v7: the millisecond clock first, so ids made in the same second still sort in the order they were made
 // (ids sort as strings, newest last). ponytail: within one millisecond the order is random.
@@ -73,10 +84,11 @@ async function store(feed: string, { ext, content, meta }: NewNote, now: Date, w
   }
 }
 
-export async function createNote(feed: string, markdown: string, now = new Date(), sender?: string, tags: string[] = [], wantedReadId?: string, extra: Pick<Meta, "title"> = {}): Promise<{ note: MarkdownNote; readId: string | null }> {
+export async function createNote(feed: string, markdown: string, now = new Date(), sender?: string, tags: string[] = [], wantedReadId?: string, title?: string): Promise<{ note: MarkdownNote; readId: string | null }> {
   assertFeed(feed);
   checkMarkdown(markdown);
-  const meta: Meta = { ...(sender !== undefined && { sender }), ...(tags.length && { tags }), ...extra };
+  const given = checkLine("title", title, MAX_NOTE_TITLE);
+  const meta: Meta = { ...(sender !== undefined && { sender }), ...(tags.length && { tags }), ...(given && { title: given }) };
   const { id, readId } = await store(feed, { ext: "md", content: markdown, meta }, now, wantedReadId);
   return { note: new MarkdownNote({ id, ext: "md", meta, createdAt: stampOf(id)!, size: Buffer.byteLength(markdown) }, markdown), readId };
 }
@@ -91,7 +103,9 @@ export async function createImageNote(
   assertFeed(feed);
   const ext = sniffImage(bytes);
   if (!ext) throw new UnsupportedTypeError("send a PNG, JPEG, GIF or WebP image");
-  const { sender, tags = [], title, alt, name } = opts;
+  const { sender, tags = [], name } = opts;
+  const title = checkLine("title", opts.title, MAX_NOTE_TITLE);
+  const alt = checkLine("alt", opts.alt, MAX_ALT);
   const meta: Meta = { ...(sender !== undefined && { sender }), ...(tags.length && { tags }), ...(title && { title }), ...(alt && { alt }), ...(name && { name }) };
   const { id, readId } = await store(feed, { ext, content: bytes, meta }, now, opts.wantedReadId);
   return { note: new ImageNote({ id, ext, meta, createdAt: stampOf(id)!, size: bytes.length }), readId };
@@ -145,12 +159,24 @@ export async function getNote(feed: string, id: string): Promise<Note | null> {
   return stored && type ? type.read({ id, ext: stored.ext, meta: stored.meta, createdAt: createdAt(id, stored.meta, stored.mtime), size: stored.content.length }, stored.content) : null;
 }
 
-// The id never changes, so neither does createdAt. null: invalid feed or id, or no such note.
-export async function updateNote(feed: string, id: string, markdown: string): Promise<Note | null> {
-  checkMarkdown(markdown);
+/** What an edit may change; at least one field. `markdown` only for a markdown note. "" removes a title or alt. */
+export type NoteEdit = { markdown?: string; title?: string; alt?: string };
+
+// The id never changes, so neither does createdAt. null: invalid feed or id, or no such note. A refusal (blank or big markdown,
+// a bad title, markdown for an image, alt for a text, nothing to change) throws and changes nothing.
+export async function updateNote(feed: string, id: string, edit: NoteEdit): Promise<Note | null> {
+  if (edit.markdown === undefined && edit.title === undefined && edit.alt === undefined) throw new InvalidBodyError("nothing to change: send markdown, title or alt");
+  if (edit.markdown !== undefined) checkMarkdown(edit.markdown);
+  const title = checkLine("title", edit.title, MAX_NOTE_TITLE);
+  const alt = checkLine("alt", edit.alt, MAX_ALT);
   if (checkFeed(feed) || !isValidId(id)) return null;
-  if (!((await getNote(feed, id)) instanceof MarkdownNote)) return null; // an image is not edited by text
-  return (await replaceNote(feed, id, markdown)) ? getNote(feed, id) : null;
+  const note = await getNote(feed, id);
+  if (!note) return null;
+  if (edit.markdown !== undefined && !(note instanceof MarkdownNote)) throw new InvalidBodyError("an image note has no markdown to replace");
+  if (alt !== undefined && !(note instanceof ImageNote)) throw new InvalidBodyError("alt is for image notes");
+  if (edit.markdown !== undefined && !(await replaceNote(feed, id, edit.markdown))) return null;
+  if ((title !== undefined || alt !== undefined) && !(await updateMeta(feed, id, { ...(title !== undefined && { title }), ...(alt !== undefined && { alt }) }))) return null;
+  return getNote(feed, id);
 }
 
 export async function removeNote(feed: string, id: string): Promise<boolean> {

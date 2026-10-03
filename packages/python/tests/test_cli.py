@@ -157,6 +157,9 @@ def serve_notes(server, count):
             "markdown": f"# Note {i}",
             "created_at": f"2026-09-30T10:{i:02d}:00.000Z",
             "url": f"https://n.example/inbox/n{i}",
+            "kind": "markdown",
+            "file": f"20260930T10{i:02d}00Z-n{i}.md",
+            "size": 4,
             "tags": [],
         }
         for i in range(count)
@@ -216,10 +219,10 @@ def test_notes_rejects_a_bad_limit(server, capsys):
 def test_notes_json_prints_exactly_the_documented_fields(server, capsys):
     server.route = lambda method, path: (
         200,
-        {"notes": [{"id": "20260930T100000Z-a", "title": "A", "markdown": "# A", "created_at": "2026-09-30T10:00:00.000Z", "url": "https://n/a", "tags": [], "mood": "new"}], "next": None},
+        {"notes": [{"id": "20260930T100000Z-a", "title": "A", "markdown": "# A", "created_at": "2026-09-30T10:00:00.000Z", "url": "https://n/a", "kind": "markdown", "file": "a.md", "size": 3, "tags": [], "mood": "new"}], "next": None},
     )
     assert main(notes_args(server, "--json")) == 0
-    assert list(json.loads(capsys.readouterr().out)) == ["id", "title", "markdown", "created_at", "url", "tags"]
+    assert sorted(json.loads(capsys.readouterr().out)) == sorted(["id", "title", "markdown", "created_at", "url", "kind", "file", "size", "tags"])  # the unknown "mood" is dropped
 
 
 def test_notes_stops_quietly_when_the_reader_goes_away(server, capsys, monkeypatch):
@@ -235,7 +238,7 @@ def test_notes_stops_quietly_when_the_reader_goes_away(server, capsys, monkeypat
     assert capsys.readouterr().err == ""
 
 
-NOTE = {"id": "i", "title": "T", "markdown": "x", "created_at": "2026-09-30T10:00:00.000Z", "url": "https://n.example/inbox/i", "tags": []}
+NOTE = {"id": "i", "title": "T", "markdown": "x", "created_at": "2026-09-30T10:00:00.000Z", "url": "https://n.example/inbox/i", "kind": "markdown", "file": "i.md", "size": 1, "tags": []}
 
 
 def test_edit_text_prints_url(server, capsys):
@@ -282,9 +285,9 @@ def test_delete_errors(server, capsys):
 def test_image_prints_markdown_and_sends_the_file_bytes(server, capsys, tmp_path):
     f = tmp_path / "p.png"
     f.write_bytes(bytes([0x89, 0x50, 0x4E, 0x47, 0, 255]))
-    server.reply(201, {"file": "a.png", "url": "https://n.example/r/X/images/a.png", "markdown": "![](https://n.example/r/X/images/a.png)"})
+    server.reply(201, {"id": "a", "url": "https://n.example/inbox/a", "feed_url": "https://n.example/inbox", "read_url": None, "file": "a.png", "file_url": "https://n.example/r/X/a.png"})
     assert main(["image", str(f), "--url", server.url, "--feed", "inbox"]) == 0
-    assert capsys.readouterr().out == "![](https://n.example/r/X/images/a.png)\n"
+    assert capsys.readouterr().out == "![](a.png)\n"
     assert server.requests[0]["path"] == "/api/v1/feeds/inbox/images"
     assert server.requests[0]["body"] == f.read_bytes()
 

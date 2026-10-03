@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
+import { uploadImage } from "@/app/_lib/api";
 import { errorMessage, imageErrorMessage } from "@/app/_lib/messages";
 
 type Result = { data?: unknown; error?: { code?: string }; response?: Response };
@@ -34,18 +35,20 @@ export function useApiForm(page: string, initialError?: string, message = errorM
   return { run, error, setError, pending, setPending, router };
 }
 
-// Posts one image to the feed as a note of its own (a multipart `file` part to the same endpoint scripts use; the server decides the
-// format by the bytes) and returns the note's id and file name, or the refusal's message. `password` is only for the post that
-// creates a protected feed. Shared by the markdown boxes and the title image.
+// Posts one image to the feed as a note of its own (the generated client; the server decides the format by the bytes) and returns the
+// note's id and file name, or the refusal's message. `password` is only for the post that creates a protected feed. Shared by the
+// markdown boxes and the title image.
 export async function uploadImageFile(feed: string, file: File, password?: string): Promise<{ id: string; file: string; url: string } | { error: string }> {
   try {
-    const form = new FormData();
-    form.set("file", file);
-    if (password) form.set("password", password);
-    const res = await fetch(`/api/v1/feeds/${encodeURIComponent(feed)}/notes`, { method: "POST", body: form, headers: { Accept: "application/json" } });
-    const body = (await res.json().catch(() => ({}))) as { id?: string; file?: string; file_url?: string | null; code?: string };
-    if (res.ok && body.id && body.file) return { id: body.id, file: body.file, url: body.file_url ?? "" };
-    return { error: imageErrorMessage(body.code ?? "unknown", res.headers.get("retry-after")) ?? "Something went wrong." };
+    const { data, error, response } = await uploadImage({
+      baseUrl: window.location.origin,
+      path: { feed },
+      body: file,
+      headers: { "Content-Type": file.type || "application/octet-stream", ...(password && { "X-Feed-Password": password }) },
+    });
+    if (!response) throw new Error("no response");
+    if (response.ok && data?.file) return { id: data.id, file: data.file, url: data.file_url ?? "" };
+    return { error: imageErrorMessage((error as { code?: string } | undefined)?.code ?? "unknown", response.headers.get("retry-after")) ?? "Something went wrong." };
   } catch {
     return { error: "Could not reach notefeed. Check your connection and try again." };
   }

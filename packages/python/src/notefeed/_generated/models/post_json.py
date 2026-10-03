@@ -15,6 +15,8 @@ class PostJson:
     """
     Attributes:
         markdown (str):
+        title (str | Unset): The note's title, at most 100 characters, one line; empty or left out means the title is
+            taken from the text (a markdown note) or there is none (an image)
         password (str | Unset): Protects the feed: 1 to 256 printable ASCII characters, with no space at the start or
             end. Only honored on the post that creates the feed; an existing open feed answers 409. Empty is the same as
             leaving it out.
@@ -27,12 +29,15 @@ class PostJson:
     """
 
     markdown: str
+    title: str | Unset = UNSET
     password: str | Unset = UNSET
     tags: list[str] | Unset = UNSET
     read_id: str | Unset = UNSET
 
     def to_dict(self) -> dict[str, Any]:
         markdown = self.markdown
+
+        title = self.title
 
         password = self.password
 
@@ -49,6 +54,8 @@ class PostJson:
                 "markdown": markdown,
             }
         )
+        if title is not UNSET:
+            field_dict["title"] = title
         if password is not UNSET:
             field_dict["password"] = password
         if tags is not UNSET:
@@ -63,6 +70,8 @@ class PostJson:
         d = dict(src_dict)
         markdown = d.pop("markdown")
 
+        title = d.pop("title", UNSET)
+
         password = d.pop("password", UNSET)
 
         tags = cast(list[str], d.pop("tags", UNSET))
@@ -71,6 +80,7 @@ class PostJson:
 
         post_json = cls(
             markdown=markdown,
+            title=title,
             password=password,
             tags=tags,
             read_id=read_id,

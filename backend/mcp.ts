@@ -56,11 +56,11 @@ function server(h: Headers): McpServer {
     "post_note",
     {
       description: `Post a markdown note to a feed; the feed is created by its first note; a password given then protects the feed for good, and is refused on a feed that already exists. ${PROTECTED} ${SECRET_NOTE}`,
-      inputSchema: z.object({ feed, markdown: z.string(), password, tags: z.array(z.string()).optional().describe(`Labels for the note, e.g. ["ci","deploy"]: ${TAG_RULE}. Not verified; readers see them.`), read_id: z.string().optional().describe("Only when this post creates the feed: its read id (3 to 64 characters of a-z, 0-9, - and _), random when left out. A short readable one is guessable. Fails if taken.") }),
+      inputSchema: z.object({ feed, markdown: z.string(), title: z.string().optional().describe("The note's title (at most 100 characters, one line); left out, it is taken from the text"), password, tags: z.array(z.string()).optional().describe(`Labels for the note, e.g. ["ci","deploy"]: ${TAG_RULE}. Not verified; readers see them.`), read_id: z.string().optional().describe("Only when this post creates the feed: its read id (3 to 64 characters of a-z, 0-9, - and _), random when left out. A short readable one is guessable. Fails if taken.") }),
       outputSchema: z.object({ id: z.string(), url: z.string(), feed_url: z.string(), read_url: z.string().nullable() }),
     },
-    guard(async ({ feed, markdown, password, tags, read_id }) => {
-      const { note, readId } = await postNote(feed, clientIp(h), async () => ({ markdown, tags, readId: read_id }), { password }, sender(h));
+    guard(async ({ feed, markdown, title, password, tags, read_id }) => {
+      const { note, readId } = await postNote(feed, clientIp(h), async () => ({ markdown, title, tags, readId: read_id }), { password }, sender(h));
       const feedUrl = base + feedPath(feed);
       return ok({ id: note.id, url: `${feedUrl}/${note.id}`, feed_url: feedUrl, read_url: readId && base + rssPath(readId) });
     }),
@@ -101,13 +101,13 @@ function server(h: Headers): McpServer {
   s.registerTool(
     "edit_note",
     {
-      description: `Replace a note's markdown; its id stays. ${PROTECTED} ${SECRET_NOTE}`,
-      inputSchema: z.object({ feed, id: z.string(), markdown: z.string(), password }),
+      description: `Replace a note's markdown, set its title, or both (an empty title removes it: the title follows the text again); its id stays. At least one of markdown and title. ${PROTECTED} ${SECRET_NOTE}`,
+      inputSchema: z.object({ feed, id: z.string(), markdown: z.string().optional(), title: z.string().optional(), password }),
       outputSchema: NoteFull,
       annotations: { destructiveHint: true, idempotentHint: true },
     },
-    guard(async ({ feed, id, markdown, password }) => {
-      const note = await editNote(feed, id, clientIp(h), async () => ({ markdown }), { password });
+    guard(async ({ feed, id, markdown, title, password }) => {
+      const note = await editNote(feed, id, clientIp(h), async () => ({ markdown, title }), { password });
       return ok({ ...summary(feed, note), markdown: note.markdown });
     }),
   );

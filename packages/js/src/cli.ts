@@ -70,7 +70,7 @@ export async function main(argv: string[], io: Io = process): Promise<number> {
       } catch (e) {
         throw new UsageError(`cannot read ${text}: ${(e as NodeJS.ErrnoException).code ?? (e as Error).message}`);
       }
-      io.stdout.write(`${(await client(values).uploadImage(bytes)).markdown}\n`);
+      io.stdout.write(`![](${(await client(values).uploadImage(bytes)).file})\n`);
       return 0;
     }
     if (command === "notes" && text === undefined) {

@@ -8,10 +8,10 @@ import { assertFeed, deleteFeed as removeWholeFeed, feedCount, hasFeed, isHeldBa
 import { sniffImage } from "./images";
 import { capReached, rateLimit } from "./limits";
 import { checkTags } from "./tags";
-import { checkMarkdown, countNotes, createImageNote, createNote, hasImageNote, removeNote, updateNote, type Note } from "./notes";
+import { checkLine, checkMarkdown, countNotes, createImageNote, createNote, hasImageNote, MAX_ALT, MAX_NOTE_TITLE, removeNote, updateNote, type Note, type NoteEdit } from "./notes";
 
 // What a post carries besides the note itself. `name` is the file name an image came with.
-export type PostInput = { password?: string; tags?: string[]; readId?: string; name?: string } & ({ markdown: string } | { image: Uint8Array });
+export type PostInput = { password?: string; tags?: string[]; readId?: string; name?: string; title?: string; alt?: string } & ({ markdown: string } | { image: Uint8Array });
 
 // `read` runs only once the post is admitted, so a refused request never has its body read.
 // A password (header, or body `password`) is set only by the post that creates the feed.
@@ -48,6 +48,8 @@ export async function postNote(
   if (isImage) {
     if (!sniffImage(input.image)) throw new UnsupportedTypeError("send a PNG, JPEG, GIF or WebP image");
   } else checkMarkdown(input.markdown);
+  checkLine("title", input.title, MAX_NOTE_TITLE);
+  checkLine("alt", input.alt, MAX_ALT);
   const tags = checkTags(given);
   const password = (access.password ?? bodyPassword) || undefined; // empty means none
   let created = false;
@@ -63,7 +65,9 @@ export async function postNote(
   // ponytail: checked, not locked. A protected creation can still complete in the few microseconds between
   // this check and createNote's ensureFeed, which then finds the feed and writes into it: this one note is
   // then in the protected feed. A lock around creation, per feed, would close it.
-  const made = isImage ? await createImageNote(feed, input.image, { sender, tags, name: input.name, wantedReadId }) : await createNote(feed, input.markdown, undefined, sender, tags, wantedReadId);
+  const made = isImage
+    ? await createImageNote(feed, input.image, { sender, tags, name: input.name, title: input.title, alt: input.alt, wantedReadId })
+    : await createNote(feed, input.markdown, undefined, sender, tags, wantedReadId, input.title);
   return { ...made, created };
 }
 
@@ -77,11 +81,9 @@ async function admit(feed: string, ip: string, access: FeedAccess): Promise<void
   if (wait !== null) throw new RateLimitedError(wait);
 }
 
-export async function editNote(feed: string, id: string, ip: string, read: () => Promise<{ markdown: string }>, access: FeedAccess): Promise<Note> {
+export async function editNote(feed: string, id: string, ip: string, read: () => Promise<NoteEdit>, access: FeedAccess): Promise<Note> {
   await admit(feed, ip, access);
-  const { markdown } = await read();
-  checkMarkdown(markdown);
-  const note = await updateNote(feed, id, markdown);
+  const note = await updateNote(feed, id, await read());
   if (!note) throw new NotFoundError("no such note");
   return note;
 }

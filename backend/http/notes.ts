@@ -4,13 +4,13 @@ import { config } from "../config";
 import { AuthError, ImageTooLargeError, InvalidBodyError, NoteTooLargeError, UnsupportedTypeError } from "../errors";
 import { cookieValue } from "../feedlock";
 import { clientIp } from "../limits";
-import { MAX_BYTES } from "../notes";
+import { MAX_BYTES, type NoteEdit } from "../notes";
 import { postNote, type PostInput } from "../posting";
 import { splitTags, tagsFromHeader } from "../tags";
 import { feedPath, imagePath, publicUrl, rssPath } from "../urls";
 import { feedCookies } from "./feedsession";
 import { authorize, errorRedirect, feedAccess, sameOrigin, sender, mediaType, parseForm, readCapped, wantsHtml } from "./request";
-import { type Created, PostForm, PostJson } from "./schemas";
+import { type Created, EditJson, PostForm, PostJson } from "./schemas";
 
 // curl --data-binary sends x-www-form-urlencoded by default; treat it (and no type) as raw markdown.
 const TEXT_TYPES = ["", "text/markdown", "text/plain", "application/x-www-form-urlencoded"];
@@ -22,32 +22,59 @@ type PostReply = { status: 201; body: Created; headers?: HeadersInit } | { statu
 const redirect = (location: string, more: [string, string][] = []): PostReply => ({ status: 303, body: undefined, headers: [["Location", location], ...more] });
 
 // The API's snake_case `read_id` is `readId` inside.
-const withReadId = ({ read_id, ...rest }: { markdown: string; password?: string; tags?: string[]; read_id?: string }) => ({ ...rest, readId: read_id });
+const withReadId = ({ read_id, ...rest }: { markdown: string; password?: string; tags?: string[]; read_id?: string; title?: string; alt?: string }) => ({ ...rest, readId: read_id });
 
 // What a post carries: a note's markdown, or an image, with the optional new-feed password, tags and read id. The
 // markdown comes from a raw text body, JSON, or a form's fields; an image from a raw image body or a form's `file`
 // part. Tags come from the body; a raw body has none, so it takes the X-Note-Tags header. A raw image's file name
 // comes from X-Note-Name. The 100 KB cap counts the whole body of a markdown post, so a form's own framing takes a
 // few bytes of it; an image has NOTEFEED_MAX_IMAGE_BYTES.
-export async function readPost(req: Request): Promise<PostInput> {
-  const post = await readBody(req);
-  return { ...post, tags: post.tags ?? tagsFromHeader(req.headers.get("x-note-tags")) };
+export async function readPost(req: Request, imageOnly = false): Promise<PostInput> {
+  const post = await readBody(req, imageOnly);
+  const header = (name: string) => req.headers.get(name)?.trim() || undefined; // an empty header is none
+  return { ...post, tags: post.tags ?? tagsFromHeader(req.headers.get("x-note-tags")), title: post.title ?? header("x-note-title"), alt: post.alt ?? header("x-note-alt") };
 }
 
-// For an edit, which only ever takes text.
-export async function readMarkdown(req: Request): Promise<{ markdown: string }> {
-  const post = await readPost(req);
-  if (!("markdown" in post)) throw new InvalidBodyError("an edit needs markdown, not an image");
-  return post;
+// What an edit carries: markdown, a title, an alt text; at least one (updateNote checks). A raw text body is the markdown.
+export async function readEdit(req: Request): Promise<NoteEdit> {
+  const type = mediaType(req.headers);
+  const isJson = type === "application/json";
+  const isForm = type === "multipart/form-data";
+  if (!isJson && !isForm && !TEXT_TYPES.includes(type)) throw new UnsupportedTypeError();
+  const bytes = await readCapped(req, MAX_BYTES);
+  if (!bytes) throw new NoteTooLargeError();
+  if (isForm) {
+    const data = await parseForm(bytes, req.headers).catch(() => null);
+    if (!data) throw new InvalidBodyError("invalid form");
+    const text = (k: string) => (typeof data.get(k) === "string" ? (data.get(k) as string) : undefined);
+    return { markdown: text("markdown"), title: text("title"), alt: text("alt") };
+  }
+  let text: string;
+  try {
+    text = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(bytes);
+  } catch {
+    throw new InvalidBodyError("body must be UTF-8");
+  }
+  if (!isJson) return { markdown: text };
+  let json: unknown;
+  try {
+    json = JSON.parse(text);
+  } catch {
+    throw new InvalidBodyError("invalid JSON");
+  }
+  const parsed = EditJson.safeParse(json);
+  if (!parsed.success) throw new InvalidBodyError('JSON needs "markdown", "title" or "alt" strings');
+  return parsed.data;
 }
 
 const fileName = (v: string | null | undefined) => (v ?? "").replace(/[\x00-\x1f\x7f/\\]/g, "").trim().slice(0, 200) || undefined;
 
-async function readBody(req: Request): Promise<PostInput> {
+async function readBody(req: Request, imageOnly: boolean): Promise<PostInput> {
   const type = mediaType(req.headers);
   const isJson = type === "application/json";
   const isForm = type === "multipart/form-data";
   const isImage = IMAGE_TYPES.includes(type);
+  if (imageOnly && !isImage) throw new UnsupportedTypeError("send a PNG, JPEG, GIF or WebP image");
   if (!isJson && !isForm && !isImage && !TEXT_TYPES.includes(type)) throw new UnsupportedTypeError();
 
   const bytes = await readCapped(req, isImage || isForm ? config.maxImageBytes() : MAX_BYTES);
@@ -63,7 +90,7 @@ async function readBody(req: Request): Promise<PostInput> {
     if (data && file instanceof File) {
       if (data.has("markdown")) throw new InvalidBodyError('a form has a "markdown" field or a "file" part, not both');
       const text = (k: string) => (typeof data.get(k) === "string" ? (data.get(k) as string) : undefined);
-      return { image: new Uint8Array(await file.arrayBuffer()), name: fileName(file.name), password: text("password"), readId: text("read_id"), ...(data.has("tags") && { tags: tagsOf(data) }) };
+      return { image: new Uint8Array(await file.arrayBuffer()), name: fileName(file.name), password: text("password"), readId: text("read_id"), title: text("title"), alt: text("alt"), ...(data.has("tags") && { tags: tagsOf(data) }) };
     }
     if (bytes.length > MAX_BYTES) throw new NoteTooLargeError();
     const form = data && { ...Object.fromEntries(data), ...(data.has("tags") && { tags: tagsOf(data) }) };
@@ -93,7 +120,7 @@ async function readBody(req: Request): Promise<PostInput> {
 
 // The postNote entry's handler (backend/http/api.ts). Refusals are thrown as domain errors, except to
 // a browser form, which always gets a redirect back to the page.
-export async function handlePostNote(req: Request, feed: string): Promise<PostReply> {
+export async function handlePostNote(req: Request, feed: string, imageOnly = false): Promise<PostReply> {
   const h = req.headers;
   try {
     const ip = clientIp(h);
@@ -105,7 +132,7 @@ export async function handlePostNote(req: Request, feed: string): Promise<PostRe
       if (e instanceof AuthError && wantsHtml(h)) return redirect(`/login?next=${encodeURIComponent(feedPath(feed))}`);
       throw e;
     }
-    const { note, created, readId } = await postNote(feed, ip, () => readPost(req), feedAccess(h, feed), sender(h));
+    const { note, created, readId } = await postNote(feed, ip, () => readPost(req, imageOnly), feedAccess(h, feed), sender(h));
     // Only the post that created a protected feed gets the cookie: that browser chose the password, so it
     // stays unlocked without asking again. Any other post either came with the cookie or is a script.
     const value = created && sameOrigin(h) ? await cookieValue(feed) : null;

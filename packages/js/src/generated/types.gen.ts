@@ -18,9 +18,25 @@ export type Note = {
      */
     id: string;
     /**
-     * The first heading, or the first non-empty line; may be empty
+     * The title set for the note, else the first heading or the first non-empty line of a markdown note; may be empty (an image without one)
      */
     title: string;
+    /**
+     * Alternative text of an image note
+     */
+    alt?: string | null;
+    /**
+     * The file name an image was posted with
+     */
+    name?: string | null;
+    /**
+     * The size of the note's content in bytes
+     */
+    size: number;
+    /**
+     * Where the note's file is served, absolute, under the feed's read id; null while the feed has no read link
+     */
+    file_url?: string | null;
     /**
      * The note, byte-for-byte as posted
      */
@@ -92,6 +108,10 @@ export type Error = {
 export type PostJson = {
     markdown: string;
     /**
+     * The note's title, at most 100 characters, one line; empty or left out means the title is taken from the text (a markdown note) or there is none (an image)
+     */
+    title?: string;
+    /**
      * Protects the feed: 1 to 256 printable ASCII characters, with no space at the start or end. Only honored on the post that creates the feed; an existing open feed answers 409. Empty is the same as leaving it out.
      */
     password?: string;
@@ -111,6 +131,14 @@ export type PostForm = {
      */
     markdown: string;
     /**
+     * The note's title, at most 100 characters, one line; empty or left out means the title is taken from the text (a markdown note) or there is none (an image)
+     */
+    title?: string;
+    /**
+     * Alternative text of an image note, at most 500 characters, one line
+     */
+    alt?: string;
+    /**
      * Protects the feed: 1 to 256 printable ASCII characters, with no space at the start or end. Only honored on the post that creates the feed; an existing open feed answers 409. Empty is the same as leaving it out.
      */
     password?: string;
@@ -123,6 +151,23 @@ export type PostForm = {
      */
     read_id?: string;
 };
+
+export type EditJson = {
+    /**
+     * The new text; only for a markdown note
+     */
+    markdown?: string;
+    /**
+     * The note's title, at most 100 characters, one line; empty or left out means the title is taken from the text (a markdown note) or there is none (an image)
+     */
+    title?: string;
+    /**
+     * Alternative text of an image note, at most 500 characters, one line
+     */
+    alt?: string;
+};
+
+export type EditForm = EditJson;
 
 export type PasswordJson = {
     /**
@@ -272,6 +317,14 @@ export type PostNoteData = {
          * For an image body: the picture's original file name, kept with the note (at most 200 characters)
          */
         'X-Note-Name'?: string;
+        /**
+         * The note's title, for a raw body; a JSON or form body's own `title` wins. At most 100 characters, one line.
+         */
+        'X-Note-Title'?: string;
+        /**
+         * For an image body: its alternative text; a form's own `alt` wins.
+         */
+        'X-Note-Alt'?: string;
     };
     path: {
         /**
@@ -324,6 +377,85 @@ export type PostNoteResponses = {
 };
 
 export type PostNoteResponse = PostNoteResponses[keyof PostNoteResponses];
+
+export type UploadImageData = {
+    /**
+     * The image's bytes: PNG, JPEG, GIF or WebP, recognized by their first bytes, not by the Content-Type
+     */
+    body: Blob | File;
+    headers?: {
+        /**
+         * The feed's own password, when it has one: to post, list or get, and (as the current password) to change or remove it. On the `POST` that creates a feed it sets the feed's password; on a `POST` to an existing feed that has none it answers 409. An empty value is the same as no header, so a `POST` with an empty one creates an open feed.
+         */
+        'X-Feed-Password'?: string;
+        /**
+         * Tags for the note, comma-separated (`ci,deploy`): at most 10 tags, each 1 to 32 characters of letters, digits, `-`, `_`, `.` and `:`; case is folded to lowercase, duplicates are removed. For a raw markdown body; a JSON or form body's own `tags` wins. Empty is none.
+         */
+        'X-Note-Tags'?: string;
+        /**
+         * For an image body: the picture's original file name, kept with the note (at most 200 characters)
+         */
+        'X-Note-Name'?: string;
+        /**
+         * The note's title, for a raw body; a JSON or form body's own `title` wins. At most 100 characters, one line.
+         */
+        'X-Note-Title'?: string;
+        /**
+         * For an image body: its alternative text; a form's own `alt` wins.
+         */
+        'X-Note-Alt'?: string;
+    };
+    path: {
+        /**
+         * The feed's name. It is the write key: anyone who knows it can post.
+         */
+        feed: string;
+    };
+    query?: never;
+    url: '/api/v1/feeds/{feed}/images';
+};
+
+export type UploadImageErrors = {
+    /**
+     * Invalid or reserved feed name; a bad title or alt; a new password that is not printable ASCII; invalid tags
+     */
+    400: Error;
+    /**
+     * The instance has a password, or the feed has its own, and it is missing or wrong
+     */
+    401: Error;
+    /**
+     * A password was sent for a feed that already exists without one: it can't be claimed
+     */
+    409: Error;
+    /**
+     * Body over NOTEFEED_MAX_IMAGE_BYTES
+     */
+    413: Error;
+    /**
+     * Not a PNG, JPEG, GIF or WebP image
+     */
+    415: Error;
+    /**
+     * Too many posts, or wrong passwords, from this client
+     */
+    429: Error;
+    /**
+     * NOTEFEED_MAX_FEEDS or NOTEFEED_MAX_IMAGES_PER_FEED reached
+     */
+    507: Error;
+};
+
+export type UploadImageError = UploadImageErrors[keyof UploadImageErrors];
+
+export type UploadImageResponses = {
+    /**
+     * Stored
+     */
+    201: Created;
+};
+
+export type UploadImageResponse = UploadImageResponses[keyof UploadImageResponses];
 
 export type DeleteNoteData = {
     body?: never;
@@ -430,7 +562,7 @@ export type GetNoteResponses = {
 export type GetNoteResponse = GetNoteResponses[keyof GetNoteResponses];
 
 export type EditNoteData = {
-    body: PostJson;
+    body: EditJson;
     headers?: {
         /**
          * The feed's own password, when it has one: to post, list or get, and (as the current password) to change or remove it. On the `POST` that creates a feed it sets the feed's password; on a `POST` to an existing feed that has none it answers 409. An empty value is the same as no header, so a `POST` with an empty one creates an open feed.

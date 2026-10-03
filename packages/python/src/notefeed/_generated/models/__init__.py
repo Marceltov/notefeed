@@ -1,6 +1,8 @@
 """Contains all the data models used in inputs/outputs"""
 
 from .created import Created
+from .edit_form import EditForm
+from .edit_json import EditJson
 from .error import Error
 from .error_code import ErrorCode
 from .feed import Feed
@@ -16,6 +18,8 @@ from .read_feed import ReadFeed
 
 __all__ = (
     "Created",
+    "EditForm",
+    "EditJson",
     "Error",
     "ErrorCode",
     "Feed",

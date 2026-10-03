@@ -116,6 +116,31 @@ export async function replaceNote(feed: string, id: string, content: string | Ui
   }
 }
 
+// Changes some fields of an existing note's metadata: a string or list sets one, null (or an empty value) removes it. The sidecar is
+// replaced atomically (temp file, then rename) and removed when nothing is left. False when there is no such note.
+export async function updateMeta(feed: string, id: string, patch: { [K in keyof Meta]?: Meta[K] | null }): Promise<boolean> {
+  const note = await readNote(feed, id);
+  if (!note) return false;
+  const merged: Record<string, unknown> = { ...note.meta };
+  for (const [k, v] of Object.entries(patch)) {
+    if (v === null || v === undefined || v === "" || (Array.isArray(v) && v.length === 0)) delete merged[k];
+    else merged[k] = v;
+  }
+  const path = sidecar(feed, id, note.ext);
+  if (!hasMeta(merged as Meta)) return orMissing(unlink(/*turbopackIgnore: true*/ path).then(() => true), true);
+  const tmp = join(feedDir(feed), `.${randomBytes(6).toString("hex")}.tmp`);
+  try {
+    await writeFile(/*turbopackIgnore: true*/ tmp, JSON.stringify(merged));
+    await rename(/*turbopackIgnore: true*/ tmp, path);
+    return true;
+  } catch (e) {
+    if (isErrno(e, "ENOENT")) return false; // the feed was deleted since the read
+    throw e;
+  } finally {
+    await unlink(/*turbopackIgnore: true*/ tmp).catch(() => {});
+  }
+}
+
 // Content first, then the sidecar: a sidecar left behind is ignored, content without its metadata would be shown bare.
 export async function deleteNoteFile(feed: string, id: string): Promise<boolean> {
   const entry = (await listNoteFiles(feed)).find((e) => e.id === id);

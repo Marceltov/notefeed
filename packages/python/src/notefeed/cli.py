@@ -55,7 +55,7 @@ def main(argv: list[str] | None = None) -> int:
                     data = f.read()
             except OSError as ex:
                 raise _UsageError(f"cannot read {args.path}: {ex.strerror}") from None
-            print(_client(args).upload_image(data).markdown)
+            print(f"![]({_client(args).upload_image(data).file})")
         else:
             if args.limit < 1:
                 raise _UsageError("--limit must be a whole number, 1 or more")

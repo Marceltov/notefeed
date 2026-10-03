@@ -54,6 +54,8 @@ describe("GET /feeds/{feed}/notes", () => {
       {
         kind: "markdown",
         file: `${one.id}.md`,
+        file_url: expect.stringMatching(new RegExp(`^${BASE}/r/[\\w-]+/${one.id}\\.md$`)),
+        size: 10,
         id: one.id,
         title: "One",
         markdown: "# One\nbody",

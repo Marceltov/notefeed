@@ -8,14 +8,13 @@ from ... import errors
 from ...client import AuthenticatedClient, Client
 from ...models.created import Created
 from ...models.error import Error
-from ...models.post_json import PostJson
-from ...types import UNSET, Response, Unset
+from ...types import UNSET, File, Response, Unset
 
 
 def _get_kwargs(
     feed: str,
     *,
-    body: PostJson,
+    body: File,
     x_feed_password: str | Unset = UNSET,
     x_note_tags: str | Unset = UNSET,
     x_note_name: str | Unset = UNSET,
@@ -40,14 +39,13 @@ def _get_kwargs(
 
     _kwargs: dict[str, Any] = {
         "method": "post",
-        "url": "/api/v1/feeds/{feed}/notes".format(
+        "url": "/api/v1/feeds/{feed}/images".format(
             feed=quote(str(feed), safe=""),
         ),
     }
 
-    _kwargs["json"] = body.to_dict()
-
-    headers["Content-Type"] = "application/json"
+    _kwargs["content"] = body.payload
+    headers["Content-Type"] = "application/octet-stream"
 
     _kwargs["headers"] = headers
     return _kwargs
@@ -121,31 +119,23 @@ def sync_detailed(
     feed: str,
     *,
     client: AuthenticatedClient,
-    body: PostJson,
+    body: File,
     x_feed_password: str | Unset = UNSET,
     x_note_tags: str | Unset = UNSET,
     x_note_name: str | Unset = UNSET,
     x_note_title: str | Unset = UNSET,
     x_note_alt: str | Unset = UNSET,
 ) -> Response[Any | Created | Error]:
-    """Post a note
+    """Post an image
 
-     Creates the feed with its first note, optionally protected by its own password (`X-Feed-Password`
-    header or a `password` field in the JSON or form body; 1 to 256 printable ASCII characters, with no
-    space at the start or end). Posting to a protected feed needs that password. Also served at `POST
-    /{feed}`, the short form the client packages and curl one-liners use. A markdown body is at most
-    102400 bytes and must be UTF-8. A body that is an image (`image/png`, `image/jpeg`, `image/gif`,
-    `image/webp` or `application/octet-stream`) is posted as a note of its own: PNG, JPEG, GIF or WebP,
-    recognized by its first bytes, whatever `Content-Type` is sent (SVG is refused). It is stored byte
-    for byte, with no resizing and no metadata stripped (EXIF such as GPS position stays in the file),
-    at most NOTEFEED_MAX_IMAGE_BYTES (default 5 MiB). The response has its `file` and a `file_url` under
-    the feed's read id, public like the read link. `X-Note-Name` gives the picture's original file name.
-    A multipart form may send a `file` part instead of `markdown`. `application/x-www-form-urlencoded`
-    (what `curl -d` sends) is read as raw markdown, not as form fields. `read_id` (JSON or form field)
-    is the feed's read id when this post creates it: random when left out, ignored for a feed that
-    exists. Tags (at most 10 tags, each 1 to 32 characters of letters, digits, `-`, `_`, `.` and `:`;
-    case is folded to lowercase, duplicates are removed) go in the JSON `tags` array, a repeated `tags`
-    form field, or, for a raw body, the `X-Note-Tags` header.
+     The same as posting a note with an image body, for clients that send the picture itself: it becomes
+    a note of its own. The body is PNG, JPEG, GIF or WebP, recognized by its first bytes, whatever
+    `Content-Type` is sent (SVG is refused). Stored byte for byte, with no resizing and no metadata
+    stripped (EXIF such as GPS position stays in the file). The response has the note's `file` and a
+    `file_url` under the feed's read link, public like the read link, and `![](file)` in a markdown note
+    shows it. Creates the feed if it does not exist, like a first note; a password given then protects
+    it. Needs the same credentials as posting and counts against the post rate limit. The size limit is
+    NOTEFEED_MAX_IMAGE_BYTES (default 5 MiB).
 
     Args:
         feed (str):
@@ -154,7 +144,8 @@ def sync_detailed(
         x_note_name (str | Unset):
         x_note_title (str | Unset):
         x_note_alt (str | Unset):
-        body (PostJson):
+        body (File): The image's bytes: PNG, JPEG, GIF or WebP, recognized by their first bytes,
+            not by the Content-Type
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -185,31 +176,23 @@ def sync(
     feed: str,
     *,
     client: AuthenticatedClient,
-    body: PostJson,
+    body: File,
     x_feed_password: str | Unset = UNSET,
     x_note_tags: str | Unset = UNSET,
     x_note_name: str | Unset = UNSET,
     x_note_title: str | Unset = UNSET,
     x_note_alt: str | Unset = UNSET,
 ) -> Any | Created | Error | None:
-    """Post a note
+    """Post an image
 
-     Creates the feed with its first note, optionally protected by its own password (`X-Feed-Password`
-    header or a `password` field in the JSON or form body; 1 to 256 printable ASCII characters, with no
-    space at the start or end). Posting to a protected feed needs that password. Also served at `POST
-    /{feed}`, the short form the client packages and curl one-liners use. A markdown body is at most
-    102400 bytes and must be UTF-8. A body that is an image (`image/png`, `image/jpeg`, `image/gif`,
-    `image/webp` or `application/octet-stream`) is posted as a note of its own: PNG, JPEG, GIF or WebP,
-    recognized by its first bytes, whatever `Content-Type` is sent (SVG is refused). It is stored byte
-    for byte, with no resizing and no metadata stripped (EXIF such as GPS position stays in the file),
-    at most NOTEFEED_MAX_IMAGE_BYTES (default 5 MiB). The response has its `file` and a `file_url` under
-    the feed's read id, public like the read link. `X-Note-Name` gives the picture's original file name.
-    A multipart form may send a `file` part instead of `markdown`. `application/x-www-form-urlencoded`
-    (what `curl -d` sends) is read as raw markdown, not as form fields. `read_id` (JSON or form field)
-    is the feed's read id when this post creates it: random when left out, ignored for a feed that
-    exists. Tags (at most 10 tags, each 1 to 32 characters of letters, digits, `-`, `_`, `.` and `:`;
-    case is folded to lowercase, duplicates are removed) go in the JSON `tags` array, a repeated `tags`
-    form field, or, for a raw body, the `X-Note-Tags` header.
+     The same as posting a note with an image body, for clients that send the picture itself: it becomes
+    a note of its own. The body is PNG, JPEG, GIF or WebP, recognized by its first bytes, whatever
+    `Content-Type` is sent (SVG is refused). Stored byte for byte, with no resizing and no metadata
+    stripped (EXIF such as GPS position stays in the file). The response has the note's `file` and a
+    `file_url` under the feed's read link, public like the read link, and `![](file)` in a markdown note
+    shows it. Creates the feed if it does not exist, like a first note; a password given then protects
+    it. Needs the same credentials as posting and counts against the post rate limit. The size limit is
+    NOTEFEED_MAX_IMAGE_BYTES (default 5 MiB).
 
     Args:
         feed (str):
@@ -218,7 +201,8 @@ def sync(
         x_note_name (str | Unset):
         x_note_title (str | Unset):
         x_note_alt (str | Unset):
-        body (PostJson):
+        body (File): The image's bytes: PNG, JPEG, GIF or WebP, recognized by their first bytes,
+            not by the Content-Type
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -244,31 +228,23 @@ async def asyncio_detailed(
     feed: str,
     *,
     client: AuthenticatedClient,
-    body: PostJson,
+    body: File,
     x_feed_password: str | Unset = UNSET,
     x_note_tags: str | Unset = UNSET,
     x_note_name: str | Unset = UNSET,
     x_note_title: str | Unset = UNSET,
     x_note_alt: str | Unset = UNSET,
 ) -> Response[Any | Created | Error]:
-    """Post a note
+    """Post an image
 
-     Creates the feed with its first note, optionally protected by its own password (`X-Feed-Password`
-    header or a `password` field in the JSON or form body; 1 to 256 printable ASCII characters, with no
-    space at the start or end). Posting to a protected feed needs that password. Also served at `POST
-    /{feed}`, the short form the client packages and curl one-liners use. A markdown body is at most
-    102400 bytes and must be UTF-8. A body that is an image (`image/png`, `image/jpeg`, `image/gif`,
-    `image/webp` or `application/octet-stream`) is posted as a note of its own: PNG, JPEG, GIF or WebP,
-    recognized by its first bytes, whatever `Content-Type` is sent (SVG is refused). It is stored byte
-    for byte, with no resizing and no metadata stripped (EXIF such as GPS position stays in the file),
-    at most NOTEFEED_MAX_IMAGE_BYTES (default 5 MiB). The response has its `file` and a `file_url` under
-    the feed's read id, public like the read link. `X-Note-Name` gives the picture's original file name.
-    A multipart form may send a `file` part instead of `markdown`. `application/x-www-form-urlencoded`
-    (what `curl -d` sends) is read as raw markdown, not as form fields. `read_id` (JSON or form field)
-    is the feed's read id when this post creates it: random when left out, ignored for a feed that
-    exists. Tags (at most 10 tags, each 1 to 32 characters of letters, digits, `-`, `_`, `.` and `:`;
-    case is folded to lowercase, duplicates are removed) go in the JSON `tags` array, a repeated `tags`
-    form field, or, for a raw body, the `X-Note-Tags` header.
+     The same as posting a note with an image body, for clients that send the picture itself: it becomes
+    a note of its own. The body is PNG, JPEG, GIF or WebP, recognized by its first bytes, whatever
+    `Content-Type` is sent (SVG is refused). Stored byte for byte, with no resizing and no metadata
+    stripped (EXIF such as GPS position stays in the file). The response has the note's `file` and a
+    `file_url` under the feed's read link, public like the read link, and `![](file)` in a markdown note
+    shows it. Creates the feed if it does not exist, like a first note; a password given then protects
+    it. Needs the same credentials as posting and counts against the post rate limit. The size limit is
+    NOTEFEED_MAX_IMAGE_BYTES (default 5 MiB).
 
     Args:
         feed (str):
@@ -277,7 +253,8 @@ async def asyncio_detailed(
         x_note_name (str | Unset):
         x_note_title (str | Unset):
         x_note_alt (str | Unset):
-        body (PostJson):
+        body (File): The image's bytes: PNG, JPEG, GIF or WebP, recognized by their first bytes,
+            not by the Content-Type
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -306,31 +283,23 @@ async def asyncio(
     feed: str,
     *,
     client: AuthenticatedClient,
-    body: PostJson,
+    body: File,
     x_feed_password: str | Unset = UNSET,
     x_note_tags: str | Unset = UNSET,
     x_note_name: str | Unset = UNSET,
     x_note_title: str | Unset = UNSET,
     x_note_alt: str | Unset = UNSET,
 ) -> Any | Created | Error | None:
-    """Post a note
+    """Post an image
 
-     Creates the feed with its first note, optionally protected by its own password (`X-Feed-Password`
-    header or a `password` field in the JSON or form body; 1 to 256 printable ASCII characters, with no
-    space at the start or end). Posting to a protected feed needs that password. Also served at `POST
-    /{feed}`, the short form the client packages and curl one-liners use. A markdown body is at most
-    102400 bytes and must be UTF-8. A body that is an image (`image/png`, `image/jpeg`, `image/gif`,
-    `image/webp` or `application/octet-stream`) is posted as a note of its own: PNG, JPEG, GIF or WebP,
-    recognized by its first bytes, whatever `Content-Type` is sent (SVG is refused). It is stored byte
-    for byte, with no resizing and no metadata stripped (EXIF such as GPS position stays in the file),
-    at most NOTEFEED_MAX_IMAGE_BYTES (default 5 MiB). The response has its `file` and a `file_url` under
-    the feed's read id, public like the read link. `X-Note-Name` gives the picture's original file name.
-    A multipart form may send a `file` part instead of `markdown`. `application/x-www-form-urlencoded`
-    (what `curl -d` sends) is read as raw markdown, not as form fields. `read_id` (JSON or form field)
-    is the feed's read id when this post creates it: random when left out, ignored for a feed that
-    exists. Tags (at most 10 tags, each 1 to 32 characters of letters, digits, `-`, `_`, `.` and `:`;
-    case is folded to lowercase, duplicates are removed) go in the JSON `tags` array, a repeated `tags`
-    form field, or, for a raw body, the `X-Note-Tags` header.
+     The same as posting a note with an image body, for clients that send the picture itself: it becomes
+    a note of its own. The body is PNG, JPEG, GIF or WebP, recognized by its first bytes, whatever
+    `Content-Type` is sent (SVG is refused). Stored byte for byte, with no resizing and no metadata
+    stripped (EXIF such as GPS position stays in the file). The response has the note's `file` and a
+    `file_url` under the feed's read link, public like the read link, and `![](file)` in a markdown note
+    shows it. Creates the feed if it does not exist, like a first note; a password given then protects
+    it. Needs the same credentials as posting and counts against the post rate limit. The size limit is
+    NOTEFEED_MAX_IMAGE_BYTES (default 5 MiB).
 
     Args:
         feed (str):
@@ -339,7 +308,8 @@ async def asyncio(
         x_note_name (str | Unset):
         x_note_title (str | Unset):
         x_note_alt (str | Unset):
-        body (PostJson):
+        body (File): The image's bytes: PNG, JPEG, GIF or WebP, recognized by their first bytes,
+            not by the Content-Type
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.

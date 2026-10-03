@@ -14,7 +14,7 @@ import { TAG_RULE } from "../tags";
 import { API_PREFIX, feedPath, imagePath, publicUrl, readPath, rssPath } from "../urls";
 import { createDispatcher, op, type AnyOp, type ResponseSpec } from "./dispatch";
 import { deleteFeed, deleteNote, editNote, updateFeed } from "../posting";
-import { handlePostNote, readMarkdown } from "./notes";
+import { handlePostNote, readEdit } from "./notes";
 import { authorize, feedAccess, readCapped } from "./request";
 import {
   COMPONENTS,
@@ -26,7 +26,11 @@ import {
   FeedPasswordHeader,
   FeedSettingsJson,
   ImageBody,
+  EditForm,
+  EditJson,
+  NoteAltHeader,
   NoteNameHeader,
+  NoteTitleHeader,
   NoteIdParam,
   NoteJson,
   NoteList,
@@ -57,8 +61,9 @@ async function passwordFeedAndFeedPassword(input: { req: Request; params: Record
   await checkFeedAccess(input.params.feed, feedAccess(input.req.headers, input.params.feed), clientIp(input.req.headers));
 }
 
-// Wire form of a note; `base` is the absolute URL its page lives under.
-const noteJson = (n: Note, base: string): NoteJson => ({
+// Wire form of a note; `base` is the absolute URL its page lives under, `files` the one its files are served under
+// (the feed's read link; null while the feed has none).
+const noteJson = (n: Note, base: string, files: string | null): NoteJson => ({
   kind: n.kind as NoteJson["kind"],
   file: n.file,
   id: n.id,
@@ -66,17 +71,27 @@ const noteJson = (n: Note, base: string): NoteJson => ({
   markdown: n.markdown,
   created_at: n.createdAt.toISOString(),
   url: `${base}/${n.id}`,
+  file_url: files && files + n.file,
+  size: n.size,
   ...(n.sender !== undefined && { sender: n.sender }),
+  ...(n.alt !== undefined && { alt: n.alt }),
+  ...("name" in n && typeof n.name === "string" && { name: n.name }),
   tags: n.tags,
 });
 
+// Where a feed's files are served from (by its name, for the Feeds API), or null while it has no read link.
+async function filesOf(feed: string, headers: Headers): Promise<string | null> {
+  const readId = await readIdOf(feed);
+  return readId && `${publicUrl(headers)}${readPath(readId)}/`;
+}
+
 // One page of notes, newest first, and the cursor for the next one.
-async function page(notes: (limit: number, before?: string, tag?: string) => Promise<Note[]>, query: z.infer<typeof PageQuery>, base: string) {
+async function page(notes: (limit: number, before?: string, tag?: string) => Promise<Note[]>, query: z.infer<typeof PageQuery>, base: string, files: string | null) {
   const found = await notes(query.limit + 1, query.before, query.tag); // one extra: is there a next page?
   const shown = found.slice(0, query.limit);
   return {
     status: 200 as const,
-    body: { notes: shown.map((n) => noteJson(n, base)), next: found.length > query.limit ? shown[shown.length - 1].id : null },
+    body: { notes: shown.map((n) => noteJson(n, base, files)), next: found.length > query.limit ? shown[shown.length - 1].id : null },
   };
 }
 
@@ -115,7 +130,7 @@ const OPS: AnyOp[] = [
     tags: ["Feeds"],
     password: true,
     params: { feed: FeedParam },
-    headers: { "X-Feed-Password": FeedPasswordHeader, "X-Note-Tags": NoteTagsHeader, "X-Note-Name": NoteNameHeader },
+    headers: { "X-Feed-Password": FeedPasswordHeader, "X-Note-Tags": NoteTagsHeader, "X-Note-Name": NoteNameHeader, "X-Note-Title": NoteTitleHeader, "X-Note-Alt": NoteAltHeader },
     body: {
       "text/markdown": z.string(),
       "text/plain": z.string(),
@@ -147,6 +162,45 @@ const OPS: AnyOp[] = [
   }).handle(({ req, params }) => handlePostNote(req, params.feed)),
 
   op({
+    method: "POST",
+    path: `${API_PREFIX}/feeds/{feed}/images`,
+    operationId: "uploadImage",
+    summary: "Post an image",
+    description:
+      "The same as posting a note with an image body, for clients that send the picture itself: it becomes a note of its own. " +
+      "The body is PNG, JPEG, GIF or WebP, recognized by its first bytes, whatever `Content-Type` is sent (SVG is refused). " +
+      "Stored byte for byte, with no resizing and no metadata stripped (EXIF such as GPS position stays in the file). " +
+      "The response has the note's `file` and a `file_url` under the feed's read link, public like the read link, and `![](file)` in a markdown note shows it. " +
+      "Creates the feed if it does not exist, like a first note; a password given then protects it. Needs the same credentials as posting and counts against the post rate limit. " +
+      "The size limit is NOTEFEED_MAX_IMAGE_BYTES (default 5 MiB).",
+    tags: ["Feeds"],
+    password: true,
+    params: { feed: FeedParam },
+    headers: { "X-Feed-Password": FeedPasswordHeader, "X-Note-Tags": NoteTagsHeader, "X-Note-Name": NoteNameHeader, "X-Note-Title": NoteTitleHeader, "X-Note-Alt": NoteAltHeader },
+    body: {
+      "image/png": ImageBody,
+      "image/jpeg": ImageBody,
+      "image/gif": ImageBody,
+      "image/webp": ImageBody,
+      "application/octet-stream": ImageBody,
+    },
+    responses: {
+      201: { description: "Stored", schema: Created },
+      303: {
+        description: "Only when the request accepts `text/html` (a browser navigating): back to the feed page with `?posted=<id>` or `?error=<code>`, or to the login page",
+        headers: { Location: { description: "Where to go", type: "string" } },
+      },
+      400: err("Invalid or reserved feed name; a bad title or alt; a new password that is not printable ASCII; invalid tags"),
+      401: UNAUTHORIZED,
+      409: err("A password was sent for a feed that already exists without one: it can't be claimed"),
+      413: err("Body over NOTEFEED_MAX_IMAGE_BYTES"),
+      415: err("Not a PNG, JPEG, GIF or WebP image"),
+      429: { ...err("Too many posts, or wrong passwords, from this client"), headers: RETRY },
+      507: err("NOTEFEED_MAX_FEEDS or NOTEFEED_MAX_IMAGES_PER_FEED reached"),
+    },
+  }).handle(({ req, params }) => handlePostNote(req, params.feed, true)),
+
+  op({
     method: "GET",
     path: `${API_PREFIX}/feeds/{feed}/notes`,
     operationId: "listNotes",
@@ -165,7 +219,7 @@ const OPS: AnyOp[] = [
     },
     before: passwordFeedAndFeedPassword,
   }).handle(async ({ req, params, query }) => {
-    return page((l, b, t) => listNotes(params.feed, l, b, t), query, publicUrl(req.headers) + feedPath(params.feed));
+    return page((l, b, t) => listNotes(params.feed, l, b, t), query, publicUrl(req.headers) + feedPath(params.feed), await filesOf(params.feed, req.headers));
   }),
 
   op({
@@ -188,7 +242,7 @@ const OPS: AnyOp[] = [
   }).handle(async ({ req, params }) => {
     const note = await getNote(params.feed, params.id);
     if (!note) throw new NotFoundError("no such note");
-    return { status: 200, body: noteJson(note, publicUrl(req.headers) + feedPath(params.feed)) };
+    return { status: 200, body: noteJson(note, publicUrl(req.headers) + feedPath(params.feed), await filesOf(params.feed, req.headers)) };
   }),
 
   op({
@@ -197,9 +251,10 @@ const OPS: AnyOp[] = [
     operationId: "editNote",
     summary: "Edit a note",
     description:
-      "Replaces the note's markdown; its id and creation time stay, the title follows the new text. " +
+      "Changes the note: its markdown (only for a markdown note), its title (empty removes it: a markdown note's title follows its text again), its alt text (image notes). " +
+      "Its id and creation time stay. A raw text body is the new markdown. At least one of the three is needed. " +
       "Needs the feed's password if it has one, and counts against the post rate limit. Read links can't edit. " +
-      `The body is as for posting: at most ${MAX_BYTES} bytes, UTF-8, a \`password\` field is ignored.`,
+      `The body is at most ${MAX_BYTES} bytes and UTF-8.`,
     tags: ["Feeds"],
     password: true,
     params: { feed: FeedParam, id: NoteIdParam },
@@ -208,13 +263,8 @@ const OPS: AnyOp[] = [
       "text/markdown": z.string(),
       "text/plain": z.string(),
       "application/x-www-form-urlencoded": z.string(),
-      "application/json": PostJson,
-      "multipart/form-data": PostForm,
-      "image/png": ImageBody,
-      "image/jpeg": ImageBody,
-      "image/gif": ImageBody,
-      "image/webp": ImageBody,
-      "application/octet-stream": ImageBody,
+      "application/json": EditJson,
+      "multipart/form-data": EditForm,
     },
     responses: {
       200: { description: "The note as it is now", schema: NoteJson },
@@ -228,8 +278,8 @@ const OPS: AnyOp[] = [
     before: passwordAndFeed,
   }).handle(async ({ req, params }) => {
     const ip = clientIp(req.headers);
-    const note = await editNote(params.feed, params.id, ip, () => readMarkdown(req), feedAccess(req.headers, params.feed));
-    return { status: 200, body: noteJson(note, publicUrl(req.headers) + feedPath(params.feed)) };
+    const note = await editNote(params.feed, params.id, ip, () => readEdit(req), feedAccess(req.headers, params.feed));
+    return { status: 200, body: noteJson(note, publicUrl(req.headers) + feedPath(params.feed), await filesOf(params.feed, req.headers)) };
   }),
 
   op({
@@ -437,7 +487,7 @@ const OPS: AnyOp[] = [
     const feed = await feedForReadId(params.readId);
     const settings = feed ? await getSettings(feed) : null;
     const notes = async (l: number, b?: string, t?: string) => (feed && settings ? forReaders(await listNotes(feed, l, b, t), settings) : []);
-    return page(notes, query, publicUrl(req.headers) + readPath(params.readId));
+    return page(notes, query, publicUrl(req.headers) + readPath(params.readId), `${publicUrl(req.headers)}${readPath(params.readId)}/`);
   }),
 
   op({
@@ -457,7 +507,7 @@ const OPS: AnyOp[] = [
     const found = feed ? await getNote(feed, params.id) : null;
     if (!feed || !found) throw new NotFoundError("no such note");
     const [note] = forReaders([found], await getSettings(feed));
-    return { status: 200, body: noteJson(note, publicUrl(req.headers) + readPath(params.readId)) };
+    return { status: 200, body: noteJson(note, publicUrl(req.headers) + readPath(params.readId), `${publicUrl(req.headers)}${readPath(params.readId)}/`) };
   }),
 
   op({

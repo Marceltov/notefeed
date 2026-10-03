@@ -312,10 +312,10 @@ test("deleteErrors", async () => {
 test("imagePrintsMarkdownAndSendsTheFileBytes", async () => {
   const f = join(mkdtempSync(join(tmpdir(), "nf-")), "p.png");
   writeFileSync(f, Buffer.from([0x89, 0x50, 0x4e, 0x47, 0, 255]));
-  server.reply(201, { file: "a.png", url: "https://n.example/r/X/images/a.png", markdown: "![](https://n.example/r/X/images/a.png)" });
+  server.reply(201, { id: "a", url: "https://n.example/inbox/a", feed_url: "https://n.example/inbox", read_url: null, file: "a.png", file_url: "https://n.example/r/X/a.png" });
   const t = io();
   expect(await main(["image", f, "--url", server.url, "--feed", "inbox"], t.io)).toBe(0);
-  expect(t.out.stdout).toBe("![](https://n.example/r/X/images/a.png)\n");
+  expect(t.out.stdout).toBe("![](a.png)\n");
   expect(server.requests[0].path).toBe("/api/v1/feeds/inbox/images");
   expect([...server.requests[0].body]).toEqual([0x89, 0x50, 0x4e, 0x47, 0, 255]);
 });
