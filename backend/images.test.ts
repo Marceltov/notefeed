@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { beforeEach, describe, expect, test } from "vitest";
 import { UnsupportedTypeError } from "./errors";
 import { resetFeedsForTests } from "./feeds";
-import { contentTypeOf, sniffImage } from "./images";
+import { contentTypeOf, sniffImage } from "../shared/images";
 import { createImageNote, createNote, getNote, hasImageNote, listNotes, removeNote } from "./notes";
 import { ImageNote } from "./note/image";
 

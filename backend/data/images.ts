@@ -1,5 +1,5 @@
 // An image on disk is `<DATA_DIR>/<feed>/<name>`, next to the notes, byte-for-byte as uploaded. Callers pass a name already
-// checked against IMAGE_FILE_RE (backend/images.ts); nothing here validates it. Never creates the feed directory.
+// checked against IMAGE_FILE_RE (shared/images.ts); nothing here validates it. Never creates the feed directory.
 import { randomBytes } from "node:crypto";
 import { link, readdir, readFile, stat, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";

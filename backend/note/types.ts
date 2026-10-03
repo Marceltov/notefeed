@@ -1,6 +1,6 @@
 // The kinds of note, by file extension: listing and reading look here, so a new kind is a subclass of Note and one
 // entry in NOTE_TYPES.
-import { IMAGE_EXTS, sniffImage } from "../images";
+import { IMAGE_EXTS, sniffImage } from "../../shared/images";
 import { ImageNote } from "./image";
 import { checkMarkdown, MarkdownNote } from "./markdown";
 import { parseMedia } from "./media";

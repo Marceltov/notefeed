@@ -5,7 +5,7 @@ import { isErrno } from "./data/fs";
 import { deleteNoteFile, replaceNote, updateMeta, writeNote, listNoteFiles, readNote, type Meta } from "./data/notes";
 import { InvalidBodyError, UnsupportedTypeError } from "./errors";
 import { assertFeed, checkFeed, ensureFeed, forgetFeed } from "./feeds";
-import { sniffImage } from "./images";
+import { sniffImage } from "../shared/images";
 import { ImageNote } from "./note/image";
 import { MarkdownNote } from "./note/markdown";
 import { Note } from "./note/note";

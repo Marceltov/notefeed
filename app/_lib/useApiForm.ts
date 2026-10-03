@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { postNote } from "@/app/_lib/api";
 import { encodeHeaderValue } from "@/shared/headers";
+import { contentTypeOf, sniffImage } from "@/shared/images";
 import { errorMessage, imageErrorMessage } from "@/app/_lib/messages";
 
 type Result = { data?: unknown; error?: { code?: string }; response?: Response };
@@ -36,6 +37,12 @@ export function useApiForm(page: string, initialError?: string, message = errorM
   return { run, error, setError, pending, setPending, router };
 }
 
+// The type the bytes say, not the one the browser guessed from the name: a PNG named .jpg is a PNG. Anything unknown keeps the browser's type, and the server refuses it.
+const typeOfBytes = async (file: File) => {
+  const ext = sniffImage(new Uint8Array(await file.slice(0, 12).arrayBuffer()));
+  return ext ? contentTypeOf(ext) : file.type;
+};
+
 // Posts one image to the feed as a note of its own (the generated client; the server checks the bytes against the declared type) and returns the
 // note's id and file name, or the refusal's message. `password` is only for the post that creates a protected feed; `meta` is a title and tags to put on the picture. Shared by the
 // markdown boxes and the title image.
@@ -46,7 +53,7 @@ export async function postFile(feed: string, file: File, password?: string, meta
       path: { feed },
       body: file,
       headers: {
-        "Content-Type": file.type, // the server accepts only the types it lists, and checks the bytes against it
+        "Content-Type": await typeOfBytes(file), // the server accepts only the types it lists, and checks the bytes against it
         ...(password && { "X-Feed-Password": password }),
         ...(meta.title && { "X-Note-Title": encodeHeaderValue(meta.title) }),
         ...(meta.tags?.length && { "X-Note-Tags": meta.tags.join(",") }),
