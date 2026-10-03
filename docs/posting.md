@@ -108,6 +108,12 @@ What to know:
 
 In the browser, the compose box and the note editor take pictures with the [Add image](web-ui.md#adding-an-image) button, by paste or by drop.
 
+## Posting a note with its pictures
+
+The API takes one note per request, so a note with pictures is the pictures first, then the text. The [clients](clients.md#from-code), the `notefeed post --attach` command and the [MCP](mcp.md) `post_note` tool do that in one call: each picture is posted as a note of its own, in order, and the text follows with `![](name)` swapped for the picture's file name. A picture the text never refers to is added at the end, so none is dropped. Names are letters, digits, `.`, `_` and `-`; the text is markdown; everything that can be checked locally is checked before the first request.
+
+If one picture is refused, the call fails with that picture's name and the pictures already posted, and the text is not posted. Nothing is rolled back: the pictures posted before it stay in the feed as notes of their own, and you can post again or delete them.
+
 ## Feed settings and deleting a feed
 
 A feed can have a **title** (at most 100 characters) and a **description** (at most 500), both on one line. The title is shown as a heading on the feed page, where the feed's name stays in the page header, and both show in the read-only view and in the RSS feed (see [Read links and RSS](feed.md#title-and-description)). The feed's name stays as it is: you can't rename a feed. A feed has neither until you set them.
