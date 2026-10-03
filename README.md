@@ -1,5 +1,10 @@
 # notefeed
 
+[![](https://img.shields.io/badge/Documentation-docs.notefeed.me-beige)](docs.notefeed.me)
+![NPM Version](https://img.shields.io/npm/v/notefeed?color=red)
+![PyPi Version](https://img.shields.io/pypi/v/notefeed?color=blue)
+[![M8ven Score](https://m8ven.ai/badge/mcp/marceltov/notefeed)](https://m8ven.ai/mcp/marceltov/notefeed?s=readme)
+
 Post short markdown notes to a named feed — from a script over HTTP, or by hand in a small web UI — and read them back as RSS. Like [ntfy](https://ntfy.sh), but for notes: there are no accounts, a feed is just a name, and each note is a plain `.md` file on disk. Built as an inbox for dashboards like Glance and Dynacat, which can read RSS but have nowhere to post to.
 
 **Documentation: https://docs.notefeed.me/**
