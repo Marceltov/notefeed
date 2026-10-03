@@ -33,7 +33,7 @@ export default async function NotePage({ params, searchParams }: PageProps<"/[fe
         </p>
       )}
       <NoteArticle note={note} back={feedPath(feed)} imageBase={readId ? `${readPath(readId)}/` : undefined} />
-      <NoteActions key={note.markdown} feed={feed} id={id} markdown={note.markdown} error={noteErrorMessage(error, retry)} />
+      <NoteActions key={note.markdown} feed={feed} id={id} kind={note.kind} markdown={note.markdown} error={noteErrorMessage(error, retry)} />
     </>
   );
 }

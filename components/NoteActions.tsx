@@ -10,7 +10,7 @@ const summary = "cursor-pointer select-none text-muted hover:text-ink";
 // Edit and delete for a note: plain forms to POST /<feed>/<id>/edit and /delete. With JavaScript they go
 // through the generated API client and show refusals inline; without, the browser follows the 303 and the
 // note page shows the outcome (`error` is its message).
-export function NoteActions({ feed, id, markdown, error: initialError }: { feed: string; id: string; markdown: string; error?: string }) {
+export function NoteActions({ feed, id, kind, markdown, error: initialError }: { feed: string; id: string; kind: string; markdown: string; error?: string }) {
   const page = `/${feed}`;
   const { run, error, setError, pending, setPending, router } = useApiForm(page, initialError);
   const [text, setText] = useState(markdown);
@@ -31,6 +31,7 @@ export function NoteActions({ feed, id, markdown, error: initialError }: { feed:
 
   return (
     <section aria-label="Edit or delete this note" className="mt-8 space-y-3 text-sm">
+      {kind !== "image" && (
       <details open={editing} onToggle={(e) => setEditing(e.currentTarget.open)}>
         <summary className={summary}>Edit</summary>
         <form method="post" action={`${base}/edit`} encType="multipart/form-data" onSubmit={save} className="mt-3">
@@ -51,6 +52,7 @@ export function NoteActions({ feed, id, markdown, error: initialError }: { feed:
           </button>
         </form>
       </details>
+      )}
       <details>
         <summary className={summary}>Delete</summary>
         <form method="post" action={`${base}/delete`} onSubmit={remove} className="mt-3">

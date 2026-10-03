@@ -38,6 +38,13 @@ function Tags({ tags, base }: { tags: string[]; base: string }) {
   ));
 }
 
+// An image note's picture, from the feed's current read link (`imageBase`), so it follows a changed read id. The text alternative is
+// the note's own, else its title, else none: a picture without a description is decoration to a screen reader, not a file name.
+function Picture({ note, imageBase, className }: { note: Note; imageBase?: string; className: string }) {
+  // eslint-disable-next-line @next/next/no-img-element
+  return <img src={(imageBase ?? "") + note.file} alt={note.alt ?? note.title} loading="lazy" className={className} />;
+}
+
 // Notes grouped by day; each title links to `${base}/${id}`. `imageBase` is where a note's relative image links point.
 export function NoteList({ notes, base, imageBase, posted }: { notes: Note[]; base: string; imageBase?: string; posted?: string }) {
   return groupByDay(notes).map(([day, items]) => (
@@ -55,9 +62,22 @@ export function NoteList({ notes, base, imageBase, posted }: { notes: Note[]; ba
               {time(n.createdAt)}
             </time>
             <div className="min-w-0">
-              <Link href={`${base}/${n.id}`} className="font-bold hover:text-carbon hover:underline">
-                {n.title || n.id}
-              </Link>
+              {n.kind === "image" ? (
+                <>
+                  {n.title && (
+                    <Link href={`${base}/${n.id}`} className="font-bold hover:text-carbon hover:underline">
+                      {n.title}
+                    </Link>
+                  )}
+                  <Link href={`${base}/${n.id}`} className="mt-1 block">
+                    <Picture note={n} imageBase={imageBase} className="max-h-96 max-w-full rounded-sm" />
+                  </Link>
+                </>
+              ) : (
+                <Link href={`${base}/${n.id}`} className="font-bold hover:text-carbon hover:underline">
+                  {n.title || n.id}
+                </Link>
+              )}
               {n.sender && <span className="ml-2 text-sm text-muted">by {n.sender}</span>}
               <Tags tags={n.tags} base={base} />
               {bodyAfterTitle(n.markdown) && (
@@ -83,7 +103,14 @@ export function NoteArticle({ note, back, imageBase }: { note: Note; back: strin
         {note.sender && <span className="text-sm text-muted"> by {note.sender}</span>}
         <Tags tags={note.tags} base={back} />
         <div className="mt-2">
-          <NoteView markdown={note.markdown} imageBase={imageBase} />
+          {note.kind === "image" ? (
+            <>
+              {note.title && <h1 className="mb-2 text-xl font-bold">{note.title}</h1>}
+              <Picture note={note} imageBase={imageBase} className="max-w-full rounded-sm" />
+            </>
+          ) : (
+            <NoteView markdown={note.markdown} imageBase={imageBase} />
+          )}
         </div>
       </article>
       <p className="mt-10 text-sm">
