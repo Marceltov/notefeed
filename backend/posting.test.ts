@@ -2,14 +2,14 @@ import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import { EmptyNoteError, ImageLimitError, ImageTooLargeError, InvalidBodyError, NotFoundError, UnsupportedTypeError } from "./errors";
-import { protectedFeed } from "./feedlock";
+import { AuthError, EmptyNoteError, ImageLimitError, ImageTooLargeError, InvalidBodyError, NotFoundError, UnsupportedTypeError } from "./errors";
+import { createProtected, protectedFeed } from "./feedlock";
 import { hasFeed, resetFeedsForTests } from "./feeds";
 import { resetRateLimitsForTests } from "./limits";
 import { logsOf } from "./log";
 import * as notes from "./notes";
 import { countNotes, createImageNote, createNote, getNote, MarkdownNote } from "./notes";
-import { editWithPictures, MAX_ATTACHMENTS, type Picture, type PostBundle, postNote, postWithPictures } from "./posting";
+import { editContent, editWithPictures, MAX_ATTACHMENTS, type Picture, type PostBundle, postNote, postWithPictures } from "./posting";
 
 // The text's write is the call after the pictures: a test makes it fail to see the pictures removed again.
 vi.mock("./notes", async (original) => {
@@ -177,6 +177,30 @@ describe("postWithPictures", () => {
     await post({ text: "x", pictures: [pic("a.png"), pic("b.png"), pic("c.png")] });
     await post({ pictures: [pic("a.png"), pic("b.png"), pic("c.png")] });
     expect(await countNotes("f")).toBe(7);
+  });
+});
+
+describe("which refusal wins", () => {
+  test("a bad picture on a missing note is a 404, for a multipart PUT and a raw one", async () => {
+    await createNote("f", "x");
+    await expect(edit("nope", { text: "y", pictures: [pic("a.png", { body: new Uint8Array([1]) })] })).rejects.toBeInstanceOf(NotFoundError);
+    const raw = editContent("f", "nope", "ip", async () => ({ body: new Uint8Array([1]), mediaType: "image/png" }), {});
+    await expect(raw).rejects.toBeInstanceOf(NotFoundError);
+  });
+
+  test("the body of a PUT for a missing note is not read", async () => {
+    const read = vi.fn(async () => ({ text: "y", pictures: [] }));
+    await expect(editWithPictures("f", "nope", "ip", read, {})).rejects.toBeInstanceOf(NotFoundError);
+    expect(read).not.toHaveBeenCalled();
+  });
+
+  test("a poster without the password is refused (401), not told the feed is over a cap, when the feed was created protected while the body was sent", async () => {
+    vi.stubEnv("NOTEFEED_MAX_IMAGES_PER_FEED", "1");
+    const read = async () => {
+      await createProtected("f", "secret-pass-1");
+      return { pictures: [pic("a.png"), pic("b.png")] };
+    };
+    await expect(postWithPictures("f", "ip", read, {})).rejects.toBeInstanceOf(AuthError);
   });
 });
 

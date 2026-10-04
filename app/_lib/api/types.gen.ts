@@ -604,7 +604,7 @@ export type EditNoteData = {
          */
         'X-Feed-Password'?: string;
         /**
-         * Tags for the note, comma-separated (`ci,deploy`): at most 10 tags, each 1 to 32 characters of letters, digits, `-`, `_`, `.` and `:`; case is folded to lowercase, duplicates are removed. For a raw markdown body; a JSON or form body's own `tags` wins. Empty is none.
+         * Only for a multipart body: the tags go on the new pictures (the note keeps its own). A raw body ignores it. Comma-separated, empty is none.
          */
         'X-Note-Tags'?: string;
     };

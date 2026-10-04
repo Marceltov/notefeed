@@ -42,7 +42,7 @@ curl -X PUT -H "Content-Type: text/markdown" --data-binary @note.md \
   https://notes.example.com/api/v1/feeds/homelab-7f3k2q9x4m8wz/notes/20260929T140512Z-backup-finished
 ```
 
-A markdown note can also be replaced with a `multipart/form-data` `PUT`, to add pictures: the `text` part is required, the `file` parts and `alt.<filename>` are as in [posting a note with its pictures](#posting-a-note-with-its-pictures), and the references are swapped the same way. The pictures are new notes of their own; `X-Note-Tags` goes on them only, and the answer is `200` with the note and `attachments`. It is all or nothing, like a post.
+A markdown note can also be replaced with a `multipart/form-data` `PUT`, to add pictures: the `text` part is required, the `file` parts and `alt.<filename>` are as in [posting a note with its pictures](#posting-a-note-with-its-pictures), and the references are swapped the same way. The pictures are new notes of their own; `X-Note-Tags` goes on them only (a raw `PUT` ignores it), and the answer is `200` with the note and `attachments`. The note is looked up before the parts are checked: a missing note is `404` and an image note `415`, whatever the parts hold. It is all or nothing, like a post.
 
 `PATCH` changes the note's [title](#titles) and, for a picture, its alt text, with a JSON body of `title` and/or `alt`. An empty string removes one. It answers `200` with the note:
 

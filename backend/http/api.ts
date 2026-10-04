@@ -220,11 +220,11 @@ const OPS: AnyOp[] = [
       "the title of a markdown note without one set follows the new text. Change the title or alt text with `PATCH`. " +
       "Needs the feed's password if it has one, and counts against the post rate limit. Read links can't edit. " +
       MULTIPART +
-      "On a `PUT` the `text` part is required and the note must be a markdown note; the note keeps its own title and tags, `X-Note-Tags` goes on the new pictures.",
+      "On a `PUT` the `text` part is required and the note must be a markdown note; the note keeps its own title and tags, `X-Note-Tags` goes on the new pictures. A raw body ignores `X-Note-Tags`. The note is looked up first: a missing note is `404` and an image note `415` whatever the body holds.",
     tags: ["Feeds"],
     password: true,
     params: { feed: FeedParam, id: NoteIdParam },
-    headers: { "X-Feed-Password": FeedPasswordHeader, "X-Note-Tags": NoteTagsHeader },
+    headers: { "X-Feed-Password": FeedPasswordHeader, "X-Note-Tags": NoteTagsHeader.describe("Only for a multipart body: the tags go on the new pictures (the note keeps its own). A raw body ignores it. Comma-separated, empty is none.") },
     body: { ...Object.fromEntries(MEDIA_TYPES.map((m) => [m.mediaType, FileBody])), "multipart/form-data": MultipartNote },
     responses: {
       200: { description: "The note as it is now, and with a multipart body the new pictures", schema: NoteEdited },
