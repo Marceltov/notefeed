@@ -47,4 +47,23 @@ InfluxDB takes the same endpoint through Telegraf:
   metric_version = 2
 ```
 
-A starter Grafana dashboard (import it, pick the Prometheus data source): [grafana-notefeed.json](../assets/grafana-notefeed.json). Its panels are the 95th percentile of `feed_page` by feed size, requests per second by kind, directory and file reads per request, texts refused for time and waiting, event-loop lag and memory.
+A starter Grafana dashboard (import it, pick the Prometheus data source): [grafana-notefeed.json](../assets/grafana-notefeed.json).
+
+## Setup with Prometheus and Grafana
+
+The steps to get from the endpoint to the dashboard, as they run on a Docker host with Prometheus and Grafana on their own containers:
+
+1. Set `NOTEFEED_METRICS=1` and a `NOTEFEED_METRICS_TOKEN` in notefeed's environment and restart it. `curl -H "Authorization: Bearer <token>" http://<host>:3000/metrics` should print `notefeed_` lines.
+2. Add the `notefeed` job above to Prometheus. Keep the token out of the config file in git: `authorization: { credentials_file: <path> }` reads it from a file that stays on the host (mount it into the Prometheus container read-only; a mount of a file that does not exist yet makes Docker create a folder, so create the file first). Reload Prometheus and check that the target is `up` under Status, Targets.
+3. Provision the dashboard from [grafana-notefeed.json](../assets/grafana-notefeed.json). Imported by hand, Grafana asks for the data source. Provisioned from a file, replace `${DS_PROMETHEUS}` with the uid of your Prometheus data source and delete the `__inputs` block, since provisioning does not fill inputs in.
+4. Give it a few days of real use before reading it; the counters start at 0 on every restart, which `rate()` handles.
+
+Reading the panels:
+
+- **feed_page p95 by feed size**: the panel the decision rests on. Over 200 ms for `feed_size` below `gte1000` is the sign that [#96](https://github.com/Marceltov/notefeed/issues/96) or an index is worth doing.
+- **Requests per second by kind**: what the instance is used for; a `_tag` kind with traffic is the tag filter reading whole feeds.
+- **Directory and file reads per request**: the cost behind the latency. Flat across `feed_size` means reading does not grow with the feed; rising with it is what #96 describes.
+- **Texts refused for time and waiting**: anything above 0 for refused texts means a post with pictures hit `NOTEFEED_PARSE_TIMEOUT_MS`; waiting above 0 for long means the worker is the bottleneck.
+- **Event-loop lag and memory**: a lag that spikes together with a slow `feed_page` points at the main thread rather than the disk.
+
+An alert is not part of the dashboard. If you want one, start from the rule of thumb above and from the target being down (`up{job="notefeed"} == 0`). Its panels are the 95th percentile of `feed_page` by feed size, requests per second by kind, directory and file reads per request, texts refused for time and waiting, event-loop lag and memory.
