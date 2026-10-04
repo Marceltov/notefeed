@@ -3,7 +3,8 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   output: "standalone",
   // pino stays a plain Node require (it is on Next's own list too), so the standalone build traces it into node_modules.
-  serverExternalPackages: ["pino"],
+  // prom-client the same: one module instance for every route bundle, and its Node internals (v8, perf_hooks) stay as they are.
+  serverExternalPackages: ["pino", "prom-client"],
   // proxy.ts handles trailing slashes itself: POST /<feed>/ stores the note, everything else gets a 308.
   skipTrailingSlashRedirect: true,
   // /r/<readId>/<name>.<ext> is a file of the feed; a note id has no dot, so notes stay on their page; feed.xml is the RSS route.

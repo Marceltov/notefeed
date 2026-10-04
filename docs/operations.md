@@ -97,6 +97,55 @@ If a feed's first note fails to save (a full disk, say), notefeed may leave an e
 
 If notefeed can't read a feed's `.readid` when it starts (wrong permissions, say), it logs that, without the feed's name, and lists the feed without a read link until the next start: the feed page shows none, and `read_url` and `image_url` are `null` in the API. Uploading an image to it is refused with `404`, because an image's URL is built from the read id. Posting and reading by name work as usual. notefeed does not fall back to another read id, because that would change the feed's link. Make the file readable and restart notefeed. The same happens to a feed whose `.readid` and computed read id both belong to other feeds, which takes two hand-made copies.
 
+## Metrics
+
+With `NOTEFEED_METRICS=1`, `GET /metrics` serves how long requests take, in the Prometheus text format ([Configuration](configuration.md) has the token setting; with a token, send `Authorization: Bearer <token>`). It exists to answer one question with data: is reading a feed slow enough to be worth an index or another storage? Off by default; nothing is measured while it is off. `metrics` is a reserved feed name.
+
+The counters live in the app's memory and start at 0 again when the container restarts. That is what Prometheus expects: it keeps the history and treats a drop as a reset, so always query with `rate()` or `increase()`, never the raw values.
+
+| Metric | What it shows |
+|---|---|
+| `notefeed_request_duration_seconds` | A histogram of the time a request took, by `kind`, `status` (`2xx`, `4xx`, `5xx`; a redirect counts as `2xx`) and `feed_size` (the notes of the feed it ran against: `lt10`, `lt100`, `lt1000`, `gte1000`, or `none` for a request that reads no feed). |
+| `notefeed_request_dir_reads`, `notefeed_request_file_reads` | Histograms of the directory reads and file reads one request made, by `kind` and `feed_size`. Reading a note lists its feed's folder again, so these grow with the feed: they show the cost behind [#96](https://github.com/Marceltov/notefeed/issues/96) directly. |
+| `notefeed_parse_duration_seconds`, `notefeed_parse_timeouts_total`, `notefeed_parse_waiting` | The worker that reads a text posted with pictures: how long reading took, how many texts were refused for time (`NOTEFEED_PARSE_TIMEOUT_MS`), and how many wait for a free worker now. |
+| `notefeed_nodejs_eventloop_lag_*` | The event-loop lag: a stall of the main thread shows here. |
+| `notefeed_process_*`, `notefeed_nodejs_*` | Node's default process metrics: memory, CPU, open handles, garbage collection. |
+
+`kind` is a fixed name, never anything a client sent: the API's operation id (`listNotes`, `getNote`, `postNote`, `editNote`, and so on, as in the [API](api.md)), `<operation>_tag` for a listing filtered by `tag` (it reads every note until it has enough), `rss` for the feed's RSS, `feed_file` for a file of a feed, and `feed_page` and `feed_page_tag` for the feed's web page. Posting with pictures is `postNote` like any other post. Requests to an unknown path or with a wrong method, `/mcp`, sign-in and the read pages are not measured.
+
+`feed_page` is the server's time to read the feed's notes for the page, not the time to send it: network and streaming are not in it, which is what you want to decide on storage.
+
+No feed name, read id, note text, title, sender or address is ever a label or a value, so the number of series stays small whatever the traffic or the number of feeds.
+
+### What counts as a problem
+
+A rule of thumb to start from: the 95th percentile of `feed_page` over 200 ms for feeds under 1000 notes (`feed_size` below `gte1000`) means the reading of notes (#96) or an in-memory index is worth doing. A rising number of directory and file reads per request for `listNotes_tag` shows the tag filter reading the whole feed. Look at `rate()`s over a few days of real use before deciding.
+
+### Scraping
+
+Prometheus:
+
+```yaml
+scrape_configs:
+  - job_name: notefeed
+    metrics_path: /metrics
+    authorization:
+      credentials: <the value of NOTEFEED_METRICS_TOKEN>   # leave out without a token
+    static_configs:
+      - targets: ["notefeed:3000"]
+```
+
+InfluxDB takes the same endpoint through Telegraf:
+
+```toml
+[[inputs.prometheus]]
+  urls = ["http://notefeed:3000/metrics"]
+  http_headers = { "Authorization" = "Bearer <the value of NOTEFEED_METRICS_TOKEN>" }
+  metric_version = 2
+```
+
+A starter Grafana dashboard (import it, pick the Prometheus data source): [grafana-notefeed.json](assets/grafana-notefeed.json). Its panels are the 95th percentile of `feed_page` by feed size, requests per second by kind, directory and file reads per request, texts refused for time and waiting, event-loop lag and memory.
+
 ## Logs
 
 notefeed writes its logs to standard output as JSON lines: one object per line, with the level as a word (`level`), an ISO time (`time`), the part of notefeed that logged it (`component`), a fixed message (`msg`) and fields with the details. For example, the line at start-up:
