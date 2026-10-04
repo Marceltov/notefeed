@@ -540,28 +540,10 @@ def test_alt_or_name_with_attachments_is_a_config_error(server, extra):
     assert server.requests == []
 
 
-EMOJI = "\U0001F600" * 101  # 101 code points, 202 UTF-16 units
-
-
 @pytest.mark.parametrize(
     "content, attachments",
     [
         ("x", [Attachment("a.png", PNG, "image/png"), Attachment("a.png", PNG, "image/png")]),
-        ("x", [Attachment("a/b.png", PNG, "image/png")]),
-        ("x", [Attachment("a\\b.png", PNG, "image/png")]),
-        ("x", [Attachment("..", PNG, "image/png")]),
-        ("x", [Attachment("...", PNG, "image/png")]),
-        ("x", [Attachment("", PNG, "image/png")]),
-        ("x", [Attachment(" a.png", PNG, "image/png")]),
-        ("x", [Attachment("a.png ", PNG, "image/png")]),
-        ("x", [Attachment("a.png\u00a0", PNG, "image/png")]),
-        ("x", [Attachment("a.png\ufeff", PNG, "image/png")]),  # these three: space to JavaScript's trim, which the server uses
-        ("x", [Attachment("a.png\u2028", PNG, "image/png")]),
-        ("x", [Attachment("a.png\u3000", PNG, "image/png")]),
-        ("x", [Attachment("a\x7f.png", PNG, "image/png")]),
-        ("x", [Attachment("a\n.png", PNG, "image/png")]),
-        ("x", [Attachment("a" * 201, PNG, "image/png")]),
-        ("x", [Attachment(EMOJI, PNG, "image/png")]),
         ("x", [Attachment("a.md", PNG, "text/markdown")]),
         ("x", [Attachment("a.png", PNG)]),
         (PNG, [Attachment("a.png", PNG, "image/png")]),
@@ -573,8 +555,8 @@ def test_invalid_attachments_are_refused_before_anything_is_sent(server, content
     assert server.requests == []
 
 
-@pytest.mark.parametrize("name", ["Screenshot 2026-10-03.png", "a" * 200, "\U0001F600" * 100, "ü.png", "a.b"])
-def test_valid_attachment_names_are_sent(server, name):
+@pytest.mark.parametrize("name", ["Screenshot 2026-10-03.png", "\U0001F600.png", "ü.png", "a.b"])
+def test_attachment_names_are_sent_as_given(server, name):
     server.reply(201, answer(1))
     Client(server.url, "inbox").post("x", attachments=[Attachment(name, PNG, "image/png")])
     assert f'filename="{name}"'.encode() in server.requests[0]["body"]  # raw UTF-8, which the email parser cannot read back
@@ -585,6 +567,15 @@ def test_a_server_refusal_keeps_its_class_and_message(server):
     with pytest.raises(InvalidRequestError) as e:
         Client(server.url, "inbox").post("x", attachments=[Attachment("b.png", PNG, "image/png")])
     assert (e.value.status, e.value.code, str(e.value)) == (400, "invalid_body", 'file part "b.png": not a picture')
+    assert len(server.requests) == 1
+
+
+def test_the_name_rule_is_the_servers_a_refused_name_is_sent_and_raises_its_error(server):
+    message = 'attachment "..": not a file name: 1 to 200 characters, no / or \\, no control or text-direction override characters, no leading or trailing space'
+    server.reply(400, {"error": message, "code": "invalid_body"})
+    with pytest.raises(InvalidRequestError) as e:
+        Client(server.url, "inbox").post("x", attachments=[Attachment("..", PNG, "image/png")])
+    assert (e.value.status, e.value.code, str(e.value)) == (400, "invalid_body", message)
     assert len(server.requests) == 1
 
 

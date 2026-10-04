@@ -103,20 +103,6 @@ class Posted(Created):
     attachments: list[Created] = attrs.field(factory=list)
 
 
-# Same rule as the server's isAttachmentName (shared/links.ts): 1 to 200 UTF-16 units, one path segment, no
-# control characters, no leading or trailing space as JavaScript's trim() sees it, not only dots.
-_JS_SPACE = " \t\n\v\f\r\u00a0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000\ufeff"
-
-
-def _is_attachment_name(name: str) -> bool:
-    return (
-        1 <= len(name.encode("utf-16-le", "surrogatepass")) // 2 <= 200
-        and not re.search(r"[/\\\x00-\x1f\x7f]", name)
-        and name == name.strip(_JS_SPACE)
-        and not re.fullmatch(r"\.+", name)
-    )
-
-
 # Same rule as the server; reserved names still come back as a 400.
 _FEED_RE = re.compile(r"[a-z0-9_-]{1,64}")
 
@@ -230,8 +216,10 @@ class Client:
         `attachments` (pictures, at most 10 by the server) go in the same request as the markdown, one note each: `![](name)` in the
         markdown shows one by its `name`, and `.attachments` of the result lists them. `content` may then be None: there is no text
         note, `title` goes on every picture, and the result is the first picture's `Created` (with `.attachments` all of them). `tags`
-        label every note; `alt` and `name` are not allowed with attachments (use `Attachment.alt`). Everything is checked before
-        anything is sent, and the server posts all or nothing: a refusal raises its error and posts no note."""
+        label every note; `alt` and `name` are not allowed with attachments (use `Attachment.alt`). Checked here, before anything
+        is sent (ConfigError): a name given twice, an attachment that is not a picture, content that is not markdown, `alt` or `name`
+        with attachments. What a name may be is the server's rule (docs/posting.md, "Posting a note with its pictures"): a name it refuses
+        raises InvalidRequestError, `attachment "<name>": ...`. The server posts all or nothing: a refusal posts no note."""
         if not attachments:
             if content is None:
                 raise ConfigError("no content given")
@@ -246,8 +234,6 @@ class Client:
             files.append(("text", ("text.md", content.encode("utf-8"), "text/markdown")))
         seen: set[str] = set()
         for a in attachments:
-            if not _is_attachment_name(a.name):
-                raise ConfigError(f'attachment name "{a.name}": 1 to 200 characters, no / or \\, no control characters, no leading or trailing space, not only dots')
             if a.name in seen:
                 raise ConfigError(f'attachment "{a.name}" is given twice')
             seen.add(a.name)

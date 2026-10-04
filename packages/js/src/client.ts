@@ -67,9 +67,6 @@ const BY_CODE: Partial<Record<ErrorCode, typeof NotefeedError>> = {
   unsupported_type: InvalidRequestError,
 };
 
-// Same rule as the server's isAttachmentName: one path segment of 1 to 200 UTF-16 units, no `/`, `\`, control characters, leading/trailing space, not only dots.
-const isAttachmentName = (name: string): boolean =>
-  name.length >= 1 && name.length <= 200 && !/[/\\\u0000-\u001f\u007f]/.test(name) && name === name.trim() && !/^\.+$/.test(name);
 const IMAGE_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"];
 
 const FEED_RE = /^[a-z0-9_-]{1,64}$/; // same rule as the server; reserved names still come back as a 400
@@ -132,9 +129,10 @@ export class Client {
    *
    * `attachments` are pictures posted with the note in one request: `![](name)` in the markdown shows one (a picture the text never refers to is
    * added at the end), and `Created.attachments` lists them in order. `tags` label the pictures too. `content` may be `null` when there are
-   * attachments: only the pictures are posted, `title` and `tags` go on each, and the result is the first picture plus `attachments`. A name is
-   * one path segment of 1 to 200 characters, without `/`, `\`, control characters or a leading or trailing space, and not `.` or `..`. The options
-   * are checked before anything is sent, and when the server refuses any part (its message names it) nothing is posted.
+   * attachments: only the pictures are posted, `title` and `tags` go on each, and the result is the first picture plus `attachments`. Checked
+   * here, before anything is sent (ConfigError): a name given twice, an attachment that is not a picture, content that is not markdown, `alt` or
+   * `name` with attachments. What a name may be is the server's rule (docs/posting.md, "Posting a note with its pictures"): a name it refuses is an
+   * InvalidRequestError, `attachment "<name>": ...`, and whenever the server refuses any part (its message names it) nothing is posted.
    */
   async post(
     content: string | Uint8Array | Blob | null,
@@ -148,7 +146,6 @@ export class Client {
     const form = new FormData();
     if (content !== null) form.append("text", new Blob([content], { type: "text/markdown" }));
     for (const a of attachments) {
-      if (!isAttachmentName(a.name)) throw new ConfigError(`attachment name "${a.name}": one path segment of 1 to 200 characters, no / or \\, no control characters, no leading or trailing space, not made only of dots`);
       if (attachments.findIndex((b) => b.name === a.name) !== attachments.indexOf(a)) throw new ConfigError(`attachment "${a.name}" is given twice`);
       const { body, type } = asFile(a.content, a.type);
       if (!IMAGE_TYPES.includes(type)) throw new ConfigError(`attachment "${a.name}" must be a picture (${IMAGE_TYPES.join(", ")})`);
