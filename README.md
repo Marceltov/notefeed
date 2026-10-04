@@ -13,7 +13,7 @@ Post short markdown notes to a named feed — from a script over HTTP, or by han
 - **Hosted version: https://notefeed.me**  
 - **Documentation: https://docs.notefeed.me/**
 
-notefeed is private by default and stores nothing about a person; [sign-in with a verified sender](https://docs.notefeed.me/identity/) is opt-in.
+notefeed is private by default and stores nothing about a person; [sign-in with a verified sender](https://docs.notefeed.me/self-hosting/sign-in/) is opt-in.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/screenshot-dark.png">
@@ -48,13 +48,13 @@ curl -H "Content-Type: text/markdown" --data-binary @note.md http://localhost:30
 
 Or with a client: `pip install notefeed` / `npm install notefeed`, then `notefeed post "# Hello" --feed homelab-7f3k2q9x4m8wz`.
 
-The answer includes the feed's `read_url`: a read-only RSS link to give to feed readers and dashboards. It doesn't reveal the feed name (except for operator-only [reserved feeds](docs/configuration.md#reserved-feeds), whose read link is their name), and it can't post. A feed created since feed deletion was added has a random read id of its own, so deleting a feed and creating its name again gives a new link.
+The answer includes the feed's `read_url`: a read-only RSS link to give to feed readers and dashboards. It doesn't reveal the feed name (except for operator-only [reserved feeds](docs/self-hosting/reserved-feeds.md), whose read link is their name), and it can't post. A feed created since feed deletion was added has a random read id of its own, so deleting a feed and creating its name again gives a new link.
 
-To require a password for posting and the web UI, set `NOTEFEED_PASSWORD`. Read links stay open. See [Configuration](https://docs.notefeed.me/configuration/). To protect a single feed, create it with `curl -H "X-Feed-Password: ..."`; see [Posting notes](https://docs.notefeed.me/posting/#a-feed-with-its-own-password).
+To require a password for posting and the web UI, set `NOTEFEED_PASSWORD`. Read links stay open. See [Configuration](https://docs.notefeed.me/self-hosting/configuration/). To protect a single feed, create it with `curl -H "X-Feed-Password: ..."`; see [Posting notes](https://docs.notefeed.me/using/feed-passwords/#in-the-api).
 
-A feed can get a title, a description and a title image and can be deleted with everything in it, from the web UI, the API and the client packages; see [Feed settings and deleting a feed](https://docs.notefeed.me/posting/#feed-settings-and-deleting-a-feed). Posted notes can be edited and deleted from the web UI, the API, the clients and MCP; see [Editing and deleting notes](https://docs.notefeed.me/posting/#editing-and-deleting-notes). AI assistants can post, read, edit and delete notes over MCP at `/mcp`; see [MCP](https://docs.notefeed.me/mcp/).
+A feed can get a title, a description and a title image and can be deleted with everything in it, from the web UI, the API and the client packages; see [Feed settings and deleting a feed](https://docs.notefeed.me/using/feeds/#feed-settings-in-the-api). Posted notes can be edited and deleted from the web UI, the API, the clients and MCP; see [Editing and deleting notes](https://docs.notefeed.me/using/editing/). AI assistants can post, read, edit and delete notes over MCP at `/mcp`; see [MCP](https://docs.notefeed.me/integrations/mcp/).
 
-Pictures are notes too: drop or paste them into the web UI's compose box (they are posted with the note), or post one with `Content-Type: image/png` (or `notefeed post --file photo.png`), and write `![](file)` in a markdown note to show it; see [Pictures](https://docs.notefeed.me/posting/#pictures). Pictures are public to anyone with the feed's read link, and are stored as posted, with metadata such as GPS position left in.
+Pictures are notes too: drop or paste them into the web UI's compose box (they are posted with the note), or post one with `Content-Type: image/png` (or `notefeed post --file photo.png`), and write `![](file)` in a markdown note to show it; see [Pictures](https://docs.notefeed.me/using/pictures/). Pictures are public to anyone with the feed's read link, and are stored as posted, with metadata such as GPS position left in.
 
 ## Development
 

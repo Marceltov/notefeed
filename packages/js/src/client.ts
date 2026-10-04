@@ -131,7 +131,7 @@ export class Client {
    * added at the end), and `Created.attachments` lists them in order. `tags` label the pictures too. `content` may be `null` when there are
    * attachments: only the pictures are posted, `title` and `tags` go on each, and the result is the first picture plus `attachments`. Checked
    * here, before anything is sent (ConfigError): a name given twice, an attachment that is not a picture, content that is not markdown, `alt` or
-   * `name` with attachments. What a name may be is the server's rule (docs/posting.md, "Posting a note with its pictures"): a name it refuses is an
+   * `name` with attachments. What a name may be is the server's rule (docs/using/pictures.md, "Posting a note with its pictures"): a name it refuses is an
    * InvalidRequestError, `attachment "<name>": ...`, and whenever the server refuses any part (its message names it) nothing is posted.
    */
   async post(

@@ -36,6 +36,8 @@ theme:
     - content.code.copy
     - navigation.footer
     - search.highlight
+    - navigation.sections
+    - navigation.indexes
 
 plugins:
   - search
@@ -56,16 +58,47 @@ markdown_extensions:
   - pymdownx.details
   - pymdownx.keys
 
+validation:
+  anchors: warn
+
 nav:
   - Home: index.md
-  - Quick start: quick-start.md
-  - Web UI: web-ui.md
-  - Posting notes: posting.md
-  - Client libraries: clients.md
-  - REST API: api.md
-  - MCP: mcp.md
-  - Read links and RSS: feed.md
-  - Sign-in and sender: identity.md
-  - Configuration: configuration.md
-  - Reverse proxy: reverse-proxy.md
-  - Operations: operations.md
+  - Get started:
+      - Quick start: get-started/quick-start.md
+      - Concepts: get-started/concepts.md
+  - Using notefeed:
+      - Web UI: using/web-ui.md
+      - Posting notes: using/posting.md
+      - Posting from scripts: using/scripts.md
+      - Pictures: using/pictures.md
+      - Titles and tags: using/titles-and-tags.md
+      - Editing and deleting notes: using/editing.md
+      - Feeds: using/feeds.md
+      - Feed passwords: using/feed-passwords.md
+      - Read links: using/read-links.md
+      - RSS and dashboards: using/rss.md
+  - Integrations:
+      - Client libraries: integrations/clients.md
+      - Command line: integrations/cli.md
+      - REST API: integrations/api.md
+      - MCP: integrations/mcp.md
+  - Self-hosting:
+      - Configuration: self-hosting/configuration.md
+      - Passwords and access: self-hosting/access.md
+      - Reserved feeds: self-hosting/reserved-feeds.md
+      - OAuth for MCP: self-hosting/oauth.md
+      - Rate limits and caps: self-hosting/limits.md
+      - Reverse proxy: self-hosting/reverse-proxy.md
+      - Sign-in and sender:
+          - self-hosting/sign-in/index.md
+          - Setup: self-hosting/sign-in/setup.md
+          - Providers: self-hosting/sign-in/providers.md
+          - The sender: self-hosting/sign-in/sender.md
+          - Troubleshooting: self-hosting/sign-in/troubleshooting.md
+      - Storage: self-hosting/storage.md
+      - Backups: self-hosting/backups.md
+      - Deleting notes and feeds: self-hosting/deleting.md
+      - Metrics: self-hosting/metrics.md
+      - Logs: self-hosting/logs.md
+      - Upgrading: self-hosting/upgrading.md
+      - Running from source: self-hosting/running-from-source.md
