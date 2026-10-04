@@ -93,3 +93,11 @@ test("planImages parses once and applyImages can be applied for each set of file
   expect(applyImages(plan, new Map([["a.png", "1.png"], ["b.png", "2.png"], ["c.png", "3.png"]]))).toBe("\uFEFF![a](1.png) ![b](2.png)\n\n[x]: 1.png\n\n![](3.png)");
   expect(applyImages(plan, new Map([["a.png", "9.png"], ["b.png", "8.png"], ["c.png", "7.png"]]))).toBe("\uFEFF![a](9.png) ![b](8.png)\n\n[x]: 9.png\n\n![](7.png)");
 });
+
+test("placeImages finds the destination after an alt text with a ] inside a code span", () => {
+  const sent = new Map([["a.png", "F1.png"]]);
+  expect(placeImages("![a `]` b](a.png)", sent)).toBe("![a `]` b](F1.png)");
+  expect(placeImages("![a ``]`` b](a.png)", sent)).toBe("![a ``]`` b](F1.png)");
+  // a backtick that never closes is literal, so the bracket after it still closes the label
+  expect(placeImages("![a ` b](a.png)", sent)).toBe("![a ` b](F1.png)");
+});
