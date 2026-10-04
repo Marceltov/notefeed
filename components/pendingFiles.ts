@@ -1,6 +1,6 @@
 // Pictures dropped, pasted or picked in a note box wait in the browser until the note is posted. While they wait, the text refers to
 // each by a local name (the token); the note is posted with them in one request, and the server swaps each token for the stored file's name.
-import { MAX_ATTACHMENTS } from "@/shared/links";
+import { FORBIDDEN_IN_TEXT, MAX_ALT, MAX_ATTACHMENTS } from "@/shared/links";
 
 /** A picture waiting to be posted; `token` is the name the text refers to it by, `preview` an object URL of the file to show it by. */
 export type Pending = { key: string; file: File; token: string; preview: string };
@@ -38,4 +38,23 @@ export const onlyReferences = (text: string, tokens: readonly string[]): boolean
 export function removeReference(text: string, token: string): string {
   const ref = `!\\[[^\\]]*\\]\\(${escapeRe(token)}\\)`;
   return text.replace(new RegExp(`^${ref}[ \\t]*(\\n|$)`, "gm"), "").replace(new RegExp(ref, "g"), "");
+}
+
+/**
+ * The alt text each of `tokens` is given in the text, for a box that holds nothing but pictures (the text is not sent then, so its alt
+ * texts would be lost): the first non-empty one among the picture's references. Cleaned as the server wants an alt text, one line of at
+ * most MAX_ALT characters with no forbidden character, so a pasted line separator cannot make the whole post fail. A picture with none is left out.
+ */
+export function altsOf(text: string, tokens: readonly string[]): Record<string, string> {
+  const alts: Record<string, string> = {};
+  for (const token of tokens) {
+    for (const [, raw] of text.matchAll(new RegExp(`!\\[([^\\]]*)\\]\\(${escapeRe(token)}\\)`, "g"))) {
+      const alt = Array.from(raw.replace(new RegExp(FORBIDDEN_IN_TEXT, "g"), " ").replace(/\s+/g, " ").trim()).slice(0, MAX_ALT).join("").trim();
+      if (alt) {
+        alts[token] = alt;
+        break;
+      }
+    }
+  }
+  return alts;
 }

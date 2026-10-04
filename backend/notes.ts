@@ -6,7 +6,7 @@ import { deleteNoteFile, replaceNote, updateMeta, writeNote, listNoteFiles, read
 import { InvalidBodyError, UnsupportedTypeError } from "./errors";
 import { assertFeed, checkFeed, ensureFeed, forgetFeed } from "./feeds";
 import { sniffImage } from "../shared/images";
-import { cleanName, FORBIDDEN_IN_TEXT } from "../shared/links";
+import { cleanName, FORBIDDEN_IN_TEXT, MAX_ALT } from "../shared/links";
 import { ImageNote } from "./note/image";
 import { MarkdownNote } from "./note/markdown";
 import { Note } from "./note/note";
@@ -17,7 +17,7 @@ export { ImageNote, MarkdownNote, Note };
 export { cleanName }; // defined in shared/links.ts, with the characters a name may not hold
 
 export const MAX_NOTE_TITLE = 100;
-export const MAX_ALT = 500;
+export { MAX_ALT }; // defined in shared/links.ts: the web box holds to it too
 
 // A note's title or alt text: trimmed, one line of at most `max` characters (an emoji is one). "" means none.
 export function checkLine(name: string, value: string | undefined, max: number): string | undefined {

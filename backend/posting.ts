@@ -2,7 +2,8 @@
 // caller's job (bearer vs. session cookie); everything after that is here, in this order.
 import { config } from "./config";
 import { idStamp } from "../shared/notes";
-import { isAttachmentName, MAX_ATTACHMENTS, placeImages, safeName } from "../shared/links";
+import { applyImages, type ImagePlan } from "../shared/imagePlan.mjs";
+import { isAttachmentName, MAX_ATTACHMENTS, safeName } from "../shared/links";
 import { FeedExistsError, FeedLimitError, ImageLimitError, ImageTooLargeError, InvalidBodyError, NotefeedError, NotFoundError, NoteLimitError, RateLimitedError, UnsupportedTypeError } from "./errors";
 import { type FeedAccess, checkFeedAccess, createProtected } from "./feedlock";
 import { type FeedSettings, checkSettings, getStoredSettings, saveSettings } from "./feedsettings";
@@ -10,6 +11,7 @@ import { assertFeed, deleteFeed as removeWholeFeed, feedCount, hasFeed, isHeldBa
 import { capReached, rateLimit } from "./limits";
 import { logger } from "./log";
 import { MEDIA_TYPES } from "./note/media";
+import { planInWorker } from "./place";
 import { type NoteType, parseMediaType } from "./note/types";
 import { checkTags } from "./tags";
 import { checkLine, checkMarkdown, countNotes, createNoteOf, encoder, getNote, MARKDOWN, hasImageNote, MAX_ALT, MAX_NOTE_TITLE, removeNote, replaceContent, changeMeta, type NewNoteOptions, type Note } from "./notes";
@@ -185,10 +187,13 @@ function checkPictures(pictures: Picture[]): (Picture & { type: NoteType; ext: s
 }
 
 // The text as it will be stored, checked before the pictures are: each picture's place holds a file name as long as its stored one will be.
+// The text is parsed once, here, in a worker (place.ts); the plan it returns is applied again with the stored file names.
 // ponytail: the length is that of today's ids (`<stamp>-<uuid>`); if they change, the write's own check refuses and the pictures are removed.
-function checkText(text: string, pictures: { name: string; ext: string }[]): void {
+async function checkText(text: string, pictures: { name: string; ext: string }[]): Promise<ImagePlan> {
   const id = `${idStamp(new Date())}-${"0".repeat(36)}`;
-  checkMarkdown(placeImages(text, new Map(pictures.map((p) => [p.name, `${id}.${p.ext}`]))));
+  const plan = await planInWorker(text, new Set(pictures.map((p) => p.name)));
+  checkMarkdown(applyImages(plan, new Map(pictures.map((p) => [p.name, `${id}.${p.ext}`]))));
+  return plan;
 }
 
 // Stores the pictures in order, then whatever `then` stores (given the stored notes and the map of file name to stored file); if
@@ -231,7 +236,7 @@ export async function postWithPictures(
   const { text, title, ...input } = await read();
   const pictures = checkPictures(input.pictures);
   if (text === undefined && pictures.length === 0) throw new InvalidBodyError("send a text, pictures or both");
-  if (text !== undefined) checkText(text, pictures);
+  const plan = text === undefined ? undefined : await checkText(text, pictures);
   checkLine("title", title, MAX_NOTE_TITLE);
   const tags = checkTags(input.tags);
   await recheck(feed, ip, access, proved, input.password);
@@ -242,7 +247,7 @@ export async function postWithPictures(
   const opts = { sender, tags, wantedReadId };
   return storeWithPictures(feed, pictures, { ...opts, title: text === undefined ? title : undefined }, async (stored, sent, readId) => {
     if (text === undefined) return { note: stored[0], created, readId, pictures: stored };
-    const made = await createNoteOf(feed, MARKDOWN, "md", encoder.encode(placeImages(text, sent)), { ...opts, title });
+    const made = await createNoteOf(feed, MARKDOWN, "md", encoder.encode(applyImages(plan!, sent)), { ...opts, title });
     return { ...made, created, pictures: stored };
   });
 }
@@ -264,11 +269,11 @@ export async function editWithPictures(
   if (note.type !== MARKDOWN_TYPE) throw new UnsupportedTypeError(`this note is ${note.type}: send that Content-Type`);
   const input = await read();
   const pictures = checkPictures(input.pictures);
-  checkText(input.text, pictures);
+  const plan = await checkText(input.text, pictures);
   const tags = checkTags(input.tags);
   await checkCap(feed, "image", pictures.length);
   return storeWithPictures(feed, pictures, { sender, tags }, async (stored, sent) => {
-    const edited = await replaceContent(feed, id, encoder.encode(placeImages(input.text, sent)), MARKDOWN_TYPE);
+    const edited = await replaceContent(feed, id, encoder.encode(applyImages(plan, sent)), MARKDOWN_TYPE);
     if (!edited) throw new NotFoundError("no such note");
     return { note: edited, pictures: stored };
   });

@@ -145,7 +145,7 @@ The parts:
 
 (the other fields of a [post](#posting-notes) are left out here). Raw requests are answered as before, without `attachments`. A client of this version needs a server of this version: an older server answers `415` to multipart.
 
-**Errors** are those of posting, with the part named in the message. `400`: a file name that is not allowed or is given twice, a `file` part without a file name, more than 10 files, a part that is none of `text`, `file` and `alt.<filename>` (or a second `text`), an `alt.` for a file that is not there, a text that is not UTF-8, a blank text with no pictures, a body that is not valid multipart, nothing to post, and no `text` on a `PUT`. `415`: a file that is not an accepted picture or whose bytes are not that format. `413`: a picture, the text or the whole request is too large. `507`: a cap is reached.
+**Errors** are those of posting, with the part named in the message. `400`: a file name that is not allowed or is given twice, a `file` part without a file name, more than 10 files, a part that is none of `text`, `file` and `alt.<filename>` (or a second `text`), an `alt.` for a file that is not there, a text that is not UTF-8, a blank text with no pictures, a text sent with pictures that takes longer than `NOTEFEED_PARSE_TIMEOUT_MS` (10 s) to read (it is read in a worker thread, so only its sender waits), a body that is not valid multipart, nothing to post, and no `text` on a `PUT`. `415`: a file that is not an accepted picture or whose bytes are not that format. `413`: a picture, the text or the whole request is too large. `507`: a cap is reached.
 
 ## Feed settings and deleting a feed
 
