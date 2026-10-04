@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { beforeEach, describe, expect, test } from "vitest";
 import { EmptyNoteError, InvalidFeedError, NoteTooLargeError, ReservedFeedError } from "./errors";
 import { hasFeed } from "./feeds";
-import { countNotes, createImageNote, createNote, getNote, isValidId, listNotes, removeNote, replaceContent } from "./notes";
+import { cleanName, countNotes, type ImageNote, createImageNote, createNote, getNote, isValidId, listNotes, removeNote, replaceContent } from "./notes";
 
 let root: string;
 let dir: string; // the "test" feed's directory
@@ -52,6 +52,10 @@ describe("hand-placed notes", () => {
     await place("holiday.md", "# Holiday");
     expect((await listNotes("test")).map((n) => n.id)).toContain("holiday");
     expect((await getNote("test", "holiday"))?.title).toBe("Holiday");
+  });
+  test("a name stored with control or text-direction characters is read without them", async () => {
+    await place("old.png", "x", { name: "evil\u202egnp\u009b.exe" });
+    expect(((await getNote("test", "old")) as ImageNote).name).toBe("evilgnp.exe");
   });
   test("it is dated by the sidecar created, else by the file's mtime", async () => {
     await place("a.md", "x", { created: "2021-05-06T07:08:09Z" });
@@ -323,4 +327,12 @@ describe("type and content", () => {
     expect([img.type, img.content]).toEqual(["image/png", undefined]);
     expect((await getNote("test", img.id))?.type).toBe("image/png");
   });
+});
+
+test("cleanName strips control characters (C0, C1), text-direction overrides and slashes, trims, and keeps 200", () => {
+  expect(cleanName(" ../my\u009b cat\u202e\u2066.png\u0085\n ")).toBe("..my cat.png");
+  expect(cleanName("a\u2028b\u2029c.png")).toBe("abc.png");
+  expect(cleanName("a\u200eb 图.png")).toBe("a\u200eb 图.png");
+  expect(cleanName("\u009b\u202e")).toBeUndefined();
+  expect(cleanName("a".repeat(300))).toHaveLength(200);
 });

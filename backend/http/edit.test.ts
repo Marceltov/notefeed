@@ -1,4 +1,4 @@
-import { mkdtemp, readFile } from "node:fs/promises";
+import { mkdtemp, readFile, readdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { beforeEach, describe, expect, test } from "vitest";
@@ -114,6 +114,7 @@ describe("PATCH changes metadata", () => {
     expect((await patch(md.id, {})).status).toBe(400);
     expect((await patch(md.id, { title: "x".repeat(101) })).status).toBe(400);
     expect((await patch(md.id, { title: "a\nb" })).status).toBe(400);
+    for (const title of ["a\u009bb", "a\u202eb", "a\u2028b"]) expect((await patch(md.id, { title })).status, JSON.stringify(title)).toBe(400);
     expect((await patch(md.id, "{nope")).status).toBe(400);
     expect((await patch(md.id, { title: "x" }, "text/plain")).status).toBe(415);
     expect((await patch("nope", { title: "x" })).status).toBe(404);
@@ -125,4 +126,50 @@ test("a read link can neither put nor patch", async () => {
   const made = await post("# x", "text/markdown");
   const res = await send("PUT", `/read/anything/notes/${made.id}`, "# y", "text/markdown");
   expect([404, 405]).toContain(res.status);
+});
+
+describe("multipart PUT: a markdown note's new text with its pictures", () => {
+  const png = (name: string, bytes: Uint8Array = PNG) => new File([bytes as BlobPart], name, { type: "image/png" });
+  const putForm = (id: string, parts: [string, string | File][], headers: Record<string, string> = {}) => {
+    const f = new FormData();
+    for (const [k, v] of parts) f.append(k, v);
+    return send("PUT", `/feeds/f/notes/${id}`, f, null, headers);
+  };
+  const pictures = async () => (await readdir(join(dir, "f"))).filter((n) => n.endsWith(".png"));
+
+  test("200: the note with its new text and the pictures; the tags go on the pictures, the note keeps its own", async () => {
+    const made = await post("# Old", "text/markdown", { "x-note-title": "Kept", "x-note-tags": "a" });
+    const res = await putForm(made.id, [["text", "# New ![](c.png)"], ["file", png("c.png")], ["alt.c.png", "C"]], { "x-note-tags": "pics" });
+    expect(res.status).toBe(200);
+    const note = await res.json();
+    expect(note.attachments).toHaveLength(1);
+    const [c] = note.attachments;
+    expect(c.file).toBe(`${c.id}.png`);
+    expect(note).toMatchObject({ id: made.id, type: "text/markdown", content: `# New ![](${c.file})`, title: "Kept", tags: ["a"] });
+    expect(await sidecar(c.file)).toEqual({ alt: "C", name: "c.png", tags: ["pics"] });
+    expect((await content(made.file)).toString()).toBe(`# New ![](${c.file})`);
+  });
+  test("the text as a file part works the same, byte for byte", async () => {
+    const made = await post("# Old", "text/markdown");
+    const res = await putForm(made.id, [["text", new File(["# New\nline"], "n.md", { type: "text/markdown" })]]);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ content: "# New\nline", attachments: [] });
+    expect((await putForm(made.id, [["text", new File(["# x"], "n.md", { type: "image/png" })]])).status).toBe(415);
+  });
+  test("a raw PUT's answer has no attachments", async () => {
+    const made = await post("# Old", "text/markdown");
+    expect("attachments" in (await (await put(made.id, "# New", "text/markdown")).json())).toBe(false);
+  });
+  test("a missing note is 404, an image note 415, no text part 400, a bad picture 415: nothing is stored or changed", async () => {
+    const md = await post("# Text", "text/markdown");
+    const img = await post(PNG as BodyInit, "image/png");
+    expect((await putForm("nope", [["text", "# x"], ["file", png("a.png")]])).status).toBe(404);
+    expect((await putForm(img.id, [["text", "# x"], ["file", png("a.png")]])).status).toBe(415);
+    expect((await putForm(md.id, [["file", png("a.png")]])).status).toBe(400);
+    expect((await putForm(md.id, [["text", "# x"], ["other", "y"]])).status).toBe(400);
+    expect((await putForm(md.id, [["text", "# x"], ["file", png("a.png")]], { "x-note-alt": "y" })).status).toBe(400);
+    expect((await putForm(md.id, [["text", "# x"], ["file", png("a.png")], ["file", png("b.png", JPG)]])).status).toBe(415);
+    expect(await pictures()).toEqual([img.file]);
+    expect((await content(md.file)).toString()).toBe("# Text");
+  });
 });

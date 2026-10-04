@@ -1,6 +1,7 @@
 // The web UI's wording for the backend's error codes (shared/errors.ts), from a form post's
 // ?error=&retry= or a fetch() error body. Runs on the server and in the browser.
 import type { ErrorCode } from "@/shared/errors";
+import { MAX_ATTACHMENTS } from "@/shared/links";
 import { PASSWORD_RULE } from "@/shared/password";
 
 // Under a new-password field, and what the browser says when the field's pattern doesn't match.
@@ -8,6 +9,9 @@ export const PASSWORD_HINT = `Use ${PASSWORD_RULE}: unaccented letters, digits a
 
 // Under the sign-in button and the compose box while sign-in is on.
 export const SENDER_NOTICE = "Your name is shown on your notes, including on the public read link and RSS.";
+
+// In a note box, when more pictures are dropped, pasted or picked than a note takes: the ones that fit are added.
+export const TOO_MANY_PICTURES = `A note can have at most ${MAX_ATTACHMENTS} pictures.`;
 
 // sign_in_failed is no API code: only the OIDC callback's ?error= (backend/oidc/routes.ts).
 const MESSAGES: Record<ErrorCode | "sign_in_failed", string> = {
@@ -67,3 +71,15 @@ export function imageErrorMessage(code: unknown, retry?: unknown): string | unde
   };
   return own[String(code)] ?? errorMessage(code, retry);
 }
+
+// The same, for a note sent with its pictures: a refusal that names a picture (`attachment "a.png": …`) is worded as an image
+// refusal, after the picture's name; any other goes to `message`, except a "too_large" that names no picture when the request had
+// pictures (`pictures`). That has two causes: the text is over 100 KB, or one picture is so far over its limit that the server stopped
+// reading the request before it could name it.
+export const withPictures =
+  (message: (code: unknown, retry?: unknown) => string | undefined, pictures = false) =>
+  (code: unknown, retry?: unknown, detail?: string): string | undefined => {
+    const name = /^attachment "(.*)": /.exec(detail ?? "")?.[1];
+    if (name !== undefined) return `${name}: ${imageErrorMessage(code, retry)}`;
+    return pictures && code === "too_large" ? "The note is too large: its text is over 100 KB, or a picture is too large." : message(code, retry);
+  };

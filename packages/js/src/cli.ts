@@ -57,10 +57,13 @@ export async function main(argv: string[], io: Io = process): Promise<number> {
     }
     const [command, text, ...rest] = positionals;
     if (command === "post" && !rest.length) {
-      const input = await read(text, values.file, values.type, io);
       const attachments = await Promise.all((values.attach ?? []).map(attachment));
-      const note = await client(values).post(input.content, { type: input.type, title: values.title, tags: values.tag, name: input.name, attachments });
-      io.stdout.write(`${[note.url, ...note.attachments.map((a) => a.url)].join("\n")}\n`);
+      // Pictures alone need no text; the result is then the first picture, whose URL is also in `attachments`.
+      const noText = attachments.length > 0 && text === undefined && !values.file;
+      const input = noText ? { content: null, type: undefined, name: undefined } : await read(text, values.file, values.type, io);
+      // The server refuses a file name next to attachments: the text has none then.
+      const note = await client(values).post(input.content, { type: input.type, title: values.title, tags: values.tag, name: attachments.length ? undefined : input.name, attachments });
+      io.stdout.write(`${[...(noText ? [] : [note.url]), ...note.attachments.map((a) => a.url)].join("\n")}\n`);
       return 0;
     }
     if (command === "edit" && text !== undefined && rest.length <= 1) {
@@ -96,7 +99,6 @@ export async function main(argv: string[], io: Io = process): Promise<number> {
     throw new UsageError(USAGE);
   } catch (e) {
     io.stderr.write(`notefeed: ${(e as Error).message.split("\n")[0]}\n`);
-    if (e instanceof NotefeedError) for (const p of e.posted) io.stderr.write(`posted: ${p.url}\n`);
     if (e instanceof ConfigError || e instanceof UsageError) return 2;
     if (e instanceof NotefeedError) return 1;
     return 2; // parseArgs rejects unknown options with a TypeError
@@ -139,14 +141,12 @@ async function read(text: string | undefined, file: string | undefined, type: st
   return { content: text, type: type ?? "text/markdown" };
 }
 
-// A picture to post first: its name is the file's, its type comes from the extension.
+// A picture to post with the note: its name is the file's (the client checks it), its type comes from the extension.
 async function attachment(path: string): Promise<{ name: string; content: Uint8Array; type: string }> {
   const type = TYPES[extname(path).toLowerCase()];
   if (!type || type === "text/markdown") throw new UsageError(`cannot attach ${path}: a picture (${Object.keys(TYPES).filter((e) => TYPES[e] !== "text/markdown").join(", ")}) is expected`);
-  const name = basename(path);
-  if (!/^(?!\.+$)[A-Za-z0-9._-]+$/.test(name)) throw new UsageError(`cannot attach ${path}: its file name "${name}" is what the text refers to it by, so it may only have letters, digits, ., _ and -: rename the file`);
   try {
-    return { name, content: await readFile(path), type };
+    return { name: basename(path), content: await readFile(path), type };
   } catch (e) {
     throw new UsageError(`cannot read ${path}: ${(e as NodeJS.ErrnoException).code ?? (e as Error).message}`);
   }

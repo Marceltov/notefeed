@@ -4,49 +4,45 @@ import { useState, type FormEvent } from "react";
 import { deleteNote, editNote, patchNote } from "@/app/_lib/api";
 import { MarkdownInput } from "@/components/MarkdownInput";
 import { usePendingImages } from "@/components/usePendingImages";
-import { useApiForm } from "@/app/_lib/useApiForm";
+import { multipart, multipartBody, useApiForm } from "@/app/_lib/useApiForm";
+import { noteErrorMessage, withPictures } from "@/app/_lib/messages";
 
 const summary = "cursor-pointer select-none text-muted hover:text-ink";
 
-// Edit and delete for a note: plain forms to POST /<feed>/<id>/edit and /delete. With JavaScript they go
-// through the generated API client and show refusals inline; without, the browser follows the 303 and the
-// note page shows the outcome (`error` is its message).
+// Edit and delete for a note, through the generated API client, with refusals shown inline (`error` is a first message to show).
 export function NoteActions({ feed, id, kind, markdown, title: savedTitle, alt: savedAlt, error: initialError }: { feed: string; id: string; kind: string; markdown: string; title: string; alt: string; error?: string }) {
   const page = `/${feed}`;
-  const { run, error, setError, pending, setPending, router } = useApiForm(page, initialError);
+  const images = usePendingImages();
+  const { run, error, setError, pending, setPending, router } = useApiForm(page, initialError, withPictures(noteErrorMessage, images.pending.length > 0));
   const [text, setText] = useState(markdown);
   const [title, setTitle] = useState(savedTitle); // the title set by hand: empty means the one the text gives
   const [alt, setAlt] = useState(savedAlt);
   const image = kind === "image";
-  const images = usePendingImages(feed);
   const [editing, setEditing] = useState(!!initialError);
   const base = `${page}/${id}`;
 
   const opts = () => ({ baseUrl: window.location.origin, path: { feed, id } }); // in handlers only: no window while rendering on the server
-  async function save(e: FormEvent) {
+  function save(e: FormEvent) {
     e.preventDefault();
-    // Only what changed is sent: a text note's content is replaced (PUT) when its text changed or pictures were added, and its title set (PATCH)
+    // Only what changed is sent: a text note's content is replaced (PUT, the text and the added pictures in one multipart request:
+    // the text part goes even when it holds only the pictures' references, a PUT needs it) when its text changed or pictures were added, and its title set (PATCH)
     // when that changed; a picture has no text, only a title and an alt text. Nothing changed: nothing is sent.
+    // The PATCH goes first: it can be sent twice, the PUT can't (it stores the pictures). So a refused PATCH sent nothing else,
+    // and saving again after a refused PUT repeats the harmless PATCH and stores the pictures once.
     const textChanged = !image && (text !== markdown || images.pending.length > 0);
     const meta = { ...(title !== savedTitle && { title }), ...(image && alt !== savedAlt && { alt }) };
     const metaChanged = Object.keys(meta).length > 0;
     if (!textChanged && !metaChanged) return setEditing(false);
-    setPending(true);
-    const refused = await images.flush();
-    if (refused) {
-      setError(refused);
-      return setPending(false);
-    }
     const call = async () => {
-      let last: { response?: Response; error?: { code?: string } } | undefined;
-      if (textChanged) {
-        last = await editNote({ ...opts(), body: new Blob([images.apply(text)], { type: "text/markdown" }), headers: { "Content-Type": "text/markdown" } });
+      let last: { response?: Response; error?: { code?: string; error?: string } } | undefined;
+      if (metaChanged) {
+        last = await patchNote({ ...opts(), body: meta });
         if (!last.response?.ok) return last;
       }
-      if (metaChanged) last = await patchNote({ ...opts(), body: meta });
+      if (textChanged) last = await editNote({ ...opts(), ...multipart(await multipartBody(text, images.pending)), headers: { "Content-Type": null } });
       return last!;
     };
-    run(undefined, call, () => {
+    run(e, call, () => {
       setError(undefined);
       setEditing(false);
       setPending(false);
@@ -73,6 +69,7 @@ export function NoteActions({ feed, id, kind, markdown, title: savedTitle, alt: 
               className="font-mono"
               pending={images.pending}
               onPendingChange={images.setPending}
+              onMessage={setError}
             />
           )}
           <label htmlFor="edit-title" className="mt-2 block text-muted">

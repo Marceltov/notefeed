@@ -7,7 +7,6 @@ import io
 import itertools
 import json
 import os
-import re
 import sys
 from datetime import timezone
 from pathlib import Path
@@ -26,7 +25,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--type", help="the file's media type, when the extension does not say")
     p.add_argument("--title", help="the note's title (default: taken from the text)")
     p.add_argument("--tag", action="append", help="label the note with this tag (repeat for several)")
-    p.add_argument("--attach", action="append", metavar="PATH", help="a picture to post first and refer to as ![](its file name); repeat for several")
+    p.add_argument("--attach", action="append", metavar="PATH", help="a picture to post with the note and refer to as ![](its file name); repeat for several")
     e = sub.add_parser("edit", help="replace a note's content; prints its URL")
     e.add_argument("id", help="the note's id")
     e.add_argument("text", nargs="?", help='the new markdown, or "-" to read stdin')
@@ -50,10 +49,13 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         if args.command == "post":
-            content, media, name = _read(args)
             attachments = [_attachment(path) for path in args.attach or []]
-            note = _client(args).post(content, type=media, title=args.title, tags=args.tag, name=name, attachments=attachments)
-            print("\n".join([note.url, *(a.url for a in note.attachments)]))
+            # Pictures alone need no text; the result is then the first picture, whose URL is also in `attachments`.
+            no_text = bool(attachments) and args.text is None and not args.file
+            content, media, name = (None, None, None) if no_text else _read(args)
+            # The server refuses a file name next to attachments: the text has none then.
+            note = _client(args).post(content, type=media, title=args.title, tags=args.tag, name=None if attachments else name, attachments=attachments)
+            print("\n".join([*([] if no_text else [note.url]), *(a.url for a in note.attachments)]))
         elif args.command == "edit":
             content, media, _ = _read(args)
             print(_client(args).edit(args.id, content, type=media).url)
@@ -81,8 +83,6 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     except NotefeedError as e:
         print(f"notefeed: {e}", file=sys.stderr)
-        for p in e.posted:
-            print(f"posted: {p.url}", file=sys.stderr)
         return 1
     return 0
 
@@ -122,15 +122,12 @@ _TYPES = {".md": "text/markdown", ".markdown": "text/markdown", ".png": "image/p
 
 
 def _attachment(path: str) -> Attachment:
-    """A picture to post first: its name is the file's, its type comes from the extension."""
+    """A picture to post with the note: its name is the file's, its type comes from the extension."""
     media = _TYPES.get(Path(path).suffix.lower())
     if not media or media == "text/markdown":
         raise _UsageError(f"cannot attach {path}: a picture ({', '.join(e for e, t in _TYPES.items() if t != 'text/markdown')}) is expected")
-    name = Path(path).name
-    if not re.fullmatch(r"(?!\.+$)[A-Za-z0-9._-]+", name):
-        raise _UsageError(f'cannot attach {path}: its file name "{name}" is what the text refers to it by, so it may only have letters, digits, ., _ and -: rename the file')
     try:
-        return Attachment(name, Path(path).read_bytes(), media)
+        return Attachment(Path(path).name, Path(path).read_bytes(), media)
     except OSError as e:
         raise _UsageError(f"cannot read {path}: {e.strerror}") from None
 

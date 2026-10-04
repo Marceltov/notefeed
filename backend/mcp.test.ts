@@ -114,6 +114,9 @@ describe("tools", () => {
     const listed = (await call("list_notes", { feed: "a", tag: "ci" })).structuredContent.notes;
     expect(listed.map((n: { id: string; tags: string[] }) => [n.id, n.tags])).toEqual([[r.structuredContent.id, ["ci", "env:prod"]]]);
     expect((await call("post_note", { feed: "a", markdown: "# x", tags: ["no good"] })).isError).toBe(true);
+    for (const title of ["a\u009bb", "a\u202eb", "a\u2028b"]) expect((await call("post_note", { feed: "a", markdown: "# x", title })).isError, JSON.stringify(title)).toBe(true);
+    const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1]).toString("base64");
+    for (const alt of ["a\u009bb", "a\u202eb", "a\u2028b"]) expect((await call("post_file", { feed: "a", type: "image/png", data: png, alt })).isError, JSON.stringify(alt)).toBe(true);
   });
 
   test("post_note to a feed without a read link answers read_url null", async () => {
@@ -380,34 +383,53 @@ describe("post_note attachments", () => {
     expect((await call("post_note", { feed: "f", markdown: "x" })).structuredContent.attachments).toEqual([]);
   });
   test("validation refuses before anything is posted", async () => {
-    for (const attachments of [[att("a.png"), att("a.png")], [att("a b.png")], [att("..")], [att("a.md", { type: "text/markdown" })], [att("a.svg", { type: "image/svg+xml" })]]) {
+    for (const attachments of [[att("a.png"), att("a.png")], [att("a/b.png")], [att("..")], [att("a.md", { type: "text/markdown" })], [att("a.svg", { type: "image/svg+xml" })]]) {
       expect((await call("post_note", { feed: "f", markdown: "x", attachments })).isError).toBe(true);
     }
     expect(await hasFeed("f")).toBe(false);
   });
-  test("a failed upload names the attachment and lists the posted ones, and the text is not posted", async () => {
+  test("a failed attachment names it and posts nothing", async () => {
     const bad = att("b.png", { data: Buffer.from("not a png").toString("base64") });
     const r = await call("post_note", { feed: "f", markdown: "x", attachments: [att("a.png"), bad] });
     expect(r.isError).toBe(true);
-    const notes = await listNotes("f", 10);
-    expect(notes).toHaveLength(1);
-    expect(r.content[0].text).toContain('attachment "b.png"');
-    expect(r.content[0].text).toContain(notes[0].file);
+    expect(r.content[0].text).toMatch(/^attachment "b\.png":/);
+    expect(await listNotes("f", 10)).toHaveLength(0);
   });
-  test("an oversized image is refused before the first image is posted", async () => {
-    process.env.NOTEFEED_MAX_IMAGE_BYTES = "10";
+  test("data that is not base64 is a clear error naming the attachment", async () => {
+    const r = await call("post_note", { feed: "f", markdown: "x", attachments: [att("a.png", { data: "!!not base64!!" })] });
+    expect(r.isError).toBe(true);
+    expect(r.content[0].text).toMatch(/^attachment "a\.png": .*base64/);
+    expect(await hasFeed("f")).toBe(false);
+  });
+  test("a valid 6 MB picture is accepted", async () => {
+    vi.stubEnv("NOTEFEED_MAX_IMAGE_BYTES", "8388608"); // afterEach unstubs it, also when the call throws
+    const big = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(6_000_000, 1)]).toString("base64");
+    const r = await call("post_note", { feed: "f", markdown: "x", attachments: [att("a.png", { data: big })] });
+    expect(r.isError).toBeFalsy();
+    expect(r.structuredContent.attachments).toHaveLength(1);
+  });
+  test("an oversized image is refused before anything is posted", async () => {
+    vi.stubEnv("NOTEFEED_MAX_IMAGE_BYTES", "10");
     const small = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]).toString("base64");
     const r = await call("post_note", { feed: "f", markdown: "x", attachments: [att("a.png", { data: small }), att("b.png")] });
-    delete process.env.NOTEFEED_MAX_IMAGE_BYTES;
+    expect(r.isError).toBe(true);
+    expect(r.content[0].text).toMatch(/^attachment "b\.png":/);
+    expect(await hasFeed("f")).toBe(false);
+  });
+  test("a text too large posts nothing, pictures included", async () => {
+    const r = await call("post_note", { feed: "f", markdown: "x".repeat(110_000), attachments: [att("a.png")] });
     expect(r.isError).toBe(true);
     expect(await hasFeed("f")).toBe(false);
   });
-  test("a failed text post still lists the images already posted", async () => {
-    const r = await call("post_note", { feed: "f", markdown: "x".repeat(110_000), attachments: [att("a.png")] });
-    const notes = await listNotes("f", 10);
-    expect(r.isError).toBe(true);
-    expect(notes).toHaveLength(1);
-    expect(r.content[0].text).toContain(`already posted: ${notes[0].file}`);
+  test("a titled reference and a definition are swapped", async () => {
+    const r = (await call("post_note", { feed: "f", markdown: '![x](a.png "T") and ![y][r]\n\n[r]: b.png', attachments: [att("a.png"), att("b.png")] })).structuredContent;
+    const [a, b] = r.attachments;
+    expect((await getNote("f", r.id))!.content).toBe(`![x](${a.file} "T") and ![y][r]\n\n[r]: ${b.file}`);
+  });
+  test("a file name with a space is referenced percent-encoded", async () => {
+    const r = (await call("post_note", { feed: "f", markdown: "![](a%20b.png)", attachments: [att("a b.png")] })).structuredContent;
+    expect(r.attachments).toHaveLength(1);
+    expect((await getNote("f", r.id))!.content).toBe(`![](${r.attachments[0].file})`);
   });
   test("empty markdown posts only the references", async () => {
     const r = (await call("post_note", { feed: "f", markdown: "", attachments: [att("a.png")] })).structuredContent;
@@ -417,6 +439,14 @@ describe("post_note attachments", () => {
     await call("post_note", { feed: "p", markdown: "x", password: "pw", attachments: [att("a.png")] });
     expect((await call("list_notes", { feed: "p" })).isError).toBe(true);
     expect((await call("list_notes", { feed: "p", password: "pw" })).structuredContent.notes).toHaveLength(2);
+    const r = (await call("post_note", { feed: "q", markdown: "x", password: "pw", attachments: [att("a.png"), att("b.png")] })).structuredContent;
+    expect((await call("list_notes", { feed: "q" })).isError).toBe(true);
+    expect((await call("list_notes", { feed: "q", password: "pw" })).structuredContent.notes).toHaveLength(3);
+    expect(r.attachments).toHaveLength(2);
+    // A picture the call stored is a note of the protected feed: not read without the password either.
+    const picture = r.attachments[0].id;
+    expect((await call("get_note", { feed: "q", id: picture })).isError).toBe(true);
+    expect((await call("get_note", { feed: "q", id: picture, password: "pw" })).structuredContent).toMatchObject({ id: picture, type: "image/png" });
   });
 });
 
@@ -450,9 +480,9 @@ describe("post_file", () => {
     expect(bad.content[0].text).toContain("image/png");
     expect((await call("post_file", { feed: "i", type: "image/png", data: Buffer.from("nope").toString("base64") })).isError).toBe(true);
     expect((await call("post_file", { feed: "i", type: "image/jpeg", data: png })).isError).toBe(true);
-    process.env.NOTEFEED_MAX_IMAGE_BYTES = "10";
+    vi.stubEnv("NOTEFEED_MAX_IMAGE_BYTES", "10");
     expect((await call("post_file", { feed: "i", type: "image/png", data: png })).isError).toBe(true);
-    delete process.env.NOTEFEED_MAX_IMAGE_BYTES;
+    vi.unstubAllEnvs(); // the default limit again
     await call("post_note", { feed: "p", markdown: "# Hi", password: "pw" });
     expect((await call("post_file", { feed: "p", type: "image/png", data: png })).content[0].text).toBe("missing or wrong password");
   });

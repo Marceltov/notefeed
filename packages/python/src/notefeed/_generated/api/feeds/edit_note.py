@@ -7,7 +7,7 @@ import httpx
 from ... import errors
 from ...client import AuthenticatedClient, Client
 from ...models.error import Error
-from ...models.note import Note
+from ...models.note_edited import NoteEdited
 from ...types import UNSET, File, Response, Unset
 
 
@@ -17,10 +17,14 @@ def _get_kwargs(
     *,
     body: File,
     x_feed_password: str | Unset = UNSET,
+    x_note_tags: str | Unset = UNSET,
 ) -> dict[str, Any]:
     headers: dict[str, Any] = {}
     if not isinstance(x_feed_password, Unset):
         headers["X-Feed-Password"] = x_feed_password
+
+    if not isinstance(x_note_tags, Unset):
+        headers["X-Note-Tags"] = x_note_tags
 
     _kwargs: dict[str, Any] = {
         "method": "put",
@@ -39,9 +43,9 @@ def _get_kwargs(
 
 def _parse_response(
     *, client: AuthenticatedClient | Client, response: httpx.Response
-) -> Error | Note | None:
+) -> Error | NoteEdited | None:
     if response.status_code == 200:
-        response_200 = Note.from_dict(response.json())
+        response_200 = NoteEdited.from_dict(response.json())
 
         return response_200
 
@@ -75,6 +79,11 @@ def _parse_response(
 
         return response_429
 
+    if response.status_code == 507:
+        response_507 = Error.from_dict(response.json())
+
+        return response_507
+
     if client.raise_on_unexpected_status:
         raise errors.UnexpectedStatus(response.status_code, response.content)
     else:
@@ -83,7 +92,7 @@ def _parse_response(
 
 def _build_response(
     *, client: AuthenticatedClient | Client, response: httpx.Response
-) -> Response[Error | Note]:
+) -> Response[Error | NoteEdited]:
     return Response(
         status_code=HTTPStatus(response.status_code),
         content=response.content,
@@ -99,19 +108,31 @@ def sync_detailed(
     client: AuthenticatedClient,
     body: File,
     x_feed_password: str | Unset = UNSET,
-) -> Response[Error | Note]:
+    x_note_tags: str | Unset = UNSET,
+) -> Response[Error | NoteEdited]:
     """Replace a note's content
 
      The body is the new file, with the same rules as posting: a `Content-Type` that is one of the
     accepted types, a body that is what it declares. A note keeps its type, so the type must be the
     note's own (`415` otherwise). Id, creation time and metadata stay: the title of a markdown note
     without one set follows the new text. Change the title or alt text with `PATCH`. Needs the feed's
-    password if it has one, and counts against the post rate limit. Read links can't edit.
+    password if it has one, and counts against the post rate limit. Read links can't edit. A markdown
+    note with its pictures is one `multipart/form-data` request: a `text` part (the markdown, a field or
+    a file part; a file part keeps its line breaks, a field's are sent as CRLF), `file` parts (up to 10
+    pictures, each with its file name and image `Content-Type`) and `alt.<file name>` fields. The
+    pictures are stored first, each as its own note named by its file name, then the text with its
+    references to them (`![](chart.png)`, `[x]: chart.png`, as written or percent-decoded) swapped for
+    the stored files; a picture it never refers to is appended as `![](file)`. Everything is checked
+    before the first write, and a failed write removes what the request stored: all or nothing. `X-Note-
+    Alt` and `X-Note-Name` are 400. The answer has `attachments`, the stored pictures in the order of
+    the `file` parts. On a `PUT` the `text` part is required and the note must be a markdown note; the
+    note keeps its own title and tags, `X-Note-Tags` goes on the new pictures.
 
     Args:
         feed (str):
         id (str):
         x_feed_password (str | Unset):
+        x_note_tags (str | Unset):
         body (File): The note, a file: its bytes, of the type `Content-Type` declares
 
     Raises:
@@ -119,7 +140,7 @@ def sync_detailed(
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Response[Error | Note]
+        Response[Error | NoteEdited]
     """
 
     kwargs = _get_kwargs(
@@ -127,6 +148,7 @@ def sync_detailed(
         id=id,
         body=body,
         x_feed_password=x_feed_password,
+        x_note_tags=x_note_tags,
     )
 
     response = client.get_httpx_client().request(
@@ -143,19 +165,31 @@ def sync(
     client: AuthenticatedClient,
     body: File,
     x_feed_password: str | Unset = UNSET,
-) -> Error | Note | None:
+    x_note_tags: str | Unset = UNSET,
+) -> Error | NoteEdited | None:
     """Replace a note's content
 
      The body is the new file, with the same rules as posting: a `Content-Type` that is one of the
     accepted types, a body that is what it declares. A note keeps its type, so the type must be the
     note's own (`415` otherwise). Id, creation time and metadata stay: the title of a markdown note
     without one set follows the new text. Change the title or alt text with `PATCH`. Needs the feed's
-    password if it has one, and counts against the post rate limit. Read links can't edit.
+    password if it has one, and counts against the post rate limit. Read links can't edit. A markdown
+    note with its pictures is one `multipart/form-data` request: a `text` part (the markdown, a field or
+    a file part; a file part keeps its line breaks, a field's are sent as CRLF), `file` parts (up to 10
+    pictures, each with its file name and image `Content-Type`) and `alt.<file name>` fields. The
+    pictures are stored first, each as its own note named by its file name, then the text with its
+    references to them (`![](chart.png)`, `[x]: chart.png`, as written or percent-decoded) swapped for
+    the stored files; a picture it never refers to is appended as `![](file)`. Everything is checked
+    before the first write, and a failed write removes what the request stored: all or nothing. `X-Note-
+    Alt` and `X-Note-Name` are 400. The answer has `attachments`, the stored pictures in the order of
+    the `file` parts. On a `PUT` the `text` part is required and the note must be a markdown note; the
+    note keeps its own title and tags, `X-Note-Tags` goes on the new pictures.
 
     Args:
         feed (str):
         id (str):
         x_feed_password (str | Unset):
+        x_note_tags (str | Unset):
         body (File): The note, a file: its bytes, of the type `Content-Type` declares
 
     Raises:
@@ -163,7 +197,7 @@ def sync(
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Error | Note
+        Error | NoteEdited
     """
 
     return sync_detailed(
@@ -172,6 +206,7 @@ def sync(
         client=client,
         body=body,
         x_feed_password=x_feed_password,
+        x_note_tags=x_note_tags,
     ).parsed
 
 
@@ -182,19 +217,31 @@ async def asyncio_detailed(
     client: AuthenticatedClient,
     body: File,
     x_feed_password: str | Unset = UNSET,
-) -> Response[Error | Note]:
+    x_note_tags: str | Unset = UNSET,
+) -> Response[Error | NoteEdited]:
     """Replace a note's content
 
      The body is the new file, with the same rules as posting: a `Content-Type` that is one of the
     accepted types, a body that is what it declares. A note keeps its type, so the type must be the
     note's own (`415` otherwise). Id, creation time and metadata stay: the title of a markdown note
     without one set follows the new text. Change the title or alt text with `PATCH`. Needs the feed's
-    password if it has one, and counts against the post rate limit. Read links can't edit.
+    password if it has one, and counts against the post rate limit. Read links can't edit. A markdown
+    note with its pictures is one `multipart/form-data` request: a `text` part (the markdown, a field or
+    a file part; a file part keeps its line breaks, a field's are sent as CRLF), `file` parts (up to 10
+    pictures, each with its file name and image `Content-Type`) and `alt.<file name>` fields. The
+    pictures are stored first, each as its own note named by its file name, then the text with its
+    references to them (`![](chart.png)`, `[x]: chart.png`, as written or percent-decoded) swapped for
+    the stored files; a picture it never refers to is appended as `![](file)`. Everything is checked
+    before the first write, and a failed write removes what the request stored: all or nothing. `X-Note-
+    Alt` and `X-Note-Name` are 400. The answer has `attachments`, the stored pictures in the order of
+    the `file` parts. On a `PUT` the `text` part is required and the note must be a markdown note; the
+    note keeps its own title and tags, `X-Note-Tags` goes on the new pictures.
 
     Args:
         feed (str):
         id (str):
         x_feed_password (str | Unset):
+        x_note_tags (str | Unset):
         body (File): The note, a file: its bytes, of the type `Content-Type` declares
 
     Raises:
@@ -202,7 +249,7 @@ async def asyncio_detailed(
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Response[Error | Note]
+        Response[Error | NoteEdited]
     """
 
     kwargs = _get_kwargs(
@@ -210,6 +257,7 @@ async def asyncio_detailed(
         id=id,
         body=body,
         x_feed_password=x_feed_password,
+        x_note_tags=x_note_tags,
     )
 
     response = await client.get_async_httpx_client().request(**kwargs)
@@ -224,19 +272,31 @@ async def asyncio(
     client: AuthenticatedClient,
     body: File,
     x_feed_password: str | Unset = UNSET,
-) -> Error | Note | None:
+    x_note_tags: str | Unset = UNSET,
+) -> Error | NoteEdited | None:
     """Replace a note's content
 
      The body is the new file, with the same rules as posting: a `Content-Type` that is one of the
     accepted types, a body that is what it declares. A note keeps its type, so the type must be the
     note's own (`415` otherwise). Id, creation time and metadata stay: the title of a markdown note
     without one set follows the new text. Change the title or alt text with `PATCH`. Needs the feed's
-    password if it has one, and counts against the post rate limit. Read links can't edit.
+    password if it has one, and counts against the post rate limit. Read links can't edit. A markdown
+    note with its pictures is one `multipart/form-data` request: a `text` part (the markdown, a field or
+    a file part; a file part keeps its line breaks, a field's are sent as CRLF), `file` parts (up to 10
+    pictures, each with its file name and image `Content-Type`) and `alt.<file name>` fields. The
+    pictures are stored first, each as its own note named by its file name, then the text with its
+    references to them (`![](chart.png)`, `[x]: chart.png`, as written or percent-decoded) swapped for
+    the stored files; a picture it never refers to is appended as `![](file)`. Everything is checked
+    before the first write, and a failed write removes what the request stored: all or nothing. `X-Note-
+    Alt` and `X-Note-Name` are 400. The answer has `attachments`, the stored pictures in the order of
+    the `file` parts. On a `PUT` the `text` part is required and the note must be a markdown note; the
+    note keeps its own title and tags, `X-Note-Tags` goes on the new pictures.
 
     Args:
         feed (str):
         id (str):
         x_feed_password (str | Unset):
+        x_note_tags (str | Unset):
         body (File): The note, a file: its bytes, of the type `Content-Type` declares
 
     Raises:
@@ -244,7 +304,7 @@ async def asyncio(
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Error | Note
+        Error | NoteEdited
     """
 
     return (
@@ -254,5 +314,6 @@ async def asyncio(
             client=client,
             body=body,
             x_feed_password=x_feed_password,
+            x_note_tags=x_note_tags,
         )
     ).parsed

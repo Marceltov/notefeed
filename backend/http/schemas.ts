@@ -4,6 +4,7 @@ import * as z from "zod";
 import { ERROR_CODES } from "../../shared/errors";
 import { PASSWORD_RULE } from "../../shared/password";
 import { FEED_RE } from "../feeds";
+import { MAX_ATTACHMENTS } from "../posting";
 import { TAG_RE, TAG_RULE } from "../tags";
 
 export const NOTE_ID = /^[A-Za-z0-9_-]{1,128}$/;
@@ -46,6 +47,23 @@ export const Created = z
   })
   .meta({ id: "Created" });
 export type Created = z.infer<typeof Created>;
+
+const Attachments = z.array(Created).optional().describe("A multipart request's pictures, one per `file` part, in their order; absent for a raw body");
+export const Posted = Created.extend({ attachments: Attachments }).describe("The note the post is about: its text note, or with no `text` part its first picture").meta({ id: "Posted" });
+export type Posted = z.infer<typeof Posted>;
+export const NoteEdited = NoteJson.extend({ attachments: Attachments }).meta({ id: "NoteEdited" });
+
+// A note with its pictures, as multipart/form-data. `alt.<file name>` fields can't be listed by name: they are described in text.
+export const MultipartNote = z
+  .object({
+    text: z.string().optional().describe("The markdown note (UTF-8): a field, or a file part (its name is ignored; its type, if any, `text/markdown` or `application/octet-stream`) to keep its line breaks as they are, since a form field's are sent as CRLF. At most one; required on a PUT. Its references to the files (`![](chart.png)`, `[x]: chart.png`) are swapped for the stored files; a file it never refers to is appended as `![](file)`"),
+    file: z
+      .array(z.string().meta({ format: "binary" }))
+      .max(MAX_ATTACHMENTS)
+      .optional()
+      .describe(`A picture: up to ${MAX_ATTACHMENTS} parts, each with a file name (one path segment, 1 to 200 characters, unique in the request) and its image \`Content-Type\`. An \`alt.<file name>\` field gives one its alternative text`),
+  })
+  .meta({ id: "MultipartNote" });
 
 export const ErrorJson = z
   .object({
@@ -109,7 +127,7 @@ export const ReadFeedJson = z.object({ title: TITLE, description: DESCRIPTION, i
 // A raw request body, not JSON.
 export const FileBody = z.string().meta({ format: "binary" }).describe("The note, a file: its bytes, of the type `Content-Type` declares");
 
-export const COMPONENTS = [NoteJson, NoteList, Created, ErrorJson, MetaJson, PasswordJson, FeedSettingsJson, FeedJson, ReadFeedJson];
+export const COMPONENTS = [NoteJson, NoteList, Created, Posted, NoteEdited, MultipartNote, ErrorJson, MetaJson, PasswordJson, FeedSettingsJson, FeedJson, ReadFeedJson];
 
 export const FeedParam = z.string().regex(FEED_RE).describe("The feed's name. It is the write key: anyone who knows it can post.");
 export const ReadIdParam = z.string().regex(/^[A-Za-z0-9_-]{1,64}$/).describe("The feed's read id, from its read link: 22 random characters, one the feed's owner chose, or the feed's own name for a reserved feed. Read-only; never reveals the name of any other feed.");

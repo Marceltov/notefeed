@@ -42,6 +42,8 @@ curl -X PUT -H "Content-Type: text/markdown" --data-binary @note.md \
   https://notes.example.com/api/v1/feeds/homelab-7f3k2q9x4m8wz/notes/20260929T140512Z-backup-finished
 ```
 
+A markdown note can also be replaced with a `multipart/form-data` `PUT`, to add pictures: the `text` part is required, the `file` parts and `alt.<filename>` are as in [posting a note with its pictures](#posting-a-note-with-its-pictures), and the references are swapped the same way. The pictures are new notes of their own; `X-Note-Tags` goes on them only, and the answer is `200` with the note and `attachments`. It is all or nothing, like a post.
+
 `PATCH` changes the note's [title](#titles) and, for a picture, its alt text, with a JSON body of `title` and/or `alt`. An empty string removes one. It answers `200` with the note:
 
 ```sh
@@ -67,7 +69,7 @@ What to know:
 
 ## Titles
 
-Every note can have a title of its own, up to 100 characters on one line. Without one, a markdown note is titled by its first heading or first line, and a note that starts with a picture by that picture's alt text; a picture without one shows as the picture. To set one when you post, send the `X-Note-Title` header; later, `PATCH` it. In the web UI it is the **Title** field of the compose box and of the editor. The title is metadata, not part of the file: replacing the content leaves it, and an empty title removes it so the title follows the text again.
+Every note can have a title of its own, up to 100 characters on one line. A title holds no control characters (U+0080 to U+009F included), no line or paragraph separator (U+2028, U+2029) and no text-direction override characters (U+202A to U+202E, U+2066 to U+2069), or it is `400`; right-to-left text and its marks are fine. The same goes for a picture's alternative text. Without one, a markdown note is titled by its first heading or first line, and a note that starts with a picture by that picture's alt text; a picture without one shows as the picture. To set one when you post, send the `X-Note-Title` header; later, `PATCH` it. In the web UI it is the **Title** field of the compose box and of the editor. The title is metadata, not part of the file: replacing the content leaves it, and an empty title removes it so the title follows the text again.
 
 ## Tags
 
@@ -87,13 +89,13 @@ curl -H "Content-Type: text/markdown" -H "X-Note-Tags: ci,deploy" --data-binary 
 
 ## Pictures
 
-A picture is a note of its own: post it with its own `Content-Type`, and it is stored next to the markdown notes, listed in the feed, shown in the read-only view and sent to RSS readers as an enclosure. A markdown note can show it too, by writing `![](<file>)` with the `file` that the post returned.
+A picture is a note of its own: post it with its own `Content-Type` (or with a note, in [one multipart request](#posting-a-note-with-its-pictures)), and it is stored next to the markdown notes, listed in the feed, shown in the read-only view and sent to RSS readers as an enclosure. A markdown note can show it too, by writing `![](<file>)` with the `file` that the post returned.
 
 ```sh
 curl -H "Content-Type: image/png" --data-binary @photo.png https://notes.example.com/homelab-7f3k2q9x4m8wz
 ```
 
-The answer is the same as for any note, with the picture's `file` and `file_url` (see above). `X-Note-Alt` sets its alternative text, `X-Note-Name` keeps the original file name, and `X-Note-Title` and `X-Note-Tags` work as for markdown. Non-ASCII text in these headers is sent as its UTF-8 bytes, which curl and the client packages do.
+The answer is the same as for any note, with the picture's `file` and `file_url` (see above). `X-Note-Alt` sets its alternative text (one line, at most 500 characters, with no control or text-direction override characters, like a [title](#titles)), `X-Note-Name` keeps the original file name (without `/`, `\`, control characters, line separators and text-direction override characters, trimmed, at most 200 characters), and `X-Note-Title` and `X-Note-Tags` work as for markdown. Non-ASCII text in these headers is sent as its UTF-8 bytes, which curl and the client packages do.
 
 What to know:
 
@@ -110,9 +112,40 @@ In the browser, the compose box and the note editor take pictures with the [Add 
 
 ## Posting a note with its pictures
 
-The API takes one note per request, so a note with pictures is the pictures first, then the text. The [clients](clients.md#from-code), the `notefeed post --attach` command and the [MCP](mcp.md) `post_note` tool do that in one call: each picture is posted as a note of its own, in order, and the text follows with `![](name)` swapped for the picture's file name. A picture the text never refers to is added at the end, so none is dropped. Names are letters, digits, `.`, `_` and `-` (not only dots); the text is markdown; everything that can be checked locally is checked before the first request.
+A note with its pictures is one `multipart/form-data` request, to `POST /<feed>` (or `/api/v1/feeds/<feed>/notes`). The [clients](clients.md#from-code), the `notefeed post --attach` command, the [web UI](web-ui.md#adding-an-image) and the [MCP](mcp.md) `post_note` tool all send it. It is the one exception to one raw file per request:
 
-If one picture is refused, the call fails with that picture's name and the pictures already posted, and the text is not posted. If the text itself is refused after the pictures, the call fails with the pictures already posted. Nothing is rolled back: the pictures posted before it stay in the feed as notes of their own, and you can post again or delete them.
+```sh
+curl -F "text=@note.md;type=text/markdown" -F "file=@chart.png;type=image/png" -F "file=@photo.jpg;type=image/jpeg" \
+  -F "alt.chart.png=Disk use over a week" https://notes.example.com/homelab-7f3k2q9x4m8wz
+```
+
+The parts:
+
+- **`text`:** at most one, the markdown. It is a plain string field or a file part. A file part is stored byte for byte and is what the clients send, because `FormData` rewrites `\n` to `\r\n` in string fields. The type of a file part may be `text/markdown`, empty or `application/octet-stream` (curl labels a `.md` file that way). Required on a `PUT`.
+- **`file`:** 0 to 10, the pictures. The file name is the name the markdown refers to; the type must be an accepted [picture type](#pictures), and the server checks the bytes. A file name is any single path segment of 1 to 200 characters (UTF-16 units) on one line (no line or paragraph separator, U+2028 and U+2029), without `/`, `\`, control characters (U+0080 to U+009F included), text-direction override characters (U+202A to U+202E, U+2066 to U+2069) or a leading or trailing space, not only dots, and unique in the request. A refusal shows the name with each such character as `�`. A `"` in a file name round-trips: clients send it as `%22` and the server decodes it. So a literal `%22`, `%0A` or `%0D` in a file name is decoded too: `a%22b.png` is stored as `a"b.png`, and a name with `%0A` or `%0D` arrives with a line break and is refused as not a file name (`400`).
+- **`alt.<filename>`:** optional, the alternative text of the picture of that name.
+- At least one `text` or `file` part is needed. Only a `text` part is the same as a raw post. Only `file` parts store just the pictures. `X-Note-Tags` goes on the text note and on every picture. `X-Note-Title` goes on the text note; with only `file` parts it goes on every picture. `X-Feed-Password` and `X-Read-Id` work as for a raw post; `X-Note-Alt` and `X-Note-Name` with multipart are `400`.
+
+**References.** The server swaps `![](name)` in the text for the picture's stored file name. It handles the image destination with a title (`![](name "title")`, the title is kept), a reference definition (`[l]: name`), a name in angle brackets (`<my chart.png>`) and a percent-encoded name (`my%20chart.png`); an exact match wins over a decoded one. Only the definition markdown uses for a label counts, which is the first: a repeated label's later definition is left alone, and its picture counts as not referred to. An image inside a code block or a code span is left as written, and a leading BOM is handled. A picture the text never refers to is added at the end as `![](file)`, so none is dropped.
+
+**Caps.** The request body is at most the markdown limit (100 KB) plus 10 times `NOTEFEED_MAX_IMAGE_BYTES` plus 64 KiB, or it is `413`. The limits of the note and of each picture apply as usual, and the note and image caps are checked for the notes the feed has plus the new ones. The limit applies to the stored text: a text of exactly 100 KB cannot be posted with pictures, because the swapped file names make it longer.
+
+**All or nothing.** Everything is checked first; then the pictures are stored, then the text. If anything fails, the notes this request stored are removed. The one thing that stays is a feed this request created (even a protected one) when a write fails after its creation: it is then an empty feed. A refusal names the part, for example `attachment "b.png": ...`. The whole request takes one slot of the [rate limit](configuration.md#rate-limits-and-caps).
+
+**The answer** is `201` with what a raw post of the text answers (the first picture's, when there is no `text` part), plus `attachments`: the same fields for every picture, in order:
+
+```json
+{
+  "id": "20260929T140512Z-3f2b8c1e-7d4a-4e6b-9a15-c0d2e8f41b73",
+  "url": "https://notes.example.com/homelab-7f3k2q9x4m8wz/20260929T140512Z-3f2b8c1e-7d4a-4e6b-9a15-c0d2e8f41b73",
+  "file": "20260929T140512Z-3f2b8c1e-7d4a-4e6b-9a15-c0d2e8f41b73.md",
+  "attachments": [{ "id": "…", "file": "….png", "file_url": "…" }]
+}
+```
+
+(the other fields of a [post](#posting-notes) are left out here). Raw requests are answered as before, without `attachments`. A client of this version needs a server of this version: an older server answers `415` to multipart.
+
+**Errors** are those of posting, with the part named in the message. `400`: a file name that is not allowed or is given twice, a `file` part without a file name, more than 10 files, a part that is none of `text`, `file` and `alt.<filename>` (or a second `text`), an `alt.` for a file that is not there, a text that is not UTF-8, a blank text with no pictures, a body that is not valid multipart, nothing to post, and no `text` on a `PUT`. `415`: a file that is not an accepted picture or whose bytes are not that format. `413`: a picture, the text or the whole request is too large. `507`: a cap is reached.
 
 ## Feed settings and deleting a feed
 
@@ -221,7 +254,7 @@ Changing the password signs every browser out of the feed. A wrong or missing fe
 
 ## Types
 
-`Content-Type` is required and must be one of these. Nothing is guessed:
+`Content-Type` is required and must be one of these (or `multipart/form-data`, see [Posting a note with its pictures](#posting-a-note-with-its-pictures)). Nothing is guessed:
 
 | Content type | A note of |
 |---|---|
@@ -246,7 +279,7 @@ From Python or Node, use the [client libraries](clients.md) instead of building 
 | `401` | The instance has a password and the `Authorization` header is missing or wrong, or the feed has its own password and `X-Feed-Password` is missing or wrong |
 | `409` | A password was sent for a feed that already exists without one (`feed_exists`); the `read_id` for a new feed belongs to another feed (`taken`) |
 | `404` | No feed in the URL: `POST /`, for example from an empty variable in `$NOTEFEED_URL/$FEED`. For [editing and deleting](#editing-and-deleting-notes): no such note |
-| `413` | The body is larger than 100 KB (102400 bytes); for a [picture](#pictures), larger than `NOTEFEED_MAX_IMAGE_BYTES` |
+| `413` | The body is larger than 100 KB (102400 bytes); for a [picture](#pictures), larger than `NOTEFEED_MAX_IMAGE_BYTES`; for a [multipart request](#posting-a-note-with-its-pictures), larger than its cap |
 | `415` | The `Content-Type` is missing or not one of the [types](#types), or the body is not what it declares (a picture that is not that format, markdown that is not UTF-8) |
 | `429` | Too many posts, edits or deletes, or too many wrong passwords, from this client in the last minute. `Retry-After` says how many seconds to wait. See [Rate limits and caps](configuration.md#rate-limits-and-caps). |
 | `500` | The note could not be written. No partial file is left behind. |

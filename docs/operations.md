@@ -126,6 +126,7 @@ Read the logs with `docker compose logs notefeed`, or your container runtime's e
 | `warn`, `error` | `feeds` | a feed's read id or a leftover folder | A problem with a feed's files that notefeed works around, such as a `.readid` it can't read; the feed's name is never in it. |
 | `error` | `http`, `mcp` | `request failed`, `tool failed` | An unexpected failure, answered with a bare `500` or `internal error`; `err` carries the error, with everything below the data directory in a path replaced by `<path>` (so no feed name or note title). |
 | `error` | `http` | `an operation answered a status it doesn't declare` | A bug: an API operation answered a status its OpenAPI description doesn't list, and the client got a bare `500`; `operation` is the operation's id and `status` the status it tried to send. |
+| `error` | `posting` | `a picture of a failed post could not be removed` | A post or an edit of a note with pictures failed while storing, and one of the picture notes it had already stored could not be removed again: that picture may be left in the feed (the removal also reports a file that was already gone) and can be deleted by hand. `note` is the picture note's id (its file in `DATA_DIR` starts with it), and `err` carries the error when the removal itself failed; the feed's name is never in it. |
 | `debug` | `limits` | `rate limit reached` | A request over `NOTEFEED_RATE_LIMIT`; `kind` is `post` or `password`. |
 | `debug` | `auth` | `password bearer refused` | A script sent a wrong instance password as its bearer token. |
 

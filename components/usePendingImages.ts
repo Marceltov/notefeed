@@ -1,32 +1,21 @@
 "use client";
 
-import { useRef, useState } from "react";
-import { postFile } from "@/app/_lib/useApiForm";
-import { type Pending } from "@/components/pendingFiles";
-import { substitute } from "@/shared/links";
+import { useState } from "react";
+import { multipartBody } from "@/app/_lib/useApiForm";
+import { onlyReferences, type Pending } from "@/components/pendingFiles";
 
-// The pictures waiting in a note box, and what posting them takes: `flush` uploads the ones not yet sent (each becomes a note of its
-// own), `apply` swaps the local names in the text for the notes' file names. A picture that was sent stays sent when a later step
-// fails, so posting again does not make it twice; removing it from the list forgets it.
-export function usePendingImages(feed: string) {
+/**
+ * The compose box's request body: undefined when no picture waits (the box posts raw), else the text and the pictures in one
+ * multipart body, without the text when it holds nothing but the pictures' references (the server then makes only the pictures,
+ * and the title and tags go on them).
+ */
+export async function pendingBody(text: string, pending: Pending[]): Promise<FormData | undefined> {
+  if (pending.length === 0) return undefined;
+  return multipartBody(onlyReferences(text, pending.map((p) => p.token)) ? undefined : text, pending);
+}
+
+// The pictures waiting in a note box (for MarkdownInput), and the compose box's body of them with its text.
+export function usePendingImages() {
   const [pending, setPending] = useState<Pending[]>([]);
-  const sent = useRef(new Map<string, { id: string; file: string }>()); // by Pending.key
-  const last = useRef<string | undefined>(undefined);
-
-  /** Posts the files not yet sent, in order, and stops at the first refusal. Returns its message, or undefined when all are sent. `password` is for the post that creates a protected feed, `meta` (a title, tags) goes on every picture. */
-  async function flush(password?: string, meta?: { title?: string; tags?: string[] }): Promise<string | undefined> {
-    for (const p of pending) {
-      if (sent.current.has(p.key)) continue;
-      const result = await postFile(feed, p.file, password, meta);
-      if ("error" in result) return result.error;
-      sent.current.set(p.key, { id: result.id, file: result.file });
-      last.current = result.id;
-    }
-    return undefined;
-  }
-
-  const apply = (text: string) =>
-    substitute(text, new Map(pending.flatMap((p) => (sent.current.has(p.key) ? [[p.token, sent.current.get(p.key)!.file] as const] : []))));
-
-  return { pending, setPending, flush, apply, lastId: () => last.current };
+  return { pending, setPending, body: (text: string) => pendingBody(text, pending) };
 }

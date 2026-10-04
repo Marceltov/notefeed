@@ -472,40 +472,78 @@ def img(n):
     return {"id": f"I{n}", "url": f"https://n.example/inbox/I{n}", "feed_url": "https://n.example/inbox", "read_url": None, "file": f"F{n}.png", "file_url": f"https://n.example/r/X/F{n}.png"}
 
 
-def test_attachments_are_uploaded_in_order_then_the_text_with_the_references_placed(server):
-    server.reply(201, img(1))
-    server.reply(201, img(2))
-    server.reply(201, CREATED)
+def parts(request):
+    """The multipart body of a recorded request: [(name, filename, content type, bytes)]."""
+    from email.parser import BytesParser
+
+    msg = BytesParser().parsebytes(b"Content-Type: " + request["headers"]["Content-Type"].encode() + b"\r\n\r\n" + request["body"])
+    return [(p.get_param("name", header="content-disposition"), p.get_filename(), p.get_content_type() if p.get("Content-Type") else None, p.get_payload(decode=True)) for p in msg.get_payload()]
+
+
+def answer(*ns):
+    return {**CREATED, "attachments": [img(n) for n in ns]}
+
+
+def test_attachments_go_in_one_multipart_request(server):
+    server.reply(201, answer(1, 2))
     r = Client(server.url, "inbox", feed_password="pw").post(
-        "hi ![](a.png)", title="T", tags=["x"], read_id="my-read",
+        "hi ![](a.png)\nline\n", title="T", tags=["x"], read_id="my-read",
         attachments=[Attachment("a.png", PNG, "image/png", alt="A"), Attachment("b.png", PNG, "image/png")],
     )
-    assert [q["headers"]["Content-Type"] for q in server.requests] == ["image/png", "image/png", "text/markdown"]
-    first, _, text = (q["headers"] for q in server.requests)
-    assert (first["X-Note-Name"], first["X-Note-Alt"], first["X-Note-Tags"], first["X-Feed-Password"], first["X-Read-Id"]) == ("a.png", "A", "x", "pw", "my-read")
-    assert "X-Note-Title" not in first
-    assert (text["X-Note-Title"], text["X-Note-Tags"], text["X-Feed-Password"], text["X-Read-Id"]) == ("T", "x", "pw", "my-read")
-    assert server.requests[2]["body"] == b"hi ![](F1.png)\n\n![](F2.png)"
+    assert len(server.requests) == 1
+    q = server.requests[0]
+    h = q["headers"]
+    assert h["Content-Type"].startswith("multipart/form-data; boundary=")
+    assert (h["X-Note-Title"], h["X-Note-Tags"], h["X-Feed-Password"], h["X-Read-Id"]) == ("T", "x", "pw", "my-read")
+    assert "X-Note-Alt" not in h and "X-Note-Name" not in h
+    assert parts(q) == [
+        ("alt.a.png", None, None, b"A"),  # httpx writes the fields first
+        ("text", "text.md", "text/markdown", b"hi ![](a.png)\nline\n"),
+        ("file", "a.png", "image/png", PNG),
+        ("file", "b.png", "image/png", PNG),
+    ]
     assert r.id == CREATED["id"]
     assert [a.id for a in r.attachments] == ["I1", "I2"]
 
 
+def test_the_text_part_is_sent_byte_for_byte(server):
+    server.reply(201, answer(1))
+    Client(server.url, "inbox").post("a\nb\r\nc é\n", attachments=[Attachment("a.png", PNG, "image/png")])
+    assert parts(server.requests[0])[0][3] == b"a\nb\r\nc \xc3\xa9\n"
+    assert b"\r\n\r\na\nb\r\nc" in server.requests[0]["body"]
+
+
 def test_no_attachments_gives_an_empty_list(server):
     assert Client(server.url, "inbox").post("x").attachments == []
+    assert server.requests[0]["headers"]["Content-Type"] == "text/markdown"
 
 
-def test_empty_markdown_with_attachments_posts_only_the_references(server):
-    server.reply(201, img(1))
-    Client(server.url, "inbox").post("", attachments=[Attachment("a.png", PNG, "image/png")])
-    assert server.requests[1]["body"] == b"![](F1.png)"
+def test_no_text_with_attachments_sends_no_text_part_and_returns_the_servers_answer(server):
+    server.reply(201, {**img(1), "attachments": [img(1), img(2)]})
+    r = Client(server.url, "inbox").post(None, title="T", tags=["x"], attachments=[Attachment("a.png", PNG, "image/png"), Attachment("b.png", PNG, "image/png")])
+    q = server.requests[0]
+    assert [p[:3] for p in parts(q)] == [("file", "a.png", "image/png"), ("file", "b.png", "image/png")]
+    assert (q["headers"]["X-Note-Title"], q["headers"]["X-Note-Tags"]) == ("T", "x")
+    assert (r.id, [a.id for a in r.attachments]) == ("I1", ["I1", "I2"])
+
+
+def test_no_content_and_no_attachments_is_a_config_error(server):
+    with pytest.raises(ConfigError):
+        Client(server.url, "inbox").post(None)
+    assert server.requests == []
+
+
+@pytest.mark.parametrize("extra", [{"alt": "a"}, {"name": "n.md"}])
+def test_alt_or_name_with_attachments_is_a_config_error(server, extra):
+    with pytest.raises(ConfigError):
+        Client(server.url, "inbox").post("x", attachments=[Attachment("a.png", PNG, "image/png")], **extra)
+    assert server.requests == []
 
 
 @pytest.mark.parametrize(
     "content, attachments",
     [
         ("x", [Attachment("a.png", PNG, "image/png"), Attachment("a.png", PNG, "image/png")]),
-        ("x", [Attachment("a b.png", PNG, "image/png")]),
-        ("x", [Attachment("..", PNG, "image/png")]),
         ("x", [Attachment("a.md", PNG, "text/markdown")]),
         ("x", [Attachment("a.png", PNG)]),
         (PNG, [Attachment("a.png", PNG, "image/png")]),
@@ -517,41 +555,32 @@ def test_invalid_attachments_are_refused_before_anything_is_sent(server, content
     assert server.requests == []
 
 
-def test_a_failed_upload_raises_the_original_error_with_the_attachment_and_the_posted_images(server):
-    server.reply(201, img(1))
-    server.reply(400, {"error": "bad image", "code": "invalid_body"})
+@pytest.mark.parametrize("name", ["Screenshot 2026-10-03.png", "\U0001F600.png", "ü.png", "a.b"])
+def test_attachment_names_are_sent_as_given(server, name):
+    server.reply(201, answer(1))
+    Client(server.url, "inbox").post("x", attachments=[Attachment(name, PNG, "image/png")])
+    assert f'filename="{name}"'.encode() in server.requests[0]["body"]  # raw UTF-8, which the email parser cannot read back
+
+
+def test_a_server_refusal_keeps_its_class_and_message(server):
+    server.reply(400, {"error": 'file part "b.png": not a picture', "code": "invalid_body"})
     with pytest.raises(InvalidRequestError) as e:
-        Client(server.url, "inbox").post("x", attachments=[Attachment("a.png", PNG, "image/png"), Attachment("b.png", PNG, "image/png")])
-    assert (e.value.attachment, e.value.status, e.value.code) == ("b.png", 400, "invalid_body")
-    assert [p.id for p in e.value.posted] == ["I1"]
-    assert "b.png" in str(e.value)
-    assert len(server.requests) == 2
+        Client(server.url, "inbox").post("x", attachments=[Attachment("b.png", PNG, "image/png")])
+    assert (e.value.status, e.value.code, str(e.value)) == (400, "invalid_body", 'file part "b.png": not a picture')
+    assert len(server.requests) == 1
+
+
+def test_the_name_rule_is_the_servers_a_refused_name_is_sent_and_raises_its_error(server):
+    message = 'attachment "..": not a file name: 1 to 200 characters, no / or \\, no control or text-direction override characters, no leading or trailing space, not only dots'
+    server.reply(400, {"error": message, "code": "invalid_body"})
+    with pytest.raises(InvalidRequestError) as e:
+        Client(server.url, "inbox").post("x", attachments=[Attachment("..", PNG, "image/png")])
+    assert (e.value.status, e.value.code, str(e.value)) == (400, "invalid_body", message)
+    assert len(server.requests) == 1
 
 
 def test_a_rate_limit_keeps_retry_after(server):
-    server.reply(201, img(1))
-    server.reply(429, {"error": "slow down", "code": "rate_limited"}, headers={"Retry-After": "7"})
-    with pytest.raises(RateLimitedError) as e:
-        Client(server.url, "inbox").post("x", attachments=[Attachment("a.png", PNG, "image/png"), Attachment("b.png", PNG, "image/png")])
-    assert (e.value.retry_after, e.value.attachment, len(e.value.posted)) == (7, "b.png", 1)
-
-
-def test_a_failed_text_post_still_carries_the_images_already_posted(server):
-    server.reply(201, img(1))
     server.reply(429, {"error": "slow down", "code": "rate_limited"}, headers={"Retry-After": "7"})
     with pytest.raises(RateLimitedError) as e:
         Client(server.url, "inbox").post("x", attachments=[Attachment("a.png", PNG, "image/png")])
-    assert (e.value.retry_after, e.value.attachment, [p.id for p in e.value.posted]) == (7, None, ["I1"])
-
-
-def test_a_name_referenced_twice_is_uploaded_once_and_keeps_the_texts_trailing_newline(server):
-    server.reply(201, img(1))
-    Client(server.url, "inbox").post("![](a.png) and ![](a.png)\n", attachments=[Attachment("a.png", PNG, "image/png")])
-    assert len(server.requests) == 2
-    assert server.requests[1]["body"] == b"![](F1.png) and ![](F1.png)\n"
-
-
-def test_the_clients_own_feed_password_goes_on_every_request(server):
-    server.reply(201, img(1))
-    Client(server.url, "inbox", feed_password="pw").post("x", attachments=[Attachment("a.png", PNG, "image/png")])
-    assert [q["headers"]["X-Feed-Password"] for q in server.requests] == ["pw", "pw"]
+    assert e.value.retry_after == 7

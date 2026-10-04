@@ -24,15 +24,12 @@ _M = TypeVar("_M", Created, Feed, Note, NoteList)
 
 
 class NotefeedError(Exception):
-    """Any failure talking to notefeed. `status` and `code` are None when there was no API answer.
-    `attachment` and `posted` are set when a post with `attachments` failed on one of them: its name, and the images already posted (the text note is not)."""
+    """Any failure talking to notefeed. `status` and `code` are None when there was no API answer."""
 
     def __init__(self, message: str, status: int | None = None, code: str | None = None):
         super().__init__(message)
         self.status = status
         self.code = code
-        self.attachment: str | None = None
-        self.posted: list[Created] = []
 
 
 class ConfigError(NotefeedError):
@@ -86,7 +83,6 @@ _BY_CODE: dict[str, type[NotefeedError]] = {
     "unsupported_type": InvalidRequestError,
 }
 
-_ATTACHMENT_NAME = re.compile(r"(?!\.+$)[A-Za-z0-9._-]+")  # safe to write in ![](name)
 _IMAGE_TYPES = ("image/png", "image/jpeg", "image/gif", "image/webp")
 
 
@@ -105,21 +101,6 @@ class Posted(Created):
     """What post() returns: the text note's `Created`, and `attachments`, the `Created` of each picture posted with it."""
 
     attachments: list[Created] = attrs.field(factory=list)
-
-
-def _place_images(markdown: str, sent: dict[str, str]) -> str:
-    """The markdown with each `![](name)` of `sent` (name -> file) pointing at its file; a name the text never refers to is appended as `![](file)`."""
-    used: set[str] = set()
-
-    def swap(m: re.Match[str]) -> str:
-        if m.group(2) not in sent:
-            return m.group(0)
-        used.add(m.group(2))
-        return m.group(1) + sent[m.group(2)] + m.group(3)
-
-    text = re.sub(r"(!\[[^\]]*\]\()([^)\s]+)(\))", swap, markdown)
-    rest = [f"![]({f})" for n, f in sent.items() if n not in used]
-    return "\n\n".join(p for p in [text.rstrip(), *rest] if p) if rest else text
 
 
 # Same rule as the server; reserved names still come back as a 400.
@@ -210,7 +191,7 @@ class Client:
 
     def post(
         self,
-        content: str | bytes,
+        content: str | bytes | None,
         feed: str | None = None,
         feed_password: str | None = None,
         type: str | None = None,
@@ -232,43 +213,53 @@ class Client:
         file's original name. `read_id` is the read id the feed gets when this post creates it (3 to 64 characters of
         `a-z`, `0-9`, `-`, `_`; random when left out; ignored for a feed that exists; a `taken` error when another feed has it).
 
-        `attachments` (only with a markdown `str`) are pictures posted first, one note each, in order: `![](name)` in the markdown
-        shows one (an attachment the text never refers to is added at the end), and `.attachments` of the result lists them.
-        `tags` label the images too. Everything is checked before anything is sent. If an upload fails, its error is raised with
-        `.attachment` (the name) and `.posted` (the images already posted, which stay) set; the text note is not posted."""
-        own = (feed, feed_password)
+        `attachments` (pictures, at most 10 by the server) go in the same request as the markdown, one note each: `![](name)` in the
+        markdown shows one by its `name`, and `.attachments` of the result lists them. `content` may then be None: there is no text
+        note, `title` goes on every picture, and the result is the first picture's `Created` (with `.attachments` all of them). `tags`
+        label every note; `alt` and `name` are not allowed with attachments (use `Attachment.alt`). Checked here, before anything
+        is sent (ConfigError): a name given twice, an attachment that is not a picture, content that is not markdown, `alt` or `name`
+        with attachments. What a name may be is the server's rule (docs/posting.md, "Posting a note with its pictures"): a name it refuses
+        raises InvalidRequestError, `attachment "<name>": ...`. The server posts all or nothing: a refusal posts no note."""
         if not attachments:
-            return Posted(**attrs.asdict(self._post_one(content, *own, type, title, tags, alt, name, read_id), recurse=False))
-        if not isinstance(content, str) or (type or "text/markdown") != "text/markdown":
+            if content is None:
+                raise ConfigError("no content given")
+            return Posted(**attrs.asdict(self._post_one(content, feed, feed_password, type, title, tags, alt, name, read_id), recurse=False))
+        if (content is not None and not isinstance(content, str)) or (type or "text/markdown") != "text/markdown":
             raise ConfigError("attachments go with a markdown string")
-        types = []
+        if alt or name:
+            raise ConfigError("alt and name do not go with attachments: give each Attachment its alt")
+        files: list[Any] = []
+        fields: dict[str, str] = {}
+        if content is not None:
+            files.append(("text", ("text.md", content.encode("utf-8"), "text/markdown")))
+        seen: set[str] = set()
         for a in attachments:
-            if not _ATTACHMENT_NAME.fullmatch(a.name):
-                raise ConfigError(f'attachment name "{a.name}": use letters, digits, ., _ and - only')
-            media = _as_file(a.content, a.type)[1]
+            if a.name in seen:
+                raise ConfigError(f'attachment "{a.name}" is given twice')
+            seen.add(a.name)
+            data, media = _as_file(a.content, a.type)
             if media not in _IMAGE_TYPES:
                 raise ConfigError(f'attachment "{a.name}" must be a picture ({", ".join(_IMAGE_TYPES)})')
-            types.append(media)
-        names = [a.name for a in attachments]
-        if len(set(names)) != len(names):
-            raise ConfigError(f'attachment "{next(n for n in names if names.count(n) > 1)}" is given twice')
-        posted: list[Created] = []
-        sent: dict[str, str] = {}
-        for a, media in zip(attachments, types):
-            try:
-                done = self._post_one(a.content, *own, media, None, tags, a.alt, a.name, read_id)
-            except NotefeedError as e:
-                e.args = (f'attachment "{a.name}": {e}',)
-                e.attachment, e.posted = a.name, posted
-                raise
-            posted.append(done)
-            sent[a.name] = done.file
+            files.append(("file", (a.name, data, media)))
+            if a.alt:
+                fields[f"alt.{a.name}"] = a.alt
+        kwargs = post_note._get_kwargs(
+            feed=self._feed_for(feed),
+            body=File(payload=b""),
+            x_feed_password=self._fp(feed_password),
+            x_read_id=read_id or UNSET,
+            x_note_title=_header_value(title) if title else UNSET,
+            x_note_tags=",".join(tags) if tags else UNSET,
+        )
+        del kwargs["content"], kwargs["headers"]["Content-Type"]  # httpx writes the multipart body and its boundary
+        kwargs["files"], kwargs["data"] = files, fields
+        body = self._call(kwargs)
+        done = self._parse(Created, body)
         try:
-            text = self._post_one(_place_images(content, sent), *own, type, title, tags, alt, name, read_id)
-        except NotefeedError as e:
-            e.posted = posted  # the text failed: the images stay, `attachment` stays None
-            raise
-        return Posted(**attrs.asdict(text, recurse=False), attachments=posted)
+            extra = [Created.from_dict(x) for x in body.get("attachments") or []]
+        except (KeyError, TypeError, ValueError, AttributeError):
+            raise NotefeedError(f"unexpected response from {self.url} (not a notefeed server?)") from None
+        return Posted(**attrs.asdict(done, recurse=False), attachments=extra)
 
     def _post_one(self, content, feed, feed_password, type, title, tags, alt, name, read_id) -> Created:
         payload, media = _as_file(content, type)

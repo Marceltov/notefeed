@@ -20,10 +20,12 @@ test("every $ref points at a component", () => {
   for (const r of refs) expect((doc.components as { schemas: object }).schemas).toHaveProperty(r);
 });
 
-test("postNote lists every media type the registry accepts, each as a binary body", () => {
+test("postNote lists every media type the registry accepts, each as a binary body, and the multipart form", () => {
   const doc = openApiDocument("https://notefeed.me") as { paths: Record<string, { post?: { requestBody: { content: Record<string, { schema: { format?: string } }> } } }> };
   const content = doc.paths["/api/v1/feeds/{feed}/notes"].post!.requestBody.content;
-  expect(Object.keys(content).sort()).toEqual(["image/gif", "image/jpeg", "image/png", "image/webp", "text/markdown"]);
-  for (const body of Object.values(content)) expect(body.schema.format).toBe("binary");
+  const { "multipart/form-data": multipart, ...files } = content;
+  expect(Object.keys(files).sort()).toEqual(["image/gif", "image/jpeg", "image/png", "image/webp", "text/markdown"]);
+  for (const body of Object.values(files)) expect(body.schema.format).toBe("binary");
+  expect(multipart.schema).toEqual({ $ref: "#/components/schemas/MultipartNote" });
   expect(doc.paths["/api/v1/feeds/{feed}/images"]).toBeUndefined();
 });

@@ -6,7 +6,9 @@ import { encodeHeaderValue } from "../../shared/headers";
 import { protectedFeed } from "../feedlock";
 import { hasFeed, readIdOf, resetFeedsForTests } from "../feeds";
 import { resetRateLimitsForTests } from "../limits";
+import { countNotes } from "../notes";
 import { API_PREFIX, dispatch } from "./api";
+import { readMultipart } from "./notes";
 
 const BASE = "http://localhost:3000";
 let dir: string;
@@ -54,7 +56,7 @@ describe("a markdown note", () => {
 });
 
 describe("every other Content-Type is refused, and nothing is created", () => {
-  test.each([null, "text/plain", "application/x-www-form-urlencoded", "application/octet-stream", "application/json", "multipart/form-data; boundary=x", "image/svg+xml", "text/markdown; charset=iso-8859-1"])(
+  test.each([null, "text/plain", "application/x-www-form-urlencoded", "application/octet-stream", "application/json", "image/svg+xml", "text/markdown; charset=iso-8859-1"])(
     "%j is 415 and the message names the types to send",
     async (type) => {
       const res = await post("# Hi", type);
@@ -175,4 +177,216 @@ test("the old image endpoint and the old body types are gone", async () => {
   const gone = await dispatch(new Request(`${BASE}${API_PREFIX}/feeds/f/images`, { method: "POST", body: PNG, headers: { host: "localhost:3000", "content-type": "image/png" } }), ["feeds", "f", "images"]);
   expect(gone.status).toBe(404);
   expect((await post(JSON.stringify({ markdown: "# a" }), "application/json")).status).toBe(415);
+});
+
+// A multipart post: `text`, `file` and `alt.<name>` parts, built from FormData as a browser or a client sends them.
+const png = (name: string, bytes: Uint8Array = PNG, type = "image/png") => new File([bytes as BlobPart], name, { type });
+function form(parts: [string, string | File][]): FormData {
+  const f = new FormData();
+  for (const [k, v] of parts) f.append(k, v);
+  return f;
+}
+const sendForm = (parts: [string, string | File][], headers: Record<string, string> = {}, feed = "f") => post(form(parts), null, headers, feed);
+const sidecarOf = async (file: string, feed = "f") => JSON.parse((await readFile(join(dir, feed, `.${file}.json`))).toString());
+
+describe("multipart: a text with its pictures", () => {
+  test("pictures then text: the answer is the text note plus every picture in part order, the text refers to the stored files", async () => {
+    const text = '# Report\n\n![Chart](chart.png "Q3")\n\n![logo][l]\n\n[l]: logo.png\n';
+    const res = await sendForm(
+      [
+        ["text", text],
+        ["file", png("chart.png")],
+        ["alt.chart.png", "A chart"],
+        ["file", png("logo.png", JPG, "image/jpeg")],
+      ],
+      { "x-note-title": "T", "x-note-tags": "ci" },
+    );
+    expect(res.status).toBe(201);
+    const body = await res.json();
+    expect(body.file).toBe(`${body.id}.md`);
+    expect(body.url).toBe(`${BASE}/f/${body.id}`);
+    const [chart, logo] = body.attachments;
+    expect(body.attachments).toHaveLength(2);
+    expect(chart.file).toBe(`${chart.id}.png`);
+    expect(logo.file).toBe(`${logo.id}.jpg`);
+    expect(chart.file_url).toBe(`${BASE}/r/${(await readIdOf("f"))!}/${chart.file}`);
+    // FormData sends a string field's line breaks as CRLF (the HTML form-data encoding): the text is stored as it arrived.
+    expect((await stored(body.file)).toString()).toBe(`# Report\n\n![Chart](${chart.file} "Q3")\n\n![logo][l]\n\n[l]: ${logo.file}\n`.replace(/\n/g, "\r\n"));
+    expect([...(await stored(chart.file))]).toEqual([...PNG]);
+    expect(await sidecarOf(body.file)).toEqual({ title: "T", tags: ["ci"] });
+    expect(await sidecarOf(chart.file)).toEqual({ alt: "A chart", name: "chart.png", tags: ["ci"] });
+    expect(await sidecarOf(logo.file)).toEqual({ name: "logo.png", tags: ["ci"] });
+  });
+  test("file names survive the multipart encoding: spaces, non-ASCII, a reference percent-encoded", async () => {
+    const res = await sendForm([
+      ["text", "![](a%20b.png) ![](Größe.png)"],
+      ["file", png("a b.png")],
+      ["file", png("Größe.png")],
+    ]);
+    expect(res.status).toBe(201);
+    const { file, attachments } = await res.json();
+    expect((await stored(file)).toString()).toBe(`![](${attachments[0].file}) ![](${attachments[1].file})`);
+    expect((await sidecarOf(attachments[1].file)).name).toBe("Größe.png");
+  });
+  test("only files: just the pictures, each with the title and tags; the answer is the first picture", async () => {
+    const res = await sendForm([["file", png("a.png")], ["file", png("b.png")]], { "x-note-title": "T", "x-note-tags": "ci" });
+    expect(res.status).toBe(201);
+    const body = await res.json();
+    expect(body.attachments).toHaveLength(2);
+    expect(body).toMatchObject({ id: body.attachments[0].id, file: body.attachments[0].file });
+    for (const a of body.attachments) expect(await sidecarOf(a.file)).toMatchObject({ title: "T", tags: ["ci"] });
+    expect(await countNotes("f", "markdown")).toBe(0);
+    expect(await countNotes("f")).toBe(2);
+  });
+  test("only text equals a raw post, with no attachments", async () => {
+    const res = await sendForm([["text", "# Hi"]], { "x-note-title": "T" });
+    expect(res.status).toBe(201);
+    const body = await res.json();
+    expect(body.attachments).toEqual([]);
+    expect((await stored(body.file)).toString()).toBe("# Hi");
+    expect(await sidecarOf(body.file)).toEqual({ title: "T" });
+  });
+  test("a raw post's answer has no attachments", async () => {
+    expect("attachments" in (await (await post("# a", "text/markdown")).json())).toBe(false);
+  });
+
+  const eleven = Array.from({ length: 11 }, (_, i) => ["file", png(`${i}.png`)] as [string, File]);
+  test.each([
+    ["no text and no file", [], {}, "invalid_body", null],
+    ["two text parts", [["text", "a"], ["text", "b"]], {}, "invalid_body", null],
+    ["a text field and a text file", [["text", "# a"], ["text", new File(["# b"], "b.md", { type: "text/markdown" })]], {}, "invalid_body", null],
+    ["a part named other", [["text", "a"], ["other", "x"]], {}, "invalid_body", null],
+    ["a file part without a file name", [["file", "just a string"]], {}, "invalid_body", null],
+    ["a duplicate file name", [["file", png("a.png")], ["file", png("a.png")]], {}, "invalid_body", "a.png"],
+    ["alt for a file that is not sent", [["file", png("a.png")], ["alt.x.png", "x"]], {}, "invalid_body", null],
+    ["X-Note-Alt", [["file", png("a.png")]], { "x-note-alt": "x" }, "invalid_body", null],
+    ["X-Note-Name", [["file", png("a.png")]], { "x-note-name": "x.png" }, "invalid_body", null],
+    ["11 files", eleven, {}, "invalid_body", null],
+    ["blank text and no file", [["text", "  "]], {}, "empty_note", null],
+  ] as [string, [string, string | File][], Record<string, string>, string, string | null][])("%s is 400, and nothing is created", async (_, parts, headers, code, named) => {
+    const res = await sendForm(parts, headers);
+    const body = await res.json();
+    expect([res.status, body.code]).toEqual([400, code]);
+    // Only a refusal about one picture names it: the web box words those after the picture's name.
+    if (named) expect(body.error.startsWith(`attachment "${named}": `)).toBe(true);
+    else expect(body.error).not.toMatch(/^attachment "/);
+    expect(await hasFeed("f")).toBe(false);
+  });
+  test.each([
+    ["an unexpected part's key", [["text", "a"], ["evil\u202egnp\u009b", "x"]]],
+    ["the name of an alt field with no file", [["file", png("a.png")], ["alt.evil\u202egnp\u009b.png", "x"]]],
+  ] as [string, [string, string | File][]][])("%s is echoed without its control and text-direction characters", async (_, parts) => {
+    const res = await sendForm(parts);
+    const { error } = await res.json();
+    expect(res.status).toBe(400);
+    expect(error).toContain("evil\ufffdgnp\ufffd");
+    expect(error).not.toMatch(/[\u009b\u202e]/);
+  });
+  const utf8 = (s: string) => Buffer.from(s).toString("latin1"); // a header's non-ASCII text travels as its UTF-8 bytes
+  test.each(["a\u009bb", "a\u202eb", "a\u2028b", "a\u2066b"])("a title with a control or text-direction character is 400: %j", async (title) => {
+    const res = await post("# x", "text/markdown", { "x-note-title": utf8(title) });
+    expect([res.status, (await res.json()).code]).toEqual([400, "invalid_body"]);
+    expect(await hasFeed("f")).toBe(false);
+  });
+  test.each(["a\u009bb", "a\u202eb", "a\u2028b"])("an alt text with a control or text-direction character is 400: %j", async (alt) => {
+    expect((await post(PNG as BodyInit, "image/png", { "x-note-alt": utf8(alt) })).status).toBe(400);
+    expect((await sendForm([["file", png("a.png")], ["alt.a.png", alt]])).status).toBe(400);
+    expect(await hasFeed("f")).toBe(false);
+  });
+  test.each(["صورة اليوم", "תמונה של היום", "a\u200eb \u200f\u061c", "👨\u200d👩\u200d👧 family"])("a right-to-left or joined-emoji title is kept: %j", async (title) => {
+    const res = await post("# x", "text/markdown", { "x-note-title": utf8(title) });
+    expect(res.status).toBe(201);
+    expect(await sidecarOf((await res.json()).file)).toEqual({ title });
+  });
+  test("a body that is not multipart is 400 invalid_body", async () => {
+    const res = await post("# Hi", "multipart/form-data; boundary=x");
+    expect([res.status, (await res.json()).code]).toEqual([400, "invalid_body"]);
+  });
+  test("a picture that is not what it declares, or not a picture, is 415 and names the part", async () => {
+    for (const file of [png("b.png", JPG), new File(["hi"], "b.txt", { type: "text/plain" }), new File([PNG as BlobPart], "b.png")]) {
+      const res = await sendForm([["text", "# a"], ["file", png("a.png")], ["file", file]]);
+      const body = await res.json();
+      expect([res.status, body.code]).toEqual([415, "unsupported_type"]);
+      expect(body.error).toContain(`attachment "${file.name}"`);
+      expect(await hasFeed("f")).toBe(false);
+    }
+  });
+  test("an oversize picture or a body over the request cap is 413, and nothing is created", async () => {
+    process.env.NOTEFEED_MAX_IMAGE_BYTES = "20";
+    // Both are `too_large`; the message says which: the picture's is ImageTooLargeError's, after its name.
+    const picture = await sendForm([["text", "# a"], ["file", png("a.png", new Uint8Array([...PNG, ...new Uint8Array(20)]))]]);
+    expect([picture.status, await picture.json()]).toEqual([413, { code: "too_large", error: 'attachment "a.png": image exceeds the size limit' }]);
+    // The cap is 102400 + 10 * 20 bytes + 64 KiB of framing: an alt text that long would be a 400 if it were read. NoteTooLargeError, naming no picture.
+    const request = await sendForm([["file", png("a.png")], ["alt.a.png", "a".repeat(102400 + 200 + 65536 + 1)]]);
+    expect([request.status, await request.json()]).toEqual([413, { code: "too_large", error: "note exceeds 100 KB" }]);
+    expect(await hasFeed("f")).toBe(false);
+  });
+  test("a request at every limit at once passes the request cap: 10 pictures at the image limit and a text at the markdown limit", async () => {
+    process.env.NOTEFEED_MAX_IMAGE_BYTES = "20";
+    const full = new Uint8Array([...PNG, ...new Uint8Array(20 - PNG.length)]);
+    const files = Array.from({ length: 10 }, (_, i) => ["file", png(`${i}.png`, full)] as [string, File]);
+    const req = (text: string) => new Request(`${BASE}${API_PREFIX}/feeds/f/notes`, { method: "POST", body: form([["text", text], ...files]) });
+    // Read as the request cap sees it: a text of exactly MAX_BYTES can't be stored with pictures, their references make it longer.
+    const read = await readMultipart(req("a".repeat(102400)), "post");
+    expect([read.text!.length, read.pictures.length]).toEqual([102400, 10]);
+    // Stored, with room left for the ten references.
+    const res = await sendForm([["text", "a".repeat(102400 - 10 * 64)], ...files]);
+    expect(res.status).toBe(201);
+    expect((await res.json()).attachments).toHaveLength(10);
+  });
+  test("the text as a file part is stored byte for byte: no CRLF, a BOM kept; its name is ignored", async () => {
+    const bytes = new Uint8Array([0xef, 0xbb, 0xbf, ...new TextEncoder().encode("# Hi\n\n![](a.png)\n")]);
+    for (const type of ["text/markdown", "text/markdown; charset=utf-8"]) {
+      const res = await sendForm([["text", new File([bytes as BlobPart], "whatever.txt", { type })], ["file", png("a.png")]]);
+      expect(res.status, type).toBe(201);
+      const { file, attachments } = await res.json();
+      const text = (await stored(file)).toString();
+      expect(text).not.toContain("\r");
+      expect(text).toBe(`\uFEFF# Hi\n\n![](${attachments[0].file})\n`);
+    }
+  });
+  test("a text file part may be application/octet-stream; another type is 415, invalid UTF-8 is 400, and they store nothing", async () => {
+    const as = (bytes: BlobPart, type: string) => sendForm([["text", new File([bytes], "t.md", { type })], ["file", png("a.png")]]);
+    expect((await as("# curl", "application/octet-stream")).status).toBe(201); // curl's label for a .md file
+    const wrong = await as("# a", "image/png");
+    expect([wrong.status, (await wrong.json()).code]).toEqual([415, "unsupported_type"]);
+    expect((await as("# a", "text/markdown; charset=iso-8859-1")).status).toBe(415);
+    const bad = await as(new Uint8Array([0xff, 0xfe, 0x41]) as BlobPart, "text/markdown");
+    expect([bad.status, (await bad.json()).code]).toEqual([400, "invalid_body"]);
+    expect(await countNotes("f")).toBe(2);
+  });
+  test("a protected feed: the first multipart post creates it, a refused one leaves none, a later post needs the password", async () => {
+    const refused = await sendForm([["text", "# a"], ["file", png("a.png")], ["file", png("b.png", JPG)]], { "x-feed-password": "hunter22" }, "g");
+    expect(refused.status).toBe(415);
+    expect(await hasFeed("g")).toBe(false);
+    expect(await protectedFeed("g")).toBe(false);
+    const twice = await sendForm([["text", "# a"], ["file", png("a.png")], ["file", png("a.png")]], { "x-feed-password": "hunter22" }, "g");
+    expect([twice.status, (await twice.json()).code]).toEqual([400, "invalid_body"]);
+    expect(await hasFeed("g")).toBe(false);
+    expect(await protectedFeed("g")).toBe(false);
+    expect((await sendForm([["text", "# a"], ["file", png("a.png")]], { "x-feed-password": "hunter22" })).status).toBe(201);
+    expect(await protectedFeed("f")).toBe(true);
+    expect((await sendForm([["file", png("b.png")]])).status).toBe(401);
+    expect((await sendForm([["file", png("b.png")]], { "x-feed-password": "hunter22" })).status).toBe(201);
+  });
+  test("a double quote in a file name round-trips: FormData sends %22, the server decodes it", async () => {
+    const res = await sendForm([["text", '![](<q"uote.png>)'], ["file", png('q"uote.png')]]);
+    expect(res.status).toBe(201);
+    const { file, attachments } = await res.json();
+    expect((await stored(file)).toString()).toBe(`![](${attachments[0].file})`);
+    expect((await sidecarOf(attachments[0].file)).name).toBe('q"uote.png');
+  });
+  test("the image cap holds for the post that would create the feed", async () => {
+    process.env.NOTEFEED_MAX_IMAGES_PER_FEED = "2";
+    const res = await sendForm([["file", png("a.png")], ["file", png("b.png")], ["file", png("c.png")]], {}, "new");
+    expect([res.status, (await res.json()).code]).toEqual([507, "image_limit"]);
+    expect(await hasFeed("new")).toBe(false);
+  });
+  test("the caps count the existing notes plus the new pictures", async () => {
+    process.env.NOTEFEED_MAX_IMAGES_PER_FEED = "2";
+    expect((await sendForm([["file", png("a.png")]])).status).toBe(201);
+    const res = await sendForm([["text", "# a"], ["file", png("b.png")], ["file", png("c.png")]]);
+    expect([res.status, (await res.json()).code]).toEqual([507, "image_limit"]);
+    expect(await countNotes("f")).toBe(1);
+  });
 });

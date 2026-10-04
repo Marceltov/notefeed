@@ -14,9 +14,9 @@ import { parseMediaType } from "./note/types";
 import { logger } from "./log";
 import { checkLine, getNote, listNotes, MAX_NOTE_TITLE, type Note } from "./notes";
 import { verify } from "./oauth/tokens";
-import { ATTACHMENT_NAME, placeImages } from "../shared/links";
+import { isAttachmentName, safeName } from "../shared/links";
 import { TAG_RULE } from "./tags";
-import { deleteFeed, deleteNote, editContent, editMeta, postNote, updateFeed } from "./posting";
+import { deleteFeed, deleteNote, editContent, editMeta, postNote, postWithPictures, updateFeed } from "./posting";
 import { feedPath, imagePath, mcpResource, publicUrl, rssPath } from "./urls";
 
 const log = logger("mcp");
@@ -56,19 +56,19 @@ function server(h: Headers): McpServer {
   const s = new McpServer({ name: "notefeed", version: "1.0.0" });
 
   // One file as a note: the type must be accepted and the bytes must be what it says (postNote checks that); a picture is size-limited.
-  const postBytes = async (feed: string, f: { type: string; data: string; title?: string; alt?: string; name?: string; tags?: string[] }, password: string | undefined, readId?: string) => {
+  const postBytes = async (feed: string, f: { type: string; data: string; title?: string; alt?: string; name?: string; tags?: string[] }, password: string | undefined) => {
     const parsed = parseMediaType(f.type);
     if (!parsed) throw new UnsupportedTypeError();
     const body = Buffer.from(f.data, "base64");
     if (parsed.type.name === "image" && body.length > config.maxImageBytes()) throw new ImageTooLargeError();
-    return postNote(feed, clientIp(h), async () => ({ body, mediaType: parsed.mediaType, title: f.title, alt: f.alt, name: f.name, tags: f.tags, readId }), { password }, sender(h));
+    return postNote(feed, clientIp(h), async () => ({ body, mediaType: parsed.mediaType, title: f.title, alt: f.alt, name: f.name, tags: f.tags }), { password }, sender(h));
   };
   const fileUrl = (readId: string | null, file: string) => (readId ? base + imagePath(readId, file) : "");
 
   s.registerTool(
     "post_note",
     {
-      description: `Post a markdown note to a feed; the feed is created by its first note; a password given then protects the feed for good, and is refused on a feed that already exists. attachments are pictures posted first, as notes of their own: write ![](name) in the markdown where one goes (an attachment the text never refers to is added at the end); if one fails, the ones before it stay posted and the text is not. ${PROTECTED} ${SECRET_NOTE}`,
+      description: `Post a markdown note to a feed; the feed is created by its first note; a password given then protects the feed for good, and is refused on a feed that already exists. attachments are pictures posted with the note, each as a note of its own: write ![](name) in the markdown where one goes (a name with spaces as ![](<name with spaces>) or ![](name%20with%20spaces); a title after it is fine; an attachment the text never refers to is added at the end); all or nothing, a refusal posts nothing. ${PROTECTED} ${SECRET_NOTE}`,
       inputSchema: z.object({
         feed,
         markdown: z.string(),
@@ -77,43 +77,22 @@ function server(h: Headers): McpServer {
         tags: z.array(z.string()).optional().describe(`Labels for the note, e.g. ["ci","deploy"]: ${TAG_RULE}. Not verified; readers see them.`),
         read_id: z.string().optional().describe("Only when this post creates the feed: its read id (3 to 64 characters of a-z, 0-9, - and _), random when left out. A short readable one is guessable. Fails if taken."),
         attachments: z
-          .array(z.object({ name: z.string().regex(ATTACHMENT_NAME).describe("What the markdown calls it: ![](name). Letters, digits, . _ - only; unique"), type: z.string().describe(`The picture's media type: ${ACCEPTED_TYPES}`), data: z.string().describe("The picture's bytes, base64"), alt: z.string().optional().describe("Alternative text (at most 500 characters, one line)") }))
+          .array(z.object({ name: z.string().refine(isAttachmentName, "Not a file name: 1 to 200 characters, no / or \\, no control or text-direction override characters, no leading or trailing space, not only dots").describe("What the markdown calls it: ![](name). Any single path segment (no / or \\; spaces allowed, written <name with spaces> or name%20with%20spaces in the markdown); unique"), type: z.string().describe(`The picture's media type: ${ACCEPTED_TYPES}`), data: z.string().describe("The picture's bytes, standard base64 (not URL-safe)"), alt: z.string().optional().describe("Alternative text (at most 500 characters, one line)") }))
           .optional(),
       }),
       outputSchema: z.object({ id: z.string(), url: z.string(), feed_url: z.string(), read_url: z.string().nullable(), attachments: z.array(z.object({ id: z.string(), file: z.string(), url: z.string() })) }),
     },
     guard(async ({ feed, markdown, title, password, tags, read_id, attachments = [] }) => {
-      // Everything that can be checked without the feed, before the first note is posted.
-      const names = new Set<string>();
-      for (const a of attachments) {
-        if (names.has(a.name)) throw new InvalidBodyError(`attachment "${a.name}" is given twice`);
-        names.add(a.name);
-        if (parseMediaType(a.type)?.type.name !== "image") throw new UnsupportedTypeError(`attachment "${a.name}" must be a picture`);
-        if (Buffer.from(a.data, "base64").length > config.maxImageBytes()) throw new ImageTooLargeError();
-      }
-      const posted: { id: string; file: string; url: string }[] = [];
-      const sent = new Map<string, string>();
-      for (const a of attachments) {
-        try {
-          const { note, readId } = await postBytes(feed, { ...a, tags }, password, read_id);
-          posted.push({ id: note.id, file: note.file, url: fileUrl(readId, note.file) });
-          sent.set(a.name, note.file);
-        } catch (e) {
-          if (e instanceof NotefeedError) e.message = `attachment "${a.name}": ${e.message}${posted.length ? ` (already posted: ${posted.map((p) => p.file).join(", ")})` : ""}`;
-          throw e;
-        }
-      }
-      const text = new TextEncoder().encode(placeImages(markdown, sent));
-      let done;
-      try {
-        done = await postNote(feed, clientIp(h), async () => ({ body: text, mediaType: "text/markdown", title, tags, readId: read_id }), { password }, sender(h));
-      } catch (e) {
-        if (e instanceof NotefeedError && posted.length) e.message = `${e.message} (already posted: ${posted.map((p) => p.file).join(", ")})`;
-        throw e;
-      }
-      const { note, readId } = done;
+      // Buffer.from skips what is not base64, so the data is checked here; the rest of the checks are postWithPictures's.
+      const pictures = attachments.map((a) => {
+        const clean = a.data.replace(/\s/g, "");
+        const body = Buffer.from(clean, "base64");
+        if (body.toString("base64").replace(/=+$/, "") !== clean.replace(/=+$/, "")) throw new InvalidBodyError(`attachment "${safeName(a.name)}": data is not valid base64`);
+        return { name: a.name, body, mediaType: a.type, alt: a.alt };
+      });
+      const { note, readId, pictures: stored } = await postWithPictures(feed, clientIp(h), async () => ({ text: markdown, pictures, title, tags, password, readId: read_id }), { password }, sender(h));
       const feedUrl = base + feedPath(feed);
-      return ok({ id: note.id, url: `${feedUrl}/${note.id}`, feed_url: feedUrl, read_url: readId && base + rssPath(readId), attachments: posted });
+      return ok({ id: note.id, url: `${feedUrl}/${note.id}`, feed_url: feedUrl, read_url: readId && base + rssPath(readId), attachments: stored.map((p) => ({ id: p.id, file: p.file, url: fileUrl(readId, p.file) })) });
     }),
   );
 
@@ -248,8 +227,12 @@ function server(h: Headers): McpServer {
   return s;
 }
 
+// The SDK's default of 4 MiB would refuse a valid 3 MB picture (base64 is a third larger); 16 MiB holds the largest picture (10 MiB) in base64.
+// ponytail: one cap for every call; several large pictures in one call need a bigger one.
+const MAX_REQUEST_BYTES = 16 * 1024 * 1024;
+
 // "auto" answers with one JSON body unless a tool emits mid-call notifications, which ours never do.
-const handler = createMcpHandler(({ requestInfo }) => server(requestInfo!.headers), { legacy: "reject" });
+const handler = createMcpHandler(({ requestInfo }) => server(requestInfo!.headers), { legacy: "reject", maxRequestBodySize: MAX_REQUEST_BYTES });
 
 const rpcError = (status: number, message: string, headers?: Record<string, string>) =>
   Response.json({ jsonrpc: "2.0", error: { code: -32600, message } }, { status, headers });

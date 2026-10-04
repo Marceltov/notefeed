@@ -1,3 +1,5 @@
+import email.parser
+import email.policy
 import io
 import json
 import sys
@@ -347,12 +349,12 @@ def test_edit_a_picture_file_sends_it_as_its_type(server, tmp_path):
     assert (server.requests[0]["method"], type_of(server)) == ("PUT", "image/webp")
 
 
-# --attach: pictures posted first; the text refers to them by file name.
+# --attach: pictures and text in one multipart request.
 PNG = bytes([0x89, 0x50, 0x4E, 0x47])
 
 
-def _img(n):
-    return {"id": f"I{n}", "url": f"https://n.example/inbox/I{n}", "feed_url": "https://n.example/inbox", "read_url": None, "file": f"F{n}.png", "file_url": "x"}
+def _img(n, ext="png"):
+    return {"id": f"I{n}", "url": f"https://n.example/inbox/I{n}", "feed_url": "https://n.example/inbox", "read_url": None, "file": f"F{n}.{ext}", "file_url": "x"}
 
 
 _TEXT = {"id": "T", "url": "https://n.example/inbox/T", "feed_url": "https://n.example/inbox", "read_url": None, "file": "T.md", "file_url": "x"}
@@ -364,16 +366,51 @@ def _pics(tmp_path):
     return tmp_path
 
 
-def test_attach_posts_images_then_text_and_prints_the_text_url_then_the_image_urls(server, capsys, tmp_path):
+def _parts(server, i=0):
+    """The multipart parts of request i as (name, filename, content type, payload)."""
+    r = server.requests[i]
+    msg = email.parser.BytesParser(policy=email.policy.HTTP).parsebytes(b"Content-Type: " + r["headers"]["Content-Type"].encode() + b"\r\n\r\n" + r["body"])
+    return [(p.get_param("name", header="content-disposition"), p.get_filename(), p.get_content_type(), p.get_payload(decode=True)) for p in msg.iter_parts()]
+
+
+def test_attach_sends_one_multipart_request_and_prints_the_text_url_then_the_image_urls(server, capsys, tmp_path):
     d = _pics(tmp_path)
-    server.reply(201, _img(1))
-    server.reply(201, _img(2))
-    server.reply(201, _TEXT)
+    server.reply(201, {**_TEXT, "attachments": [_img(1), _img(2, "webp")]})
     assert main(["post", "see ![](chart.png)", "--attach", str(d / "chart.png"), "--attach", str(d / "t.webp"), "--url", server.url, "--feed", "inbox"]) == 0
     assert capsys.readouterr().out.split() == ["https://n.example/inbox/T", "https://n.example/inbox/I1", "https://n.example/inbox/I2"]
-    assert [type_of(server, i) for i in range(3)] == ["image/png", "image/webp", "text/markdown"]
-    assert server.requests[0]["headers"]["X-Note-Name"] == "chart.png"
-    assert sent(server, 2) == "see ![](F1.png)\n\n![](F2.png)"
+    assert len(server.requests) == 1
+    assert type_of(server).startswith("multipart/form-data; boundary=")
+    assert _parts(server) == [
+        ("text", "text.md", "text/markdown", b"see ![](chart.png)"),
+        ("file", "chart.png", "image/png", PNG),
+        ("file", "t.webp", "image/webp", PNG),
+    ]
+
+
+def test_attach_without_text_sends_no_text_part_and_prints_each_picture_url_once(server, capsys, tmp_path):
+    d = _pics(tmp_path)
+    server.reply(201, {**_img(1), "attachments": [_img(1), _img(2)]})
+    assert main(["post", "--attach", str(d / "chart.png"), "--attach", str(d / "t.webp"), "--url", server.url, "--feed", "inbox"]) == 0
+    assert capsys.readouterr().out.split() == ["https://n.example/inbox/I1", "https://n.example/inbox/I2"]
+    assert [p[:2] for p in _parts(server)] == [("file", "chart.png"), ("file", "t.webp")]
+
+
+def test_attach_without_text_sends_the_title_and_tags_as_headers_and_no_text_part(server, tmp_path):
+    d = _pics(tmp_path)
+    server.reply(201, {**_img(1), "attachments": [_img(1)]})
+    assert main(["post", "--attach", str(d / "chart.png"), "--title", "T", "--tag", "a", "--tag", "b", "--url", server.url, "--feed", "inbox"]) == 0
+    headers = server.requests[0]["headers"]
+    assert (headers["X-Note-Title"], headers["X-Note-Tags"]) == ("T", "a,b")
+    assert [p[:2] for p in _parts(server)] == [("file", "chart.png")]
+
+
+def test_attach_with_stdin_sends_the_stdin_text_as_the_text_part(server, capsys, monkeypatch, tmp_path):
+    d = _pics(tmp_path)
+    monkeypatch.setattr(sys, "stdin", io.TextIOWrapper(io.BytesIO(b"# from stdin\r\n![](chart.png)\n")))
+    server.reply(201, {**_TEXT, "attachments": [_img(1)]})
+    assert main(["post", "-", "--attach", str(d / "chart.png"), "--url", server.url, "--feed", "inbox"]) == 0
+    assert capsys.readouterr().out.split() == ["https://n.example/inbox/T", "https://n.example/inbox/I1"]
+    assert _parts(server) == [("text", "text.md", "text/markdown", b"# from stdin\r\n![](chart.png)\n"), ("file", "chart.png", "image/png", PNG)]
 
 
 def test_attach_unreadable_markdown_or_unknown_extension_exits_2_and_posts_nothing(server, capsys, tmp_path):
@@ -384,24 +421,31 @@ def test_attach_unreadable_markdown_or_unknown_extension_exits_2_and_posts_nothi
     assert server.requests == []
 
 
-def test_attach_failed_upload_exits_1_naming_the_attachment_and_the_posted_images(server, capsys, tmp_path):
+def test_attach_refused_exits_1_naming_the_attachment_and_prints_nothing(server, capsys, tmp_path):
     d = _pics(tmp_path)
-    server.reply(201, _img(1))
-    server.reply(400, {"error": "bad image", "code": "invalid_body"})
+    server.reply(400, {"error": 'attachment "t.webp": bad image', "code": "invalid_body"})
     assert main(["post", "hi", "--attach", str(d / "chart.png"), "--attach", str(d / "t.webp"), "--url", server.url, "--feed", "inbox"]) == 1
     out = capsys.readouterr()
     assert out.out == ""
-    assert out.err.splitlines() == ['notefeed: attachment "t.webp": bad image', "posted: https://n.example/inbox/I1"]
+    assert out.err == 'notefeed: attachment "t.webp": bad image\n'
+    assert len(server.requests) == 1
 
 
-def test_attach_name_with_a_space_exits_2_saying_why_and_posts_nothing(server, capsys, tmp_path):
+def test_attach_name_with_a_space_is_accepted_and_sent_with_that_filename(server, tmp_path):
     (tmp_path / "my chart.png").write_bytes(PNG)
-    assert main(["post", "hi", "--attach", str(tmp_path / "my chart.png"), "--url", server.url, "--feed", "inbox"]) == 2
-    assert "file name" in capsys.readouterr().err
-    assert server.requests == []
+    server.reply(201, {**_TEXT, "attachments": [_img(1)]})
+    assert main(["post", "hi", "--attach", str(tmp_path / "my chart.png"), "--url", server.url, "--feed", "inbox"]) == 0
+    assert _parts(server)[1][:2] == ("file", "my chart.png")
 
 
 def test_attach_with_a_non_markdown_file_exits_2_and_posts_nothing(server, tmp_path):
     d = _pics(tmp_path)
     assert main(["post", "--file", str(d / "chart.png"), "--attach", str(d / "t.webp"), "--url", server.url, "--feed", "inbox"]) == 2
     assert server.requests == []
+
+
+def test_attach_with_a_markdown_file_is_one_request_with_its_text(server, tmp_path):
+    d = _pics(tmp_path)
+    server.reply(201, {**_TEXT, "attachments": [_img(1)]})
+    assert main(["post", "--file", str(d / "notes.md"), "--attach", str(d / "chart.png"), "--url", server.url, "--feed", "inbox"]) == 0
+    assert _parts(server)[0] == ("text", "text.md", "text/markdown", b"# x")

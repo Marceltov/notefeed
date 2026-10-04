@@ -6,6 +6,7 @@ import { deleteNoteFile, replaceNote, updateMeta, writeNote, listNoteFiles, read
 import { InvalidBodyError, UnsupportedTypeError } from "./errors";
 import { assertFeed, checkFeed, ensureFeed, forgetFeed } from "./feeds";
 import { sniffImage } from "../shared/images";
+import { cleanName, FORBIDDEN_IN_TEXT } from "../shared/links";
 import { ImageNote } from "./note/image";
 import { MarkdownNote } from "./note/markdown";
 import { Note } from "./note/note";
@@ -13,6 +14,7 @@ import { parseMediaType, typeForExt, type NoteType } from "./note/types";
 
 export { checkMarkdown, MAX_BYTES } from "./note/markdown";
 export { ImageNote, MarkdownNote, Note };
+export { cleanName }; // defined in shared/links.ts, with the characters a name may not hold
 
 export const MAX_NOTE_TITLE = 100;
 export const MAX_ALT = 500;
@@ -21,7 +23,7 @@ export const MAX_ALT = 500;
 export function checkLine(name: string, value: string | undefined, max: number): string | undefined {
   if (value === undefined) return undefined;
   const v = value.trim();
-  if (/[\x00-\x1f\x7f]/.test(v)) throw new InvalidBodyError(`${name} must be one line`);
+  if (FORBIDDEN_IN_TEXT.test(v)) throw new InvalidBodyError(`${name} must be one line, without control or text-direction override characters`);
   if ([...v].length > max) throw new InvalidBodyError(`${name} must be at most ${max} characters`);
   return v;
 }
@@ -78,9 +80,6 @@ async function store(feed: string, { ext, content, meta }: NewNote, now: Date, w
   }
 }
 
-/** A file's original name as kept with the note: no control characters or slashes, trimmed, at most 200 characters. */
-export const cleanName = (name: string | undefined): string | undefined => (name ?? "").replace(/[\x00-\x1f\x7f/\\]/g, "").trim().slice(0, 200) || undefined;
-
 export type NewNoteOptions = { sender?: string; tags?: string[]; title?: string; alt?: string; name?: string; wantedReadId?: string };
 
 /**
@@ -101,8 +100,8 @@ export async function createNoteOf(feed: string, type: NoteType, ext: string, bo
   return { note: type.read({ id, ext, meta, createdAt: stampOf(id)!, size: body.length }, Buffer.from(body)), readId };
 }
 
-const MARKDOWN = typeForExt("md")!;
-const encoder = new TextEncoder();
+export const MARKDOWN = typeForExt("md")!;
+export const encoder = new TextEncoder();
 
 /** A markdown note from its text. */
 export async function createNote(feed: string, markdown: string, now = new Date(), sender?: string, tags: string[] = [], wantedReadId?: string, title?: string): Promise<{ note: MarkdownNote; readId: string | null }> {

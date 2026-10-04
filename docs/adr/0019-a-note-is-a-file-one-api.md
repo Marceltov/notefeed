@@ -38,3 +38,5 @@ Chosen option: the second. A note is a file, and a request says which kind.
 * Bad, because the shortest curl post now needs a header (`-H "Content-Type: text/markdown"`), and a script that relied on curl's default type breaks.
 * Bad, because this changes the API and both client packages incompatibly, and the web UI no longer posts without JavaScript.
 * Bad, because a PUT cannot change a note's type: replacing a PNG with a JPEG is delete and post.
+
+Amended by [ADR 0021](0021-a-note-with-pictures-is-one-request.md): `POST` and `PUT` of a markdown note also accept `multipart/form-data`, to post a note with its pictures in one request.

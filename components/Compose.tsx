@@ -5,57 +5,46 @@ import { useState, type FormEvent } from "react";
 import { postNote } from "@/app/_lib/api";
 import { encodeHeaderValue } from "@/shared/headers";
 import { MarkdownInput } from "@/components/MarkdownInput";
-import { onlyReferences } from "@/components/pendingFiles";
 import { usePendingImages } from "@/components/usePendingImages";
-import { useApiForm } from "@/app/_lib/useApiForm";
-import { PASSWORD_HINT, SENDER_NOTICE } from "@/app/_lib/messages";
+import { multipart, useApiForm } from "@/app/_lib/useApiForm";
+import { errorMessage, PASSWORD_HINT, SENDER_NOTICE, withPictures } from "@/app/_lib/messages";
 import { PASSWORD_PATTERN } from "@/shared/password";
 import { TAGS_HINT, TAGS_PATTERN } from "@/shared/tags";
 
-// A plain multipart form to POST /<feed>, the same endpoint scripts use: without JavaScript the browser
-// follows the 303 back to the feed page. With JavaScript the box posts through the API client generated
-// from openapi.json (JSON, the session cookie rides along same-origin) and shows refusals inline.
-// Pictures dropped, pasted or picked wait in the box (usePendingImages) and are posted, as notes of their own, when the note is.
+// The compose box posts through the API client generated from openapi.json (the session cookie rides along same-origin) and
+// shows refusals inline: the text as a raw markdown post, or, with pictures dropped, pasted or picked (they wait in the box,
+// usePendingImages), the text and the pictures in one multipart request, so nothing is half-posted.
 // `isNew`: a feed that doesn't exist yet, so the box offers to protect it with a password.
 export function Compose({ feed, action, error: initialError, isNew, sender }: { feed: string; action: string; error?: string; isNew?: boolean; sender?: boolean }) {
-  const { run, error, setError, pending, setPending, router } = useApiForm(action, initialError);
-  const images = usePendingImages(feed);
+  const images = usePendingImages();
+  const { run, error, setError, pending, router } = useApiForm(action, initialError, withPictures(errorMessage, images.pending.length > 0));
   const [text, setText] = useState("");
   const [password, setPassword] = useState("");
   const [tags, setTags] = useState("");
   const [title, setTitle] = useState("");
 
   const tagList = tags.split(",").map((t) => t.trim()).filter(Boolean);
-  async function submit(e: FormEvent) {
-    e.preventDefault();
-    setPending(true);
-    // Pictures alone make no text note, so what was typed as its title and tags goes on the pictures instead of being lost.
-    const picturesOnly = onlyReferences(text, images.pending.map((p) => p.token));
-    const refused = await images.flush(password, picturesOnly ? { title: title.trim(), tags: tagList } : undefined); // the first one of these creates the feed, with its password
-    if (refused) {
-      setError(refused);
-      return setPending(false);
-    }
-    const posted = images.lastId();
-    if (posted && picturesOnly) return router.push(`${action}?posted=${posted}`); // only pictures: no note of text
-    // The page remounts this box empty.
+  const headers = {
+    ...(title.trim() && { "X-Note-Title": encodeHeaderValue(title.trim()) }),
+    ...(password && { "X-Feed-Password": password }),
+    ...(tagList.length && { "X-Note-Tags": tagList.join(",") }),
+  };
+  // The page remounts this box empty. With pictures only, the answer is the first picture's.
+  const submit = (e: FormEvent) =>
     run(
-      undefined,
-      () =>
-        postNote({
+      e,
+      async () => {
+        const form = await images.body(text); // undefined: no pictures, a raw markdown post
+        return postNote({
           baseUrl: window.location.origin,
           path: { feed },
-          body: new Blob([images.apply(text)], { type: "text/markdown" }),
-          headers: {
-            "Content-Type": "text/markdown",
-            ...(title.trim() && { "X-Note-Title": encodeHeaderValue(title.trim()) }),
-            ...(password && { "X-Feed-Password": password }),
-            ...(tagList.length && { "X-Note-Tags": tagList.join(",") }),
-          },
-        }),
+          ...(form
+            ? { ...multipart(form), headers: { ...headers, "Content-Type": null } }
+            : { body: new Blob([text], { type: "text/markdown" }), headers: { ...headers, "Content-Type": "text/markdown" } }),
+        });
+      },
       ({ data }) => router.push(`${action}?posted=${data?.id}`),
     );
-  }
 
   return (
     <form onSubmit={submit} className="mb-12">
@@ -70,6 +59,7 @@ export function Compose({ feed, action, error: initialError, isNew, sender }: { 
         describedBy="compose-hint compose-error"
         pending={images.pending}
         onPendingChange={images.setPending}
+        onMessage={setError}
       >
         <label htmlFor="note-title" className="sr-only">
           Title (optional, otherwise taken from the text)

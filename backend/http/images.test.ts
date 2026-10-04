@@ -58,6 +58,11 @@ describe("POST /feeds/{feed}/notes with an image body", () => {
     const { file } = await res.json();
     expect(JSON.parse(await readFile(join(process.env.DATA_DIR!, "pics", `.${file}.json`), "utf8"))).toEqual({ name: "..my cat.png" });
   });
+  test("X-Note-Name is stored without C1 controls and text-direction overrides", async () => {
+    const res = await upload("pics", PNG, "image/png", { "x-note-name": Buffer.from("evil\u202egnp\u009b.exe").toString("latin1") });
+    const { file } = await res.json();
+    expect(JSON.parse(await readFile(join(process.env.DATA_DIR!, "pics", `.${file}.json`), "utf8"))).toEqual({ name: "evilgnp.exe" });
+  });
   test("a feed that does not exist is created by its first image, like by a first note", async () => {
     const res = await upload("ghost", PNG);
     expect(res.status).toBe(201);

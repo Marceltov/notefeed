@@ -112,6 +112,6 @@ test("saving an edit sends only what changed: nothing, the title, or the text", 
   await page.getByText("Edit", { exact: true }).click();
   await page.getByLabel("Note in markdown").fill("# Edited\nmore text");
   await page.getByRole("button", { name: "Save" }).click();
-  await expect(page.getByText("more text")).toBeVisible();
+  await expect(page.getByText("more text", { exact: true })).toBeVisible();
   expect(writes).toEqual(["PATCH", "PUT"]);
 });
