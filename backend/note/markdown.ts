@@ -1,4 +1,4 @@
-import { absolutizeImages } from "../../shared/links";
+import { absolutizeImages, cleanLine } from "../../shared/links";
 import { extractTitle } from "../../shared/notes";
 import type { Meta } from "../data/notes";
 import { EmptyNoteError, NoteTooLargeError } from "../errors";
@@ -24,7 +24,7 @@ export class MarkdownNote extends Note {
     return this.markdown;
   }
   get title(): string {
-    return this.meta.title ?? extractTitle(this.markdown);
+    return cleanLine(this.meta.title ?? extractTitle(this.markdown)); // what no title holds is not shown, whatever was stored or written in the text
   }
   // Readers have no base to resolve a relative image link against, so it becomes absolute here; the stored note is unchanged.
   rssContent(base: string) {

@@ -1,4 +1,5 @@
 // A feed's display title and description: validation and storage. Access and rate limits are posting.ts.
+import { cleanLine, FORBIDDEN_IN_TEXT } from "../shared/links";
 import { readSettings, writeSettings } from "./data/settings";
 import { isErrno } from "./data/fs";
 import { InvalidBodyError, NotFoundError } from "./errors";
@@ -9,12 +10,12 @@ export type FeedSettings = { title: string; description: string; image: string; 
 export const MAX_TITLE = 100;
 export const MAX_DESCRIPTION = 500;
 
-// Trimmed; counted in characters (an emoji is one), no control characters, so one line of text.
+// Trimmed; counted in characters (an emoji is one), one line of text: no control or text-direction override characters (the rule of a note's title).
 function field(input: Record<string, unknown>, name: "title" | "description", max: number): string {
   const v = input[name];
   if (typeof v !== "string") throw new InvalidBodyError(`${name} must be a string`);
   const s = v.trim();
-  if (/[\x00-\x1f\x7f]/.test(s)) throw new InvalidBodyError(`${name} must not contain control characters`);
+  if (FORBIDDEN_IN_TEXT.test(s)) throw new InvalidBodyError(`${name} must be one line, without control or text-direction override characters`);
   if ([...s].length > max) throw new InvalidBodyError(`${name} must be at most ${max} characters`);
   return s;
 }
@@ -42,7 +43,8 @@ export const getStoredSettings = (feed: string): Promise<FeedSettings> => readSe
 
 // What is shown: a title image whose file is gone (removed by hand) counts as none, so nothing points at a 404.
 export async function getSettings(feed: string): Promise<FeedSettings> {
-  const s = await readSettings(feed);
+  const stored = await readSettings(feed);
+  const s = { ...stored, title: cleanLine(stored.title), description: cleanLine(stored.description) }; // stored before the rule, or edited by hand
   return s.image && !(await hasImageNote(feed, s.image)) ? { ...s, image: "" } : s;
 }
 

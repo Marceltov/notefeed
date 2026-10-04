@@ -69,6 +69,11 @@ test("allowed: an empty list allows nobody", () => {
 
 const NE = ["name", "email"];
 
+test("senderFrom: control and text-direction override characters become spaces; a claim of only those is skipped", () => {
+  expect(senderFrom({ name: "An\u202en" }, NE)).toBe("An n");
+  expect(senderFrom({ name: "\u202e\u2028", email: "a@x" }, NE)).toBe("a@x");
+});
+
 test("senderFrom: default order name then email, trimmed", () => {
   expect(senderFrom({ name: " Ann ", email: "a@x" }, NE)).toBe("Ann");
   expect(senderFrom({ name: "  ", email: "a@x" }, NE)).toBe("a@x");

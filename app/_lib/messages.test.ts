@@ -40,3 +40,12 @@ test("withPictures words an unnamed too-large refusal of a request with pictures
 test("the message for more pictures than a note takes names the limit", () => {
   expect(TOO_MANY_PICTURES).toBe("A note can have at most 10 pictures.");
 });
+
+test("withPictures points at a title or an alt text refused for its characters", () => {
+  const message = withPictures(errorMessage);
+  const rule = "must be one line, without control or text-direction override characters";
+  expect(message("invalid_body", null, `title ${rule}`)).toBe(`The title ${rule}.`);
+  expect(message("invalid_body", null, `alt ${rule}`)).toBe(`The alt text ${rule}.`);
+  expect(message("invalid_body", null, `attachment "a.png": alt ${rule}`)).toBe(`a.png: The alt text ${rule}.`);
+  expect(message("invalid_body", null, "title must be at most 100 characters")).toBe("The note could not be read.");
+});

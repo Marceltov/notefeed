@@ -12,8 +12,10 @@ T = TypeVar("T", bound="ReadFeed")
 class ReadFeed:
     """
     Attributes:
-        title (str): Display title, at most 100 characters, one line; empty means none (the feed's name is shown)
-        description (str): Description, at most 500 characters, one line; may be empty
+        title (str): Display title, at most 100 characters, one line (control and text-direction override characters are
+            refused); empty means none (the feed's name is shown)
+        description (str): Description, at most 500 characters, one line (control and text-direction override characters
+            are refused); may be empty
         image_url (None | str): The feed's title image (absolute URL, served under the read id), or null
     """
 

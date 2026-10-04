@@ -2,6 +2,7 @@
 // "default"; each NOTEFEED_OIDC_<NAME>_* set is another, with id NAME lowercased (DEFAULT is reserved for the
 // unprefixed set). A provider is on only when issuer, client id, client secret and a non-empty allow-list are all set.
 // Must not import auth.ts (auth.ts imports this).
+import { cleanLine } from "../../shared/links";
 import { config } from "../config";
 
 export type Provider = { id: string; label: string; issuer: string; clientId: string; clientSecret: string; allow: string[]; senderClaim: string[] };
@@ -51,7 +52,7 @@ export function allowed(provider: Pick<Provider, "allow">, c: { email?: string; 
 export function senderFrom(claims: Record<string, unknown>, order: string[]): string | undefined {
   for (const k of order) {
     const v = claims[k];
-    if (typeof v === "string" && v.trim()) return v.trim();
+    if (typeof v === "string" && cleanLine(v)) return cleanLine(v); // a name from the provider is shown on notes: no control or text-direction override characters
   }
   return undefined;
 }

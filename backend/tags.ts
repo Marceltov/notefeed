@@ -1,4 +1,5 @@
 // Tags: free labels set by whoever posts a note, not verified. Validated once here, for every way of posting.
+import { safeText } from "../shared/links";
 import { InvalidBodyError } from "./errors";
 
 export const MAX_TAGS = 10;
@@ -9,7 +10,7 @@ export const TAG_RULE = `at most ${MAX_TAGS} tags, each 1 to 32 characters of le
 export function checkTags(tags: readonly string[] = []): string[] {
   const out = [...new Set(tags.map((t) => t.toLowerCase()))];
   const bad = out.find((t) => !TAG_RE.test(t));
-  if (bad !== undefined) throw new InvalidBodyError(`invalid tag ${JSON.stringify(bad)}: ${TAG_RULE}`);
+  if (bad !== undefined) throw new InvalidBodyError(`invalid tag ${JSON.stringify(safeText(bad, 64))}: ${TAG_RULE}`);
   if (out.length > MAX_TAGS) throw new InvalidBodyError(`too many tags: ${TAG_RULE}`);
   return out;
 }

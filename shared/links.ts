@@ -20,6 +20,12 @@ const TEXT_SET = String.raw`\u0000-\u001f\u007f-\u009f\u2028-\u202e\u2066-\u2069
 /** What no title or alt text holds. Not global, so `test` keeps no state. */
 export const FORBIDDEN_IN_TEXT = new RegExp(`[${TEXT_SET}]`);
 
+/** A text as it is shown in a message: each forbidden character as U+FFFD, at most `max` characters. */
+export const safeText = (text: string, max = 200): string => text.replace(new RegExp(FORBIDDEN_IN_TEXT, "g"), "\ufffd").slice(0, max);
+
+/** A title, an alt text or a sender as it is shown: each forbidden character a space, trimmed. For what was stored before the rule, or edited by hand; one that follows the rule comes out as it is. */
+export const cleanLine = (text: string): string => (FORBIDDEN_IN_TEXT.test(text) ? text.replace(new RegExp(FORBIDDEN_IN_TEXT, "g"), " ") : text).trim();
+
 /** What no file name holds: the same, and `/` and `\`. The one definition of the name rule's characters. */
 export const FORBIDDEN_IN_NAME = new RegExp(String.raw`[${TEXT_SET}/\\]`);
 
