@@ -17,7 +17,7 @@ vi.mock("node:fs/promises", async (importOriginal) => {
 });
 
 test("a failed .readid write leaves no feed directory", async () => {
-  const { ensureFeed, createProtectedFeed } = await import("../feeds");
+  const { ensureFeed, createProtectedFeed } = await import("../../feeds");
   const dir = await mkdtemp(join(tmpdir(), "notefeed-fail-"));
   process.env.DATA_DIR = dir;
   process.env.NOTEFEED_SECRET = "x".repeat(32);

@@ -1,19 +1,15 @@
 // The file system backend: `<DATA_DIR>/<feed>/…` (ADR 0017, 0018).
+import { config } from "../../config";
 import type { Storage } from "../types";
-import { readSettings, writeSettings } from "./settings";
-import { readHash, removeHash, writeHash } from "./password";
+import { createFeedMethods, type FeedDeps } from "./feedindex";
 import { deleteNote, listNoteRefs, readFeedFile, readMeta, readNote, replaceNote, updateMeta, writeNote } from "./notes";
+import { readHash, removeHash, writeHash } from "./password";
+import { readSettings, writeSettings } from "./settings";
 
-// The feed methods come with the next task.
-const notYet = (): never => {
-  throw new Error("fs storage: feeds are not behind the interface yet");
-};
-
-export function createFsStorage(): Storage {
+export function createFsStorage(deps: FeedDeps): Storage {
   return {
+    ...createFeedMethods(deps, config.dataDir),
     writeNote, listNoteRefs, readNote, readMeta, replaceNote, updateMeta, deleteNote, readFile: readFeedFile,
     readSettings, writeSettings, readHash, writeHash, removeHash,
-    createFeed: notYet, deleteFeed: notYet, forgetFeed: notYet, setReadId: notYet, feedReadId: notYet,
-    feedForReadId: notYet, listFeeds: notYet, listFeedNames: notYet, feedCount: notYet,
   };
 }

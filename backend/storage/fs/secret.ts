@@ -3,7 +3,7 @@
 import { randomBytes } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { isErrno, root } from "../storage/fs/fs";
+import { isErrno, root } from "./fs";
 
 export const secretPath = () => join(/*turbopackIgnore: true*/ root(), ".secret");
 

@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describeStorage } from "../contract";
@@ -8,9 +8,7 @@ describeStorage("fs", async () => {
   const root = await mkdtemp(join(tmpdir(), "notefeed-"));
   process.env.DATA_DIR = root;
   return {
-    storage: createFsStorage(),
-    makeFeed: (name) => mkdir(join(root, name), { recursive: true }).then(() => undefined),
-    dropFeed: (name) => rm(join(root, name), { recursive: true, force: true }),
+    storage: createFsStorage({ derivedReadId: (feed) => `derived-${feed}`, isReadId: (id) => /^[A-Za-z0-9_-]{3,64}$/.test(id), isFeedName: (n) => /^[a-z0-9_-]{1,64}$/.test(n) }),
     cleanup: () => rm(root, { recursive: true, force: true }),
   };
 });

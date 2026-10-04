@@ -1,10 +1,10 @@
 // The startup line and what is wrong with the configuration, logged once when the server starts
 // (instrumentation.ts). Names of variables only, never their values.
 import { config, LOG_LEVELS } from "./config";
-import { listFeedDirs } from "./data/feeds";
 import { reservedFeedProblems, RESERVED_FEEDS } from "./feeds";
 import { logger } from "./log";
 import { missingVars, providers } from "./oidc/config";
+import { storage } from "./storage";
 
 type Fields = Record<string, unknown>;
 
@@ -32,6 +32,7 @@ export function startupReport(env: NodeJS.ProcessEnv = process.env): { fields: F
   if (config.metrics() && !config.metricsToken()) warnings.push(["startup", "metrics are on without NOTEFEED_METRICS_TOKEN: /metrics is open to anyone who can reach the app", {}]);
   const fields = {
     node: process.version,
+    storage: config.storage(),
     dataDir: config.dataDir(),
     passwordSet: config.password() !== "",
     oidcProviders,
@@ -58,14 +59,15 @@ export async function reservedFeedWarnings(): Promise<Warning[]> {
 // A feed folder that predates a route name notefeed reserves (like `metrics`, which became the scrape route) can no longer be opened
 // by name. The names are notefeed's own fixed ones, not a user's feed names, so they may be logged.
 export async function reservedFolderWarnings(): Promise<Warning[]> {
-  const feeds = (await listFeedDirs()).filter((n) => RESERVED_FEEDS.has(n)).sort();
+  const feeds = (await storage().listFeedNames()).filter((n) => RESERVED_FEEDS.has(n)).sort();
   return feeds.length
     ? [["feeds", "a feed folder is named like one of notefeed's routes; it cannot be opened by name", { feeds, hint: "rename its folder in DATA_DIR to a name that is not reserved, and restart" }]]
     : [];
 }
 
-// Never throws: a failure here must not keep the server from starting.
+// Throws only for a wrong storage setting; any other failure here must not keep the server from starting.
 export async function logStartup(): Promise<void> {
+  config.validateStorage(); // a wrong storage setting keeps the server from starting; the one failure not caught below
   const warn = (warnings: Warning[]) => warnings.forEach(([component, msg, f]) => logger(component).warn(f, msg));
   try {
     const { fields, warnings } = startupReport();

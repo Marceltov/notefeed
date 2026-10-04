@@ -1,17 +1,15 @@
 // The tests every Storage backend must pass. A backend's test file calls describeStorage() with a factory for a fresh, empty store.
 import { describe, expect, test } from "vitest";
+import { NotFoundError, ReadIdTakenError } from "../errors";
 import { FeedGoneError, type Storage } from "./types";
 
 export type Harness = {
   storage: Storage;
-  /** A feed that exists and is empty. */
-  makeFeed(name: string): Promise<void>;
-  /** The feed disappears (deleted meanwhile), whatever the backend's way of listing it. */
-  dropFeed(name: string): Promise<void>;
   cleanup(): Promise<void>;
 };
 
 const MD = ["md"];
+const makeFeed = async (s: Storage, name: string, readId = `rid-${name}`) => void (await s.createFeed(name, readId));
 const ALL = ["md", "png"];
 const text = (b: Buffer | undefined) => b?.toString("utf8");
 
@@ -22,7 +20,7 @@ export function describeStorage(name: string, make: () => Promise<Harness>): voi
       test(title, async () => {
         const h = await make();
         try {
-          await h.makeFeed("f");
+          await makeFeed(h.storage, "f");
           await body(h);
         } finally {
           await h.cleanup();
@@ -116,7 +114,7 @@ export function describeStorage(name: string, make: () => Promise<Harness>): voi
         for (const n of ["nope.md", ".readid", "../x.md", "a", "a.b.md", ""]) expect(await s.readFile("f", n)).toBeNull();
       });
       t("writeNote to a feed deleted meanwhile throws FeedGoneError", async (h) => {
-        await h.dropFeed("f");
+        await h.storage.deleteFeed("f");
         await expect(h.storage.writeNote("f", "a", "md", "x", {})).rejects.toBeInstanceOf(FeedGoneError);
       });
     });
@@ -138,9 +136,91 @@ export function describeStorage(name: string, make: () => Promise<Harness>): voi
         expect(await s.readHash("f")).toBeNull();
       });
       t("writing settings or a hash to a deleted feed throws FeedGoneError", async (h) => {
-        await h.dropFeed("f");
+        await h.storage.deleteFeed("f");
         await expect(h.storage.writeSettings("f", { title: "", description: "", image: "", showSender: true })).rejects.toBeInstanceOf(FeedGoneError);
         await expect(h.storage.writeHash("f", "x")).rejects.toBeInstanceOf(FeedGoneError);
+      });
+    });
+
+    describe("feeds", () => {
+      t("createFeed makes a feed with its read id, once", async ({ storage: s }) => {
+        expect(await s.createFeed("g", "gid-123")).toEqual({ created: true });
+        expect(await s.feedReadId("g")).toBe("gid-123");
+        expect(await s.createFeed("g", "other-id")).toEqual({ created: false });
+        expect(await s.feedReadId("g")).toBe("gid-123");
+        expect(await s.feedForReadId("other-id")).toBeNull();
+      });
+      t("feedReadId is undefined for a missing feed, feedForReadId null for an unknown id", async ({ storage: s }) => {
+        expect(await s.feedReadId("nope")).toBeUndefined();
+        expect(await s.feedForReadId("nope-id")).toBeNull();
+      });
+      t("two creations of one name at once: exactly one is created", async ({ storage: s }) => {
+        const r = await Promise.all([s.createFeed("g", "id-one"), s.createFeed("g", "id-two"), s.createFeed("g", "id-three")]);
+        expect(r.filter((x) => x.created)).toHaveLength(1);
+        expect(await s.feedCount()).toBe(2); // f and g
+      });
+      t("two feeds asking for one read id at once: one wins, the other is ReadIdTakenError", async ({ storage: s }) => {
+        const r = await Promise.allSettled([s.createFeed("g", "same-id"), s.createFeed("h", "same-id")]);
+        expect(r.filter((x) => x.status === "fulfilled" && x.value.created)).toHaveLength(1);
+        const lost = r.find((x) => x.status === "rejected");
+        expect(lost && "reason" in lost && lost.reason).toBeInstanceOf(ReadIdTakenError);
+        expect(await s.feedCount()).toBe(2);
+      });
+      t("a taken read id is ReadIdTakenError and creates nothing", async ({ storage: s }) => {
+        await expect(s.createFeed("g", "rid-f")).rejects.toBeInstanceOf(ReadIdTakenError);
+        expect(await s.feedReadId("g")).toBeUndefined();
+      });
+      t("createFeed with a hash is protected from the start", async ({ storage: s }) => {
+        await s.createFeed("g", "gid-123", "the-hash");
+        expect(await s.readHash("g")).toBe("the-hash");
+      });
+      t("setReadId changes it and frees the old one", async ({ storage: s }) => {
+        await s.setReadId("f", "new-id-1");
+        expect(await s.feedReadId("f")).toBe("new-id-1");
+        expect(await s.feedForReadId("new-id-1")).toBe("f");
+        expect(await s.feedForReadId("rid-f")).toBeNull();
+        await s.createFeed("g", "rid-f"); // the old id is free again
+      });
+      t("setReadId: a taken id is ReadIdTakenError, a missing feed is NotFoundError", async ({ storage: s }) => {
+        await s.createFeed("g", "gid-123");
+        await expect(s.setReadId("f", "gid-123")).rejects.toBeInstanceOf(ReadIdTakenError);
+        expect(await s.feedReadId("f")).toBe("rid-f");
+        await expect(s.setReadId("nope", "whatever-1")).rejects.toBeInstanceOf(NotFoundError);
+      });
+      t("deleteFeed removes the notes, the hash and the settings, and frees the read id", async ({ storage: s }) => {
+        await s.writeNote("f", "a", "md", "x", {});
+        await s.writeHash("f", "h");
+        await s.writeSettings("f", { title: "T", description: "", image: "", showSender: true });
+        expect(await s.deleteFeed("f")).toBe(true);
+        expect(await s.feedReadId("f")).toBeUndefined();
+        expect(await s.listNoteRefs("f")).toEqual([]);
+        expect(await s.readHash("f")).toBeNull();
+        expect((await s.readSettings("f")).title).toBe("");
+        expect(await s.deleteFeed("f")).toBe(false);
+        await s.createFeed("g", "rid-f");
+        await s.createFeed("f", "fresh-id-9"); // the same name again is a new, empty feed
+        expect(await s.listNoteRefs("f")).toEqual([]);
+        expect(await s.readHash("f")).toBeNull();
+      });
+      t("listFeeds, listFeedNames and feedCount agree", async ({ storage: s }) => {
+        await s.createFeed("g", "gid-123");
+        expect((await s.listFeeds()).sort()).toEqual(["f", "g"]);
+        expect((await s.listFeedNames()).sort()).toEqual(["f", "g"]);
+        expect(await s.feedCount()).toBe(2);
+      });
+      t("a feed name and a read id of 64 characters work", async ({ storage: s }) => {
+        const name = "n".repeat(64);
+        const id = "r".repeat(64);
+        await s.createFeed(name, id);
+        expect(await s.feedForReadId(id)).toBe(name);
+        await s.writeNote(name, "a", "md", "x", {});
+        expect(await s.listNoteRefs(name)).toEqual([{ id: "a", ext: "md" }]);
+      });
+      t("forgetFeed drops a feed whose storage is gone, unless it was made anew", async ({ storage: s }) => {
+        await s.forgetFeed("f", "not-its-id");
+        expect(await s.feedReadId("f")).toBe("rid-f");
+        await s.forgetFeed("f", "rid-f");
+        expect(await s.feedReadId("f")).toBeUndefined();
       });
     });
   });

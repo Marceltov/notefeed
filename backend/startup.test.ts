@@ -24,7 +24,7 @@ test("the startup fields: features and caps, never a secret", () => {
   stub({ NOTEFEED_PASSWORD: "pw-value", NOTEFEED_TRUST_PROXY: "1", NOTEFEED_MAX_FEEDS: "10", NOTEFEED_MAX_NOTES_PER_FEED: "5", NOTEFEED_MAX_IMAGES_PER_FEED: "3", NOTEFEED_LOG_LEVEL: "debug", PUBLIC_URL: "" });
   provider("", FULL);
   const { fields } = startupReport();
-  expect(fields).toEqual({ node: process.version, dataDir: dir, passwordSet: true, oidcProviders: 1, publicUrlSet: false, trustProxy: true, maxFeeds: 10, maxNotesPerFeed: 5, maxImagesPerFeed: 3, logLevel: "debug", metrics: false });
+  expect(fields).toEqual({ node: process.version, storage: "fs", dataDir: dir, passwordSet: true, oidcProviders: 1, publicUrlSet: false, trustProxy: true, maxFeeds: 10, maxNotesPerFeed: 5, maxImagesPerFeed: 3, logLevel: "debug", metrics: false });
   expect(JSON.stringify(startupReport())).not.toMatch(/pw-value|the-secret|ann@x\.com/);
 });
 
@@ -128,4 +128,13 @@ test("a folder named like one of notefeed's own routes is warned about, with its
   expect(await reservedFolderWarnings()).toEqual([["feeds", "a feed folder is named like one of notefeed's routes; it cannot be opened by name", { feeds: ["health", "metrics"], hint }]]);
   const logs = await logsOf(logStartup);
   expect(logs.filter((l) => l.component === "feeds")).toEqual([{ level: "warn", component: "feeds", msg: "a feed folder is named like one of notefeed's routes; it cannot be opened by name", feeds: ["health", "metrics"], hint }]);
+});
+
+test("a wrong storage setting keeps logStartup from succeeding, naming the variable and never its value", async () => {
+  stub({ NOTEFEED_STORAGE: "postgres", NOTEFEED_DATABASE_URL: "" });
+  await expect(logStartup()).rejects.toThrow(/NOTEFEED_DATABASE_URL/);
+  stub({ NOTEFEED_STORAGE: "sqlite", NOTEFEED_SECRET: "" });
+  await expect(logStartup()).rejects.toThrow(/NOTEFEED_SECRET/);
+  stub({ NOTEFEED_STORAGE: "mongo" });
+  await expect(logStartup()).rejects.toThrow(/NOTEFEED_STORAGE/);
 });
