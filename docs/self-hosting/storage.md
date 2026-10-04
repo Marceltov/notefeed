@@ -46,6 +46,8 @@ Things that differ from files:
 - **Moving between backends is not built in yet.** A new instance on a database starts empty. Moving an existing `data` folder into a database needs a script of your own.
 - **The server secret is yours to set.** With no data folder there is nowhere to keep a generated one, so `NOTEFEED_SECRET` (at least 32 bytes, `openssl rand -hex 32`) is required, and the same value must be given to every container.
 
+`sqlite` and `postgres` need Node 22 or later when you run from source (the Docker image has it); `fs` runs on any Node version notefeed supports.
+
 A PostgreSQL setup with Docker Compose is in [PostgreSQL](postgres.md#postgresql).
 
 ## Images and other files

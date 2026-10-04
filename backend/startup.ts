@@ -1,6 +1,6 @@
 // The startup line and what is wrong with the configuration, logged once when the server starts
 // (instrumentation.ts). Names of variables only, never their values.
-import { config, LOG_LEVELS } from "./config";
+import { config, LOG_LEVELS, type StorageKind } from "./config";
 import { reservedFeedProblems, RESERVED_FEEDS } from "./feeds";
 import { logger } from "./log";
 import { missingVars, providers } from "./oidc/config";
@@ -14,7 +14,11 @@ const PROVIDER_VAR = /^NOTEFEED_OIDC_(?:([A-Z0-9]+(?:_[A-Z0-9]+)*?)_)?(?:ISSUER|
 // A warning: component, msg, fields.
 type Warning = [string, string, Fields];
 
-const RESERVED_HINT = "delete its folder in DATA_DIR and restart so it is recreated protected, with its read id equal to its name";
+// What to do about a reserved feed that already exists unprotected or under another read id.
+export const reservedHint = (kind: StorageKind): string =>
+  kind === "fs"
+    ? "delete its folder in DATA_DIR and restart so it is recreated protected, with its read id equal to its name"
+    : "delete the feed and restart so it is recreated protected, with its read id equal to its name";
 
 export function startupReport(env: NodeJS.ProcessEnv = process.env): { fields: Fields; warnings: Warning[] } {
   const warnings: Warning[] = [];
@@ -52,7 +56,7 @@ export async function reservedFeedWarnings(): Promise<Warning[]> {
   return (await reservedFeedProblems()).map(({ feed, problem }) => [
     "feeds",
     problem === "unprotected" ? "reserved feed exists but is not protected" : "reserved feed exists with another read id than its name",
-    { feed, hint: RESERVED_HINT },
+    { feed, hint: reservedHint(config.storage()) },
   ]);
 }
 

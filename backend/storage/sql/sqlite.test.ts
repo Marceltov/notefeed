@@ -77,5 +77,6 @@ describe.skipIf(!supported)("sqlite", () => {
     expect(err).toBeInstanceOf(Error);
     expect((err as Error).message).toMatch(/NOTEFEED_DATABASE_URL/);
     expect((err as Error).message).not.toContain(root);
+    expect((err as Error).cause).toBeUndefined(); // the driver's error would carry the path
   });
 });

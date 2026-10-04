@@ -6,7 +6,7 @@ import { hashPassword } from "./feedlock";
 import { readIdOf, reservedFeedProblems, resetFeedsForTests } from "./feeds";
 import { logsOf, logTo } from "./log";
 import { createNote } from "./notes";
-import { logStartup, reservedFeedWarnings, reservedFolderWarnings, startupReport } from "./startup";
+import { logStartup, reservedFeedWarnings, reservedFolderWarnings, reservedHint, startupReport } from "./startup";
 
 let dir: string;
 beforeEach(async () => {
@@ -137,4 +137,12 @@ test("a wrong storage setting keeps logStartup from succeeding, naming the varia
   await expect(logStartup()).rejects.toThrow(/NOTEFEED_SECRET/);
   stub({ NOTEFEED_STORAGE: "mongo" });
   await expect(logStartup()).rejects.toThrow(/NOTEFEED_STORAGE/);
+});
+
+test("the hint for a reserved feed that already exists fits the storage: a folder on fs, the feed itself on a database", () => {
+  expect(reservedHint("fs")).toMatch(/folder in DATA_DIR/);
+  for (const kind of ["sqlite", "postgres"] as const) {
+    expect(reservedHint(kind)).toMatch(/delete the feed/);
+    expect(reservedHint(kind)).not.toMatch(/folder|DATA_DIR/);
+  }
 });

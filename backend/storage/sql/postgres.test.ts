@@ -57,5 +57,6 @@ describe.skipIf(!base || !supported)("postgres", () => {
     const err = (await s.feedCount().catch((e: Error) => e)) as Error;
     expect(err.message).toMatch(/NOTEFEED_DATABASE_URL/);
     expect(err.message).not.toMatch(/hunter2|127\.0\.0\.1/);
+    expect(err.cause).toBeUndefined(); // the driver's error would carry the address
   });
 });
