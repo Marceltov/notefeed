@@ -406,10 +406,9 @@ describe("post_note attachments", () => {
     expect(r.structuredContent.attachments).toHaveLength(1);
   });
   test("an oversized image is refused before anything is posted", async () => {
-    process.env.NOTEFEED_MAX_IMAGE_BYTES = "10";
+    vi.stubEnv("NOTEFEED_MAX_IMAGE_BYTES", "10");
     const small = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]).toString("base64");
     const r = await call("post_note", { feed: "f", markdown: "x", attachments: [att("a.png", { data: small }), att("b.png")] });
-    delete process.env.NOTEFEED_MAX_IMAGE_BYTES;
     expect(r.isError).toBe(true);
     expect(r.content[0].text).toMatch(/^attachment "b\.png":/);
     expect(await hasFeed("f")).toBe(false);
@@ -478,9 +477,9 @@ describe("post_file", () => {
     expect(bad.content[0].text).toContain("image/png");
     expect((await call("post_file", { feed: "i", type: "image/png", data: Buffer.from("nope").toString("base64") })).isError).toBe(true);
     expect((await call("post_file", { feed: "i", type: "image/jpeg", data: png })).isError).toBe(true);
-    process.env.NOTEFEED_MAX_IMAGE_BYTES = "10";
+    vi.stubEnv("NOTEFEED_MAX_IMAGE_BYTES", "10");
     expect((await call("post_file", { feed: "i", type: "image/png", data: png })).isError).toBe(true);
-    delete process.env.NOTEFEED_MAX_IMAGE_BYTES;
+    vi.unstubAllEnvs(); // the default limit again
     await call("post_note", { feed: "p", markdown: "# Hi", password: "pw" });
     expect((await call("post_file", { feed: "p", type: "image/png", data: png })).content[0].text).toBe("missing or wrong password");
   });

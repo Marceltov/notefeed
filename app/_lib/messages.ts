@@ -73,12 +73,13 @@ export function imageErrorMessage(code: unknown, retry?: unknown): string | unde
 }
 
 // The same, for a note sent with its pictures: a refusal that names a picture (`attachment "a.png": …`) is worded as an image
-// refusal, after the picture's name; any other goes to `message`, except "too_large" when the request had pictures (`pictures`):
-// the server's limit was then on the whole request, not the 100 KB of a raw note.
+// refusal, after the picture's name; any other goes to `message`, except a "too_large" that names no picture when the request had
+// pictures (`pictures`). That has two causes: the text is over 100 KB, or one picture is so far over its limit that the server stopped
+// reading the request before it could name it.
 export const withPictures =
   (message: (code: unknown, retry?: unknown) => string | undefined, pictures = false) =>
   (code: unknown, retry?: unknown, detail?: string): string | undefined => {
     const name = /^attachment "(.*)": /.exec(detail ?? "")?.[1];
     if (name !== undefined) return `${name}: ${imageErrorMessage(code, retry)}`;
-    return pictures && code === "too_large" ? "The note and its pictures are too large together." : message(code, retry);
+    return pictures && code === "too_large" ? "The note is too large: its text is over 100 KB, or a picture is too large." : message(code, retry);
   };

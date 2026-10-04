@@ -10,8 +10,8 @@ const ACCEPT = "image/png,image/jpeg,image/gif,image/webp";
 // The note textarea of the compose box and the editor, with pictures: the "Add image" button, paste and drag-and-drop each add the
 // files to `pending` (the parent owns the list and posts it, see usePendingImages) and write `![](name)` at the cursor, with the
 // file's own name. Nothing is uploaded here, so leaving the page uploads nothing. The button and the list only exist once hydrated,
-// so without JavaScript only the textarea renders. A note takes 10 pictures: of more, the ones that fit are added and `onMessage` is
-// given the reason, for the parent to show where it shows its errors.
+// so without JavaScript only the textarea renders. A note takes a limited number of pictures (MAX_ATTACHMENTS): of more,
+// the ones that fit are added and `onMessage` sets the reason, for the parent to show where it shows its errors; removing a picture clears it.
 export function MarkdownInput({ id, name, label, value, onChange, rows, placeholder, describedBy, className = "", pending, onPendingChange, onMessage, children }: {
   id: string;
   name: string;
@@ -24,7 +24,7 @@ export function MarkdownInput({ id, name, label, value, onChange, rows, placehol
   className?: string;
   pending: Pending[];
   onPendingChange: (pending: Pending[]) => void;
-  onMessage: (message: string) => void;
+  onMessage: (update: (shown: string | undefined) => string | undefined) => void; // a state setter: the message the parent shows
   children?: ReactNode; // more controls, rendered on the same row as the "Add image" button
 }) {
   const area = useRef<HTMLTextAreaElement>(null);
@@ -50,7 +50,7 @@ export function MarkdownInput({ id, name, label, value, onChange, rows, placehol
 
   function add(files: File[]) {
     const { fit, leftOut } = fitPending(pending, files);
-    if (leftOut) onMessage(TOO_MANY_PICTURES);
+    if (leftOut) onMessage(() => TOO_MANY_PICTURES);
     if (!fit.length) return;
     const taken = new Set(pending.map((p) => p.token));
     const added = fit.map((file) => {
@@ -67,6 +67,7 @@ export function MarkdownInput({ id, name, label, value, onChange, rows, placehol
     URL.revokeObjectURL(p.preview);
     onChange(removeReference(area.current?.value ?? value, p.token));
     onPendingChange(pending.filter((q) => q.key !== p.key));
+    onMessage((shown) => (shown === TOO_MANY_PICTURES ? undefined : shown)); // under the limit again; any other message stays
   }
 
   const imageFiles = (list: FileList | null) => Array.from(list ?? []).filter((f) => f.type.startsWith("image/"));

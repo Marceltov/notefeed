@@ -268,7 +268,7 @@ describe("multipart: a text with its pictures", () => {
     const body = await res.json();
     expect([res.status, body.code]).toEqual([400, code]);
     // Only a refusal about one picture names it: the web box words those after the picture's name.
-    if (named) expect(body.error).toMatch(new RegExp(`^attachment "${named}": `));
+    if (named) expect(body.error.startsWith(`attachment "${named}": `)).toBe(true);
     else expect(body.error).not.toMatch(/^attachment "/);
     expect(await hasFeed("f")).toBe(false);
   });

@@ -28,12 +28,12 @@ test("withPictures words a refusal that names a picture as an image refusal, wit
   expect(message("rate_limited", "5")).toBe("Too many requests, try again in 5 seconds.");
 });
 
-test("withPictures words a too-large refusal of a request with pictures as the note and its pictures together", () => {
+test("withPictures words an unnamed too-large refusal of a request with pictures by its two causes", () => {
   const message = withPictures(errorMessage, true);
-  expect(message("too_large", null, "note exceeds 100 KB")).toBe("The note and its pictures are too large together.");
+  expect(message("too_large", null, "note exceeds 100 KB")).toBe("The note is too large: its text is over 100 KB, or a picture is too large.");
   expect(message("too_large", null, 'attachment "big.png": image exceeds the size limit')).toBe("big.png: That image is too large.");
   expect(message("rate_limited", "5")).toBe("Too many requests, try again in 5 seconds.");
-  expect(withPictures(noteErrorMessage, true)("too_large")).toBe("The note and its pictures are too large together.");
+  expect(withPictures(noteErrorMessage, true)("too_large")).toBe("The note is too large: its text is over 100 KB, or a picture is too large.");
   expect(withPictures(errorMessage, false)("too_large", null, "note exceeds 100 KB")).toBe("The note is over 100 KB.");
 });
 

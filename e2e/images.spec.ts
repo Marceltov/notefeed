@@ -71,6 +71,10 @@ test("more than 10 pictures: the first 10 wait in the box, and the box says why 
   await expect(page.getByRole("alert").filter({ hasText: "A note can have at most 10 pictures." })).toBeVisible();
   await expect(note(page)).toHaveValue(/p9\.png/);
   await expect(note(page)).not.toHaveValue(/p10\.png/);
+  // One taken out: the box is under the limit again, so the message goes.
+  await page.getByRole("button", { name: "Remove p3.png" }).click();
+  await expect(page.getByRole("list", { name: "Images to post" }).getByRole("listitem")).toHaveCount(9);
+  await expect(page.getByRole("alert").filter({ hasText: "A note can have at most 10 pictures." })).toHaveCount(0);
 });
 
 test("leaving the page without posting uploads nothing", async ({ page }) => {
