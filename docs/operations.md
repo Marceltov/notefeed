@@ -113,7 +113,9 @@ The counters live in the app's memory and start at 0 again when the container re
 
 `kind` is a fixed name, never anything a client sent: the API's operation id (`listNotes`, `getNote`, `postNote`, `editNote`, and so on, as in the [API](api.md)), `<operation>_tag` for a listing filtered by `tag` (it reads every note until it has enough), `rss` for the feed's RSS, `feed_file` for a file of a feed, and `feed_page` and `feed_page_tag` for the feed's web page. Posting with pictures is `postNote` like any other post. Requests to an unknown path or with a wrong method, `/mcp`, sign-in and the read pages are not measured.
 
-`feed_page` is the server's time to read the feed's notes for the page, not the time to send it: network and streaming are not in it, which is what you want to decide on storage.
+`feed_page` is the server's time to read the feed's notes for the page, not the time to send it: network and streaming are not in it, which is what you want to decide on storage. A page with a `tag` filter counts twice: the filtered read is `feed_page_tag`, and the page's title is read unfiltered, which is one `feed_page` sample, so `feed_page` counts include those views.
+
+A feed that was already named `metrics` can no longer be opened by name, because `/metrics` is the scrape route. The start-up log names such a folder (`a feed folder is named like one of notefeed's routes`); rename it in `DATA_DIR` and restart.
 
 No feed name, read id, note text, title, sender or address is ever a label or a value, so the number of series stays small whatever the traffic or the number of feeds.
 
@@ -151,7 +153,7 @@ A starter Grafana dashboard (import it, pick the Prometheus data source): [grafa
 notefeed writes its logs to standard output as JSON lines: one object per line, with the level as a word (`level`), an ISO time (`time`), the part of notefeed that logged it (`component`), a fixed message (`msg`) and fields with the details. For example, the line at start-up:
 
 ```json
-{"level":"info","time":"2026-10-02T09:00:00.120Z","component":"startup","node":"v22.23.3","dataDir":"/data","passwordSet":true,"oidcProviders":1,"publicUrlSet":true,"trustProxy":true,"maxFeeds":0,"maxNotesPerFeed":0,"maxImagesPerFeed":0,"logLevel":"info","msg":"notefeed started"}
+{"level":"info","time":"2026-10-02T09:00:00.120Z","component":"startup","node":"v22.23.3","dataDir":"/data","passwordSet":true,"oidcProviders":1,"publicUrlSet":true,"trustProxy":true,"maxFeeds":0,"maxNotesPerFeed":0,"maxImagesPerFeed":0,"logLevel":"info","metrics":false,"msg":"notefeed started"}
 ```
 
 `NOTEFEED_LOG_LEVEL` sets how much is logged: `error`, `warn`, `info` (the default), `debug` or `silent`. Each level includes the ones before it. A value that isn't a level counts as `info`, and the start-up log warns about it.

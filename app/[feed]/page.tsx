@@ -13,7 +13,8 @@ import { checkFeed, feedCookieName, feedPath, feedUnlocked, getFeed, IDENTITY_CO
 export const dynamic = "force-dynamic";
 
 // The metadata and the page share one read per request (the metadata reads it unfiltered). The read is what is measured (kind
-// feed_page, feed_page_tag with a tag filter), so whichever of the two runs first carries the time and the disk work.
+// feed_page, feed_page_tag with a tag filter). Without a tag, whichever of the two runs first carries the time and the disk work; with
+// one, the metadata's unfiltered read is a feed_page sample of its own and the filtered read a feed_page_tag one.
 const loaded = (feed: string, tag?: string) => measured(tag ? "feed_page_tag" : "feed_page", () => getFeed(feed, tag), (data) => (data ? 200 : 404));
 const feedData = cache((feed: string) => loaded(feed));
 
