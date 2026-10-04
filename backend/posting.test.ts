@@ -2,19 +2,26 @@ import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import { EmptyNoteError, ImageLimitError, ImageTooLargeError, InvalidBodyError, NotFoundError, UnsupportedTypeError } from "./errors";
-import { protectedFeed } from "./feedlock";
+import { AuthError, EmptyNoteError, ImageLimitError, ImageTooLargeError, InvalidBodyError, NotFoundError, UnsupportedTypeError } from "./errors";
+import { createProtected, protectedFeed } from "./feedlock";
 import { hasFeed, resetFeedsForTests } from "./feeds";
 import { resetRateLimitsForTests } from "./limits";
 import { logsOf } from "./log";
 import * as notes from "./notes";
 import { countNotes, createImageNote, createNote, getNote, MarkdownNote } from "./notes";
-import { editWithPictures, MAX_ATTACHMENTS, type Picture, type PostBundle, postNote, postWithPictures } from "./posting";
+import { planInWorker } from "./place";
+import { editContent, editWithPictures, MAX_ATTACHMENTS, type Picture, type PostBundle, postNote, postWithPictures } from "./posting";
 
 // The text's write is the call after the pictures: a test makes it fail to see the pictures removed again.
 vi.mock("./notes", async (original) => {
   const real = await original<typeof import("./notes")>();
   return { ...real, createNoteOf: vi.fn(real.createNoteOf), replaceContent: vi.fn(real.replaceContent), removeNote: vi.fn(real.removeNote) };
+});
+
+// The text is read once per request, not once to check it and once to store it.
+vi.mock("./place", async (original) => {
+  const real = await original<typeof import("./place")>();
+  return { ...real, planInWorker: vi.fn(real.planInWorker) };
 });
 
 const real = await vi.importActual<typeof import("./notes")>("./notes");
@@ -177,6 +184,52 @@ describe("postWithPictures", () => {
     await post({ text: "x", pictures: [pic("a.png"), pic("b.png"), pic("c.png")] });
     await post({ pictures: [pic("a.png"), pic("b.png"), pic("c.png")] });
     expect(await countNotes("f")).toBe(7);
+  });
+});
+
+describe("which refusal wins", () => {
+  test("a bad picture on a missing note is a 404, for a multipart PUT and a raw one", async () => {
+    await createNote("f", "x");
+    await expect(edit("nope", { text: "y", pictures: [pic("a.png", { body: new Uint8Array([1]) })] })).rejects.toBeInstanceOf(NotFoundError);
+    const raw = editContent("f", "nope", "ip", async () => ({ body: new Uint8Array([1]), mediaType: "image/png" }), {});
+    await expect(raw).rejects.toBeInstanceOf(NotFoundError);
+  });
+
+  test("the body of a PUT for a missing note is not read", async () => {
+    const read = vi.fn(async () => ({ text: "y", pictures: [] }));
+    await expect(editWithPictures("f", "nope", "ip", read, {})).rejects.toBeInstanceOf(NotFoundError);
+    expect(read).not.toHaveBeenCalled();
+  });
+
+  test("a poster without the password is refused (401), not told the feed is over a cap, when the feed was created protected while the body was sent", async () => {
+    vi.stubEnv("NOTEFEED_MAX_IMAGES_PER_FEED", "1");
+    const read = async () => {
+      await createProtected("f", "secret-pass-1");
+      return { pictures: [pic("a.png"), pic("b.png")] };
+    };
+    await expect(postWithPictures("f", "ip", read, {})).rejects.toBeInstanceOf(AuthError);
+  });
+});
+
+describe("reading the text", () => {
+  test("a post or an edit with pictures reads the text once", async () => {
+    vi.mocked(planInWorker).mockClear();
+    const { note } = await post({ text: "# Hi ![](a.png)", pictures: [pic("a.png")] });
+    expect(planInWorker).toHaveBeenCalledTimes(1);
+    vi.mocked(planInWorker).mockClear();
+    await edit(note.id, { text: "new ![](b.png)", pictures: [pic("b.png")] });
+    expect(planInWorker).toHaveBeenCalledTimes(1);
+  });
+
+  test("a text that takes too long to read is refused with pictures, with nothing stored, and posts without them", async () => {
+    vi.stubEnv("NOTEFEED_PARSE_TIMEOUT_MS", "300");
+    const slow = ">".repeat(60000) + " ![](a.png)";
+    await expect(post({ text: slow, pictures: [pic("a.png")] })).rejects.toThrow(/cannot be sent with pictures: reading it took longer than 0.3 seconds/);
+    expect(await countNotes("f")).toBe(0);
+    const { note } = await createNote("f", "old");
+    await expect(edit(note.id, { text: slow, pictures: [pic("a.png")] })).rejects.toBeInstanceOf(InvalidBodyError);
+    expect(await countNotes("f")).toBe(1);
+    await expect(post({ text: slow, pictures: [] })).resolves.toBeDefined();
   });
 });
 

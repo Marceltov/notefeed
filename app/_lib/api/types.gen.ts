@@ -393,7 +393,7 @@ export type PostNoteData = {
 
 export type PostNoteErrors = {
     /**
-     * Invalid or reserved feed name; a blank note; a bad title, alt text or tags; a new password that is not printable ASCII; a multipart body with an unexpected part, no `text` and no `file`, more than 10 files, a bad or repeated file name, or `X-Note-Alt` / `X-Note-Name`
+     * Invalid or reserved feed name; a blank note; a bad title, alt text or tags; a new password that is not printable ASCII; a multipart body with an unexpected part, no `text` and no `file`, more than 10 files, a bad or repeated file name, a text sent with pictures that takes too long to read (`NOTEFEED_PARSE_TIMEOUT_MS`), or `X-Note-Alt` / `X-Note-Name`
      */
     400: Error;
     /**
@@ -604,7 +604,7 @@ export type EditNoteData = {
          */
         'X-Feed-Password'?: string;
         /**
-         * Tags for the note, comma-separated (`ci,deploy`): at most 10 tags, each 1 to 32 characters of letters, digits, `-`, `_`, `.` and `:`; case is folded to lowercase, duplicates are removed. For a raw markdown body; a JSON or form body's own `tags` wins. Empty is none.
+         * Only for a multipart body: the tags go on the new pictures (the note keeps its own). A raw body ignores it. Comma-separated, empty is none.
          */
         'X-Note-Tags'?: string;
     };
@@ -624,7 +624,7 @@ export type EditNoteData = {
 
 export type EditNoteErrors = {
     /**
-     * Invalid or reserved feed name; a blank note; a multipart body with an unexpected part, no `text`, more than 10 files, a bad or repeated file name, or `X-Note-Alt` / `X-Note-Name`
+     * Invalid or reserved feed name; a blank note; a multipart body with an unexpected part, no `text`, more than 10 files, a bad or repeated file name, a text sent with pictures that takes too long to read (`NOTEFEED_PARSE_TIMEOUT_MS`), or `X-Note-Alt` / `X-Note-Name`
      */
     400: Error;
     /**

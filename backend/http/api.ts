@@ -153,7 +153,7 @@ const OPS: AnyOp[] = [
       201: { description: "Stored: the note, and with a multipart body its pictures", schema: Posted },
       400: err(
         "Invalid or reserved feed name; a blank note; a bad title, alt text or tags; a new password that is not printable ASCII; " +
-          `a multipart body with an unexpected part, no \`text\` and no \`file\`, more than ${MAX_ATTACHMENTS} files, a bad or repeated file name, or \`X-Note-Alt\` / \`X-Note-Name\``,
+          `a multipart body with an unexpected part, no \`text\` and no \`file\`, more than ${MAX_ATTACHMENTS} files, a bad or repeated file name, a text sent with pictures that takes too long to read (\`NOTEFEED_PARSE_TIMEOUT_MS\`), or \`X-Note-Alt\` / \`X-Note-Name\``,
       ),
       401: UNAUTHORIZED,
       409: err("A password was sent for a feed that already exists without one: it can't be claimed; or the chosen read id is taken"),
@@ -220,17 +220,17 @@ const OPS: AnyOp[] = [
       "the title of a markdown note without one set follows the new text. Change the title or alt text with `PATCH`. " +
       "Needs the feed's password if it has one, and counts against the post rate limit. Read links can't edit. " +
       MULTIPART +
-      "On a `PUT` the `text` part is required and the note must be a markdown note; the note keeps its own title and tags, `X-Note-Tags` goes on the new pictures.",
+      "On a `PUT` the `text` part is required and the note must be a markdown note; the note keeps its own title and tags, `X-Note-Tags` goes on the new pictures. A raw body ignores `X-Note-Tags`. The note is looked up first: a missing note is `404` and an image note `415` whatever the body holds.",
     tags: ["Feeds"],
     password: true,
     params: { feed: FeedParam, id: NoteIdParam },
-    headers: { "X-Feed-Password": FeedPasswordHeader, "X-Note-Tags": NoteTagsHeader },
+    headers: { "X-Feed-Password": FeedPasswordHeader, "X-Note-Tags": NoteTagsHeader.describe("Only for a multipart body: the tags go on the new pictures (the note keeps its own). A raw body ignores it. Comma-separated, empty is none.") },
     body: { ...Object.fromEntries(MEDIA_TYPES.map((m) => [m.mediaType, FileBody])), "multipart/form-data": MultipartNote },
     responses: {
       200: { description: "The note as it is now, and with a multipart body the new pictures", schema: NoteEdited },
       400: err(
         "Invalid or reserved feed name; a blank note; " +
-          `a multipart body with an unexpected part, no \`text\`, more than ${MAX_ATTACHMENTS} files, a bad or repeated file name, or \`X-Note-Alt\` / \`X-Note-Name\``,
+          `a multipart body with an unexpected part, no \`text\`, more than ${MAX_ATTACHMENTS} files, a bad or repeated file name, a text sent with pictures that takes too long to read (\`NOTEFEED_PARSE_TIMEOUT_MS\`), or \`X-Note-Alt\` / \`X-Note-Name\``,
       ),
       401: UNAUTHORIZED,
       404: err("No such note"),

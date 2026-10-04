@@ -2,10 +2,10 @@
 // between cases, and DATA_DIR is only known at runtime.
 const env = (name: string) => process.env[name] ?? "";
 
-// Unset, empty or not a number → `fallback`.
+// Unset, empty or not a number → `fallback`. A fraction is cut to a whole number (a cap of 0.5 is no cap, not a cap below 1).
 function int(name: string, fallback: number): number {
   const raw = env(name);
-  return raw === "" || !Number.isFinite(Number(raw)) ? fallback : Number(raw);
+  return raw === "" || !Number.isFinite(Number(raw)) ? fallback : Math.trunc(Number(raw));
 }
 
 export const LOG_LEVELS = ["error", "warn", "info", "debug", "silent"] as const;
@@ -31,6 +31,8 @@ export const config = {
   reservedPassword: () => env("NOTEFEED_RESERVED_PASSWORD"),
   // "0" leaves only random read ids: nothing chosen is accepted (empty, a random one, still is).
   allowCustomIds: () => env("NOTEFEED_ALLOW_CUSTOM_IDS") !== "0",
+  // How long reading a text to place its pictures may take, in ms (it runs in a worker, so a slow text costs only its sender that time).
+  parseTimeoutMs: () => positive("NOTEFEED_PARSE_TIMEOUT_MS", 10_000),
   maxNotesPerFeed: () => Math.max(0, int("NOTEFEED_MAX_NOTES_PER_FEED", 0)),
   // Bytes per uploaded image; 0 or below means the default, and nothing above 10 MiB: Next's proxy buffers a request
   // body only up to that, so a larger image would arrive cut. Images per feed: 0 or below, no cap.

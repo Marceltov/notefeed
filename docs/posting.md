@@ -42,7 +42,7 @@ curl -X PUT -H "Content-Type: text/markdown" --data-binary @note.md \
   https://notes.example.com/api/v1/feeds/homelab-7f3k2q9x4m8wz/notes/20260929T140512Z-backup-finished
 ```
 
-A markdown note can also be replaced with a `multipart/form-data` `PUT`, to add pictures: the `text` part is required, the `file` parts and `alt.<filename>` are as in [posting a note with its pictures](#posting-a-note-with-its-pictures), and the references are swapped the same way. The pictures are new notes of their own; `X-Note-Tags` goes on them only, and the answer is `200` with the note and `attachments`. It is all or nothing, like a post.
+A markdown note can also be replaced with a `multipart/form-data` `PUT`, to add pictures: the `text` part is required, the `file` parts and `alt.<filename>` are as in [posting a note with its pictures](#posting-a-note-with-its-pictures), and the references are swapped the same way. The pictures are new notes of their own; `X-Note-Tags` goes on them only (a raw `PUT` ignores it), and the answer is `200` with the note and `attachments`. The note is looked up before the parts are checked: a missing note is `404` and an image note `415`, whatever the parts hold. It is all or nothing, like a post.
 
 `PATCH` changes the note's [title](#titles) and, for a picture, its alt text, with a JSON body of `title` and/or `alt`. An empty string removes one. It answers `200` with the note:
 
@@ -145,7 +145,7 @@ The parts:
 
 (the other fields of a [post](#posting-notes) are left out here). Raw requests are answered as before, without `attachments`. A client of this version needs a server of this version: an older server answers `415` to multipart.
 
-**Errors** are those of posting, with the part named in the message. `400`: a file name that is not allowed or is given twice, a `file` part without a file name, more than 10 files, a part that is none of `text`, `file` and `alt.<filename>` (or a second `text`), an `alt.` for a file that is not there, a text that is not UTF-8, a blank text with no pictures, a body that is not valid multipart, nothing to post, and no `text` on a `PUT`. `415`: a file that is not an accepted picture or whose bytes are not that format. `413`: a picture, the text or the whole request is too large. `507`: a cap is reached.
+**Errors** are those of posting, with the part named in the message. `400`: a file name that is not allowed or is given twice, a `file` part without a file name, more than 10 files, a part that is none of `text`, `file` and `alt.<filename>` (or a second `text`), an `alt.` for a file that is not there, a text that is not UTF-8, a blank text with no pictures, a text sent with pictures that takes longer than `NOTEFEED_PARSE_TIMEOUT_MS` (10 s) to read (it is read in a worker thread, so only its sender waits), a body that is not valid multipart, nothing to post, and no `text` on a `PUT`. `415`: a file that is not an accepted picture or whose bytes are not that format. `413`: a picture, the text or the whole request is too large. `507`: a cap is reached.
 
 ## Feed settings and deleting a feed
 
