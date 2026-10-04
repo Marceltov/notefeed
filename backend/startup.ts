@@ -28,6 +28,7 @@ export function startupReport(env: NodeJS.ProcessEnv = process.env): { fields: F
   const level = (env.NOTEFEED_LOG_LEVEL ?? "").trim().toLowerCase();
   if (level && level !== config.logLevel()) warnings.push(["startup", "NOTEFEED_LOG_LEVEL is not a level; using info", { accepted: [...LOG_LEVELS] }]);
   if (config.reservedFeeds().length && !config.reservedPassword()) warnings.push(["feeds", "reserved feeds are listed but have no password; they are not created", {}]);
+  if (config.metrics() && !config.metricsToken()) warnings.push(["startup", "metrics are on without NOTEFEED_METRICS_TOKEN: /metrics is open to anyone who can reach the app", {}]);
   const fields = {
     node: process.version,
     dataDir: config.dataDir(),
@@ -39,6 +40,7 @@ export function startupReport(env: NodeJS.ProcessEnv = process.env): { fields: F
     maxNotesPerFeed: config.maxNotesPerFeed(),
     maxImagesPerFeed: config.maxImagesPerFeed(),
     logLevel: config.logLevel(),
+    metrics: config.metrics(),
   };
   return { fields, warnings };
 }

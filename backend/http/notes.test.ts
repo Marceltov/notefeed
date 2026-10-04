@@ -98,7 +98,7 @@ test.each(["..", "a/b", decodeURIComponent("%2e%2e"), decodeURIComponent("a%2Fb"
 );
 
 // proxy.ts forwards every reserved name except logout here.
-test.each(["login", "mcp", "api", "health", "r"])("400 feed name is reserved (%s)", async (feed) => {
+test.each(["login", "mcp", "metrics", "api", "health", "r"])("400 feed name is reserved (%s)", async (feed) => {
   const res = await post("# Hi", { "content-type": "text/markdown" }, feed);
   expect(res.status).toBe(400);
   expect(await res.json()).toEqual({ error: "feed name is reserved", code: "reserved_feed" });

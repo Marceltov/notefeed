@@ -4,6 +4,7 @@
 import * as z from "zod";
 import { InvalidRequestError, NotFoundError } from "../errors";
 import { logger } from "../log";
+import { measured } from "../metrics";
 import { errorReply } from "./errors";
 
 const log = logger("http");
@@ -101,6 +102,13 @@ function send(entry: AnyOp, reply: AnyReply): Response {
   return Response.json(reply.body, { status: reply.status, headers: reply.headers });
 }
 
+// The metrics label of a request: the entry's operationId, and `<operationId>_tag` for a listing filtered by tag (an entry whose
+// query has a `tag`), which reads every note instead of one page. Only fixed names, never what the client sent.
+function kindOf(entry: AnyOp, req: Request): string {
+  const filtered = entry.query?.shape && "tag" in entry.query.shape && new URL(req.url).searchParams.get("tag");
+  return filtered ? `${entry.operationId}_tag` : entry.operationId;
+}
+
 // `prefix` is where the catch-all route is mounted (e.g. "/api/v1"); entry paths include it.
 export function createDispatcher(ops: AnyOp[], prefix: string): (req: Request, segments: string[]) => Promise<Response> {
   return async (req, segments) => {
@@ -114,20 +122,22 @@ export function createDispatcher(ops: AnyOp[], prefix: string): (req: Request, s
       const allow = (methods.includes("GET") ? [...methods, "HEAD"] : methods).sort().join(", ");
       return Response.json({ error: "method not allowed" }, { status: 405, headers: { Allow: allow } });
     }
-    let reply: AnyReply;
-    try {
-      await entry.before?.({ req, params: m.params });
-      let query: Record<string, unknown> = {};
-      if (entry.query) {
-        const parsed = entry.query.safeParse(queryOf(req));
-        if (!parsed.success) throw new InvalidRequestError(z.prettifyError(parsed.error).replace(/\s+/g, " ").replace(/^✖ /, ""));
-        query = parsed.data;
+    return measured(kindOf(entry, req), async () => {
+      let reply: AnyReply;
+      try {
+        await entry.before?.({ req, params: m.params });
+        let query: Record<string, unknown> = {};
+        if (entry.query) {
+          const parsed = entry.query.safeParse(queryOf(req));
+          if (!parsed.success) throw new InvalidRequestError(z.prettifyError(parsed.error).replace(/\s+/g, " ").replace(/^✖ /, ""));
+          query = parsed.data;
+        }
+        reply = await entry.handle({ req, params: m.params, query } as never);
+      } catch (e) {
+        reply = errorReply(e);
+        if (reply.status === 500) return Response.json(reply.body, { status: 500 }); // never declared, always allowed
       }
-      reply = await entry.handle({ req, params: m.params, query } as never);
-    } catch (e) {
-      reply = errorReply(e);
-      if (reply.status === 500) return Response.json(reply.body, { status: 500 }); // never declared, always allowed
-    }
-    return send(entry, reply);
+      return send(entry, reply);
+    }, (res) => res.status);
   };
 }

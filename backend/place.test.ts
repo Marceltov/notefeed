@@ -1,4 +1,5 @@
-import { afterEach, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+import { renderMetrics, resetMetricsForTest } from "./metrics";
 import { planInWorker } from "./place";
 
 afterEach(() => vi.unstubAllEnvs());
@@ -36,4 +37,37 @@ test("a text that takes too long is refused after the limit, and the main thread
 test("more texts than workers all get their turn", async () => {
   const plans = await Promise.all(Array.from({ length: 12 }, (_, i) => planInWorker(`![x](a.png) ${i}`, names)));
   expect(plans.map((p) => p.markdown.slice(-2).trim())).toEqual(Array.from({ length: 12 }, (_, i) => String(i)));
+});
+
+// The value of an unlabelled metric line, e.g. `notefeed_parse_waiting 8`.
+async function value(metric: string): Promise<number | undefined> {
+  const line = (await renderMetrics()).body.split("\n").find((l) => l.startsWith(`${metric} `));
+  return line === undefined ? undefined : Number(line.slice(metric.length + 1));
+}
+
+describe("metrics", () => {
+  beforeEach(() => vi.stubEnv("NOTEFEED_METRICS", "1"));
+  afterEach(() => resetMetricsForTest());
+
+  test("a text read in the worker adds one sample to the parse duration; one read without a worker adds none", async () => {
+    await planInWorker("![x](a.png)", names);
+    await planInWorker("# Just words", names);
+    expect(await value("notefeed_parse_duration_seconds_count")).toBe(1);
+  });
+
+  test("a text refused for time counts as a timeout, a text read in time does not", async () => {
+    await planInWorker("![x](a.png)", names);
+    expect(await value("notefeed_parse_timeouts_total")).toBe(0);
+    vi.stubEnv("NOTEFEED_PARSE_TIMEOUT_MS", "300");
+    await expect(planInWorker(">".repeat(80000) + " ![](a.png)", names)).rejects.toThrow(/took longer than/);
+    expect(await value("notefeed_parse_timeouts_total")).toBe(1);
+    expect(await value("notefeed_parse_duration_seconds_count")).toBe(2); // a refused text took time too
+  });
+
+  test("the texts waiting for a worker are counted, and none are left when all are done", async () => {
+    const all = Promise.all(Array.from({ length: 12 }, (_, i) => planInWorker(`![x](a.png) ${i}`, names)));
+    expect(await value("notefeed_parse_waiting")).toBe(8); // four workers at once
+    await all;
+    expect(await value("notefeed_parse_waiting")).toBe(0);
+  });
 });

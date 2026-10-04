@@ -21,7 +21,8 @@ export default defineConfig({
     { name: "notes", testMatch: "notes.spec.ts", use: { baseURL: "http://localhost:3100" } },
     { name: "feeds", testMatch: "feeds.spec.ts", use: { baseURL: "http://localhost:3100" } },
     { name: "images", testMatch: "images.spec.ts", use: { baseURL: "http://localhost:3100" } },
+    { name: "metrics", testMatch: "metrics.spec.ts", use: { baseURL: "http://localhost:3100" } },
     { name: "locked", testMatch: "locked.spec.ts", use: { baseURL: "http://localhost:3101" } },
   ],
-  webServer: [server(3100, {}), server(3101, { NOTEFEED_PASSWORD: "e2e" })],
+  webServer: [server(3100, { NOTEFEED_METRICS: "1" }), server(3101, { NOTEFEED_PASSWORD: "e2e" })],
 });

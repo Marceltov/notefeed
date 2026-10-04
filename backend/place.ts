@@ -5,6 +5,7 @@ import { Worker } from "node:worker_threads";
 import type { ImagePlan } from "../shared/imagePlan.mjs";
 import { config } from "./config";
 import { InvalidBodyError } from "./errors";
+import { observeParse, parseTimedOut, setParseWaiting } from "./metrics";
 
 const MAX_WORKERS = 4; // at once; more wait their turn (their time limit starts when theirs does)
 const MEMORY_MB = 512; // a worker's heap; past it the text is refused, not the server killed
@@ -13,10 +14,14 @@ let running = 0;
 const waiting: (() => void)[] = [];
 async function turn(): Promise<void> {
   if (running < MAX_WORKERS) return void running++;
-  await new Promise<void>((resolve) => waiting.push(resolve)); // the finished one hands over its place
+  await new Promise<void>((resolve) => {
+    waiting.push(resolve); // the finished one hands over its place
+    setParseWaiting(waiting.length);
+  });
 }
 function release(): void {
   const next = waiting.shift();
+  setParseWaiting(waiting.length);
   if (next) next();
   else running--;
 }
@@ -28,9 +33,11 @@ const mayHavePictures = (markdown: string) => markdown.includes("![") || markdow
 export async function planInWorker(markdown: string, names: ReadonlySet<string>): Promise<ImagePlan> {
   if (names.size === 0 || !mayHavePictures(markdown)) return { markdown, edits: [], unused: [...names] };
   await turn();
+  const started = performance.now();
   try {
     return await run(markdown, names);
   } finally {
+    observeParse((performance.now() - started) / 1000);
     release();
   }
 }
@@ -40,6 +47,7 @@ function run(markdown: string, names: ReadonlySet<string>): Promise<ImagePlan> {
   return new Promise((resolve, reject) => {
     const worker = new Worker(new URL("./placeWorker.mjs", import.meta.url), { workerData: { markdown, names: [...names] }, resourceLimits: { maxOldGenerationSizeMb: MEMORY_MB } });
     const refuse = (why: string) => {
+      parseTimedOut();
       void worker.terminate();
       reject(new InvalidBodyError(`the text cannot be sent with pictures: ${why}`));
     };
