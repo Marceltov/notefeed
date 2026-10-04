@@ -399,10 +399,9 @@ describe("post_note attachments", () => {
     expect(await hasFeed("f")).toBe(false);
   });
   test("a valid 6 MB picture is accepted", async () => {
-    process.env.NOTEFEED_MAX_IMAGE_BYTES = "8388608";
+    vi.stubEnv("NOTEFEED_MAX_IMAGE_BYTES", "8388608"); // afterEach unstubs it, also when the call throws
     const big = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(6_000_000, 1)]).toString("base64");
     const r = await call("post_note", { feed: "f", markdown: "x", attachments: [att("a.png", { data: big })] });
-    delete process.env.NOTEFEED_MAX_IMAGE_BYTES;
     expect(r.isError).toBeFalsy();
     expect(r.structuredContent.attachments).toHaveLength(1);
   });
@@ -442,6 +441,10 @@ describe("post_note attachments", () => {
     expect((await call("list_notes", { feed: "q" })).isError).toBe(true);
     expect((await call("list_notes", { feed: "q", password: "pw" })).structuredContent.notes).toHaveLength(3);
     expect(r.attachments).toHaveLength(2);
+    // A picture the call stored is a note of the protected feed: not read without the password either.
+    const picture = r.attachments[0].id;
+    expect((await call("get_note", { feed: "q", id: picture })).isError).toBe(true);
+    expect((await call("get_note", { feed: "q", id: picture, password: "pw" })).structuredContent).toMatchObject({ id: picture, type: "image/png" });
   });
 });
 

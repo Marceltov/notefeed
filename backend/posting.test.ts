@@ -134,6 +134,19 @@ describe("postWithPictures", () => {
     expect(await countNotes("f")).toBe(0);
   });
 
+  test("a failure while storing the second picture removes the first and rethrows that error", async () => {
+    const boom = new Error("disk full");
+    vi.mocked(notes.createNoteOf).mockImplementation(async (...args) => {
+      if (args[4]?.name === "b.png") throw boom;
+      return real.createNoteOf(...args);
+    });
+    await expect(post({ text: "x", pictures: [pic("a.png"), pic("b.png"), pic("c.png")] })).rejects.toBe(boom);
+    expect(vi.mocked(notes.createNoteOf)).toHaveBeenCalledTimes(2); // a.png stored, b.png failed: c.png and the text never tried
+    const first = (await vi.mocked(notes.createNoteOf).mock.results[0].value).note.id;
+    expect(vi.mocked(notes.removeNote).mock.calls).toEqual([["f", first]]);
+    expect(await countNotes("f")).toBe(0);
+  });
+
   test("a picture that can't be removed again is logged by its note id, never the feed's name, and the first error is rethrown", async () => {
     const boom = new Error("disk full");
     vi.mocked(notes.createNoteOf).mockImplementation(async (...args) => {

@@ -395,6 +395,24 @@ def test_attach_without_text_sends_no_text_part_and_prints_each_picture_url_once
     assert [p[:2] for p in _parts(server)] == [("file", "chart.png"), ("file", "t.webp")]
 
 
+def test_attach_without_text_sends_the_title_and_tags_as_headers_and_no_text_part(server, tmp_path):
+    d = _pics(tmp_path)
+    server.reply(201, {**_img(1), "attachments": [_img(1)]})
+    assert main(["post", "--attach", str(d / "chart.png"), "--title", "T", "--tag", "a", "--tag", "b", "--url", server.url, "--feed", "inbox"]) == 0
+    headers = server.requests[0]["headers"]
+    assert (headers["X-Note-Title"], headers["X-Note-Tags"]) == ("T", "a,b")
+    assert [p[:2] for p in _parts(server)] == [("file", "chart.png")]
+
+
+def test_attach_with_stdin_sends_the_stdin_text_as_the_text_part(server, capsys, monkeypatch, tmp_path):
+    d = _pics(tmp_path)
+    monkeypatch.setattr(sys, "stdin", io.TextIOWrapper(io.BytesIO(b"# from stdin\r\n![](chart.png)\n")))
+    server.reply(201, {**_TEXT, "attachments": [_img(1)]})
+    assert main(["post", "-", "--attach", str(d / "chart.png"), "--url", server.url, "--feed", "inbox"]) == 0
+    assert capsys.readouterr().out.split() == ["https://n.example/inbox/T", "https://n.example/inbox/I1"]
+    assert _parts(server) == [("text", "text.md", "text/markdown", b"# from stdin\r\n![](chart.png)\n"), ("file", "chart.png", "image/png", PNG)]
+
+
 def test_attach_unreadable_markdown_or_unknown_extension_exits_2_and_posts_nothing(server, capsys, tmp_path):
     d = _pics(tmp_path)
     for path in ("/nonexistent/x.png", str(d / "notes.md"), str(d / "chart.xyz")):

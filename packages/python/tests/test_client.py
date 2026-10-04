@@ -555,6 +555,9 @@ EMOJI = "\U0001F600" * 101  # 101 code points, 202 UTF-16 units
         ("x", [Attachment(" a.png", PNG, "image/png")]),
         ("x", [Attachment("a.png ", PNG, "image/png")]),
         ("x", [Attachment("a.png\u00a0", PNG, "image/png")]),
+        ("x", [Attachment("a.png\ufeff", PNG, "image/png")]),  # these three: space to JavaScript's trim, which the server uses
+        ("x", [Attachment("a.png\u2028", PNG, "image/png")]),
+        ("x", [Attachment("a.png\u3000", PNG, "image/png")]),
         ("x", [Attachment("a\x7f.png", PNG, "image/png")]),
         ("x", [Attachment("a\n.png", PNG, "image/png")]),
         ("x", [Attachment("a" * 201, PNG, "image/png")]),

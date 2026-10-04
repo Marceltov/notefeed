@@ -456,6 +456,13 @@ describe("post with attachments", () => {
     expect(((await parse(server.requests[0])).get("file") as File).name).toBe("Screenshot 2026-10-03.png");
   });
 
+  test("a name of 200 units is valid", async () => {
+    server.reply(201, { ...CREATED, attachments: [created(1)] });
+    const name = "a".repeat(196) + ".png";
+    await c().post("x", { attachments: [img(name)] });
+    expect(((await parse(server.requests[0])).get("file") as File).name).toBe(name);
+  });
+
   test.each([
     ["a duplicate name", "x", [img("a.png"), img("a.png")]],
     ["a name with /", "x", [img("a/b.png")]],
@@ -463,6 +470,10 @@ describe("post with attachments", () => {
     ["the name .", "x", [img(".")]],
     ["a name with a control character", "x", [img("a\u0001.png")]],
     ["a name with a leading space", "x", [img(" a.png")]],
+    ["a name with a trailing space", "x", [img("a.png ")]],
+    ["a name with \\", "x", [img("a\\b.png")]],
+    ["the empty name", "x", [img("")]],
+    ["a name with U+007F", "x", [img("a\u007f.png")]],
     ["a name over 200 characters", "x", [img("a".repeat(197) + ".png")]],
     ["a markdown attachment", "x", [{ name: "a.md", content: png, type: "text/markdown" }]],
     ["bytes without a type", "x", [{ name: "a.png", content: png }]],

@@ -93,6 +93,10 @@ test("only images, no text: posts the image notes and nothing else", async ({ pa
   await page.getByRole("button", { name: "Post note" }).click();
   await expect(page.locator("ol > li img")).toHaveCount(1);
   await expect(page.locator(".md")).toHaveCount(0);
+  // The answer was the first picture's: ?posted= carries its note id, and that note is the picture.
+  await expect(page).toHaveURL(/\?posted=\d{8}T\d{6}Z-[0-9a-f-]{36}$/);
+  await page.goto(`/${name}/${new URL(page.url()).searchParams.get("posted")}`);
+  await expect(page.locator("article img")).toBeVisible();
 });
 
 test("a new feed takes images and a password in its first post", async ({ page }) => {
@@ -160,6 +164,44 @@ test("editing a note offers the same control, and saving posts the picture", asy
   await page.getByRole("button", { name: "Save" }).click();
   await expect(page.getByRole("status")).toHaveText("Saved.");
   await loaded(page.locator(".md img")).toBeGreaterThan(0);
+});
+
+test("a note's text replaced by just a new picture's reference stays a text note, holding the picture", async ({ page }) => {
+  const name = feedName();
+  await post(page, name, "# Only words");
+  await page.getByRole("link", { name: "Only words" }).click();
+  await expect(page).toHaveURL(new RegExp(`/${name}/[^/?]+$`)); // the click navigates in the page: wait for the note's own address
+  const url = page.url();
+  await page.getByText("Edit", { exact: true }).click();
+  await note(page).fill("");
+  await choose(page, "Add image", PNG);
+  await expect(note(page)).toHaveValue("![](pixel.png)");
+  await page.getByRole("button", { name: "Save" }).click();
+  await expect(page.getByRole("status")).toHaveText("Saved.");
+  await loaded(page.locator(".md img")).toBeGreaterThan(0);
+  await page.goto(url); // the same note, read again: still a text to edit, its reference now the stored file
+  await page.getByText("Edit", { exact: true }).click();
+  await expect(note(page)).toHaveValue(/^!\[\]\(\d{8}T\d{6}Z-[0-9a-f-]{36}\.png\)$/);
+  await page.goto(`/${name}`);
+  await expect(page.locator("ol > li")).toHaveCount(2); // the text note and the picture
+});
+
+test("a picture the server refuses when saving: the editor says which, and the note and the feed stay as they were", async ({ page }) => {
+  const name = feedName();
+  await post(page, name, "# Unchanged");
+  await page.getByRole("link", { name: "Unchanged" }).click();
+  await expect(page).toHaveURL(new RegExp(`/${name}/[^/?]+$`)); // the click navigates in the page: wait for the note's own address
+  const url = page.url();
+  await page.getByText("Edit", { exact: true }).click();
+  await choose(page, "Add image", { name: "a.png", mimeType: "image/png", buffer: Buffer.from("not an image") });
+  await expect(note(page)).toHaveValue(/!\[\]\(a\.png\)/);
+  await page.getByRole("button", { name: "Save" }).click();
+  await expect(page.getByRole("alert").filter({ hasText: "a.png: Only PNG, JPEG, GIF and WebP" })).toBeVisible();
+  await page.goto(url);
+  await page.getByText("Edit", { exact: true }).click();
+  await expect(note(page)).toHaveValue("# Unchanged");
+  await page.goto(`/${name}`);
+  await expect(page.locator("ol > li")).toHaveCount(1);
 });
 
 test("a title that fails to save after a picture was added: saving again stores the picture once", async ({ page }) => {

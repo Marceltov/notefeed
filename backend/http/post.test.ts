@@ -252,20 +252,24 @@ describe("multipart: a text with its pictures", () => {
 
   const eleven = Array.from({ length: 11 }, (_, i) => ["file", png(`${i}.png`)] as [string, File]);
   test.each([
-    ["no text and no file", [], {}],
-    ["two text parts", [["text", "a"], ["text", "b"]], {}],
-    ["a text field and a text file", [["text", "# a"], ["text", new File(["# b"], "b.md", { type: "text/markdown" })]], {}],
-    ["a part named other", [["text", "a"], ["other", "x"]], {}],
-    ["a file part without a file name", [["file", "just a string"]], {}],
-    ["a duplicate file name", [["file", png("a.png")], ["file", png("a.png")]], {}],
-    ["alt for a file that is not sent", [["file", png("a.png")], ["alt.x.png", "x"]], {}],
-    ["X-Note-Alt", [["file", png("a.png")]], { "x-note-alt": "x" }],
-    ["X-Note-Name", [["file", png("a.png")]], { "x-note-name": "x.png" }],
-    ["11 files", eleven, {}],
-    ["blank text and no file", [["text", "  "]], {}],
-  ] as [string, [string, string | File][], Record<string, string>][])("%s is 400, and nothing is created", async (_, parts, headers) => {
+    ["no text and no file", [], {}, "invalid_body", null],
+    ["two text parts", [["text", "a"], ["text", "b"]], {}, "invalid_body", null],
+    ["a text field and a text file", [["text", "# a"], ["text", new File(["# b"], "b.md", { type: "text/markdown" })]], {}, "invalid_body", null],
+    ["a part named other", [["text", "a"], ["other", "x"]], {}, "invalid_body", null],
+    ["a file part without a file name", [["file", "just a string"]], {}, "invalid_body", null],
+    ["a duplicate file name", [["file", png("a.png")], ["file", png("a.png")]], {}, "invalid_body", "a.png"],
+    ["alt for a file that is not sent", [["file", png("a.png")], ["alt.x.png", "x"]], {}, "invalid_body", null],
+    ["X-Note-Alt", [["file", png("a.png")]], { "x-note-alt": "x" }, "invalid_body", null],
+    ["X-Note-Name", [["file", png("a.png")]], { "x-note-name": "x.png" }, "invalid_body", null],
+    ["11 files", eleven, {}, "invalid_body", null],
+    ["blank text and no file", [["text", "  "]], {}, "empty_note", null],
+  ] as [string, [string, string | File][], Record<string, string>, string, string | null][])("%s is 400, and nothing is created", async (_, parts, headers, code, named) => {
     const res = await sendForm(parts, headers);
-    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect([res.status, body.code]).toEqual([400, code]);
+    // Only a refusal about one picture names it: the web box words those after the picture's name.
+    if (named) expect(body.error).toMatch(new RegExp(`^attachment "${named}": `));
+    else expect(body.error).not.toMatch(/^attachment "/);
     expect(await hasFeed("f")).toBe(false);
   });
   test("a body that is not multipart is 400 invalid_body", async () => {
@@ -283,9 +287,12 @@ describe("multipart: a text with its pictures", () => {
   });
   test("an oversize picture or a body over the request cap is 413, and nothing is created", async () => {
     process.env.NOTEFEED_MAX_IMAGE_BYTES = "20";
-    expect((await sendForm([["text", "# a"], ["file", png("a.png", new Uint8Array([...PNG, ...new Uint8Array(20)]))]])).status).toBe(413);
-    // The cap is 102400 + 10 * 20 bytes + 64 KiB of framing: an alt text that long would be a 400 if it were read.
-    expect((await sendForm([["file", png("a.png")], ["alt.a.png", "a".repeat(102400 + 200 + 65536 + 1)]])).status).toBe(413);
+    // Both are `too_large`; the message says which: the picture's is ImageTooLargeError's, after its name.
+    const picture = await sendForm([["text", "# a"], ["file", png("a.png", new Uint8Array([...PNG, ...new Uint8Array(20)]))]]);
+    expect([picture.status, await picture.json()]).toEqual([413, { code: "too_large", error: 'attachment "a.png": image exceeds the size limit' }]);
+    // The cap is 102400 + 10 * 20 bytes + 64 KiB of framing: an alt text that long would be a 400 if it were read. NoteTooLargeError, naming no picture.
+    const request = await sendForm([["file", png("a.png")], ["alt.a.png", "a".repeat(102400 + 200 + 65536 + 1)]]);
+    expect([request.status, await request.json()]).toEqual([413, { code: "too_large", error: "note exceeds 100 KB" }]);
     expect(await hasFeed("f")).toBe(false);
   });
   test("a request at every limit at once passes the request cap: 10 pictures at the image limit and a text at the markdown limit", async () => {
@@ -325,6 +332,10 @@ describe("multipart: a text with its pictures", () => {
   test("a protected feed: the first multipart post creates it, a refused one leaves none, a later post needs the password", async () => {
     const refused = await sendForm([["text", "# a"], ["file", png("a.png")], ["file", png("b.png", JPG)]], { "x-feed-password": "hunter22" }, "g");
     expect(refused.status).toBe(415);
+    expect(await hasFeed("g")).toBe(false);
+    expect(await protectedFeed("g")).toBe(false);
+    const twice = await sendForm([["text", "# a"], ["file", png("a.png")], ["file", png("a.png")]], { "x-feed-password": "hunter22" }, "g");
+    expect([twice.status, (await twice.json()).code]).toEqual([400, "invalid_body"]);
     expect(await hasFeed("g")).toBe(false);
     expect(await protectedFeed("g")).toBe(false);
     expect((await sendForm([["text", "# a"], ["file", png("a.png")]], { "x-feed-password": "hunter22" })).status).toBe(201);

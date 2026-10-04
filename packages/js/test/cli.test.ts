@@ -403,11 +403,31 @@ test("postAttachWithoutTextSendsNoTextPartAndPrintsEachPictureUrlOnce", async ()
   server.reply(201, { ...created("I1", "F1.png"), attachments: [created("I1", "F1.png"), created("I2", "F2.png")] });
   const dir = pics();
   const t = io();
-  expect(await main(["post", "--attach", join(dir, "chart.png"), "--attach", join(dir, "chart.png").replace("chart", "t").replace(".png", ".webp"), "--url", server.url, "--feed", "inbox"], t.io)).toBe(0);
+  expect(await main(["post", "--attach", join(dir, "chart.png"), "--attach", join(dir, "t.webp"), "--url", server.url, "--feed", "inbox"], t.io)).toBe(0);
   expect(t.out.stdout.trim().split("\n")).toEqual(["https://n.example/inbox/I1", "https://n.example/inbox/I2"]);
   const form = await parse(0);
   expect(form.has("text")).toBe(false);
   expect(form.getAll("file")).toHaveLength(2);
+});
+
+test("postAttachWithoutTextSendsTheTitleAndTagsAsHeadersAndNoTextPart", async () => {
+  server.reply(201, { ...created("I1", "F1.png"), attachments: [created("I1", "F1.png")] });
+  const t = io();
+  expect(await main(["post", "--attach", join(pics(), "chart.png"), "--title", "T", "--tag", "a", "--tag", "b", "--url", server.url, "--feed", "inbox"], t.io)).toBe(0);
+  expect(server.requests[0].headers).toMatchObject({ "x-note-title": "T", "x-note-tags": "a,b" });
+  const form = await parse(0);
+  expect(form.has("text")).toBe(false);
+  expect((form.getAll("file") as File[]).map((f) => f.name)).toEqual(["chart.png"]);
+});
+
+test("postAttachWithStdinSendsTheStdinTextAsTheTextPart", async () => {
+  server.reply(201, { ...created("T", "T.md"), attachments: [created("I1", "F1.png")] });
+  const t = io("# from stdin\r\n![](chart.png)\n");
+  expect(await main(["post", "-", "--attach", join(pics(), "chart.png"), "--url", server.url, "--feed", "inbox"], t.io)).toBe(0);
+  expect(t.out.stdout.trim().split("\n")).toEqual(["https://n.example/inbox/T", "https://n.example/inbox/I1"]);
+  const form = await parse(0);
+  expect(await (form.get("text") as File).text()).toBe("# from stdin\r\n![](chart.png)\n");
+  expect(form.getAll("file")).toHaveLength(1);
 });
 
 test.each([

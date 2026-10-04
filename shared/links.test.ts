@@ -63,3 +63,30 @@ test("placeImages leaves images in code as written and appends their picture", (
 test("placeImages keeps CRLF and a trailing newline when nothing is appended", () => {
   expect(placeImages("x\r\n![](a.png)\r\n", one)).toBe("x\r\n![](F1.png)\r\n");
 });
+
+test("placeImages finds the destination after nested brackets in the alt text", () => {
+  expect(placeImages("![a [b] c](a.png)", one)).toBe("![a [b] c](F1.png)");
+});
+
+test("placeImages leaves a destination with balanced parentheses that is no attachment as written", () => {
+  expect(placeImages("![](x(1).png) end", one)).toBe("![](x(1).png) end\n\n![](F1.png)");
+});
+
+test("placeImages matches a name with parentheses, in angle brackets and percent-encoded", () => {
+  const sent = new Map([["a (1).png", "F1.png"]]);
+  expect(placeImages("![](<a (1).png>) ![x](a%20(1).png) end", sent)).toBe("![](F1.png) ![x](F1.png) end");
+});
+
+test("placeImages swaps a definition's angle-bracketed or percent-encoded destination", () => {
+  const sent = new Map([["a b.png", "F1.png"]]);
+  expect(placeImages('![x][l]\n\n[l]: <a b.png> "T"', sent)).toBe('![x][l]\n\n[l]: F1.png "T"');
+  expect(placeImages("![x][l]\n\n[l]: a%20b.png", sent)).toBe("![x][l]\n\n[l]: F1.png");
+});
+
+test("placeImages changes a definition shared by an image and a link once, for both", () => {
+  expect(placeImages("![x][l] and [the file][l]\n\n[l]: a.png", one)).toBe("![x][l] and [the file][l]\n\n[l]: F1.png");
+});
+
+test("placeImages leaves a malformed percent destination as written and appends the picture", () => {
+  expect(placeImages("![](100%zz.png)", one)).toBe("![](100%zz.png)\n\n![](F1.png)");
+});
