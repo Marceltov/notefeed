@@ -17,7 +17,7 @@ vi.mock("node:fs/promises", async (importOriginal) => {
 });
 
 test("a failed write leaves no partial file behind", async () => {
-  const { createNote } = await import("../notes");
+  const { createNote } = await import("../../notes");
   const dir = await mkdtemp(join(tmpdir(), "notefeed-fail-"));
   process.env.DATA_DIR = dir;
   await expect(createNote("test", "# Hi")).rejects.toThrow("no space");

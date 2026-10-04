@@ -1,9 +1,9 @@
 // A feed's display title and description: validation and storage. Access and rate limits are posting.ts.
 import { cleanLine, FORBIDDEN_IN_TEXT } from "../shared/links";
-import { readSettings, writeSettings } from "./data/settings";
-import { isErrno } from "./data/fs";
 import { InvalidBodyError, NotFoundError } from "./errors";
 import { hasImageNote, type Note } from "./notes";
+import { storage } from "./storage";
+import { FeedGoneError } from "./storage/types";
 
 export type FeedSettings = { title: string; description: string; image: string; showSender: boolean };
 
@@ -39,20 +39,20 @@ export function checkSettings(input: unknown): Omit<FeedSettings, "image" | "sho
 export const forReaders = (notes: Note[], s: { showSender: boolean }): Note[] => notes.map((n) => n.forReaders(s.showSender));
 
 // What is stored, whatever has become of the image file (the save path in posting.ts keeps it as it is).
-export const getStoredSettings = (feed: string): Promise<FeedSettings> => readSettings(feed);
+export const getStoredSettings = (feed: string): Promise<FeedSettings> => storage().readSettings(feed);
 
 // What is shown: a title image whose file is gone (removed by hand) counts as none, so nothing points at a 404.
 export async function getSettings(feed: string): Promise<FeedSettings> {
-  const stored = await readSettings(feed);
+  const stored = await storage().readSettings(feed);
   const s = { ...stored, title: cleanLine(stored.title), description: cleanLine(stored.description) }; // stored before the rule, or edited by hand
   return s.image && !(await hasImageNote(feed, s.image)) ? { ...s, image: "" } : s;
 }
 
 export async function saveSettings(feed: string, s: FeedSettings): Promise<void> {
   try {
-    await writeSettings(feed, s);
+    await storage().writeSettings(feed, s);
   } catch (e) {
-    if (isErrno(e, "ENOENT")) throw new NotFoundError("no such feed");
+    if (e instanceof FeedGoneError) throw new NotFoundError("no such feed");
     throw e;
   }
 }

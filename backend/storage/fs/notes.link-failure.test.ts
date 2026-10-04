@@ -10,11 +10,11 @@ vi.mock("node:fs/promises", async (importOriginal) => {
 });
 
 test("a failure after the sidecar leaves no sidecar, no temp file, and nothing listed", async () => {
-  const { writeNote, listNoteFiles } = await import("./notes");
+  const { writeNote, listNoteRefs } = await import("./notes");
   const root = await mkdtemp(join(tmpdir(), "notefeed-fail-"));
   process.env.DATA_DIR = root;
   await mkdir(join(root, "f"));
   await expect(writeNote("f", "a", "md", "x", { sender: "S" })).rejects.toThrow("io");
   expect(await readdir(join(root, "f"))).toEqual([]);
-  expect(await listNoteFiles("f")).toEqual([]);
+  expect(await listNoteRefs("f")).toEqual([]);
 });

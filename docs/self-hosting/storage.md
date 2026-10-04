@@ -27,6 +27,29 @@ notefeed writes them as the **owner of that folder**: create it yourself (`mkdir
 
 notefeed only reads folders with valid feed names and files named like notes. Anything else in `DATA_DIR`, such as `.git` or loose files, is ignored. So are symlinks, even to a folder: a feed must be a real folder inside `DATA_DIR`, so a link can't expose files from elsewhere on the disk.
 
+## Databases
+
+By default notefeed keeps everything as files, as described above. With `NOTEFEED_STORAGE` it can keep it in a database instead: `sqlite` (one file, no server) or `postgres` (a server, and several notefeed containers can share it). Nothing else changes: the API, the read links and the web UI are the same.
+
+| | `fs` (default) | `sqlite` | `postgres` |
+|---|---|---|---|
+| Where | folders in `DATA_DIR` | one file, `NOTEFEED_DATABASE_URL` (default `DATA_DIR/notefeed.db`) | a PostgreSQL server (tested with 17), `NOTEFEED_DATABASE_URL` |
+| `NOTEFEED_SECRET` | optional | required | required |
+| Containers | one | one | several |
+| Back up with | copy the folder | copy the file while notefeed is stopped, or `sqlite3 notefeed.db ".backup out.db"` | `pg_dump` |
+
+Two tables hold it all: `feeds` (name, read id, password hash and settings) and `notes` (feed, id, extension, content, metadata). A picture is a note, so its bytes are in `notes.content`; there is no separate file store. The tables are created, and updated when notefeed is upgraded, when it starts. A database made by a newer notefeed is refused with a message saying so.
+
+Things that differ from files:
+
+- **No hand-editing.** Dropping a file into a folder, or removing one, is how you change a feed on `fs`; with a database you use the API or the web UI.
+- **Moving between backends is not built in yet.** A new instance on a database starts empty. Moving an existing `data` folder into a database needs a script of your own.
+- **The server secret is yours to set.** With no data folder there is nowhere to keep a generated one, so `NOTEFEED_SECRET` (at least 32 bytes, `openssl rand -hex 32`) is required, and the same value must be given to every container.
+
+`sqlite` and `postgres` need Node 22 or later when you run from source (the Docker image has it); `fs` runs on any Node version notefeed supports.
+
+A PostgreSQL setup with Docker Compose is in [PostgreSQL](postgres.md#postgresql).
+
 ## Images and other files
 
 An image is a note: its file is in the feed's folder next to the markdown notes, stored exactly as posted, with its metadata beside it. Back them up with the rest of `data`: a `tar` of `data` includes them. A note that links to an image that was lost shows a broken image.

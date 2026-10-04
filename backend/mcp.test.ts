@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readdir, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
@@ -6,6 +6,7 @@ import { hasFeed, readIdOf, resetFeedsForTests } from "./feeds";
 import { resetRateLimitsForTests } from "./limits";
 import { logTo } from "./log";
 import { createNote, getNote, listNotes } from "./notes";
+import { storage } from "./storage";
 import { mcpRoute } from "./mcp";
 import { sign } from "./oauth/tokens";
 
@@ -247,8 +248,8 @@ describe("tools", () => {
   test("a failing note file is logged without the feed's name or the note's title", async () => {
     const { note } = await createNote("myfeed", "# Quarterly layoffs plan");
     const file = join(dir, "myfeed", `${note.id}.md`);
-    await rm(file);
-    await symlink(file, file); // opening it is now ELOOP, with the path in the error
+    // A read that fails with the path in the error (a linked note is "not a note" now, so the failure is injected).
+    vi.spyOn(storage(), "readNote").mockRejectedValueOnce(Object.assign(new Error(`ELOOP: too many symbolic links encountered, open '${file}'`), { code: "ELOOP" }));
     const r = await call("get_note", { feed: "myfeed", id: note.id });
     expect(r.content[0].text).toBe("internal error");
     expect(logs).toHaveLength(1);

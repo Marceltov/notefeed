@@ -96,6 +96,7 @@ nav:
           - The sender: self-hosting/sign-in/sender.md
           - Troubleshooting: self-hosting/sign-in/troubleshooting.md
       - Storage: self-hosting/storage.md
+      - PostgreSQL: self-hosting/postgres.md
       - Backups: self-hosting/backups.md
       - Deleting notes and feeds: self-hosting/deleting.md
       - Metrics: self-hosting/metrics.md

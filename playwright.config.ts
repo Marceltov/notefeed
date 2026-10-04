@@ -23,6 +23,12 @@ export default defineConfig({
     { name: "images", testMatch: "images.spec.ts", use: { baseURL: "http://localhost:3100" } },
     { name: "metrics", testMatch: "metrics.spec.ts", use: { baseURL: "http://localhost:3100" } },
     { name: "locked", testMatch: "locked.spec.ts", use: { baseURL: "http://localhost:3101" } },
+    // The same notes and pictures specs on the SQLite backend (needs Node 22, like the app itself).
+    { name: "sqlite", testMatch: ["notes.spec.ts", "images.spec.ts"], use: { baseURL: "http://localhost:3102" } },
   ],
-  webServer: [server(3100, { NOTEFEED_METRICS: "1" }), server(3101, { NOTEFEED_PASSWORD: "e2e" })],
+  webServer: [
+    server(3100, { NOTEFEED_METRICS: "1" }),
+    server(3101, { NOTEFEED_PASSWORD: "e2e" }),
+    server(3102, { NOTEFEED_STORAGE: "sqlite", NOTEFEED_DATABASE_URL: "file:test-results/e2e-3102.db", NOTEFEED_SECRET: "e2e-sqlite-secret-".padEnd(32, "x") }),
+  ],
 });

@@ -2,7 +2,9 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { beforeEach, describe, expect, test } from "vitest";
-import { listNoteFiles, writeNote } from "./data/notes";
+import { storage } from "./storage";
+
+const writeNote = (...a: Parameters<ReturnType<typeof storage>["writeNote"]>) => storage().writeNote(...a);
 import { AuthError, FeedExistsError, InvalidBodyError, TooManyAttemptsError } from "./errors";
 import {
   changePassword,
@@ -89,7 +91,7 @@ describe("protected feed", () => {
 
   test(".password is not a note and the feed is listed once", async () => {
     await createProtected("a", "pw");
-    expect(await listNoteFiles("a")).toEqual([]);
+    expect(await storage().listNoteRefs("a")).toEqual([]);
     resetFeedsForTests();
     expect((await listFeeds()).filter((f) => f === "a")).toHaveLength(1);
   });

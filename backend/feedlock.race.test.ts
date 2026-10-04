@@ -4,9 +4,9 @@ import { join } from "node:path";
 import { expect, test, vi } from "vitest";
 
 // The feed is deleted while a password change is waiting for its hash.
-vi.mock("./data/password", async (importOriginal) => {
-  const m = await importOriginal<typeof import("./data/password")>();
-  const { feedDir } = await import("./data/fs");
+vi.mock("./storage/fs/password", async (importOriginal) => {
+  const m = await importOriginal<typeof import("./storage/fs/password")>();
+  const { feedDir } = await import("./storage/fs/fs");
   return { ...m, writeHash: async (feed: string, hash: string) => (await rm(feedDir(feed), { recursive: true }), m.writeHash(feed, hash)) };
 });
 
