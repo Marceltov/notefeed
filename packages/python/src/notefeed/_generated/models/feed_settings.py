@@ -14,8 +14,10 @@ T = TypeVar("T", bound="FeedSettings")
 class FeedSettings:
     """
     Attributes:
-        title (str): Display title, at most 100 characters, one line; empty means none (the feed's name is shown)
-        description (str): Description, at most 500 characters, one line; may be empty
+        title (str): Display title, at most 100 characters, one line (control and text-direction override characters are
+            refused); empty means none (the feed's name is shown)
+        description (str): Description, at most 500 characters, one line (control and text-direction override characters
+            are refused); may be empty
         image (str | Unset): The file name of an image uploaded to this feed (see uploadImage), shown as the feed's
             title image; empty removes it, omitted leaves it as it is
         show_sender (bool | Unset): Whether readers (RSS, the read API and pages) see who posted each note; omitted

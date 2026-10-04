@@ -64,6 +64,17 @@ describe("posting tags", () => {
     expect((await res.json()).error).toMatch(/invalid tag "bad tag"/);
     expect(await list()).toEqual([]);
   });
+  test("a refused tag is echoed without control or text-direction override characters", () => {
+    const message = (() => {
+      try {
+        checkTags(["a\u202eb\u009b[31m"]);
+      } catch (e) {
+        return (e as Error).message;
+      }
+    })();
+    expect(message).toContain('invalid tag "a\ufffdb\ufffd[31m"');
+    expect(message).not.toMatch(/[\u0080-\u009f\u202a-\u202e]/);
+  });
   test("an invalid tag does not leave a protected feed behind", async () => {
     const res = await post("# x", { "x-note-tags": "no good", "x-feed-password": "secret1" });
     expect(res.status).toBe(400);

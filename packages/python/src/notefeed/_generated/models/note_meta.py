@@ -14,9 +14,11 @@ T = TypeVar("T", bound="NoteMeta")
 class NoteMeta:
     """
     Attributes:
-        title (str | Unset): The note's title, at most 100 characters, one line; empty or left out means the title is
-            taken from the text (a markdown note) or there is none (an image)
-        alt (str | Unset): Alternative text of an image note, at most 500 characters, one line
+        title (str | Unset): The note's title, at most 100 characters, one line (control and text-direction override
+            characters are refused); empty or left out means the title is taken from the text (a markdown note) or there is
+            none (an image)
+        alt (str | Unset): Alternative text of an image note, at most 500 characters, one line (control and text-
+            direction override characters are refused)
     """
 
     title: str | Unset = UNSET

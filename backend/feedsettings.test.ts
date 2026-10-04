@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { beforeEach, expect, test } from "vitest";
 import { readSettings, writeSettings } from "./data/settings";
-import { forReaders, getSettings } from "./feedsettings";
+import { checkSettings, forReaders, getSettings } from "./feedsettings";
 import { mdNote } from "./note/testing";
 
 beforeEach(async () => {
@@ -37,4 +37,18 @@ test("forReaders drops the sender only when showSender is false", () => {
   expect(hidden[0].title).toBe("a");
   expect(hidden[1]).toBe(b);
   expect(a.sender).toBe("x@y.z");
+});
+
+test("a title or description stored with what no title holds is shown cleaned", async () => {
+  await mkdir(join(process.env.DATA_DIR!, "old"));
+  await writeFile(join(process.env.DATA_DIR!, "old", ".feed.json"), JSON.stringify({ title: "Be\u202enign", description: "a\u2028b\u009b", image: "" }));
+  expect(await getSettings("old")).toMatchObject({ title: "Be nign", description: "a b" });
+});
+
+test("checkSettings refuses C1 controls, line separators and text-direction overrides in a title and a description", () => {
+  for (const bad of ["a\u009bb", "a\u2028b", "a\u2029b", "a\u202eb", "a\u2066b", "a\nb"]) {
+    expect(() => checkSettings({ title: bad, description: "" }), JSON.stringify(bad)).toThrow(/title must be one line/);
+    expect(() => checkSettings({ title: "", description: bad }), JSON.stringify(bad)).toThrow(/description must be one line/);
+  }
+  expect(checkSettings({ title: "\u05e9\u05dc\u05d5\u05dd\u200f", description: "" }).title).toBe("\u05e9\u05dc\u05d5\u05dd\u200f");
 });

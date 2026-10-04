@@ -1,4 +1,4 @@
-import { cleanName } from "../../shared/links";
+import { cleanLine, cleanName } from "../../shared/links";
 import type { Meta } from "../data/notes";
 import { Note, type NoteInit } from "./note";
 
@@ -9,7 +9,7 @@ export class ImageNote extends Note {
   }
 
   get title(): string {
-    return this.meta.title ?? "";
+    return cleanLine(this.meta.title ?? "");
   }
   /** The file name it was posted with, if it had one, as it may be shown. */
   get name(): string | undefined {

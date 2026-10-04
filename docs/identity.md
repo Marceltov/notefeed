@@ -156,7 +156,7 @@ sender: "Ann Example"
 The deploy finished.
 ```
 
-The sender is the first non-empty claim of `NOTEFEED_OIDC_SENDER_CLAIM` in the provider's id_token, by default the `name` claim, or the e-mail address when there is no name. There is no user table, no session list and no record of who signed in. The sign-in itself is a signed cookie in the person's browser.
+The sender is the first non-empty claim of `NOTEFEED_OIDC_SENDER_CLAIM` in the provider's id_token (control and text-direction override characters in it are replaced by spaces, as in a note's title), by default the `name` claim, or the e-mail address when there is no name. There is no user table, no session list and no record of who signed in. The sign-in itself is a signed cookie in the person's browser.
 
 ## Where the sender is shown
 

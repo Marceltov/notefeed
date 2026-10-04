@@ -333,7 +333,7 @@ const OPS: AnyOp[] = [
     operationId: "updateFeed",
     summary: "Change a feed's settings",
     description:
-      "Replaces both the title (at most 100 characters) and the description (at most 500); surrounding whitespace is trimmed and control characters are refused. " +
+      "Replaces both the title (at most 100 characters) and the description (at most 500); surrounding whitespace is trimmed and control and text-direction override characters are refused. " +
       "`show_sender` (default true) shows who posted each note to readers; omitted leaves it as it is. `read_id` gives the feed another read link (3 to 64 characters: a-z, 0-9, - and _; empty for a random one): the old id is freed and answers like an unknown read id until another feed takes it, and the notes are not edited (a relative image link follows the new id, a full URL does not). A short readable read id is guessable, so protect the feed with a password if that matters. An instance can turn chosen read ids off (NOTEFEED_ALLOW_CUSTOM_IDS=0): then only an empty `read_id` is accepted. `image` is the file name `uploadImage` returned for this feed (title image), empty to remove it, or omitted to leave it as it is; any other value is a 400. " +
       "Needs the feed's password if it has one, and counts against the post rate limit. Only on a feed that exists: it is created by its first note. Read links can't change settings.",
     tags: ["Feeds"],
@@ -343,7 +343,7 @@ const OPS: AnyOp[] = [
     body: { "application/json": FeedSettingsJson },
     responses: {
       200: { description: "The feed as it is now", schema: FeedJson },
-      400: err("Invalid or reserved feed name, bad JSON, a title or description that is too long or has control characters, a malformed read id, a reserved feed's read id, or chosen read ids turned off"),
+      400: err("Invalid or reserved feed name, bad JSON, a title or description that is too long or has control or text-direction override characters, a malformed read id, a reserved feed's read id, or chosen read ids turned off"),
       401: UNAUTHORIZED,
       404: err("No such feed"),
       409: err("The read id belongs to another feed or is held back for a reserved one"),

@@ -101,6 +101,20 @@ describe("tools", () => {
     expect(JSON.parse(r.content[0].text)).toEqual(r.structuredContent);
   });
 
+  test("a refused input value is not echoed by an MCP error", async () => {
+    const bad = "a\u202eb\u009b[31m";
+    const results = [
+      await call("post_note", { feed: bad, markdown: "x" }),
+      await call("post_note", { feed: "a", markdown: "x", attachments: [{ name: bad, type: "image/png", data: "AA" }] }),
+      await call("post_note", { feed: "a", markdown: "x", tags: [bad] }),
+      await call("post_note", { feed: "a", markdown: 5, [bad]: 1 }),
+    ];
+    for (const r of results) {
+      expect(r.isError).toBe(true);
+      expect(r.content[0].text).not.toMatch(/[\u0080-\u009f\u202a-\u202e]/);
+    }
+  });
+
   test("post_note ignores a sender argument and stores none", async () => {
     const r = await call("post_note", { feed: "a", markdown: "# Hi", sender: "Boss" });
     expect(r.isError).toBeUndefined();

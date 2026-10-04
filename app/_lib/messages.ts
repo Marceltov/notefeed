@@ -72,6 +72,14 @@ export function imageErrorMessage(code: unknown, retry?: unknown): string | unde
   return own[String(code)] ?? errorMessage(code, retry);
 }
 
+// A title or an alt text refused for holding a control or text-direction override character (a title pasted from Word with a line
+// separator, say): worded to point at it, from the server's own message (backend/notes.ts checkLine).
+const LINE_REFUSED = /^(title|alt) must be one line, without control or text-direction override characters/;
+function lineRefusal(code: unknown, detail: string | undefined): string | undefined {
+  const field = code === "invalid_body" ? LINE_REFUSED.exec(detail ?? "")?.[1] : undefined;
+  return field && `The ${field === "alt" ? "alt text" : "title"} must be one line, without control or text-direction override characters.`;
+}
+
 // The same, for a note sent with its pictures: a refusal that names a picture (`attachment "a.png": …`) is worded as an image
 // refusal, after the picture's name; any other goes to `message`, except a "too_large" that names no picture when the request had
 // pictures (`pictures`). That has two causes: the text is over 100 KB, or one picture is so far over its limit that the server stopped
@@ -79,7 +87,9 @@ export function imageErrorMessage(code: unknown, retry?: unknown): string | unde
 export const withPictures =
   (message: (code: unknown, retry?: unknown) => string | undefined, pictures = false) =>
   (code: unknown, retry?: unknown, detail?: string): string | undefined => {
-    const name = /^attachment "(.*)": /.exec(detail ?? "")?.[1];
-    if (name !== undefined) return `${name}: ${imageErrorMessage(code, retry)}`;
+    const named = /^attachment "(.*)": (.*)$/s.exec(detail ?? "");
+    if (named) return `${named[1]}: ${lineRefusal(code, named[2]) ?? imageErrorMessage(code, retry)}`;
+    const line = lineRefusal(code, detail);
+    if (line) return line;
     return pictures && code === "too_large" ? "The note is too large: its text is over 100 KB, or a picture is too large." : message(code, retry);
   };

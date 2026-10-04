@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { absolutizeImages, isAttachmentName, isRelativeLink, safeName } from "./links";
+import { absolutizeImages, cleanLine, isAttachmentName, isRelativeLink, safeName, safeText } from "./links";
 
 test("only a link with no scheme and no leading slash is relative", () => {
   expect(["a.png", "x/a.png"].map(isRelativeLink)).toEqual([true, true]);
@@ -27,4 +27,15 @@ test("safeName shows each forbidden character as U+FFFD and cuts to 200", () => 
   expect(safeName("a.png")).toBe("a.png");
   expect(safeName("a\u200eb")).toBe("a\u200eb");
   expect(safeName("a".repeat(300))).toHaveLength(200);
+});
+test("cleanLine turns each forbidden character into a space and trims; a clean line stays as it is", () => {
+  expect(cleanLine("a\u202eb\u009bc\u2028d")).toBe("a b c d");
+  expect(cleanLine("\u202e x \u202e")).toBe("x");
+  expect(cleanLine("a  b \u200e c")).toBe("a  b \u200e c");
+});
+
+test("safeText shows each forbidden character as U+FFFD and cuts to the length", () => {
+  expect(safeText("a\u202eb\u009b")).toBe("a\ufffdb\ufffd");
+  expect(safeText("a".repeat(300))).toHaveLength(200);
+  expect(safeText("abcdef", 3)).toBe("abc");
 });

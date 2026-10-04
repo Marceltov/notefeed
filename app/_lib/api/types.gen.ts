@@ -208,11 +208,11 @@ export type Error = {
 
 export type NoteMeta = {
     /**
-     * The note's title, at most 100 characters, one line; empty or left out means the title is taken from the text (a markdown note) or there is none (an image)
+     * The note's title, at most 100 characters, one line (control and text-direction override characters are refused); empty or left out means the title is taken from the text (a markdown note) or there is none (an image)
      */
     title?: string;
     /**
-     * Alternative text of an image note, at most 500 characters, one line
+     * Alternative text of an image note, at most 500 characters, one line (control and text-direction override characters are refused)
      */
     alt?: string;
 };
@@ -226,11 +226,11 @@ export type PasswordJson = {
 
 export type FeedSettings = {
     /**
-     * Display title, at most 100 characters, one line; empty means none (the feed's name is shown)
+     * Display title, at most 100 characters, one line (control and text-direction override characters are refused); empty means none (the feed's name is shown)
      */
     title: string;
     /**
-     * Description, at most 500 characters, one line; may be empty
+     * Description, at most 500 characters, one line (control and text-direction override characters are refused); may be empty
      */
     description: string;
     /**
@@ -253,11 +253,11 @@ export type Feed = {
      */
     name: string;
     /**
-     * Display title, at most 100 characters, one line; empty means none (the feed's name is shown)
+     * Display title, at most 100 characters, one line (control and text-direction override characters are refused); empty means none (the feed's name is shown)
      */
     title: string;
     /**
-     * Description, at most 500 characters, one line; may be empty
+     * Description, at most 500 characters, one line (control and text-direction override characters are refused); may be empty
      */
     description: string;
     /**
@@ -280,11 +280,11 @@ export type Feed = {
 
 export type ReadFeed = {
     /**
-     * Display title, at most 100 characters, one line; empty means none (the feed's name is shown)
+     * Display title, at most 100 characters, one line (control and text-direction override characters are refused); empty means none (the feed's name is shown)
      */
     title: string;
     /**
-     * Description, at most 500 characters, one line; may be empty
+     * Description, at most 500 characters, one line (control and text-direction override characters are refused); may be empty
      */
     description: string;
     /**
@@ -365,7 +365,7 @@ export type PostNoteData = {
          */
         'X-Read-Id'?: string;
         /**
-         * The note's title, for a raw body; a JSON or form body's own `title` wins. At most 100 characters, one line.
+         * The note's title, for a raw body; a JSON or form body's own `title` wins. At most 100 characters, one line, with no control or text-direction override characters.
          */
         'X-Note-Title'?: string;
         /**
@@ -780,7 +780,7 @@ export type UpdateFeedData = {
 
 export type UpdateFeedErrors = {
     /**
-     * Invalid or reserved feed name, bad JSON, a title or description that is too long or has control characters, a malformed read id, a reserved feed's read id, or chosen read ids turned off
+     * Invalid or reserved feed name, bad JSON, a title or description that is too long or has control or text-direction override characters, a malformed read id, a reserved feed's read id, or chosen read ids turned off
      */
     400: Error;
     /**

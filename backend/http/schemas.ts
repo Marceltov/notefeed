@@ -72,8 +72,8 @@ export const ErrorJson = z
   })
   .meta({ id: "Error" });
 
-const NoteTitle = z.string().describe("The note's title, at most 100 characters, one line; empty or left out means the title is taken from the text (a markdown note) or there is none (an image)");
-const NoteAlt = z.string().describe("Alternative text of an image note, at most 500 characters, one line");
+const NoteTitle = z.string().describe("The note's title, at most 100 characters, one line (control and text-direction override characters are refused); empty or left out means the title is taken from the text (a markdown note) or there is none (an image)");
+const NoteAlt = z.string().describe("Alternative text of an image note, at most 500 characters, one line (control and text-direction override characters are refused)");
 export const MetaJson = z.object({ title: NoteTitle.optional(), alt: NoteAlt.optional() }).meta({ id: "NoteMeta" });
 export const PasswordJson = z.object({ password: z.string().describe(`The new password: ${PASSWORD_RULE}`) }).meta({ id: "PasswordJson" });
 
@@ -87,14 +87,14 @@ export const FeedPasswordHeader = z
 export const NoteTagsHeader = z
   .string()
   .describe(`Tags for the note, comma-separated (\`ci,deploy\`): ${TAG_RULE}. For a raw markdown body; a JSON or form body's own \`tags\` wins. Empty is none.`);
-export const NoteTitleHeader = NoteTitle.describe("The note's title, for a raw body; a JSON or form body's own `title` wins. At most 100 characters, one line.");
+export const NoteTitleHeader = NoteTitle.describe("The note's title, for a raw body; a JSON or form body's own `title` wins. At most 100 characters, one line, with no control or text-direction override characters.");
 export const NoteAltHeader = NoteAlt.describe("For an image body: its alternative text; a form's own `alt` wins.");
 export const ReadIdHeader = z.string().describe("The read id the feed gets when this post creates it: 3 to 64 characters (a-z, 0-9, - and _), random when left out or empty, ignored for a feed that exists. A short readable one is guessable: protect the feed with a password if that matters. 409 when it is taken");
 export const NoteNameHeader = z.string().describe("For an image body: the picture's original file name, kept with the note (at most 200 characters)");
 export const CurrentPasswordHeader = z.string().describe("The feed's current password");
 
-const TITLE = z.string().describe("Display title, at most 100 characters, one line; empty means none (the feed's name is shown)");
-const DESCRIPTION = z.string().describe("Description, at most 500 characters, one line; may be empty");
+const TITLE = z.string().describe("Display title, at most 100 characters, one line (control and text-direction override characters are refused); empty means none (the feed's name is shown)");
+const DESCRIPTION = z.string().describe("Description, at most 500 characters, one line (control and text-direction override characters are refused); may be empty");
 const IMAGE_URL = z.url().nullable().describe("The feed's title image (absolute URL, served under the read id), or null");
 export const FeedSettingsJson = z
   .object({

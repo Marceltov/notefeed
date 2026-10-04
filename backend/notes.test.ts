@@ -215,11 +215,13 @@ describe("sender", () => {
     expect((await getNote("test", note.id))?.sender).toBe("Ann");
     expect((await getNote("test", note.id))?.content).toBe("# New");
   });
-  test.each(["a\u2028b", "a\u2029b", "a\rb"])("sender %j survives create, get and update", async (sender) => {
+  // What is stored is what was given (`meta`); the `sender` getter is what is shown, without control and text-direction override characters.
+  test.each(["a\u2028b", "a\u2029b", "a\rb"])("sender %j is stored as given through create, get and update, and shown cleaned", async (sender) => {
     const { note } = await createNote("test", "# Hi", undefined, sender);
-    expect((await getNote("test", note.id))?.sender).toBe(sender);
-    expect((await replaceContent("test", note.id, new TextEncoder().encode("# New"), "text/markdown"))?.sender).toBe(sender);
-    expect(await getNote("test", note.id)).toMatchObject({ markdown: "# New", sender });
+    expect((await getNote("test", note.id))?.meta.sender).toBe(sender);
+    expect((await getNote("test", note.id))?.sender).toBe("a b");
+    expect((await replaceContent("test", note.id, new TextEncoder().encode("# New"), "text/markdown"))?.meta.sender).toBe(sender);
+    expect(await getNote("test", note.id)).toMatchObject({ markdown: "# New", meta: { sender } });
   });
   test("a typed block in the body is body: no sender from it, with or without ours", async () => {
     const typed = '---\nsender: "Boss"\n---\nhi';
