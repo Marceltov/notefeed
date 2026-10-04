@@ -40,15 +40,30 @@ const collect = (node: MdNode, out: MdNode[] = []): MdNode[] => {
   return out;
 };
 
+// The index of the last backtick of the code span opened by the backtick run at `i` (before `end`), or the run's last backtick when it never closes.
+function codeSpanEnd(src: string, i: number, end: number): number {
+  let n = 0;
+  while (src[i + n] === "`") n++;
+  for (let j = i + n; j < end; j++) {
+    if (src[j] !== "`") continue;
+    let m = 0;
+    while (src[j + m] === "`") m++;
+    if (m === n) return j + m - 1;
+    j += m - 1;
+  }
+  return i + n - 1;
+}
+
 // The source range of the destination of an `image` or `definition` node, or null (a reference-style image has none).
 function destinationRange(src: string, node: MdNode): [number, number] | null {
   const start = node.position?.start.offset;
   const end = node.position?.end.offset;
   if (start === undefined || end === undefined) return null;
   let i = start + (node.type === "image" ? 2 : 1);
-  // the label: up to its closing bracket, brackets nested, backslash escapes skipped
+  // the label: up to its closing bracket, brackets nested, backslash escapes skipped, and (in an image's alt text) code spans, which bind tighter than brackets
   for (let depth = 0; i < end; i++) {
     if (src[i] === "\\") i++;
+    else if (src[i] === "`" && node.type === "image") i = codeSpanEnd(src, i, end);
     else if (src[i] === "[") depth++;
     else if (src[i] === "]" && depth-- === 0) break;
   }

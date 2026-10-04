@@ -34,6 +34,14 @@ test("placeImages swaps a referenced name and appends an unreferenced one", () =
   expect(placeImages("see ![x](a.png) and ![x](a.png)", sent)).toBe("see ![x](F1.png) and ![x](F1.png)\n\n![](F2.png)");
 });
 
+test("placeImages finds the destination after an alt text with a ] inside a code span", () => {
+  const sent = new Map([["a.png", "F1.png"]]);
+  expect(placeImages("![a `]` b](a.png)", sent)).toBe("![a `]` b](F1.png)");
+  expect(placeImages("![a ``]`` b](a.png)", sent)).toBe("![a ``]`` b](F1.png)");
+  // a backtick that never closes is literal, so the bracket after it still closes the label
+  expect(placeImages("![a ` b](a.png)", sent)).toBe("![a ` b](F1.png)");
+});
+
 test("placeImages keeps a leading BOM and still finds the references after it", () => {
   expect(placeImages("\uFEFF# Hi\n\n![](a.png)", new Map([["a.png", "F1.png"]]))).toBe("\uFEFF# Hi\n\n![](F1.png)");
 });
