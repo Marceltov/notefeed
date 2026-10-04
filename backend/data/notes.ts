@@ -7,7 +7,8 @@ import { join } from "node:path";
 import { countDir, countFile, noteFeedSize } from "../metrics";
 import { feedDir, isErrno, orMissing } from "./fs";
 
-export type Meta = { title?: string; sender?: string; tags?: string[]; alt?: string; name?: string; created?: string };
+export type { Meta } from "../storage/types";
+import type { Meta } from "../storage/types";
 
 const NAME_RE = /^([A-Za-z0-9_-]{1,128})\.([A-Za-z0-9]{1,16})$/;
 const file = (feed: string, id: string, ext: string) => join(feedDir(feed), `${id}.${ext}`);

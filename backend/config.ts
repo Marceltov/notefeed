@@ -13,8 +13,36 @@ export type LogLevel = (typeof LOG_LEVELS)[number];
 
 const positive = (name: string, fallback: number) => (int(name, fallback) > 0 ? int(name, fallback) : fallback);
 
+export const STORAGE_KINDS = ["fs", "sqlite", "postgres"] as const;
+export type StorageKind = (typeof STORAGE_KINDS)[number];
+
+function storageKind(): StorageKind {
+  const v = env("NOTEFEED_STORAGE").trim().toLowerCase();
+  if (v === "") return "fs";
+  if ((STORAGE_KINDS as readonly string[]).includes(v)) return v as StorageKind;
+  throw new Error(`NOTEFEED_STORAGE must be one of ${STORAGE_KINDS.join(", ")}, got "${v}"`);
+}
+
+const dataDir = () => env("DATA_DIR") || "/data";
+
+// SQLite defaults to a file next to where `fs` keeps its data, so the same volume works.
+const databaseUrl = () => env("NOTEFEED_DATABASE_URL") || (storageKind() === "sqlite" ? `file:${dataDir().replace(/\/+$/, "")}/notefeed.db` : "");
+
+// At startup, so a wrong setting shows then and not on the first signed cookie. The URL itself is never in a message.
+function validateStorage(): void {
+  const kind = storageKind();
+  if (kind === "fs") return;
+  if (kind === "postgres" && databaseUrl() === "") throw new Error("NOTEFEED_STORAGE=postgres needs NOTEFEED_DATABASE_URL");
+  if (Buffer.byteLength(env("NOTEFEED_SECRET")) < 32) {
+    throw new Error(`NOTEFEED_STORAGE=${kind} needs NOTEFEED_SECRET of at least 32 bytes (e.g. openssl rand -hex 32): there is no data folder to keep a generated one in`);
+  }
+}
+
 export const config = {
-  dataDir: () => env("DATA_DIR") || "/data",
+  dataDir,
+  storage: storageKind,
+  databaseUrl,
+  validateStorage,
   // Empty means unset: compose passes ${NOTEFEED_PASSWORD:-} and ${NOTEFEED_SECRET:-}.
   password: () => env("NOTEFEED_PASSWORD"),
   secret: () => env("NOTEFEED_SECRET"),
