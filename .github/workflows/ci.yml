@@ -7,6 +7,19 @@ on:
 jobs:
   check:
     runs-on: ubuntu-latest
+    # The storage contract suite also runs against a real PostgreSQL (backend/storage/sql/postgres.test.ts).
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_PASSWORD: pw
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -17,6 +30,8 @@ jobs:
       - run: npm run lint
       - run: npm run typecheck
       - run: npm test
+        env:
+          NOTEFEED_TEST_POSTGRES_URL: postgres://postgres:pw@localhost:5432/postgres
 
   # The committed openapi.json and the clients generated from it must match the route table.
   generate:

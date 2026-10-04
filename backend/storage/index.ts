@@ -16,13 +16,7 @@ const state = processState("storage", () => ({}) as { key?: string; instance?: S
 function build(kind: ReturnType<typeof config.storage>): Storage {
   config.validateStorage();
   if (kind === "fs") return createFsStorage({ derivedReadId, isReadId, isFeedName: (n) => checkFeed(n) === null });
-  if (kind === "sqlite") return createSqlStorage(() => connect("sqlite", config.databaseUrl()), "sqlite");
-  // PostgreSQL arrives with its own task.
-  return new Proxy({} as Storage, {
-    get: (_t, method) => () => {
-      throw new Error(`storage "${kind}" is not implemented yet (${String(method)})`);
-    },
-  });
+  return createSqlStorage(() => connect(kind, config.databaseUrl()), kind);
 }
 
 export function storage(): Storage {
