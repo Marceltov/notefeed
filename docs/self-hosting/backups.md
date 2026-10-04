@@ -5,3 +5,5 @@ Back up the `data` folder, including `.secret` and the dot files inside each fee
 ```sh
 tar czf notefeed-notes.tgz -C data .
 ```
+
+With a [database](storage.md#databases) instead of files, back up the database: `pg_dump` for PostgreSQL, the file (or `sqlite3 notefeed.db ".backup out.db"`) for SQLite. Keep your `NOTEFEED_SECRET` with the backup: it is not in the database.
