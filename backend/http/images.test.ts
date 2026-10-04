@@ -11,6 +11,7 @@ import { hasFeed } from "../feeds";
 import { createNote, listNotes, removeNote } from "../notes";
 import { API_PREFIX, dispatch } from "./api";
 import { feedSettingsRoute } from "./feedforms";
+import { renderMetrics, resetMetricsForTest } from "../metrics";
 import { fileRoute } from "./files";
 import { rssRoute } from "./rss";
 
@@ -332,4 +333,17 @@ test("a settings image can't name a real file that is not an image", async () =>
   await writeFile(join(process.env.DATA_DIR!, "pics", "secret.txt"), "x");
   const res = await call("PUT", "/feeds/pics", { body: JSON.stringify({ title: "", description: "", image: "../secret.txt" }), headers: { "content-type": "application/json" } });
   expect(res.status).toBe(400);
+});
+
+describe("metrics", () => {
+  test("a file of the feed is measured as kind feed_file", async () => {
+    process.env.NOTEFEED_METRICS = "1";
+    try {
+      await get("nope", "x.png");
+      expect((await renderMetrics()).body).toMatch(/notefeed_request_duration_seconds_count\{kind="feed_file",/);
+    } finally {
+      delete process.env.NOTEFEED_METRICS;
+      resetMetricsForTest();
+    }
+  });
 });

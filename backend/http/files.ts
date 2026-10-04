@@ -4,13 +4,17 @@
 import { createHash } from "node:crypto";
 import { readFeedFile } from "../data/notes";
 import { feedForReadId } from "../feeds";
+import { measured } from "../metrics";
 import { IMAGE_EXTS, contentTypeOf } from "../../shared/images";
 
 const NAME_RE = /^[A-Za-z0-9_-]{1,128}\.([A-Za-z0-9]{1,16})$/;
 
 // A file can be replaced under the same name (a note's `PUT`), so nothing is cached for good: the cache asks again with the ETag, a hash of the
 // bytes, and gets a bodyless 304 while the file is unchanged. `ifNoneMatch` is the request's header, if any.
-export async function fileRoute(readId: string, file: string, ifNoneMatch?: string | null): Promise<Response> {
+export const fileRoute = (readId: string, file: string, ifNoneMatch?: string | null): Promise<Response> =>
+  measured("feed_file", () => serveFile(readId, file, ifNoneMatch), (r) => r.status);
+
+async function serveFile(readId: string, file: string, ifNoneMatch?: string | null): Promise<Response> {
   const feed = await feedForReadId(readId);
   const ext = NAME_RE.exec(file)?.[1];
   const bytes = feed && ext ? await readFeedFile(feed, file) : null;

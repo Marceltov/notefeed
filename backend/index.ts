@@ -17,6 +17,7 @@ export { identityOn };
 export { feedPath, publicUrl, readPath, rssPath, safeNext, settingsPath } from "./urls";
 // Every write is one of these HTTP handlers; the frontend only mounts them and renders.
 export { dispatch } from "./http/api";
+export { measured } from "./metrics";
 export { feedCookieName, feedUnlocked } from "./feedlock";
 export { feedDeleteRoute, feedSettingsRoute } from "./http/feedforms";
 export { feedAccessRoute } from "./http/feedsession";

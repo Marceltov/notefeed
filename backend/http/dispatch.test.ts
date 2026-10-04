@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import * as z from "zod";
-import { RateLimitedError } from "../errors";
+import { NotFoundError, RateLimitedError } from "../errors";
 import { logTo } from "../log";
+import { resetMetricsForTest, renderMetrics } from "../metrics";
 import { createDispatcher, op } from "./dispatch";
 
 // Log lines, captured per test.
@@ -152,5 +153,48 @@ describe("replies", () => {
     expect(res.status).toBe(303);
     expect(res.headers.get("location")).toBe("/x");
     expect(await res.text()).toBe("");
+  });
+});
+
+describe("metrics", () => {
+  const listThings = op({
+    method: "GET",
+    path: "/api/v1/things",
+    operationId: "listThings",
+    summary: "List things",
+    tags: ["Test"],
+    params: {},
+    query: z.object({ tag: z.string().optional() }),
+    responses: { 200: { description: "ok", schema: z.object({}) }, 404: NotFound },
+  }).handle(async () => ({ status: 200, body: {} }));
+  const measuredDispatch = createDispatcher([getThing, postThing, listThings], "/api/v1");
+  const callM = (path: string, method = "GET") => measuredDispatch(new Request(`http://x/api/v1/${path}`, { method }), path.split("?")[0].split("/"));
+  const seenKinds = async () => [...(await renderMetrics()).body.matchAll(/^notefeed_request_duration_seconds_count\{([^}]*)\} (\d+)/gm)].map((m) => `${m[1]} ${m[2]}`);
+  beforeEach(() => vi.stubEnv("NOTEFEED_METRICS", "1"));
+  afterEach(() => resetMetricsForTest());
+
+  test("a listing with a tag is its own kind, without one it is the plain kind", async () => {
+    await callM("things");
+    await callM("things?tag=x", "GET");
+    const kinds = (await seenKinds()).join("\n");
+    expect(kinds).toContain('kind="listThings"');
+    expect(kinds).toContain('kind="listThings_tag"');
+  });
+  test("an entry without a tag parameter ignores a tag in the query", async () => {
+    await callM("things/a?tag=x");
+    expect((await seenKinds()).join("\n")).toContain('kind="getThing"');
+    expect((await seenKinds()).join("\n")).not.toContain("_tag");
+  });
+  test("a 404 for an unknown path and a 405 for a wrong method add no sample", async () => {
+    await callM("nothing/here");
+    await callM("things/a", "DELETE");
+    expect(await seenKinds()).toEqual([]);
+  });
+  test("a refusal is recorded with its status class", async () => {
+    behave = async () => {
+      throw new NotFoundError("gone");
+    };
+    await callM("things/a");
+    expect((await seenKinds()).join("\n")).toMatch(/kind="getThing",status="4xx"/);
   });
 });

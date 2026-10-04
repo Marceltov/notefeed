@@ -8,11 +8,14 @@ import { NoteList, TagFilter } from "@/components/NoteList";
 import { UnlockForm } from "@/components/UnlockForm";
 import { curlFor } from "@/app/_lib/curl";
 import { errorMessage, feedErrorMessage } from "@/app/_lib/messages";
-import { checkFeed, feedCookieName, feedPath, feedUnlocked, getFeed, IDENTITY_COOKIE, identitySender, publicUrl, readPath, rssPath, settingsPath } from "@/backend";
+import { checkFeed, feedCookieName, feedPath, feedUnlocked, getFeed, IDENTITY_COOKIE, identitySender, measured, publicUrl, readPath, rssPath, settingsPath } from "@/backend";
 
 export const dynamic = "force-dynamic";
 
-const feedData = cache(getFeed); // the metadata and the page share one read per request (the metadata reads it unfiltered)
+// The metadata and the page share one read per request (the metadata reads it unfiltered). The read is what is measured (kind
+// feed_page, feed_page_tag with a tag filter), so whichever of the two runs first carries the time and the disk work.
+const loaded = (feed: string, tag?: string) => measured(tag ? "feed_page_tag" : "feed_page", () => getFeed(feed, tag), (data) => (data ? 200 : 404));
+const feedData = cache((feed: string) => loaded(feed));
 
 export async function generateMetadata({ params }: PageProps<"/[feed]">): Promise<Metadata> {
   const { feed } = await params;
@@ -37,7 +40,7 @@ export default async function FeedPage({ params, searchParams }: PageProps<"/[fe
       </>
     );
   }
-  const data = tag ? await getFeed(feed, tag) : await feedData(feed);
+  const data = tag ? await loaded(feed, tag) : await feedData(feed);
   if (!data) notFound();
   const { notes, readId, exists, title, description } = data;
   const base = publicUrl(await headers());

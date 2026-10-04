@@ -3,11 +3,14 @@
 import { config } from "../config";
 import { isReadId, feedForReadId } from "../feeds";
 import { forReaders, getSettings } from "../feedsettings";
+import { measured } from "../metrics";
 import { listNotes } from "../notes";
 import { renderFeed } from "../rss";
 import { imagePath, publicUrl } from "../urls";
 
-export async function rssRoute(req: Request, readId: string): Promise<Response> {
+export const rssRoute = (req: Request, readId: string): Promise<Response> => measured("rss", () => feedXml(req, readId), (r) => r.status);
+
+async function feedXml(req: Request, readId: string): Promise<Response> {
   if (!isReadId(readId)) return new Response("not found", { status: 404 });
   const tag = new URL(req.url).searchParams.get("tag")?.toLowerCase(); // an unknown tag is an empty feed, like an unknown read id
   const feed = await feedForReadId(readId);

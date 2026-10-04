@@ -5,6 +5,7 @@ import { beforeEach, expect, test } from "vitest";
 import { derivedReadId, readIdOf, resetFeedsForTests } from "../feeds";
 import { createNote, replaceContent } from "../notes";
 import { saveSettings } from "../feedsettings";
+import { renderMetrics, resetMetricsForTest } from "../metrics";
 import { rssRoute } from "./rss";
 
 const BASE = "http://localhost:3000";
@@ -88,4 +89,15 @@ test("a relative image link in a note is absolute in the feed, and the note on d
   const xml = await (await get(rid)).text();
   expect(xml).toContain(`![](${BASE}/r/${rid}/abc.png) ![](https://x.test/y.png)`);
   expect(note.markdown).toContain("![](abc.png)");
+});
+
+test("the feed is measured as kind rss", async () => {
+  process.env.NOTEFEED_METRICS = "1";
+  try {
+    await get("0".repeat(8));
+    expect((await renderMetrics()).body).toMatch(/notefeed_request_duration_seconds_count\{kind="rss",/);
+  } finally {
+    delete process.env.NOTEFEED_METRICS;
+    resetMetricsForTest();
+  }
 });
