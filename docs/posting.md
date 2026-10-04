@@ -69,7 +69,7 @@ What to know:
 
 ## Titles
 
-Every note can have a title of its own, up to 100 characters on one line. Without one, a markdown note is titled by its first heading or first line, and a note that starts with a picture by that picture's alt text; a picture without one shows as the picture. To set one when you post, send the `X-Note-Title` header; later, `PATCH` it. In the web UI it is the **Title** field of the compose box and of the editor. The title is metadata, not part of the file: replacing the content leaves it, and an empty title removes it so the title follows the text again.
+Every note can have a title of its own, up to 100 characters on one line. A title holds no control characters (U+0080 to U+009F included), no line or paragraph separator (U+2028, U+2029) and no text-direction override characters (U+202A to U+202E, U+2066 to U+2069), or it is `400`; right-to-left text and its marks are fine. The same goes for a picture's alternative text. Without one, a markdown note is titled by its first heading or first line, and a note that starts with a picture by that picture's alt text; a picture without one shows as the picture. To set one when you post, send the `X-Note-Title` header; later, `PATCH` it. In the web UI it is the **Title** field of the compose box and of the editor. The title is metadata, not part of the file: replacing the content leaves it, and an empty title removes it so the title follows the text again.
 
 ## Tags
 
@@ -95,7 +95,7 @@ A picture is a note of its own: post it with its own `Content-Type` (or with a n
 curl -H "Content-Type: image/png" --data-binary @photo.png https://notes.example.com/homelab-7f3k2q9x4m8wz
 ```
 
-The answer is the same as for any note, with the picture's `file` and `file_url` (see above). `X-Note-Alt` sets its alternative text, `X-Note-Name` keeps the original file name (without `/`, `\`, control characters and text-direction override characters, trimmed, at most 200 characters), and `X-Note-Title` and `X-Note-Tags` work as for markdown. Non-ASCII text in these headers is sent as its UTF-8 bytes, which curl and the client packages do.
+The answer is the same as for any note, with the picture's `file` and `file_url` (see above). `X-Note-Alt` sets its alternative text (one line, at most 500 characters, with no control or text-direction override characters, like a [title](#titles)), `X-Note-Name` keeps the original file name (without `/`, `\`, control characters, line separators and text-direction override characters, trimmed, at most 200 characters), and `X-Note-Title` and `X-Note-Tags` work as for markdown. Non-ASCII text in these headers is sent as its UTF-8 bytes, which curl and the client packages do.
 
 What to know:
 
@@ -122,7 +122,7 @@ curl -F "text=@note.md;type=text/markdown" -F "file=@chart.png;type=image/png" -
 The parts:
 
 - **`text`:** at most one, the markdown. It is a plain string field or a file part. A file part is stored byte for byte and is what the clients send, because `FormData` rewrites `\n` to `\r\n` in string fields. The type of a file part may be `text/markdown`, empty or `application/octet-stream` (curl labels a `.md` file that way). Required on a `PUT`.
-- **`file`:** 0 to 10, the pictures. The file name is the name the markdown refers to; the type must be an accepted [picture type](#pictures), and the server checks the bytes. A file name is any single path segment of 1 to 200 characters (UTF-16 units) without `/`, `\`, control characters (U+0080 to U+009F included), text-direction override characters (U+202A to U+202E, U+2066 to U+2069) or a leading or trailing space, not only dots, and unique in the request. A refusal shows the name with each such character as `�`. A `"` in a file name round-trips: clients send it as `%22` and the server decodes it. So a literal `%22`, `%0A` or `%0D` in a file name is decoded too: `a%22b.png` is stored as `a"b.png`, and a name with `%0A` or `%0D` arrives with a line break and is refused as not a file name (`400`).
+- **`file`:** 0 to 10, the pictures. The file name is the name the markdown refers to; the type must be an accepted [picture type](#pictures), and the server checks the bytes. A file name is any single path segment of 1 to 200 characters (UTF-16 units) on one line (no line or paragraph separator, U+2028 and U+2029), without `/`, `\`, control characters (U+0080 to U+009F included), text-direction override characters (U+202A to U+202E, U+2066 to U+2069) or a leading or trailing space, not only dots, and unique in the request. A refusal shows the name with each such character as `�`. A `"` in a file name round-trips: clients send it as `%22` and the server decodes it. So a literal `%22`, `%0A` or `%0D` in a file name is decoded too: `a%22b.png` is stored as `a"b.png`, and a name with `%0A` or `%0D` arrives with a line break and is refused as not a file name (`400`).
 - **`alt.<filename>`:** optional, the alternative text of the picture of that name.
 - At least one `text` or `file` part is needed. Only a `text` part is the same as a raw post. Only `file` parts store just the pictures. `X-Note-Tags` goes on the text note and on every picture. `X-Note-Title` goes on the text note; with only `file` parts it goes on every picture. `X-Feed-Password` and `X-Read-Id` work as for a raw post; `X-Note-Alt` and `X-Note-Name` with multipart are `400`.
 
