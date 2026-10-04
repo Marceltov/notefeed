@@ -50,8 +50,15 @@ async function protect(feed: string, ip: string, access: FeedAccess, proved: boo
   }
   // The sender decides how long read() takes, and the feed may have been created protected meanwhile:
   // a post that proved nothing above is checked again, with nothing to show.
-  if (!proved) await checkFeedAccess(feed, {}, ip);
+  await recheck(feed, ip, access, proved, given);
   return false;
+}
+
+// The second access check: a post that proved nothing and brings no password is checked again once its body is read, because the
+// feed may have been created protected meanwhile. `postWithPictures` runs it before the caps, so a poster who may not post is
+// refused (401) rather than told that the feed is over a cap (507).
+async function recheck(feed: string, ip: string, access: FeedAccess, proved: boolean, given: string | undefined): Promise<void> {
+  if (!proved && !((access.password ?? given) || undefined)) await checkFeedAccess(feed, {}, ip);
 }
 
 // The caps are per type: images have their own, the notes limit counts the markdown ones. `adding` notes of that type; a feed that does not exist yet counts as empty.
@@ -103,6 +110,7 @@ export async function postNote(
 // Replacing a note's content, and changing its title or alt text: the same gate as posting, minus the caps.
 export async function editContent(feed: string, id: string, ip: string, read: () => Promise<{ body: Uint8Array; mediaType: string }>, access: FeedAccess): Promise<Note> {
   await admit(feed, ip, access);
+  if (!(await getNote(feed, id))) throw new NotFoundError("no such note"); // before the body is read: a missing note is 404 whatever the body
   const { body, mediaType } = await read();
   const note = await replaceContent(feed, id, body, mediaType);
   if (!note) throw new NotFoundError("no such note");
@@ -231,6 +239,7 @@ export async function postWithPictures(
   const plan = text === undefined ? undefined : await checkText(text, pictures);
   checkLine("title", title, MAX_NOTE_TITLE);
   const tags = checkTags(input.tags);
+  await recheck(feed, ip, access, proved, input.password);
   await checkCap(feed, "markdown", text === undefined ? 0 : 1);
   await checkCap(feed, "image", pictures.length);
   const wantedReadId = exists || !input.readId?.trim() ? undefined : input.readId.trim();
@@ -254,13 +263,14 @@ export async function editWithPictures(
   sender?: string,
 ): Promise<{ note: Note; pictures: Note[] }> {
   await admit(feed, ip, access);
+  // The note first, as on every other edit: a missing note is 404 and an image note 415 whatever its parts are.
+  const note = await getNote(feed, id);
+  if (!note) throw new NotFoundError("no such note");
+  if (note.type !== MARKDOWN_TYPE) throw new UnsupportedTypeError(`this note is ${note.type}: send that Content-Type`);
   const input = await read();
   const pictures = checkPictures(input.pictures);
   const plan = await checkText(input.text, pictures);
   const tags = checkTags(input.tags);
-  const note = await getNote(feed, id);
-  if (!note) throw new NotFoundError("no such note");
-  if (note.type !== MARKDOWN_TYPE) throw new UnsupportedTypeError(`this note is ${note.type}: send that Content-Type`);
   await checkCap(feed, "image", pictures.length);
   return storeWithPictures(feed, pictures, { sender, tags }, async (stored, sent) => {
     const edited = await replaceContent(feed, id, encoder.encode(applyImages(plan, sent)), MARKDOWN_TYPE);

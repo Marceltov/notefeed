@@ -126,7 +126,9 @@ def sync_detailed(
     before the first write, and a failed write removes what the request stored: all or nothing. `X-Note-
     Alt` and `X-Note-Name` are 400. The answer has `attachments`, the stored pictures in the order of
     the `file` parts. On a `PUT` the `text` part is required and the note must be a markdown note; the
-    note keeps its own title and tags, `X-Note-Tags` goes on the new pictures.
+    note keeps its own title and tags, `X-Note-Tags` goes on the new pictures. A raw body ignores
+    `X-Note-Tags`. The note is looked up first: a missing note is `404` and an image note `415` whatever
+    the body holds.
 
     Args:
         feed (str):
@@ -183,7 +185,9 @@ def sync(
     before the first write, and a failed write removes what the request stored: all or nothing. `X-Note-
     Alt` and `X-Note-Name` are 400. The answer has `attachments`, the stored pictures in the order of
     the `file` parts. On a `PUT` the `text` part is required and the note must be a markdown note; the
-    note keeps its own title and tags, `X-Note-Tags` goes on the new pictures.
+    note keeps its own title and tags, `X-Note-Tags` goes on the new pictures. A raw body ignores
+    `X-Note-Tags`. The note is looked up first: a missing note is `404` and an image note `415` whatever
+    the body holds.
 
     Args:
         feed (str):
@@ -235,7 +239,9 @@ async def asyncio_detailed(
     before the first write, and a failed write removes what the request stored: all or nothing. `X-Note-
     Alt` and `X-Note-Name` are 400. The answer has `attachments`, the stored pictures in the order of
     the `file` parts. On a `PUT` the `text` part is required and the note must be a markdown note; the
-    note keeps its own title and tags, `X-Note-Tags` goes on the new pictures.
+    note keeps its own title and tags, `X-Note-Tags` goes on the new pictures. A raw body ignores
+    `X-Note-Tags`. The note is looked up first: a missing note is `404` and an image note `415` whatever
+    the body holds.
 
     Args:
         feed (str):
@@ -290,7 +296,9 @@ async def asyncio(
     before the first write, and a failed write removes what the request stored: all or nothing. `X-Note-
     Alt` and `X-Note-Name` are 400. The answer has `attachments`, the stored pictures in the order of
     the `file` parts. On a `PUT` the `text` part is required and the note must be a markdown note; the
-    note keeps its own title and tags, `X-Note-Tags` goes on the new pictures.
+    note keeps its own title and tags, `X-Note-Tags` goes on the new pictures. A raw body ignores
+    `X-Note-Tags`. The note is looked up first: a missing note is `404` and an image note `415` whatever
+    the body holds.
 
     Args:
         feed (str):
