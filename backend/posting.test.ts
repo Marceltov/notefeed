@@ -80,7 +80,7 @@ describe("postWithPictures", () => {
 
   const refused: [string, PostBundle, unknown, string?][] = [
     ["a duplicate filename", { text: "x", pictures: [pic("a.png"), pic("a.png")] }, InvalidBodyError, "a.png"],
-    ["an unsafe filename", { text: "x", pictures: [pic("a/b.png")] }, InvalidBodyError, "a/b.png"],
+    ["an unsafe filename", { text: "x", pictures: [pic("a/b.png")] }, InvalidBodyError, "a\ufffdb.png"], // the echo is safeName's: a forbidden character as U+FFFD
     ["a non-image mediaType", { text: "x", pictures: [pic("a.md", { mediaType: "text/markdown" })] }, UnsupportedTypeError, "a.md"],
     ["bytes that are not that image", { text: "x", pictures: [pic("a.jpg", { mediaType: "image/jpeg" })] }, UnsupportedTypeError, "a.jpg"],
     ["an oversized picture", { text: "x", pictures: [pic("a.png"), pic("big.png", { body: new Uint8Array([...png(), ...new Uint8Array(100)]) })] }, ImageTooLargeError, "big.png"],
@@ -96,6 +96,14 @@ describe("postWithPictures", () => {
     expect(e).toBeInstanceOf(error as typeof Error);
     if (name) expect((e as Error).message).toMatch(new RegExp(`^attachment "${name}": `));
     else expect((e as Error).message).not.toMatch(/^attachment/);
+    expect(await hasFeed("f")).toBe(false);
+  });
+
+  test("a refused name is echoed without its control and text-direction characters", async () => {
+    const e = (await post({ text: "x", pictures: [pic("a.png"), pic("evil\u202egnp\u009b[31m.exe")] }).catch((e: Error) => e)) as Error;
+    expect(e).toBeInstanceOf(InvalidBodyError);
+    expect(e.message).toMatch(/^attachment "evil\ufffdgnp\ufffd\[31m\.exe": not a file name/);
+    expect(e.message).not.toMatch(/[\u009b\u202e]/);
     expect(await hasFeed("f")).toBe(false);
   });
 

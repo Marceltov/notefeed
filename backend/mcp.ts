@@ -14,7 +14,7 @@ import { parseMediaType } from "./note/types";
 import { logger } from "./log";
 import { checkLine, getNote, listNotes, MAX_NOTE_TITLE, type Note } from "./notes";
 import { verify } from "./oauth/tokens";
-import { isAttachmentName } from "../shared/links";
+import { isAttachmentName, safeName } from "../shared/links";
 import { TAG_RULE } from "./tags";
 import { deleteFeed, deleteNote, editContent, editMeta, postNote, postWithPictures, updateFeed } from "./posting";
 import { feedPath, imagePath, mcpResource, publicUrl, rssPath } from "./urls";
@@ -77,7 +77,7 @@ function server(h: Headers): McpServer {
         tags: z.array(z.string()).optional().describe(`Labels for the note, e.g. ["ci","deploy"]: ${TAG_RULE}. Not verified; readers see them.`),
         read_id: z.string().optional().describe("Only when this post creates the feed: its read id (3 to 64 characters of a-z, 0-9, - and _), random when left out. A short readable one is guessable. Fails if taken."),
         attachments: z
-          .array(z.object({ name: z.string().refine(isAttachmentName, "Not a file name: 1 to 200 characters, no / or \\, no control characters, no leading or trailing space").describe("What the markdown calls it: ![](name). Any single path segment (no / or \\; spaces allowed, written <name with spaces> or name%20with%20spaces in the markdown); unique"), type: z.string().describe(`The picture's media type: ${ACCEPTED_TYPES}`), data: z.string().describe("The picture's bytes, standard base64 (not URL-safe)"), alt: z.string().optional().describe("Alternative text (at most 500 characters, one line)") }))
+          .array(z.object({ name: z.string().refine(isAttachmentName, "Not a file name: 1 to 200 characters, no / or \\, no control or text-direction override characters, no leading or trailing space").describe("What the markdown calls it: ![](name). Any single path segment (no / or \\; spaces allowed, written <name with spaces> or name%20with%20spaces in the markdown); unique"), type: z.string().describe(`The picture's media type: ${ACCEPTED_TYPES}`), data: z.string().describe("The picture's bytes, standard base64 (not URL-safe)"), alt: z.string().optional().describe("Alternative text (at most 500 characters, one line)") }))
           .optional(),
       }),
       outputSchema: z.object({ id: z.string(), url: z.string(), feed_url: z.string(), read_url: z.string().nullable(), attachments: z.array(z.object({ id: z.string(), file: z.string(), url: z.string() })) }),
@@ -87,7 +87,7 @@ function server(h: Headers): McpServer {
       const pictures = attachments.map((a) => {
         const clean = a.data.replace(/\s/g, "");
         const body = Buffer.from(clean, "base64");
-        if (body.toString("base64").replace(/=+$/, "") !== clean.replace(/=+$/, "")) throw new InvalidBodyError(`attachment "${a.name}": data is not valid base64`);
+        if (body.toString("base64").replace(/=+$/, "") !== clean.replace(/=+$/, "")) throw new InvalidBodyError(`attachment "${safeName(a.name)}": data is not valid base64`);
         return { name: a.name, body, mediaType: a.type, alt: a.alt };
       });
       const { note, readId, pictures: stored } = await postWithPictures(feed, clientIp(h), async () => ({ text: markdown, pictures, title, tags, password, readId: read_id }), { password }, sender(h));

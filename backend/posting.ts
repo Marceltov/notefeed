@@ -2,7 +2,7 @@
 // caller's job (bearer vs. session cookie); everything after that is here, in this order.
 import { config } from "./config";
 import { idStamp } from "../shared/notes";
-import { isAttachmentName, MAX_ATTACHMENTS, placeImages } from "../shared/links";
+import { isAttachmentName, MAX_ATTACHMENTS, placeImages, safeName } from "../shared/links";
 import { FeedExistsError, FeedLimitError, ImageLimitError, ImageTooLargeError, InvalidBodyError, NotefeedError, NotFoundError, NoteLimitError, RateLimitedError, UnsupportedTypeError } from "./errors";
 import { type FeedAccess, checkFeedAccess, createProtected } from "./feedlock";
 import { type FeedSettings, checkSettings, getStoredSettings, saveSettings } from "./feedsettings";
@@ -153,13 +153,13 @@ export type PostBundle = { text?: string; pictures: Picture[]; title?: string; t
 const MARKDOWN_TYPE = "text/markdown";
 const IMAGE_TYPES = MEDIA_TYPES.filter((m) => m.mediaType.startsWith("image/")).map((m) => m.mediaType).join(", ");
 
-// Every check a picture gets before anything is stored; a refusal names it.
+// Every check a picture gets before anything is stored; a refusal names it (safeName: a refused name is not echoed as sent).
 function checkPictures(pictures: Picture[]): (Picture & { type: NoteType; ext: string })[] {
   if (pictures.length > MAX_ATTACHMENTS) throw new InvalidBodyError(`at most ${MAX_ATTACHMENTS} attachments`);
   const seen = new Set<string>();
   return pictures.map((p) => {
     try {
-      if (!isAttachmentName(p.name)) throw new InvalidBodyError("not a file name: 1 to 200 characters, no / or \\, no control characters, no leading or trailing space");
+      if (!isAttachmentName(p.name)) throw new InvalidBodyError("not a file name: 1 to 200 characters, no / or \\, no control or text-direction override characters, no leading or trailing space");
       if (seen.has(p.name)) throw new InvalidBodyError("the file name is given twice");
       seen.add(p.name);
       const parsed = parseMediaType(p.mediaType);
@@ -170,7 +170,7 @@ function checkPictures(pictures: Picture[]): (Picture & { type: NoteType; ext: s
       checkLine("alt", p.alt, MAX_ALT);
       return { ...p, type: parsed.type, ext: parsed.ext };
     } catch (e) {
-      if (e instanceof NotefeedError) e.message = `attachment "${p.name}": ${e.message}`;
+      if (e instanceof NotefeedError) e.message = `attachment "${safeName(p.name)}": ${e.message}`;
       throw e;
     }
   });

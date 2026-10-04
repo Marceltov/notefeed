@@ -6,6 +6,7 @@ import { deleteNoteFile, replaceNote, updateMeta, writeNote, listNoteFiles, read
 import { InvalidBodyError, UnsupportedTypeError } from "./errors";
 import { assertFeed, checkFeed, ensureFeed, forgetFeed } from "./feeds";
 import { sniffImage } from "../shared/images";
+import { FORBIDDEN_IN_NAME } from "../shared/links";
 import { ImageNote } from "./note/image";
 import { MarkdownNote } from "./note/markdown";
 import { Note } from "./note/note";
@@ -78,8 +79,8 @@ async function store(feed: string, { ext, content, meta }: NewNote, now: Date, w
   }
 }
 
-/** A file's original name as kept with the note: no control characters or slashes, trimmed, at most 200 characters. */
-export const cleanName = (name: string | undefined): string | undefined => (name ?? "").replace(/[\x00-\x1f\x7f/\\]/g, "").trim().slice(0, 200) || undefined;
+/** A file's original name as kept with the note: no control characters, text-direction overrides or slashes (FORBIDDEN_IN_NAME), trimmed, at most 200 characters. */
+export const cleanName = (name: string | undefined): string | undefined => (name ?? "").replace(new RegExp(FORBIDDEN_IN_NAME, "g"), "").trim().slice(0, 200) || undefined;
 
 export type NewNoteOptions = { sender?: string; tags?: string[]; title?: string; alt?: string; name?: string; wantedReadId?: string };
 

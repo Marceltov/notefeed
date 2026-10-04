@@ -12,9 +12,17 @@ export const absolutizeImages = (markdown: string, base: string): string =>
 /** How many pictures one note may be sent with. */
 export const MAX_ATTACHMENTS = 10;
 
-/** A name an attachment may have: one path segment of 1 to 200 characters, no `/`, `\`, control characters or leading/trailing space, not only dots. */
-export const isAttachmentName = (name: string): boolean =>
-  name.length >= 1 && name.length <= 200 && !/[/\\\u0000-\u001f\u007f]/.test(name) && name === name.trim() && !/^\.+$/.test(name);
+/**
+ * What no file name holds: control characters (C0, U+007F, C1: U+009B opens a terminal escape), the text-direction overrides, embeddings
+ * and isolates (U+202A to U+202E, U+2066 to U+2069: they let a name read as another), `/` and `\`. The one definition: not global, so `test` keeps no state.
+ */
+export const FORBIDDEN_IN_NAME = /[\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069/\\]/;
+
+/** A name as it may be shown in a message: each forbidden character as U+FFFD, at most 200 characters. */
+export const safeName = (name: string): string => name.replace(new RegExp(FORBIDDEN_IN_NAME, "g"), "\ufffd").slice(0, 200);
+
+/** A name an attachment may have: one path segment of 1 to 200 characters, none of FORBIDDEN_IN_NAME, no leading/trailing space, not only dots. */
+export const isAttachmentName = (name: string): boolean => name.length >= 1 && name.length <= 200 && !FORBIDDEN_IN_NAME.test(name) && name === name.trim() && !/^\.+$/.test(name);
 
 type MdNode = { type: string; children?: MdNode[]; position?: { start: { offset?: number }; end: { offset?: number } } };
 
