@@ -10,9 +10,9 @@ import { assertFeed, deleteFeed as removeWholeFeed, feedCount, hasFeed, isHeldBa
 import { capReached, rateLimit } from "./limits";
 import { logger } from "./log";
 import { MEDIA_TYPES } from "./note/media";
-import { type NoteType, parseMediaType, typeForExt } from "./note/types";
+import { type NoteType, parseMediaType } from "./note/types";
 import { checkTags } from "./tags";
-import { checkLine, checkMarkdown, countNotes, createNoteOf, getNote, hasImageNote, MAX_ALT, MAX_NOTE_TITLE, removeNote, replaceContent, changeMeta, type NewNoteOptions, type Note } from "./notes";
+import { checkLine, checkMarkdown, countNotes, createNoteOf, encoder, getNote, MARKDOWN, hasImageNote, MAX_ALT, MAX_NOTE_TITLE, removeNote, replaceContent, changeMeta, type NewNoteOptions, type Note } from "./notes";
 
 const log = logger("posting");
 
@@ -150,9 +150,7 @@ export type Picture = { name: string; body: Uint8Array; mediaType: string; alt?:
 // A post of a text and its pictures. No `text`: just the pictures, each with the title. `password` and `readId` as in PostInput.
 export type PostBundle = { text?: string; pictures: Picture[]; title?: string; tags?: string[]; password?: string; readId?: string };
 
-const MARKDOWN = typeForExt("md")!;
 const MARKDOWN_TYPE = "text/markdown";
-const encoder = new TextEncoder();
 const IMAGE_TYPES = MEDIA_TYPES.filter((m) => m.mediaType.startsWith("image/")).map((m) => m.mediaType).join(", ");
 
 // Every check a picture gets before anything is stored; a refusal names it.

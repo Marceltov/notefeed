@@ -56,12 +56,12 @@ function server(h: Headers): McpServer {
   const s = new McpServer({ name: "notefeed", version: "1.0.0" });
 
   // One file as a note: the type must be accepted and the bytes must be what it says (postNote checks that); a picture is size-limited.
-  const postBytes = async (feed: string, f: { type: string; data: string; title?: string; alt?: string; name?: string; tags?: string[] }, password: string | undefined, readId?: string) => {
+  const postBytes = async (feed: string, f: { type: string; data: string; title?: string; alt?: string; name?: string; tags?: string[] }, password: string | undefined) => {
     const parsed = parseMediaType(f.type);
     if (!parsed) throw new UnsupportedTypeError();
     const body = Buffer.from(f.data, "base64");
     if (parsed.type.name === "image" && body.length > config.maxImageBytes()) throw new ImageTooLargeError();
-    return postNote(feed, clientIp(h), async () => ({ body, mediaType: parsed.mediaType, title: f.title, alt: f.alt, name: f.name, tags: f.tags, readId }), { password }, sender(h));
+    return postNote(feed, clientIp(h), async () => ({ body, mediaType: parsed.mediaType, title: f.title, alt: f.alt, name: f.name, tags: f.tags }), { password }, sender(h));
   };
   const fileUrl = (readId: string | null, file: string) => (readId ? base + imagePath(readId, file) : "");
 

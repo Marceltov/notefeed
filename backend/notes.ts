@@ -101,8 +101,8 @@ export async function createNoteOf(feed: string, type: NoteType, ext: string, bo
   return { note: type.read({ id, ext, meta, createdAt: stampOf(id)!, size: body.length }, Buffer.from(body)), readId };
 }
 
-const MARKDOWN = typeForExt("md")!;
-const encoder = new TextEncoder();
+export const MARKDOWN = typeForExt("md")!;
+export const encoder = new TextEncoder();
 
 /** A markdown note from its text. */
 export async function createNote(feed: string, markdown: string, now = new Date(), sender?: string, tags: string[] = [], wantedReadId?: string, title?: string): Promise<{ note: MarkdownNote; readId: string | null }> {

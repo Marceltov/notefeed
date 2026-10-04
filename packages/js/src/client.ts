@@ -163,7 +163,7 @@ export class Client {
       ...(own.tags?.length && { "X-Note-Tags": own.tags.join(",") }),
       ...(own.readId && { "X-Read-Id": own.readId }),
     };
-    const created = await this.call(postNote({ client: this.api, path: { feed }, body: form as never, bodySerializer: (b: unknown) => b as FormData, headers, signal: AbortSignal.timeout(this.timeoutMs) }));
+    const created = await this.call(postNote({ client: this.api, path: { feed }, body: form as never, headers, signal: AbortSignal.timeout(this.timeoutMs) }));
     return { ...created, attachments: created.attachments ?? [] };
   }
 

@@ -56,8 +56,9 @@ export async function multipartBody(text: string | undefined, pictures: { token:
   return form;
 }
 
-// The generated client's options for a multipart body: sent as is, and no Content-Type, so fetch writes the boundary.
-export const multipart = (form: FormData) => ({ body: form as never, bodySerializer: (b: unknown) => b as FormData });
+// The generated client's options for a multipart body: postNote and editNote send their body as is (`bodySerializer: null` in
+// sdk.gen.ts); the caller sends no Content-Type, so fetch writes the boundary.
+export const multipart = (form: FormData) => ({ body: form as never });
 
 // Posts one image to the feed as a note of its own (the generated client; the server checks the bytes against the declared type) and returns the
 // note's id and file name, or the refusal's message. `password` is only for the post that creates a protected feed; `meta` is a title and tags to put on the picture. Shared by the
