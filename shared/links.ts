@@ -10,6 +10,9 @@ export const absolutizeImages = (markdown: string, base: string): string =>
 /** How many pictures one note may be sent with. */
 export const MAX_ATTACHMENTS = 10;
 
+/** The longest alt text, in characters (an emoji is one). */
+export const MAX_ALT = 500;
+
 // What no line of text (a title, an alt text, a name) holds: control characters (C0, U+007F, C1: U+009B opens a terminal escape), the line
 // and paragraph separators (U+2028, U+2029), and the text-direction overrides, embeddings and isolates (U+202A to U+202E, U+2066 to U+2069:
 // they let a text read as another). The marks U+200E, U+200F and U+061C and the joiners stay: right-to-left text and emoji need them.
