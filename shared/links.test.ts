@@ -102,3 +102,15 @@ test("placeImages changes a definition shared by an image and a link once, for b
 test("placeImages leaves a malformed percent destination as written and appends the picture", () => {
   expect(placeImages("![](100%zz.png)", one)).toBe("![](100%zz.png)\n\n![](F1.png)");
 });
+
+test("placeImages swaps only the first definition of a label: a later one is dead, left as written, and its picture is appended", () => {
+  const sent = new Map([["a.png", "F1.png"], ["b.png", "F2.png"]]);
+  expect(placeImages("![chart][l]\n\n[l]: a.png\n[l]: b.png", sent)).toBe("![chart][l]\n\n[l]: F1.png\n[l]: b.png\n\n![](F2.png)");
+  // a label is matched as markdown does: case and inner whitespace do not tell two apart
+  expect(placeImages("![chart][l]\n\n[L]: a.png\n[l]: b.png", sent)).toBe("![chart][l]\n\n[L]: F1.png\n[l]: b.png\n\n![](F2.png)");
+  expect(placeImages("![chart][my  pic]\n\n[My Pic]: a.png\n[my pic]: b.png", sent)).toBe("![chart][my  pic]\n\n[My Pic]: F1.png\n[my pic]: b.png\n\n![](F2.png)");
+  // the first definition wins even when it names no attachment
+  expect(placeImages("![chart][l]\n\n[l]: https://x.test/c.png\n[l]: b.png", new Map([["b.png", "F2.png"]]))).toBe("![chart][l]\n\n[l]: https://x.test/c.png\n[l]: b.png\n\n![](F2.png)");
+  // two labels, one definition each: both swapped
+  expect(placeImages("![x][l] ![y][m]\n\n[l]: a.png\n[m]: b.png", sent)).toBe("![x][l] ![y][m]\n\n[l]: F1.png\n[m]: F2.png");
+});

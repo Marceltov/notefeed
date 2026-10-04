@@ -24,7 +24,7 @@ export const safeName = (name: string): string => name.replace(new RegExp(FORBID
 /** A name an attachment may have: one path segment of 1 to 200 characters, none of FORBIDDEN_IN_NAME, no leading/trailing space, not only dots. */
 export const isAttachmentName = (name: string): boolean => name.length >= 1 && name.length <= 200 && !FORBIDDEN_IN_NAME.test(name) && name === name.trim() && !/^\.+$/.test(name);
 
-type MdNode = { type: string; children?: MdNode[]; position?: { start: { offset?: number }; end: { offset?: number } } };
+type MdNode = { type: string; identifier?: string; children?: MdNode[]; position?: { start: { offset?: number }; end: { offset?: number } } };
 
 const collect = (node: MdNode, out: MdNode[] = []): MdNode[] => {
   if (node.type === "image" || node.type === "definition") out.push(node);
@@ -76,7 +76,7 @@ function resolve(dest: string, sent: ReadonlyMap<string, string>): string | unde
 
 /**
  * Swaps the destination of each image and each link definition that refers to a key of `sent` (name → file name),
- * by parsing the markdown; every other byte stays. Each entry the text never referred to is appended as `![](file)`,
+ * by parsing the markdown; every other byte stays, a repeated label's later definition too (markdown ignores it). Each entry the text never referred to is appended as `![](file)`,
  * one paragraph each, after the trimmed text.
  */
 export function placeImages(markdown: string, sent: ReadonlyMap<string, string>): string {
@@ -84,9 +84,15 @@ export function placeImages(markdown: string, sent: ReadonlyMap<string, string>)
   // The parser drops a leading BOM, so its offsets would be one short: set it aside.
   if (markdown.startsWith("\uFEFF")) return "\uFEFF" + placeImages(markdown.slice(1), sent);
   const used = new Set<string>();
+  const labels = new Set<string>();
   let text = "";
   let at = 0;
   for (const node of collect(fromMarkdown(markdown) as MdNode)) {
+    // Markdown uses the first definition of a label (`identifier` is the label normalized) and ignores a later one: so does this.
+    if (node.type === "definition") {
+      if (labels.has(node.identifier ?? "")) continue;
+      labels.add(node.identifier ?? "");
+    }
     const range = destinationRange(markdown, node);
     if (!range) continue;
     const key = resolve(markdown.slice(range[0], range[1]).replace(/^<(.*)>$/s, "$1"), sent);
