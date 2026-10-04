@@ -2,7 +2,7 @@
 // nothing here validates them. turbopackIgnore on the fs calls stops the build from tracing the
 // whole repo (DATA_DIR is only known at runtime).
 import { join } from "node:path";
-import { config } from "../config";
+import { config } from "../../config";
 
 export const root = () => join(/*turbopackIgnore: true*/ config.dataDir());
 export const feedDir = (feed: string) => join(/*turbopackIgnore: true*/ config.dataDir(), feed);

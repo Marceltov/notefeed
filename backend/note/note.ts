@@ -1,7 +1,7 @@
 // The base of everything a feed lists: one content file plus its metadata (backend/data/notes.ts). A kind of note is a
 // subclass and one line in backend/note/types.ts; what is the same for all of them lives here.
 import { cleanLine } from "../../shared/links";
-import type { Meta } from "../data/notes";
+import type { Meta } from "../storage/types";
 import { mediaTypeOf } from "./media";
 
 /** What a note adds to its RSS item: raw markdown as the description, or a file as the enclosure (RSS 2.0 allows one per item). */

@@ -2,7 +2,10 @@ import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { beforeEach, expect, test } from "vitest";
-import { readSettings, writeSettings } from "./data/settings";
+import { storage } from "./storage";
+
+const readSettings = (feed: string) => storage().readSettings(feed);
+const writeSettings = (feed: string, s: Parameters<ReturnType<typeof storage>["writeSettings"]>[1]) => storage().writeSettings(feed, s);
 import { checkSettings, forReaders, getSettings } from "./feedsettings";
 import { mdNote } from "./note/testing";
 

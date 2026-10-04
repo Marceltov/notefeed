@@ -5,8 +5,8 @@
 import { createHmac, randomBytes } from "node:crypto";
 import { config } from "./config";
 import { createFeedDir, deleteFeedDir, listFeedDirs, readReadId, removeLeftovers, writeReadId } from "./data/feeds";
-import { isErrno } from "./data/fs";
-import { readHash } from "./data/password";
+import { isErrno } from "./storage/fs/fs";
+import { storage } from "./storage";
 import { loadOrCreateSecret, secretPath } from "./data/secret";
 import { InvalidBodyError, InvalidFeedError, NotFoundError, ReadIdTakenError, ReservedFeedError } from "./errors";
 import { logger } from "./log";
@@ -287,7 +287,7 @@ export async function reservedFeedProblems(): Promise<{ feed: string; problem: "
   const idx = await feedIndex();
   const found: { feed: string; problem: "unprotected" | "read_id" }[] = [];
   for (const feed of heldBack().filter((n) => idx.byFeed.has(n))) {
-    if ((await readHash(feed)) === null) found.push({ feed, problem: "unprotected" });
+    if ((await storage().readHash(feed)) === null) found.push({ feed, problem: "unprotected" });
     else if (idx.byFeed.get(feed) !== feed) found.push({ feed, problem: "read_id" });
   }
   return found;

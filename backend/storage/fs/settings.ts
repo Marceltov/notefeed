@@ -4,9 +4,8 @@
 import { randomBytes } from "node:crypto";
 import { readFile, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { feedDir, orMissing } from "./fs";
-
-export type Settings = { title: string; description: string; image: string; showSender: boolean };
+import { FeedGoneError, type Settings } from "../types";
+import { feedDir, isErrno, orMissing } from "./fs";
 
 const file = (feed: string) => join(feedDir(feed), ".feed.json");
 
@@ -30,6 +29,6 @@ export async function writeSettings(feed: string, s: Settings): Promise<void> {
     await rename(/*turbopackIgnore: true*/ tmp, file(feed));
   } catch (e) {
     await rm(/*turbopackIgnore: true*/ tmp, { force: true });
-    throw e;
+    throw isErrno(e, "ENOENT") ? new FeedGoneError() : e;
   }
 }

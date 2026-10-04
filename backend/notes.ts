@@ -1,16 +1,16 @@
-// Notes: validation, ids and reading them back. Storage itself is in data/notes.ts.
+// Notes: validation, ids and reading them back. Where they are kept is the storage backend's business (backend/storage).
 import { randomBytes } from "node:crypto";
 import { idStamp } from "../shared/notes";
-import { isErrno } from "./data/fs";
-import { deleteNoteFile, replaceNote, updateMeta, writeNote, listNoteFiles, readNote, type Meta } from "./data/notes";
 import { InvalidBodyError, UnsupportedTypeError } from "./errors";
 import { assertFeed, checkFeed, ensureFeed, forgetFeed } from "./feeds";
+import { storage } from "./storage";
+import { FeedGoneError, type Meta, type NoteRef } from "./storage/types";
 import { sniffImage } from "../shared/images";
 import { cleanName, FORBIDDEN_IN_TEXT, MAX_ALT } from "../shared/links";
 import { ImageNote } from "./note/image";
 import { MarkdownNote } from "./note/markdown";
 import { Note } from "./note/note";
-import { parseMediaType, typeForExt, type NoteType } from "./note/types";
+import { NOTE_TYPES, parseMediaType, typeForExt, type NoteType } from "./note/types";
 
 export { checkMarkdown, MAX_BYTES } from "./note/markdown";
 export { ImageNote, MarkdownNote, Note };
@@ -43,6 +43,9 @@ function uuidV7(now: Date): string {
 // `<stamp>-<uuid v7>`, which carry the time.
 const STAMP_RE = /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z-/;
 const ID_RE = /^[A-Za-z0-9_-]{1,128}$/;
+// The extensions that are notes, in the order a lookup tries them.
+const NOTE_EXTS = NOTE_TYPES.flatMap((t) => t.exts);
+const withContent = (ext: string) => typeForExt(ext)?.needsContent ?? false;
 
 export function isValidId(id: string): boolean {
   return ID_RE.test(id);
@@ -70,11 +73,11 @@ async function store(feed: string, { ext, content, meta }: NewNote, now: Date, w
   for (let retried = false; ; retried = true) {
     const readId = await ensureFeed(feed, wantedReadId);
     try {
-      return { id: await writeNote(feed, base, ext, content, meta), readId };
+      return { id: await storage().writeNote(feed, base, ext, content, meta), readId };
     } catch (e) {
-      // The listed feed's directory is gone (deleted since ensureFeed, or removed by hand): this is a new
+      // The listed feed is gone (deleted since ensureFeed, or its directory removed by hand): this is a new
       // feed. Once only: gone again means another delete, and that is an error.
-      if (retried || !isErrno(e, "ENOENT")) throw e;
+      if (retried || !(e instanceof FeedGoneError)) throw e;
       await forgetFeed(feed, readId);
     }
   }
@@ -117,36 +120,39 @@ export async function createImageNote(feed: string, bytes: Uint8Array, opts: New
   return { note: made.note as ImageNote, readId: made.readId };
 }
 
-async function noteIds(feed: string, typeName?: string): Promise<string[]> {
+async function noteRefs(feed: string, typeName?: string): Promise<NoteRef[]> {
   if (checkFeed(feed)) return [];
-  return (await listNoteFiles(feed)).filter((e) => { const type = typeForExt(e.ext); return type && (typeName === undefined || type.name === typeName) && isValidId(e.id); }).map((e) => e.id);
+  return (await storage().listNoteRefs(feed)).filter((e) => { const type = typeForExt(e.ext); return type && (typeName === undefined || type.name === typeName) && isValidId(e.id); });
 }
 
 // Newest first, ties by id. An id with a time is placed without reading anything; the others are looked up.
-async function newestFirst(feed: string, ids: string[]): Promise<string[]> {
+async function newestFirst(feed: string, refs: NoteRef[]): Promise<NoteRef[]> {
   const keyed = await Promise.all(
-    ids.map(async (id) => ({ id, at: (stampOf(id) ?? (await getNote(feed, id))?.createdAt)?.getTime() ?? 0 })), // gone since the listing: oldest
+    refs.map(async (ref) => ({ ref, at: (stampOf(ref.id) ?? (await readOf(feed, ref))?.createdAt)?.getTime() ?? 0 })), // gone since the listing: oldest
   );
-  return keyed.sort((a, b) => b.at - a.at || (a.id < b.id ? 1 : -1)).map((k) => k.id);
+  return keyed.sort((a, b) => b.at - a.at || (a.ref.id < b.ref.id ? 1 : -1)).map((k) => k.ref);
 }
 
 // `before` (a note id) pages backwards: the notes after it in that order. A `before` that is gone ends the list.
-// `tag`: only notes carrying it; the files are read newest first until `limit` match.
+// `tag`: only notes carrying it; newest first, the metadata of a chunk is read to choose and the notes themselves only for the
+// matches, until `limit` match.
 export async function listNotes(feed: string, limit = 50, before?: string, tag?: string, typeName?: string): Promise<Note[]> {
-  let ids = await newestFirst(feed, await noteIds(feed, typeName));
-  if (before !== undefined) ids = ids.slice(ids.indexOf(before) + 1 || ids.length);
-  const read = async (page: string[]) => (await Promise.all(page.map((id) => getNote(feed, id)))).filter((n) => n !== null); // null: deleted between readdir and read
-  if (tag === undefined) return read(ids.slice(0, limit));
-  // ponytail: a rare tag reads every note of the feed; a tag index would fix it if feeds get large.
+  let refs = await newestFirst(feed, await noteRefs(feed, typeName));
+  if (before !== undefined) refs = refs.slice(refs.findIndex((r) => r.id === before) + 1 || refs.length);
+  const read = async (page: NoteRef[]) => (await Promise.all(page.map((ref) => readOf(feed, ref)))).filter((n) => n !== null); // null: deleted between the listing and the read
+  if (tag === undefined) return read(refs.slice(0, limit));
+  // ponytail: a rare tag reads every sidecar of the feed; a tag index would fix it if feeds get large.
   const found: Note[] = [];
-  for (let i = 0; i < ids.length && found.length < limit; i += limit) {
-    found.push(...(await read(ids.slice(i, i + limit))).filter((n) => n.tags.includes(tag)));
+  for (let i = 0; i < refs.length && found.length < limit; i += limit) {
+    const chunk = refs.slice(i, i + limit);
+    const metas = await Promise.all(chunk.map((ref) => storage().readMeta(feed, ref)));
+    found.push(...(await read(chunk.filter((_, j) => metas[j]?.tags?.includes(tag)))));
   }
   return found.slice(0, limit);
 }
 
 export async function countNotes(feed: string, typeName?: string): Promise<number> {
-  return (await noteIds(feed, typeName)).length;
+  return (await noteRefs(feed, typeName)).length;
 }
 
 /** Whether `file` (`<id>.<ext>`) is an image note of this feed: the check before a title image points at it. */
@@ -156,12 +162,17 @@ export async function hasImageNote(feed: string, file: string): Promise<boolean>
   return note instanceof ImageNote && note.file === file;
 }
 
-export async function getNote(feed: string, id: string): Promise<Note | null> {
+// The note, found by trying `exts` (a lookup by id alone) or the one extension a listing already knows.
+async function readNoteAs(feed: string, id: string, exts: readonly string[]): Promise<Note | null> {
   if (checkFeed(feed) || !isValidId(id)) return null;
-  const stored = await readNote(feed, id, (ext) => typeForExt(ext)?.needsContent ?? false);
+  const stored = await storage().readNote(feed, id, exts, withContent);
   const type = stored && typeForExt(stored.ext);
   return stored && type ? type.read({ id, ext: stored.ext, meta: stored.meta, createdAt: createdAt(id, stored.meta, stored.mtime), size: stored.size }, stored.content) : null;
 }
+
+const readOf = (feed: string, ref: NoteRef) => readNoteAs(feed, ref.id, [ref.ext]);
+
+export const getNote = (feed: string, id: string): Promise<Note | null> => readNoteAs(feed, id, NOTE_EXTS);
 
 /**
  * Replaces a note's content with `body`, declared as `mediaType`. A note keeps its type, so the declared type must be the note's own
@@ -177,7 +188,7 @@ export async function replaceContent(feed: string, id: string, body: Uint8Array,
   const note = await getNote(feed, id);
   if (!note) return null;
   if (note.type !== parsed.mediaType) throw new UnsupportedTypeError(`this note is ${note.type}: send that Content-Type`);
-  return (await replaceNote(feed, id, body)) ? getNote(feed, id) : null;
+  return (await storage().replaceNote(feed, id, NOTE_EXTS, body)) ? getNote(feed, id) : null;
 }
 
 /** Sets the title and/or alt text of a note; "" removes one. At least one is needed; alt only for types that have it. null: no such note. */
@@ -190,9 +201,9 @@ export async function changeMeta(feed: string, id: string, edit: { title?: strin
   if (!note) return null;
   if (alt !== undefined && !typeForExt(note.ext)?.hasAlt) throw new InvalidBodyError("alt is for image notes");
   const patch = { ...(title !== undefined && { title }), ...(alt !== undefined && { alt }) };
-  return (await updateMeta(feed, id, patch)) ? getNote(feed, id) : null;
+  return (await storage().updateMeta(feed, id, NOTE_EXTS, patch)) ? getNote(feed, id) : null;
 }
 
 export async function removeNote(feed: string, id: string): Promise<boolean> {
-  return !checkFeed(feed) && isValidId(id) && (await deleteNoteFile(feed, id));
+  return !checkFeed(feed) && isValidId(id) && (await storage().deleteNote(feed, id, NOTE_EXTS));
 }

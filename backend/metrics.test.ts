@@ -2,7 +2,10 @@ import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { readFeedFile, writeNote } from "./data/notes";
+import { storage } from "./storage";
+
+const writeNote = (...a: Parameters<ReturnType<typeof storage>["writeNote"]>) => storage().writeNote(...a);
+const readFeedFile = (feed: string, name: string) => storage().readFile(feed, name);
 import { listNotes } from "./notes";
 import { countDir, countFile, measured, noteFeedSize, renderMetrics, resetMetricsForTest, sizeBucket, statusClass } from "./metrics";
 
@@ -96,12 +99,12 @@ test("reading a feed's notes reports its size and its directory and file reads t
   const root = await mkdtemp(join(tmpdir(), "notefeed-"));
   process.env.DATA_DIR = root;
   await mkdir(join(root, "f"));
-  for (const t of ["a", "b", "c"]) await writeNote("f", t, "md", t, {});
+  for (const t of ["a", "b", "c"]) await writeNote("f", `20260101T000000Z-${t}`, "md", t, {}); // ids with a time are placed without a read
   await measured("listNotes", () => listNotes("f", 50), () => 200);
   expect(await sample("notefeed_request_duration_seconds_count", { kind: "listNotes", feed_size: "lt10" })).toBe(1);
-  // The listing, then at least one more for each note read (readNote looks its file up by listing the folder): the cost #96 is about.
-  expect(await sample("notefeed_request_dir_reads_sum", { kind: "listNotes" })).toBeGreaterThanOrEqual(4);
-  expect(await sample("notefeed_request_file_reads_sum", { kind: "listNotes" })).toBeGreaterThanOrEqual(3);
+  // One listing of the folder, whatever the number of notes (#96: it used to be one more per note), and one read per note's text.
+  expect(await sample("notefeed_request_dir_reads_sum", { kind: "listNotes" })).toBe(1);
+  expect(await sample("notefeed_request_file_reads_sum", { kind: "listNotes" })).toBe(3);
 });
 
 test("a file of a feed read by name counts as one file read", async () => {

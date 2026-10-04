@@ -3,7 +3,7 @@ import { randomBytes } from "node:crypto";
 import { mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { logger } from "../log";
-import { feedDir, isErrno, orMissing, root } from "./fs";
+import { feedDir, isErrno, orMissing, root } from "../storage/fs/fs";
 
 const log = logger("feeds");
 

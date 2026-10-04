@@ -3,8 +3,8 @@
 import { createHmac, randomBytes, scrypt, timingSafeEqual, type ScryptOptions } from "node:crypto";
 import { promisify } from "node:util";
 import { PASSWORD_PATTERN, PASSWORD_RULE } from "../shared/password";
-import { isErrno } from "./data/fs";
-import { readHash, removeHash, writeHash } from "./data/password";
+import { storage } from "./storage";
+import { FeedGoneError } from "./storage/types";
 import { AuthError, FeedExistsError, InvalidBodyError, NotFoundError, TooManyAttemptsError } from "./errors";
 import { checkFeed, createProtectedFeed, secret } from "./feeds";
 import { authAttempt } from "./limits";
@@ -45,13 +45,13 @@ export async function verifyHash(p: string, hash: string): Promise<boolean> {
 }
 
 export async function protectedFeed(feed: string): Promise<boolean> {
-  return (await readHash(feed)) !== null;
+  return (await storage().readHash(feed)) !== null;
 }
 
 const cookieOf = (feed: string, hash: string) => createHmac("sha256", secret()).update(feed + hash).digest("hex");
 
 export async function cookieValue(feed: string): Promise<string | null> {
-  const hash = await readHash(feed);
+  const hash = await storage().readHash(feed);
   return hash === null ? null : cookieOf(feed, hash);
 }
 
@@ -77,7 +77,7 @@ async function checkPassword(password: string | undefined, hash: string, ip: str
 // Passes for a feed without a password. True when the feed has one and this access proved it; a bad or
 // stale cookie with no password beside it is, like no password, not a failed attempt.
 export async function checkFeedAccess(feed: string, access: FeedAccess, ip: string): Promise<boolean> {
-  const hash = await readHash(feed);
+  const hash = await storage().readHash(feed);
   if (hash === null) return false;
   if (!cookieUnlocks(feed, hash, access.cookie)) await checkPassword(access.password, hash, ip);
   return true;
@@ -86,13 +86,13 @@ export async function checkFeedAccess(feed: string, access: FeedAccess, ip: stri
 /** For the pages. open: the feed has no password; unlocked: the cookie is the valid one; locked: anything else. Counts no attempts. */
 export async function feedUnlocked(feed: string, cookie: string | undefined): Promise<"open" | "unlocked" | "locked"> {
   if (checkFeed(feed)) return "open"; // the page 404s on its own
-  const hash = await readHash(feed);
+  const hash = await storage().readHash(feed);
   if (hash === null) return "open";
   return cookieUnlocks(feed, hash, cookie) ? "unlocked" : "locked";
 }
 
 export async function unlock(feed: string, password: string, ip: string): Promise<string> {
-  const hash = await readHash(feed);
+  const hash = await storage().readHash(feed);
   if (hash === null) throw new AuthError();
   await checkPassword(password, hash, ip);
   return cookieOf(feed, hash);
@@ -105,7 +105,7 @@ export async function createProtected(feed: string, password: string, readId?: s
 }
 
 async function currentHash(feed: string, current: string, ip: string): Promise<string> {
-  const hash = await readHash(feed);
+  const hash = await storage().readHash(feed);
   if (hash === null) throw new FeedExistsError();
   await checkPassword(current, hash, ip);
   return hash;
@@ -119,9 +119,9 @@ export async function changePassword(feed: string, current: string, next: string
   // ponytail: checked, not locked. The write is by path after the scrypt wait, so a feed deleted and
   // re-created meanwhile (same name) gets this password; a per-feed lock would close it.
   try {
-    await writeHash(feed, hash);
+    await storage().writeHash(feed, hash);
   } catch (e) {
-    if (isErrno(e, "ENOENT")) throw new NotFoundError("no such feed"); // deleted meanwhile
+    if (e instanceof FeedGoneError) throw new NotFoundError("no such feed"); // deleted meanwhile
     throw e;
   }
   return cookieOf(feed, hash);
@@ -129,5 +129,5 @@ export async function changePassword(feed: string, current: string, next: string
 
 export async function removePassword(feed: string, current: string, ip: string): Promise<void> {
   await currentHash(feed, current, ip);
-  await removeHash(feed);
+  await storage().removeHash(feed);
 }

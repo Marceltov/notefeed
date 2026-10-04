@@ -3,7 +3,8 @@
 import { randomBytes } from "node:crypto";
 import { readFile, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { feedDir, orMissing } from "./fs";
+import { FeedGoneError } from "../types";
+import { feedDir, isErrno, orMissing } from "./fs";
 
 const file = (feed: string) => join(feedDir(feed), ".password");
 const tmpName = () => `.${randomBytes(6).toString("hex")}.tmp`;
@@ -20,7 +21,7 @@ export async function writeHash(feed: string, hash: string): Promise<void> {
     await rename(/*turbopackIgnore: true*/ tmp, file(feed));
   } catch (e) {
     await rm(/*turbopackIgnore: true*/ tmp, { force: true });
-    throw e;
+    throw isErrno(e, "ENOENT") ? new FeedGoneError() : e;
   }
 }
 

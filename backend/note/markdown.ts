@@ -1,6 +1,6 @@
 import { absolutizeImages, cleanLine } from "../../shared/links";
 import { extractTitle } from "../../shared/notes";
-import type { Meta } from "../data/notes";
+import type { Meta } from "../storage/types";
 import { EmptyNoteError, NoteTooLargeError } from "../errors";
 import { Note, type NoteInit } from "./note";
 

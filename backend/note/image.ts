@@ -1,5 +1,5 @@
 import { cleanLine, cleanName } from "../../shared/links";
-import type { Meta } from "../data/notes";
+import type { Meta } from "../storage/types";
 import { Note, type NoteInit } from "./note";
 
 // A standalone image: the content file is the picture, everything else is in the sidecar.

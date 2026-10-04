@@ -1,18 +1,43 @@
 // A note on disk is a content file `<DATA_DIR>/<feed>/<id>.<ext>`, stored exactly as posted, and an optional sidecar with
 // its metadata, `.<id>.<ext>.json` (the content file's complete name plus `.json`). Dot files are never notes. Which
 // extensions are notes is the caller's business (backend/note/types.ts); nothing here knows about types.
+// Only regular files count: a folder, a symbolic link or an unreadable entry in a feed folder is "not a note", never an error.
 import { randomBytes } from "node:crypto";
-import { link, lstat, readdir, readFile, rename, stat, unlink, writeFile } from "node:fs/promises";
+import type { Stats } from "node:fs";
+import { link, lstat, readdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { countDir, countFile, noteFeedSize } from "../metrics";
-import { feedDir, isErrno, orMissing } from "./fs";
-
-export type { Meta } from "../storage/types";
-import type { Meta } from "../storage/types";
+import { countDir, countFile, noteFeedSize } from "../../metrics";
+import { FeedGoneError, type Meta, type NoteRef, type StoredNote } from "../types";
+import { feedDir, isErrno } from "./fs";
 
 const NAME_RE = /^([A-Za-z0-9_-]{1,128})\.([A-Za-z0-9]{1,16})$/;
 const file = (feed: string, id: string, ext: string) => join(feedDir(feed), `${id}.${ext}`);
 const sidecar = (feed: string, id: string, ext: string) => join(feedDir(feed), `.${id}.${ext}.json`);
+
+// What a hand-placed oddity (a folder where a file should be, a link, a file we may not read) comes to: nothing there.
+const GONE = ["ENOENT", "ENOTDIR", "EISDIR", "EACCES", "ELOOP", "EPERM"];
+const isGone = (e: unknown) => GONE.some((c) => isErrno(e, c));
+
+async function regular(path: string): Promise<Stats | null> {
+  try {
+    const info = await lstat(/*turbopackIgnore: true*/ path);
+    return info.isFile() ? info : null;
+  } catch (e) {
+    if (isGone(e)) return null;
+    throw e;
+  }
+}
+
+async function readRegular(path: string): Promise<Buffer | null> {
+  if (!(await regular(path))) return null;
+  countFile();
+  try {
+    return await readFile(/*turbopackIgnore: true*/ path);
+  } catch (e) {
+    if (isGone(e)) return null;
+    throw e;
+  }
+}
 
 const STRINGS = ["title", "sender", "alt", "name", "created"] as const;
 // A sidecar may be hand-edited: only the known fields with the right type count; anything unreadable is no metadata.
@@ -36,9 +61,24 @@ function parseMeta(raw: string): Meta {
 
 const hasMeta = (meta: Meta) => Object.values(meta).some((v) => v !== undefined && !(Array.isArray(v) && v.length === 0));
 
+async function metaOf(feed: string, id: string, ext: string): Promise<Meta> {
+  const raw = await readRegular(sidecar(feed, id, ext));
+  return raw ? parseMeta(raw.toString("utf8")) : {};
+}
+
+// The content file of a note, whichever of the accepted extensions it has: a few lstat calls, never a listing of the folder.
+async function find(feed: string, id: string, exts: readonly string[]): Promise<{ ext: string; path: string; info: Stats } | null> {
+  for (const ext of exts) {
+    const path = file(feed, id, ext);
+    const info = await regular(path);
+    if (info) return { ext, path, info };
+  }
+  return null;
+}
+
 // Stores `content` as `<base>.<ext>`, or `<base>-2.<ext>`, `-3`, … if taken; returns the id used. The sidecar is written
 // first, so a listed note always has its metadata; a failure removes it again. The feed directory must exist (ensureFeed
-// creates it): a feed deleted meanwhile is ENOENT here, never a directory made again without its `.readid`.
+// creates it): a feed deleted meanwhile is FeedGoneError, never a directory made again without its `.readid`.
 // Never overwrites, never leaves a partial content file behind.
 export async function writeNote(feed: string, base: string, ext: string, content: string | Uint8Array, meta: Meta): Promise<string> {
   const dir = feedDir(feed);
@@ -65,17 +105,26 @@ export async function writeNote(feed: string, base: string, ext: string, content
         if (!isErrno(e, "EEXIST")) throw e;
       }
     }
+  } catch (e) {
+    throw isErrno(e, "ENOENT") ? new FeedGoneError() : e;
   } finally {
     await unlink(/*turbopackIgnore: true*/ tmp).catch(() => {});
   }
 }
 
-// Every file of the feed that could be a note: `<id>.<ext>`, no dot at the start, one dot. The caller filters by type.
-export async function listNoteFiles(feed: string): Promise<{ id: string; ext: string }[]> {
+// Every regular file of the feed that could be a note: `<id>.<ext>`, no dot at the start, one dot. The caller filters by type.
+export async function listNoteRefs(feed: string): Promise<NoteRef[]> {
   countDir();
-  const names = await orMissing(readdir(/*turbopackIgnore: true*/ feedDir(feed)), []);
-  const found = names.flatMap((f) => {
-    const m = NAME_RE.exec(f);
+  let entries;
+  try {
+    entries = await readdir(/*turbopackIgnore: true*/ feedDir(feed), { withFileTypes: true });
+  } catch (e) {
+    if (isGone(e)) return [];
+    throw e;
+  }
+  // Dirent.isFile() is false for a folder and for a symbolic link.
+  const found = entries.flatMap((e) => {
+    const m = e.isFile() ? NAME_RE.exec(e.name) : null;
     return m ? [{ id: m[1], ext: m[2] }] : [];
   });
   noteFeedSize(found.length);
@@ -84,41 +133,35 @@ export async function listNoteFiles(feed: string): Promise<{ id: string; ext: st
 
 // `withContent` says for an extension whether the bytes are wanted: a picture is only listed, so reading it whole would cost its size
 // for nothing; `content` is then empty and `size` (from the file system) is still right.
-export async function readNote(feed: string, id: string, withContent: (ext: string) => boolean = () => true): Promise<{ ext: string; content: Buffer; size: number; meta: Meta; mtime: Date } | null> {
-  const entry = (await listNoteFiles(feed)).find((e) => e.id === id);
-  if (!entry) return null;
-  const path = file(feed, id, entry.ext);
-  const info = await orMissing(stat(/*turbopackIgnore: true*/ path), null);
-  if (!info) return null;
-  if (withContent(entry.ext)) countFile();
-  const content = withContent(entry.ext) ? await orMissing(readFile(/*turbopackIgnore: true*/ path), null) : Buffer.alloc(0);
+export async function readNote(feed: string, id: string, exts: readonly string[], withContent: (ext: string) => boolean): Promise<StoredNote | null> {
+  const found = await find(feed, id, exts);
+  if (!found) return null;
+  const content = withContent(found.ext) ? await readRegular(found.path) : Buffer.alloc(0);
   if (content === null) return null;
-  countFile();
-  const raw = await orMissing(readFile(/*turbopackIgnore: true*/ sidecar(feed, id, entry.ext), "utf8"), "{}");
-  return { ext: entry.ext, content, size: info.size, meta: parseMeta(raw), mtime: info.mtime };
+  return { ext: found.ext, content, size: found.info.size, meta: await metaOf(feed, id, found.ext), mtime: found.info.mtime };
+}
+
+// Only the sidecar: what the tag filter needs. null when the note itself is not there.
+export async function readMeta(feed: string, ref: NoteRef): Promise<Meta | null> {
+  return (await regular(file(feed, ref.id, ref.ext))) ? metaOf(feed, ref.id, ref.ext) : null;
 }
 
 // A file of the feed by its name (`<stem>.<ext>`, no dot at the start): the bytes of a regular file, null for anything else. A
 // symbolic link is not followed, so nothing outside the feed folder is reachable.
 export async function readFeedFile(feed: string, name: string): Promise<Buffer | null> {
-  if (!NAME_RE.test(name)) return null;
-  const path = join(feedDir(feed), name);
-  const info = await orMissing(lstat(/*turbopackIgnore: true*/ path), null);
-  if (!info?.isFile()) return null;
-  countFile();
-  return orMissing(readFile(/*turbopackIgnore: true*/ path), null);
+  return NAME_RE.test(name) ? readRegular(join(feedDir(feed), name)) : null;
 }
 
 // Replaces an existing note's content atomically (temp file, then rename over it); the sidecar is not touched. False, and
 // nothing created, when there is no such note. ponytail: a delete landing between the lookup and the rename
 // brings the note back with the edit; a per-feed lock would close it.
-export async function replaceNote(feed: string, id: string, content: string | Uint8Array): Promise<boolean> {
-  const entry = (await listNoteFiles(feed)).find((e) => e.id === id);
-  if (!entry) return false;
+export async function replaceNote(feed: string, id: string, exts: readonly string[], content: string | Uint8Array): Promise<boolean> {
+  const found = await find(feed, id, exts);
+  if (!found) return false;
   const tmp = join(feedDir(feed), `.${randomBytes(6).toString("hex")}.tmp`);
   try {
     await writeFile(/*turbopackIgnore: true*/ tmp, content);
-    await rename(/*turbopackIgnore: true*/ tmp, file(feed, id, entry.ext));
+    await rename(/*turbopackIgnore: true*/ tmp, found.path);
     return true;
   } catch (e) {
     if (isErrno(e, "ENOENT")) return false; // the feed was deleted since the lookup
@@ -130,16 +173,23 @@ export async function replaceNote(feed: string, id: string, content: string | Ui
 
 // Changes some fields of an existing note's metadata: a string or list sets one, null (or an empty value) removes it. The sidecar is
 // replaced atomically (temp file, then rename) and removed when nothing is left. False when there is no such note.
-export async function updateMeta(feed: string, id: string, patch: { [K in keyof Meta]?: Meta[K] | null }): Promise<boolean> {
-  const note = await readNote(feed, id, () => false);
-  if (!note) return false;
-  const merged: Record<string, unknown> = { ...note.meta };
+export async function updateMeta(feed: string, id: string, exts: readonly string[], patch: { [K in keyof Meta]?: Meta[K] | null }): Promise<boolean> {
+  const found = await find(feed, id, exts);
+  if (!found) return false;
+  const merged: Record<string, unknown> = { ...(await metaOf(feed, id, found.ext)) };
   for (const [k, v] of Object.entries(patch)) {
     if (v === null || v === undefined || v === "" || (Array.isArray(v) && v.length === 0)) delete merged[k];
     else merged[k] = v;
   }
-  const path = sidecar(feed, id, note.ext);
-  if (!hasMeta(merged as Meta)) return orMissing(unlink(/*turbopackIgnore: true*/ path).then(() => true), true);
+  const path = sidecar(feed, id, found.ext);
+  if (!hasMeta(merged as Meta)) {
+    try {
+      await unlink(/*turbopackIgnore: true*/ path);
+    } catch (e) {
+      if (!isErrno(e, "ENOENT")) throw e;
+    }
+    return true;
+  }
   const tmp = join(feedDir(feed), `.${randomBytes(6).toString("hex")}.tmp`);
   try {
     await writeFile(/*turbopackIgnore: true*/ tmp, JSON.stringify(merged));
@@ -154,10 +204,18 @@ export async function updateMeta(feed: string, id: string, patch: { [K in keyof 
 }
 
 // Content first, then the sidecar: a sidecar left behind is ignored, content without its metadata would be shown bare.
-export async function deleteNoteFile(feed: string, id: string): Promise<boolean> {
-  const entry = (await listNoteFiles(feed)).find((e) => e.id === id);
-  if (!entry) return false;
-  const gone = await orMissing(unlink(/*turbopackIgnore: true*/ file(feed, id, entry.ext)).then(() => true), false);
-  await orMissing(unlink(/*turbopackIgnore: true*/ sidecar(feed, id, entry.ext)), undefined);
+export async function deleteNote(feed: string, id: string, exts: readonly string[]): Promise<boolean> {
+  const found = await find(feed, id, exts);
+  if (!found) return false;
+  let gone = true;
+  try {
+    await unlink(/*turbopackIgnore: true*/ found.path);
+  } catch (e) {
+    if (!isErrno(e, "ENOENT")) throw e;
+    gone = false;
+  }
+  await unlink(/*turbopackIgnore: true*/ sidecar(feed, id, found.ext)).catch((e) => {
+    if (!isErrno(e, "ENOENT")) throw e;
+  });
   return gone;
 }
