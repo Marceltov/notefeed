@@ -4,6 +4,7 @@
 import { randomBytes } from "node:crypto";
 import { link, lstat, readdir, readFile, rename, stat, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { countDir, countFile, noteFeedSize } from "../metrics";
 import { feedDir, isErrno, orMissing } from "./fs";
 
 export type Meta = { title?: string; sender?: string; tags?: string[]; alt?: string; name?: string; created?: string };
@@ -70,11 +71,14 @@ export async function writeNote(feed: string, base: string, ext: string, content
 
 // Every file of the feed that could be a note: `<id>.<ext>`, no dot at the start, one dot. The caller filters by type.
 export async function listNoteFiles(feed: string): Promise<{ id: string; ext: string }[]> {
+  countDir();
   const names = await orMissing(readdir(/*turbopackIgnore: true*/ feedDir(feed)), []);
-  return names.flatMap((f) => {
+  const found = names.flatMap((f) => {
     const m = NAME_RE.exec(f);
     return m ? [{ id: m[1], ext: m[2] }] : [];
   });
+  noteFeedSize(found.length);
+  return found;
 }
 
 // `withContent` says for an extension whether the bytes are wanted: a picture is only listed, so reading it whole would cost its size
@@ -85,8 +89,10 @@ export async function readNote(feed: string, id: string, withContent: (ext: stri
   const path = file(feed, id, entry.ext);
   const info = await orMissing(stat(/*turbopackIgnore: true*/ path), null);
   if (!info) return null;
+  if (withContent(entry.ext)) countFile();
   const content = withContent(entry.ext) ? await orMissing(readFile(/*turbopackIgnore: true*/ path), null) : Buffer.alloc(0);
   if (content === null) return null;
+  countFile();
   const raw = await orMissing(readFile(/*turbopackIgnore: true*/ sidecar(feed, id, entry.ext), "utf8"), "{}");
   return { ext: entry.ext, content, size: info.size, meta: parseMeta(raw), mtime: info.mtime };
 }
@@ -97,7 +103,9 @@ export async function readFeedFile(feed: string, name: string): Promise<Buffer |
   if (!NAME_RE.test(name)) return null;
   const path = join(feedDir(feed), name);
   const info = await orMissing(lstat(/*turbopackIgnore: true*/ path), null);
-  return info?.isFile() ? orMissing(readFile(/*turbopackIgnore: true*/ path), null) : null;
+  if (!info?.isFile()) return null;
+  countFile();
+  return orMissing(readFile(/*turbopackIgnore: true*/ path), null);
 }
 
 // Replaces an existing note's content atomically (temp file, then rename over it); the sidecar is not touched. False, and
