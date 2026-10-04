@@ -218,7 +218,7 @@ class Client:
         note, `title` goes on every picture, and the result is the first picture's `Created` (with `.attachments` all of them). `tags`
         label every note; `alt` and `name` are not allowed with attachments (use `Attachment.alt`). Checked here, before anything
         is sent (ConfigError): a name given twice, an attachment that is not a picture, content that is not markdown, `alt` or `name`
-        with attachments. What a name may be is the server's rule (docs/posting.md, "Posting a note with its pictures"): a name it refuses
+        with attachments. What a name may be is the server's rule (docs/using/pictures.md, "Posting a note with its pictures"): a name it refuses
         raises InvalidRequestError, `attachment "<name>": ...`. The server posts all or nothing: a refusal posts no note."""
         if not attachments:
             if content is None:

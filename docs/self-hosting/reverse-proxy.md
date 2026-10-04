@@ -1,6 +1,6 @@
 # Reverse proxy
 
-To put notefeed on the internet, run it behind a reverse proxy that handles HTTPS. Decide first whether it's open or locked (see [Configuration](configuration.md#open-or-locked)): open, anyone can post to a feed whose name they know; locked with `NOTEFEED_PASSWORD`, only you can post, and read links stay public either way.
+To put notefeed on the internet, run it behind a reverse proxy that handles HTTPS. Decide first whether it's open or locked (see [Concepts](../get-started/concepts.md#open-or-locked)): open, anyone can post to a feed whose name they know; locked with `NOTEFEED_PASSWORD`, only you can post, and read links stay public either way.
 
 On a public instance, always set these:
 
@@ -43,4 +43,4 @@ Any proxy works if it:
 If you can't control `Host` and `X-Forwarded-Host` (for example with a CDN in front), `PUBLIC_URL` covers the links. If the proxy doesn't set `X-Forwarded-For`, leave `NOTEFEED_TRUST_PROXY` unset and accept the shared rate limit. notefeed then also ignores `X-Forwarded-Proto` and `X-Forwarded-Host`, so set `PUBLIC_URL`.
 
 !!! warning "Don't put forward auth in front"
-    A login gate such as Authentik forward auth in front of notefeed would block feed readers and scripts. Use `NOTEFEED_PASSWORD` instead: it locks posting and the web UI and leaves read links open. If you want people to log in through your provider, use [sign-in](identity.md) rather than a gate: it keeps read links, RSS and scripts working.
+    A login gate such as Authentik forward auth in front of notefeed would block feed readers and scripts. Use `NOTEFEED_PASSWORD` instead: it locks posting and the web UI and leaves read links open. If you want people to log in through your provider, use [sign-in](sign-in/index.md) rather than a gate: it keeps read links, RSS and scripts working.

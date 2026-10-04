@@ -2,7 +2,7 @@
 // cookie (nf_session), the UI's password session. Optional sign-in (backend/oidc) gives a signed nf_identity cookie
 // naming the person. Either one locks the instance; with neither set it is open and every check passes.
 // ponytail: the session is HMAC(password, constant): no expiry, logout only drops the browser's copy;
-// a leaked cookie works until the password changes (see docs/configuration.md). Add an expiry to the signed value if that matters.
+// a leaked cookie works until the password changes (see docs/self-hosting/access.md). Add an expiry to the signed value if that matters.
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import { config } from "./config";
 import { AuthError, TooManyAttemptsError } from "./errors";

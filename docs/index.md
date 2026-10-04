@@ -7,31 +7,15 @@ It exists because dashboards like [Glance](https://github.com/glanceapp/glance) 
 ![A notefeed feed page: a header with read-only, RSS and settings buttons, a compose box, and notes grouped by day](assets/screenshot-light.png#only-light)
 ![A notefeed feed page: a header with read-only, RSS and settings buttons, a compose box, and notes grouped by day](assets/screenshot-dark.png#only-dark)
 
-notefeed is private by default and stores nothing about a person. [Sign-in with a verified sender](identity.md) is opt-in.
-
-## How feeds work
-
-notefeed works like [ntfy](https://ntfy.sh): there are no accounts and nothing to set up. A feed is a name, such as `homelab-7f3k2q9x4m8wz`. Posting to `/<name>` creates the feed on its first note, and `/<name>` in a browser shows it.
-
-Every feed also has a **read link**, `/r/<read id>/feed.xml`. It serves the feed as RSS, shows none of the feed's name (a [reserved feed](configuration.md#reserved-feeds) such as `news` is the exception: its read id is its name), and can't post. That's the link to give to feed readers, dashboards and other people.
-
-!!! warning "Pick a hard-to-guess name"
-    The feed name is the key: anyone who knows it can read the feed and post to it. Use something like `homelab-7f3k2q9x4m8wz`, not `homelab`. Share read access with the [read link](feed.md), never the name.
-
-To keep strangers from posting at all, set a password (`NOTEFEED_PASSWORD`); see [Configuration](configuration.md#the-password). To protect one feed, give it its own password when you create it: see [Posting notes](posting.md#a-feed-with-its-own-password).
+notefeed is private by default and stores nothing about a person. [Sign-in with a verified sender](self-hosting/sign-in/index.md) is opt-in.
 
 ## Hosted or self-hosted
 
-A hosted instance runs at [notefeed.me](https://notefeed.me). To run your own, follow the [Quick start](quick-start.md).
+A hosted instance runs at [notefeed.me](https://notefeed.me). To run your own, follow the [Quick start](get-started/quick-start.md).
 
 ## Where to go next
 
-- [Quick start](quick-start.md): run notefeed with Docker Compose.
-- [Posting notes](posting.md): the API, accepted formats, errors and script examples.
-- [Client libraries](clients.md): Python and Node packages, and the `notefeed` command.
-- [MCP](mcp.md): letting Claude and other AI assistants post and read notes.
-- [Web UI](web-ui.md): the start page, feed pages and writing notes by hand.
-- [Read links and RSS](feed.md): hooking notefeed up to Glance, Dynacat and other readers.
-- [Configuration](configuration.md): every setting, the password, rate limits and caps.
-- [Reverse proxy](reverse-proxy.md): putting notefeed on the internet behind Caddy.
-- [Operations](operations.md): feed folders, upgrades, backups and deleting notes and feeds.
+- **Get started:** [Quick start](get-started/quick-start.md) runs notefeed with Docker Compose; [Concepts](get-started/concepts.md) explains feeds, names and read links.
+- **Using notefeed:** the [web UI](using/web-ui.md), [posting notes](using/posting.md), [pictures](using/pictures.md), [feeds](using/feeds.md) and how to [read them back](using/read-links.md) in Glance, Dynacat and other readers.
+- **Integrations:** [client libraries](integrations/clients.md) and the [command line](integrations/cli.md), the [REST API](integrations/api.md) and [MCP](integrations/mcp.md) for AI assistants.
+- **Self-hosting:** [configuration](self-hosting/configuration.md), [passwords and access](self-hosting/access.md), a [reverse proxy](self-hosting/reverse-proxy.md), [storage](self-hosting/storage.md), [backups](self-hosting/backups.md), [metrics](self-hosting/metrics.md) and [logs](self-hosting/logs.md).
