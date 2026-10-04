@@ -126,7 +126,7 @@ test.each(["/r/x/feed.xml", "/login", "/_next/static/x.js", "/api/v1/feeds/backu
   expect(isNext(proxy(req(p)))).toBe(true);
 });
 
-test.each(["/mcp", "/oauth/authorize?x=1", "/oauth/token", "/.well-known/oauth-authorization-server", "/.well-known/oauth-protected-resource/mcp"])("locked: %s is not sent to /login", (p) => {
+test.each(["/mcp", "/metrics", "/oauth/authorize?x=1", "/oauth/token", "/.well-known/oauth-authorization-server", "/.well-known/oauth-protected-resource/mcp"])("locked: %s is not sent to /login", (p) => {
   process.env.NOTEFEED_PASSWORD = "pw";
   expect(isNext(proxy(req(p)))).toBe(true);
 });
@@ -155,6 +155,12 @@ test("POST /mcp is not rewritten and passes (open instance)", () => {
 test("POST /mcp is not rewritten and passes (locked instance)", () => {
   process.env.NOTEFEED_PASSWORD = "pw";
   const res = proxy(req("/mcp", { method: "POST" }));
+  expect(rewrite(res)).toBeNull();
+  expect(isNext(res)).toBe(true);
+});
+
+test("POST /metrics is not rewritten to a feed's notes", () => {
+  const res = proxy(req("/metrics", { method: "POST" }));
   expect(rewrite(res)).toBeNull();
   expect(isNext(res)).toBe(true);
 });

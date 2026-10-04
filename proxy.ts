@@ -10,7 +10,7 @@ const ONE_SEGMENT = /^\/([^/]+)\/?$/;
 // never headers: the same rule a reverse proxy would apply if the backend moved out.
 function postTarget(pathname: string): string | null {
   const seg = ONE_SEGMENT.exec(pathname)?.[1];
-  if (seg === undefined || seg === "logout" || seg === "mcp") return null; // /logout and /mcp are route handlers themselves
+  if (seg === undefined || seg === "logout" || seg === "mcp" || seg === "metrics") return null; // /logout, /mcp and /metrics are route handlers themselves
   return seg === "login" ? "/api/login" : `/api/v1/feeds/${seg}/notes`; // reserved names get the handler's 400
 }
 
@@ -37,6 +37,7 @@ export function proxy(req: NextRequest) {
   const exempt =
     pathname === "/login" ||
     pathname === "/mcp" ||
+    pathname === "/metrics" ||
     pathname === "/privacy" ||
     pathname === "/imprint" ||
     /^\/(r|_next|api|oauth|\.well-known)\//.test(pathname) ||

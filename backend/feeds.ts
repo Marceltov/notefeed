@@ -19,7 +19,7 @@ export const READ_ID_RE = /^[A-Za-z0-9_-]{3,64}$/; // random ones are 22 charact
 export const CUSTOM_READ_ID_RE = /^[a-z0-9_-]{3,64}$/; // the ones people choose
 // Names that collide with routes. "robots.txt" can't match FEED_RE; listed anyway.
 export const RESERVED_FEEDS: ReadonlySet<string> = new Set([
-  "r", "api", "login", "logout", "mcp", "oauth", "n", "_next", "static", "robots.txt", "health",
+  "r", "api", "login", "logout", "mcp", "metrics", "oauth", "n", "_next", "static", "robots.txt", "health",
 ]);
 
 // Names kept for the operator (announcements and the like), only those in NOTEFEED_RESERVED_FEEDS. Unlike RESERVED_FEEDS
