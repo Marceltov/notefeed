@@ -47,7 +47,8 @@ export interface Storage {
   createFeed(feed: string, readId: string, hash?: string): Promise<{ created: boolean }>;
   /** The feed with everything in it. False when there is no such feed. */
   deleteFeed(feed: string): Promise<boolean>;
-  /** For a writer that found a listed feed gone: drops what is left of it, unless the feed was made anew (`readId` says which). */
+  /** For a writer that found a listed feed gone: drops what is left of its entry, unless the feed was made anew (`readId` says which).
+   *  Only the file system has such leftovers; a database backend does nothing, its rows are the truth and are never dropped here. */
   forgetFeed(feed: string, readId: string | null): Promise<void>;
   /** Throws NotFoundError (no such feed) or ReadIdTakenError. */
   setReadId(feed: string, readId: string): Promise<void>;

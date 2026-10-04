@@ -4,6 +4,7 @@
 import { randomBytes } from "node:crypto";
 import { readFile, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { parseSettings, serializeSettings } from "../settings";
 import { FeedGoneError, type Settings } from "../types";
 import { feedDir, isErrno, orMissing } from "./fs";
 
@@ -11,12 +12,7 @@ const file = (feed: string) => join(feedDir(feed), ".feed.json");
 
 export async function readSettings(feed: string): Promise<Settings> {
   const text = await orMissing(readFile(/*turbopackIgnore: true*/ file(feed), "utf8"), null);
-  try {
-    const j = JSON.parse(text ?? "");
-    return { title: typeof j.title === "string" ? j.title : "", description: typeof j.description === "string" ? j.description : "", image: typeof j.image === "string" ? j.image : "", showSender: j.showSender !== false };
-  } catch {
-    return { title: "", description: "", image: "", showSender: true };
-  }
+  return parseSettings(text);
 }
 
 // Temp file + rename: a crash leaves the old settings or the new ones. Never creates the directory: a feed
@@ -24,8 +20,7 @@ export async function readSettings(feed: string): Promise<Settings> {
 export async function writeSettings(feed: string, s: Settings): Promise<void> {
   const tmp = join(feedDir(feed), `.${randomBytes(6).toString("hex")}.tmp`);
   try {
-    const { showSender, ...rest } = s;
-    await writeFile(/*turbopackIgnore: true*/ tmp, JSON.stringify(showSender ? rest : s));
+    await writeFile(/*turbopackIgnore: true*/ tmp, serializeSettings(s));
     await rename(/*turbopackIgnore: true*/ tmp, file(feed));
   } catch (e) {
     await rm(/*turbopackIgnore: true*/ tmp, { force: true });

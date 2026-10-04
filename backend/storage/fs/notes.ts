@@ -7,6 +7,7 @@ import type { Stats } from "node:fs";
 import { link, lstat, readdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { countDir, countFile, noteFeedSize } from "../../metrics";
+import { applyPatch, hasMeta, parseMeta } from "../meta";
 import { FeedGoneError, type Meta, type NoteRef, type StoredNote } from "../types";
 import { feedDir, isErrno } from "./fs";
 
@@ -38,28 +39,6 @@ async function readRegular(path: string): Promise<Buffer | null> {
     throw e;
   }
 }
-
-const STRINGS = ["title", "sender", "alt", "name", "created"] as const;
-// A sidecar may be hand-edited: only the known fields with the right type count; anything unreadable is no metadata.
-function parseMeta(raw: string): Meta {
-  let json: unknown;
-  try {
-    json = JSON.parse(raw);
-  } catch {
-    return {};
-  }
-  if (typeof json !== "object" || json === null || Array.isArray(json)) return {};
-  const o = json as Record<string, unknown>;
-  const meta: Meta = {};
-  for (const k of STRINGS) if (typeof o[k] === "string") meta[k] = o[k];
-  if (Array.isArray(o.tags)) {
-    const tags = o.tags.filter((t): t is string => typeof t === "string");
-    if (tags.length) meta.tags = tags;
-  }
-  return meta;
-}
-
-const hasMeta = (meta: Meta) => Object.values(meta).some((v) => v !== undefined && !(Array.isArray(v) && v.length === 0));
 
 async function metaOf(feed: string, id: string, ext: string): Promise<Meta> {
   const raw = await readRegular(sidecar(feed, id, ext));
@@ -176,13 +155,9 @@ export async function replaceNote(feed: string, id: string, exts: readonly strin
 export async function updateMeta(feed: string, id: string, exts: readonly string[], patch: { [K in keyof Meta]?: Meta[K] | null }): Promise<boolean> {
   const found = await find(feed, id, exts);
   if (!found) return false;
-  const merged: Record<string, unknown> = { ...(await metaOf(feed, id, found.ext)) };
-  for (const [k, v] of Object.entries(patch)) {
-    if (v === null || v === undefined || v === "" || (Array.isArray(v) && v.length === 0)) delete merged[k];
-    else merged[k] = v;
-  }
+  const merged = applyPatch(await metaOf(feed, id, found.ext), patch);
   const path = sidecar(feed, id, found.ext);
-  if (!hasMeta(merged as Meta)) {
+  if (!hasMeta(merged)) {
     try {
       await unlink(/*turbopackIgnore: true*/ path);
     } catch (e) {

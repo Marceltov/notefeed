@@ -216,11 +216,11 @@ export function describeStorage(name: string, make: () => Promise<Harness>): voi
         await s.writeNote(name, "a", "md", "x", {});
         expect(await s.listNoteRefs(name)).toEqual([{ id: "a", ext: "md" }]);
       });
-      t("forgetFeed drops a feed whose storage is gone, unless it was made anew", async ({ storage: s }) => {
+      t("forgetFeed never removes a feed that is still there under another id", async ({ storage: s }) => {
+        await s.writeNote("f", "a", "md", "x", {});
         await s.forgetFeed("f", "not-its-id");
         expect(await s.feedReadId("f")).toBe("rid-f");
-        await s.forgetFeed("f", "rid-f");
-        expect(await s.feedReadId("f")).toBeUndefined();
+        expect(await s.listNoteRefs("f")).toEqual([{ id: "a", ext: "md" }]);
       });
     });
   });
