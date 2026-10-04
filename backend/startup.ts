@@ -1,7 +1,8 @@
 // The startup line and what is wrong with the configuration, logged once when the server starts
 // (instrumentation.ts). Names of variables only, never their values.
 import { config, LOG_LEVELS } from "./config";
-import { reservedFeedProblems } from "./feeds";
+import { listFeedDirs } from "./data/feeds";
+import { reservedFeedProblems, RESERVED_FEEDS } from "./feeds";
 import { logger } from "./log";
 import { missingVars, providers } from "./oidc/config";
 
@@ -54,6 +55,15 @@ export async function reservedFeedWarnings(): Promise<Warning[]> {
   ]);
 }
 
+// A feed folder that predates a route name notefeed reserves (like `metrics`, which became the scrape route) can no longer be opened
+// by name. The names are notefeed's own fixed ones, not a user's feed names, so they may be logged.
+export async function reservedFolderWarnings(): Promise<Warning[]> {
+  const feeds = (await listFeedDirs()).filter((n) => RESERVED_FEEDS.has(n)).sort();
+  return feeds.length
+    ? [["feeds", "a feed folder is named like one of notefeed's routes; it cannot be opened by name", { feeds, hint: "rename its folder in DATA_DIR to a name that is not reserved, and restart" }]]
+    : [];
+}
+
 // Never throws: a failure here must not keep the server from starting.
 export async function logStartup(): Promise<void> {
   const warn = (warnings: Warning[]) => warnings.forEach(([component, msg, f]) => logger(component).warn(f, msg));
@@ -61,6 +71,7 @@ export async function logStartup(): Promise<void> {
     const { fields, warnings } = startupReport();
     logger("startup").info(fields, "notefeed started");
     warn(warnings);
+    warn(await reservedFolderWarnings());
     warn(await reservedFeedWarnings()); // loads the feed index, which creates missing reserved feeds
   } catch (e) {
     try {

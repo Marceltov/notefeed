@@ -6,7 +6,7 @@ import { hashPassword } from "./feedlock";
 import { readIdOf, reservedFeedProblems, resetFeedsForTests } from "./feeds";
 import { logsOf, logTo } from "./log";
 import { createNote } from "./notes";
-import { logStartup, reservedFeedWarnings, startupReport } from "./startup";
+import { logStartup, reservedFeedWarnings, reservedFolderWarnings, startupReport } from "./startup";
 
 let dir: string;
 beforeEach(async () => {
@@ -119,4 +119,13 @@ test("without NOTEFEED_RESERVED_PASSWORD there is nothing to check", async () =>
   await createNote("news", "# x");
   stub({ NOTEFEED_RESERVED_FEEDS: "news", NOTEFEED_RESERVED_PASSWORD: "" });
   expect(await reservedFeedProblems()).toEqual([]);
+});
+
+test("a folder named like one of notefeed's own routes is warned about, with its name; ordinary names are not", async () => {
+  expect(await reservedFolderWarnings()).toEqual([]);
+  for (const n of ["metrics", "health", "ordinary"]) await mkdir(join(dir, n));
+  const hint = "rename its folder in DATA_DIR to a name that is not reserved, and restart";
+  expect(await reservedFolderWarnings()).toEqual([["feeds", "a feed folder is named like one of notefeed's routes; it cannot be opened by name", { feeds: ["health", "metrics"], hint }]]);
+  const logs = await logsOf(logStartup);
+  expect(logs.filter((l) => l.component === "feeds")).toEqual([{ level: "warn", component: "feeds", msg: "a feed folder is named like one of notefeed's routes; it cannot be opened by name", feeds: ["health", "metrics"], hint }]);
 });

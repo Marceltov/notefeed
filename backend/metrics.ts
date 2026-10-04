@@ -39,12 +39,10 @@ export async function renderMetrics(): Promise<{ contentType: string; body: stri
   return { contentType: register.contentType, body: await register.metrics() };
 }
 
-/** Tests only: drops the registry (and stops its default collectors), so the next use starts empty. */
+/** Tests only: every sample back to its start. The registry stays: its default collectors cannot be stopped, so a new one would leak them. */
 export function resetMetricsForTest(): void {
-  const g = globalThis as Record<symbol, unknown>;
-  const key = Symbol.for("notefeed.metrics");
-  (g[key] as Metrics | undefined)?.register.clear();
-  delete g[key];
+  const m = metrics();
+  for (const metric of [m.duration, m.dirs, m.files, m.parse, m.timeouts, m.waiting]) metric.reset();
 }
 
 export type FeedSize = "none" | "lt10" | "lt100" | "lt1000" | "gte1000";
