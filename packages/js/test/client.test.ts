@@ -481,7 +481,7 @@ describe("post with attachments", () => {
   });
 
   test("the name rule is the server's: a name it refuses is sent, and surfaces as its InvalidRequestError", async () => {
-    const message = 'attachment "..": not a file name: 1 to 200 characters, no / or \\, no control or text-direction override characters, no leading or trailing space';
+    const message = 'attachment "..": not a file name: 1 to 200 characters, no / or \\, no control or text-direction override characters, no leading or trailing space, not only dots';
     server.reply(400, { error: message, code: "invalid_body" });
     const err = await c().post("x", { attachments: [img("..")] }).catch((e) => e);
     expect(err).toBeInstanceOf(InvalidRequestError);

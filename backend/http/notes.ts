@@ -1,6 +1,7 @@
 // POST /api/v1/feeds/<feed>/notes, also POST /<feed> (proxy.ts rewrites it): the only way to post a
 // note, for scripts, the client packages and the web UI's compose box alike.
 import { decodeHeaderValue } from "../../shared/headers";
+import { safeName } from "../../shared/links";
 import { config } from "../config";
 import { ImageTooLargeError, InvalidBodyError, NoteTooLargeError, UnsupportedTypeError } from "../errors";
 import { cookieValue } from "../feedlock";
@@ -77,9 +78,9 @@ export async function readMultipart(req: Request, kind: "post" | "edit"): Promis
     if (key === "text" && text === undefined) text = typeof value === "string" ? value : await textFile(value);
     else if (key === "file" && typeof value !== "string" && value.name) pictures.push({ name: value.name, body: new Uint8Array(await value.arrayBuffer()), mediaType: value.type });
     else if (key.startsWith("alt.") && typeof value === "string" && !alts.has(key.slice(4))) alts.set(key.slice(4), value.trim());
-    else throw new InvalidBodyError(`unexpected part "${key}": send one text field, files with their file names, and alt.<file name> fields`);
+    else throw new InvalidBodyError(`unexpected part "${safeName(key)}": send one text field, files with their file names, and alt.<file name> fields`);
   }
-  for (const name of alts.keys()) if (!pictures.some((p) => p.name === name)) throw new InvalidBodyError(`alt.${name}: no file of that name`);
+  for (const name of alts.keys()) if (!pictures.some((p) => p.name === name)) throw new InvalidBodyError(`alt.${safeName(name)}: no file of that name`);
   for (const p of pictures) p.alt = alts.get(p.name) || undefined;
   if (kind === "edit" && text === undefined) throw new InvalidBodyError("send the note's new text as a text field");
   return { text, pictures, title: header("x-note-title"), tags: tagsFromHeader(req.headers.get("x-note-tags")), readId: header("x-read-id") };

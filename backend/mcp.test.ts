@@ -114,6 +114,9 @@ describe("tools", () => {
     const listed = (await call("list_notes", { feed: "a", tag: "ci" })).structuredContent.notes;
     expect(listed.map((n: { id: string; tags: string[] }) => [n.id, n.tags])).toEqual([[r.structuredContent.id, ["ci", "env:prod"]]]);
     expect((await call("post_note", { feed: "a", markdown: "# x", tags: ["no good"] })).isError).toBe(true);
+    for (const title of ["a\u009bb", "a\u202eb", "a\u2028b"]) expect((await call("post_note", { feed: "a", markdown: "# x", title })).isError, JSON.stringify(title)).toBe(true);
+    const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1]).toString("base64");
+    for (const alt of ["a\u009bb", "a\u202eb", "a\u2028b"]) expect((await call("post_file", { feed: "a", type: "image/png", data: png, alt })).isError, JSON.stringify(alt)).toBe(true);
   });
 
   test("post_note to a feed without a read link answers read_url null", async () => {

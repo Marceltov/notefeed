@@ -571,7 +571,7 @@ def test_a_server_refusal_keeps_its_class_and_message(server):
 
 
 def test_the_name_rule_is_the_servers_a_refused_name_is_sent_and_raises_its_error(server):
-    message = 'attachment "..": not a file name: 1 to 200 characters, no / or \\, no control or text-direction override characters, no leading or trailing space'
+    message = 'attachment "..": not a file name: 1 to 200 characters, no / or \\, no control or text-direction override characters, no leading or trailing space, not only dots'
     server.reply(400, {"error": message, "code": "invalid_body"})
     with pytest.raises(InvalidRequestError) as e:
         Client(server.url, "inbox").post("x", attachments=[Attachment("..", PNG, "image/png")])

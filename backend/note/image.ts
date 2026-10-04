@@ -1,3 +1,4 @@
+import { cleanName } from "../../shared/links";
 import type { Meta } from "../data/notes";
 import { Note, type NoteInit } from "./note";
 
@@ -10,9 +11,9 @@ export class ImageNote extends Note {
   get title(): string {
     return this.meta.title ?? "";
   }
-  /** The file name it was posted with, if it had one. */
+  /** The file name it was posted with, if it had one, as it may be shown. */
   get name(): string | undefined {
-    return this.meta.name;
+    return cleanName(this.meta.name); // a name stored before the rule may hold what it forbids
   }
   rssContent(base: string) {
     return { enclosure: { url: `${base}/${this.file}`, length: this.size, type: this.type } };

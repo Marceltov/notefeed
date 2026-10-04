@@ -272,6 +272,32 @@ describe("multipart: a text with its pictures", () => {
     else expect(body.error).not.toMatch(/^attachment "/);
     expect(await hasFeed("f")).toBe(false);
   });
+  test.each([
+    ["an unexpected part's key", [["text", "a"], ["evil\u202egnp\u009b", "x"]]],
+    ["the name of an alt field with no file", [["file", png("a.png")], ["alt.evil\u202egnp\u009b.png", "x"]]],
+  ] as [string, [string, string | File][]][])("%s is echoed without its control and text-direction characters", async (_, parts) => {
+    const res = await sendForm(parts);
+    const { error } = await res.json();
+    expect(res.status).toBe(400);
+    expect(error).toContain("evil\ufffdgnp\ufffd");
+    expect(error).not.toMatch(/[\u009b\u202e]/);
+  });
+  const utf8 = (s: string) => Buffer.from(s).toString("latin1"); // a header's non-ASCII text travels as its UTF-8 bytes
+  test.each(["a\u009bb", "a\u202eb", "a\u2028b", "a\u2066b"])("a title with a control or text-direction character is 400: %j", async (title) => {
+    const res = await post("# x", "text/markdown", { "x-note-title": utf8(title) });
+    expect([res.status, (await res.json()).code]).toEqual([400, "invalid_body"]);
+    expect(await hasFeed("f")).toBe(false);
+  });
+  test.each(["a\u009bb", "a\u202eb", "a\u2028b"])("an alt text with a control or text-direction character is 400: %j", async (alt) => {
+    expect((await post(PNG as BodyInit, "image/png", { "x-note-alt": utf8(alt) })).status).toBe(400);
+    expect((await sendForm([["file", png("a.png")], ["alt.a.png", alt]])).status).toBe(400);
+    expect(await hasFeed("f")).toBe(false);
+  });
+  test.each(["صورة اليوم", "תמונה של היום", "a\u200eb \u200f\u061c", "👨\u200d👩\u200d👧 family"])("a right-to-left or joined-emoji title is kept: %j", async (title) => {
+    const res = await post("# x", "text/markdown", { "x-note-title": utf8(title) });
+    expect(res.status).toBe(201);
+    expect(await sidecarOf((await res.json()).file)).toEqual({ title });
+  });
   test("a body that is not multipart is 400 invalid_body", async () => {
     const res = await post("# Hi", "multipart/form-data; boundary=x");
     expect([res.status, (await res.json()).code]).toEqual([400, "invalid_body"]);

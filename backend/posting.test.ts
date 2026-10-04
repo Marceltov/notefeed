@@ -103,6 +103,7 @@ describe("postWithPictures", () => {
     const e = (await post({ text: "x", pictures: [pic("a.png"), pic("evil\u202egnp\u009b[31m.exe")] }).catch((e: Error) => e)) as Error;
     expect(e).toBeInstanceOf(InvalidBodyError);
     expect(e.message).toMatch(/^attachment "evil\ufffdgnp\ufffd\[31m\.exe": not a file name/);
+    expect(e.message).toContain("not only dots");
     expect(e.message).not.toMatch(/[\u009b\u202e]/);
     expect(await hasFeed("f")).toBe(false);
   });

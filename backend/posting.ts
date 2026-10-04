@@ -159,7 +159,7 @@ function checkPictures(pictures: Picture[]): (Picture & { type: NoteType; ext: s
   const seen = new Set<string>();
   return pictures.map((p) => {
     try {
-      if (!isAttachmentName(p.name)) throw new InvalidBodyError("not a file name: 1 to 200 characters, no / or \\, no control or text-direction override characters, no leading or trailing space");
+      if (!isAttachmentName(p.name)) throw new InvalidBodyError("not a file name: 1 to 200 characters, no / or \\, no control or text-direction override characters, no leading or trailing space, not only dots");
       if (seen.has(p.name)) throw new InvalidBodyError("the file name is given twice");
       seen.add(p.name);
       const parsed = parseMediaType(p.mediaType);

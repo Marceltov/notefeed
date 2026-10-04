@@ -114,6 +114,7 @@ describe("PATCH changes metadata", () => {
     expect((await patch(md.id, {})).status).toBe(400);
     expect((await patch(md.id, { title: "x".repeat(101) })).status).toBe(400);
     expect((await patch(md.id, { title: "a\nb" })).status).toBe(400);
+    for (const title of ["a\u009bb", "a\u202eb", "a\u2028b"]) expect((await patch(md.id, { title })).status, JSON.stringify(title)).toBe(400);
     expect((await patch(md.id, "{nope")).status).toBe(400);
     expect((await patch(md.id, { title: "x" }, "text/plain")).status).toBe(415);
     expect((await patch("nope", { title: "x" })).status).toBe(404);
