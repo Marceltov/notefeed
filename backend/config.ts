@@ -2,10 +2,10 @@
 // between cases, and DATA_DIR is only known at runtime.
 const env = (name: string) => process.env[name] ?? "";
 
-// Unset, empty or not a number → `fallback`.
+// Unset, empty or not a number → `fallback`. A fraction is cut to a whole number (a cap of 0.5 is no cap, not a cap below 1).
 function int(name: string, fallback: number): number {
   const raw = env(name);
-  return raw === "" || !Number.isFinite(Number(raw)) ? fallback : Number(raw);
+  return raw === "" || !Number.isFinite(Number(raw)) ? fallback : Math.trunc(Number(raw));
 }
 
 export const LOG_LEVELS = ["error", "warn", "info", "debug", "silent"] as const;
