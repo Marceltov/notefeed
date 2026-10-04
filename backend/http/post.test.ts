@@ -332,6 +332,19 @@ describe("multipart: a text with its pictures", () => {
     expect((await sendForm([["file", png("b.png")]])).status).toBe(401);
     expect((await sendForm([["file", png("b.png")]], { "x-feed-password": "hunter22" })).status).toBe(201);
   });
+  test("a double quote in a file name round-trips: FormData sends %22, the server decodes it", async () => {
+    const res = await sendForm([["text", '![](<q"uote.png>)'], ["file", png('q"uote.png')]]);
+    expect(res.status).toBe(201);
+    const { file, attachments } = await res.json();
+    expect((await stored(file)).toString()).toBe(`![](${attachments[0].file})`);
+    expect((await sidecarOf(attachments[0].file)).name).toBe('q"uote.png');
+  });
+  test("the image cap holds for the post that would create the feed", async () => {
+    process.env.NOTEFEED_MAX_IMAGES_PER_FEED = "2";
+    const res = await sendForm([["file", png("a.png")], ["file", png("b.png")], ["file", png("c.png")]], {}, "new");
+    expect([res.status, (await res.json()).code]).toEqual([507, "image_limit"]);
+    expect(await hasFeed("new")).toBe(false);
+  });
   test("the caps count the existing notes plus the new pictures", async () => {
     process.env.NOTEFEED_MAX_IMAGES_PER_FEED = "2";
     expect((await sendForm([["file", png("a.png")]])).status).toBe(201);

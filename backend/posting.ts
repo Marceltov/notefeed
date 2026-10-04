@@ -8,10 +8,13 @@ import { type FeedAccess, checkFeedAccess, createProtected } from "./feedlock";
 import { type FeedSettings, checkSettings, getStoredSettings, saveSettings } from "./feedsettings";
 import { assertFeed, deleteFeed as removeWholeFeed, feedCount, hasFeed, isHeldBack, readIdOf, setReadId } from "./feeds";
 import { capReached, rateLimit } from "./limits";
+import { logger } from "./log";
 import { MEDIA_TYPES } from "./note/media";
 import { type NoteType, parseMediaType, typeForExt } from "./note/types";
 import { checkTags } from "./tags";
 import { checkLine, checkMarkdown, countNotes, createNoteOf, getNote, hasImageNote, MAX_ALT, MAX_NOTE_TITLE, removeNote, replaceContent, changeMeta, type NewNoteOptions, type Note } from "./notes";
+
+const log = logger("posting");
 
 // The gate every write passes first: the feed's access, then the rate limit (counted once per request). Whether the
 // password was proved. An edit or delete targets an existing note, so its feed already exists, and the feed's
@@ -49,7 +52,7 @@ async function protect(feed: string, ip: string, access: FeedAccess, proved: boo
   return false;
 }
 
-// The caps are per type: images have their own, the notes limit counts the markdown ones. `adding` notes of that type to a feed that exists.
+// The caps are per type: images have their own, the notes limit counts the markdown ones. `adding` notes of that type; a feed that does not exist yet counts as empty.
 async function checkCap(feed: string, typeName: string, adding: number): Promise<void> {
   const image = typeName === "image";
   const max = image ? config.maxImagesPerFeed() : config.maxNotesPerFeed();
@@ -183,7 +186,8 @@ function checkText(text: string, pictures: { name: string; ext: string }[]): voi
 }
 
 // Stores the pictures in order, then whatever `then` stores (given the stored notes and the map of file name to stored file); if
-// any write fails, the pictures stored so far are removed and the error is rethrown.
+// any write fails, the pictures stored so far are removed and the error is rethrown. A picture that can't be removed is logged by its
+// note id (never the feed: its name is the write key), so an operator can find the stray file.
 async function storeWithPictures<T>(feed: string, pictures: (Picture & { type: NoteType; ext: string })[], opts: NewNoteOptions, then: (stored: Note[], sent: Map<string, string>, readId: string | null) => Promise<T>): Promise<T> {
   const stored: Note[] = [];
   try {
@@ -195,7 +199,12 @@ async function storeWithPictures<T>(feed: string, pictures: (Picture & { type: N
     }
     return await then(stored, new Map(pictures.map((p, i) => [p.name, stored[i].file])), readId);
   } catch (e) {
-    await Promise.all(stored.map((n) => removeNote(feed, n.id).catch(() => false)));
+    await Promise.all(
+      stored.map(async (n) => {
+        const failed = await removeNote(feed, n.id).then((removed) => (removed ? null : {}), (err: unknown) => ({ err }));
+        if (failed) log.error({ note: n.id, ...failed }, "a picture of a failed post could not be removed");
+      }),
+    );
     throw e;
   }
 }
@@ -219,10 +228,8 @@ export async function postWithPictures(
   if (text !== undefined) checkText(text, pictures);
   checkLine("title", title, MAX_NOTE_TITLE);
   const tags = checkTags(input.tags);
-  if (exists) {
-    await checkCap(feed, "markdown", text === undefined ? 0 : 1);
-    await checkCap(feed, "image", pictures.length);
-  }
+  await checkCap(feed, "markdown", text === undefined ? 0 : 1);
+  await checkCap(feed, "image", pictures.length);
   const wantedReadId = exists || !input.readId?.trim() ? undefined : input.readId.trim();
   const created = await protect(feed, ip, access, proved, exists, input.password, wantedReadId);
   const opts = { sender, tags, wantedReadId };

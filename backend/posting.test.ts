@@ -6,6 +6,7 @@ import { EmptyNoteError, ImageLimitError, ImageTooLargeError, InvalidBodyError, 
 import { protectedFeed } from "./feedlock";
 import { hasFeed, resetFeedsForTests } from "./feeds";
 import { resetRateLimitsForTests } from "./limits";
+import { logsOf } from "./log";
 import * as notes from "./notes";
 import { countNotes, createImageNote, createNote, getNote, MarkdownNote } from "./notes";
 import { editWithPictures, MAX_ATTACHMENTS, type Picture, type PostBundle, postNote, postWithPictures } from "./posting";
@@ -13,7 +14,7 @@ import { editWithPictures, MAX_ATTACHMENTS, type Picture, type PostBundle, postN
 // The text's write is the call after the pictures: a test makes it fail to see the pictures removed again.
 vi.mock("./notes", async (original) => {
   const real = await original<typeof import("./notes")>();
-  return { ...real, createNoteOf: vi.fn(real.createNoteOf), replaceContent: vi.fn(real.replaceContent) };
+  return { ...real, createNoteOf: vi.fn(real.createNoteOf), replaceContent: vi.fn(real.replaceContent), removeNote: vi.fn(real.removeNote) };
 });
 
 const real = await vi.importActual<typeof import("./notes")>("./notes");
@@ -26,6 +27,7 @@ beforeEach(async () => {
 });
 afterEach(() => {
   vi.mocked(notes.createNoteOf).mockClear().mockImplementation(real.createNoteOf);
+  vi.mocked(notes.removeNote).mockReset().mockImplementation(real.removeNote);
   vi.unstubAllEnvs();
 });
 
@@ -107,6 +109,14 @@ describe("postWithPictures", () => {
     expect(await countNotes("f", "image")).toBe(3);
   });
 
+  test("the image cap holds for a feed that does not exist yet: nothing stored, no feed", async () => {
+    vi.stubEnv("NOTEFEED_MAX_IMAGES_PER_FEED", "2");
+    await expect(post({ text: "x", pictures: [pic("a.png"), pic("b.png"), pic("c.png")] })).rejects.toBeInstanceOf(ImageLimitError);
+    expect(await hasFeed("f")).toBe(false);
+    await post({ text: "x", pictures: [pic("a.png"), pic("b.png")] });
+    expect(await countNotes("f", "image")).toBe(2);
+  });
+
   test("a new protected feed with a bad second picture is not created", async () => {
     await expect(post({ text: "x", pictures: [pic("a.png"), pic("b.png", { mediaType: "image/gif" })] }, "f", { password: "secret-password" })).rejects.toThrow(/^attachment "b.png": /);
     expect(await hasFeed("f")).toBe(false);
@@ -122,6 +132,22 @@ describe("postWithPictures", () => {
     await expect(post({ text: "x ![](a.png)", pictures: [pic("a.png"), pic("b.png")] })).rejects.toBe(boom);
     expect(vi.mocked(notes.createNoteOf)).toHaveBeenCalledTimes(3);
     expect(await countNotes("f")).toBe(0);
+  });
+
+  test("a picture that can't be removed again is logged by its note id, never the feed's name, and the first error is rethrown", async () => {
+    const boom = new Error("disk full");
+    vi.mocked(notes.createNoteOf).mockImplementation(async (...args) => {
+      if (args[1].name === "markdown") throw boom;
+      return real.createNoteOf(...args);
+    });
+    vi.mocked(notes.removeNote).mockResolvedValueOnce(false).mockRejectedValueOnce(new Error("EACCES"));
+    const logs = await logsOf(() => expect(post({ text: "x", pictures: [pic("a.png"), pic("b.png"), pic("c.png")] }, "hidden-feed")).rejects.toBe(boom));
+    const ids = (await Promise.all(vi.mocked(notes.createNoteOf).mock.results.slice(0, 2).map((r) => r.value))).map((m) => m.note.id);
+    const lines = logs.filter((l) => l.msg === "a picture of a failed post could not be removed");
+    expect(lines.map((l) => [l.level, l.component, l.note])).toEqual(ids.map((id) => ["error", "posting", id]));
+    expect((lines[1].err as { message: string }).message).toBe("EACCES");
+    expect(JSON.stringify(logs)).not.toContain("hidden-feed");
+    expect(await countNotes("hidden-feed")).toBe(2); // the third was removed
   });
 
   test("the rate limit counts once for N pictures", async () => {
