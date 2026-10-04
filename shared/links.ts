@@ -9,6 +9,9 @@ export const isRelativeLink = (src: string): boolean => src !== "" && !/^([a-z][
 export const absolutizeImages = (markdown: string, base: string): string =>
   markdown.replace(/(!\[[^\]]*\]\()([^)\s]+)/g, (m, head: string, src: string) => (isRelativeLink(src) ? head + base + src : m));
 
+/** How many pictures one note may be sent with. */
+export const MAX_ATTACHMENTS = 10;
+
 /** A name an attachment may have: one path segment of 1 to 200 characters, no `/`, `\`, control characters or leading/trailing space, not only dots. */
 export const isAttachmentName = (name: string): boolean =>
   name.length >= 1 && name.length <= 200 && !/[/\\\u0000-\u001f\u007f]/.test(name) && name === name.trim() && !/^\.+$/.test(name);

@@ -2,15 +2,17 @@
 
 import { useRef, useSyncExternalStore, type ClipboardEvent, type DragEvent, type ReactNode } from "react";
 import { ImagePlus, X } from "lucide-react";
-import { type Pending, newPending, removeReference, uniqueToken } from "@/components/pendingFiles";
+import { type Pending, fitPending, newPending, removeReference, uniqueToken } from "@/components/pendingFiles";
+import { TOO_MANY_PICTURES } from "@/app/_lib/messages";
 
 const ACCEPT = "image/png,image/jpeg,image/gif,image/webp";
 
 // The note textarea of the compose box and the editor, with pictures: the "Add image" button, paste and drag-and-drop each add the
 // files to `pending` (the parent owns the list and posts it, see usePendingImages) and write `![](name)` at the cursor, with the
 // file's own name. Nothing is uploaded here, so leaving the page uploads nothing. The button and the list only exist once hydrated,
-// so without JavaScript only the textarea renders.
-export function MarkdownInput({ id, name, label, value, onChange, rows, placeholder, describedBy, className = "", pending, onPendingChange, children }: {
+// so without JavaScript only the textarea renders. A note takes 10 pictures: of more, the ones that fit are added and `onMessage` is
+// given the reason, for the parent to show where it shows its errors.
+export function MarkdownInput({ id, name, label, value, onChange, rows, placeholder, describedBy, className = "", pending, onPendingChange, onMessage, children }: {
   id: string;
   name: string;
   label: string;
@@ -22,6 +24,7 @@ export function MarkdownInput({ id, name, label, value, onChange, rows, placehol
   className?: string;
   pending: Pending[];
   onPendingChange: (pending: Pending[]) => void;
+  onMessage: (message: string) => void;
   children?: ReactNode; // more controls, rendered on the same row as the "Add image" button
 }) {
   const area = useRef<HTMLTextAreaElement>(null);
@@ -46,8 +49,11 @@ export function MarkdownInput({ id, name, label, value, onChange, rows, placehol
   }
 
   function add(files: File[]) {
+    const { fit, leftOut } = fitPending(pending, files);
+    if (leftOut) onMessage(TOO_MANY_PICTURES);
+    if (!fit.length) return;
     const taken = new Set(pending.map((p) => p.token));
-    const added = files.map((file) => {
+    const added = fit.map((file) => {
       const token = uniqueToken(file.name, taken);
       taken.add(token);
       return newPending(file, token);

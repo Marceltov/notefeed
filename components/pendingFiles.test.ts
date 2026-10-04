@@ -1,5 +1,6 @@
 import { expect, test } from "vitest";
-import { onlyReferences, removeReference, uniqueToken } from "./pendingFiles";
+import { fitPending, onlyReferences, removeReference, uniqueToken } from "./pendingFiles";
+import { MAX_ATTACHMENTS } from "@/shared/links";
 
 test("uniqueToken keeps a free name and numbers a taken one before the extension", () => {
   expect(uniqueToken("a.png", new Set())).toBe("a.png");
@@ -47,4 +48,15 @@ test("uniqueToken keeps a token within 200 characters, with its extension, and s
   expect(next.length).toBeLessThanOrEqual(200);
   expect(next.endsWith("-2.png")).toBe(true);
   expect(uniqueToken("b".repeat(255), new Set()).length).toBeLessThanOrEqual(200);
+});
+
+test("fitPending adds the files that fit under the limit and says when some were left out", () => {
+  const waiting = (n: number) => Array.from({ length: n }, (_, i) => `p${i}`);
+  const files = ["a", "b", "c"];
+  expect(MAX_ATTACHMENTS).toBe(10);
+  expect(fitPending(waiting(0), files)).toEqual({ fit: files, leftOut: false });
+  expect(fitPending(waiting(7), files)).toEqual({ fit: files, leftOut: false });
+  expect(fitPending(waiting(8), files)).toEqual({ fit: ["a", "b"], leftOut: true });
+  expect(fitPending(waiting(10), files)).toEqual({ fit: [], leftOut: true });
+  expect(fitPending(waiting(10), [])).toEqual({ fit: [], leftOut: false });
 });

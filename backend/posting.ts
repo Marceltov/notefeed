@@ -2,7 +2,7 @@
 // caller's job (bearer vs. session cookie); everything after that is here, in this order.
 import { config } from "./config";
 import { idStamp } from "../shared/notes";
-import { isAttachmentName, placeImages } from "../shared/links";
+import { isAttachmentName, MAX_ATTACHMENTS, placeImages } from "../shared/links";
 import { FeedExistsError, FeedLimitError, ImageLimitError, ImageTooLargeError, InvalidBodyError, NotefeedError, NotFoundError, NoteLimitError, RateLimitedError, UnsupportedTypeError } from "./errors";
 import { type FeedAccess, checkFeedAccess, createProtected } from "./feedlock";
 import { type FeedSettings, checkSettings, getStoredSettings, saveSettings } from "./feedsettings";
@@ -143,7 +143,7 @@ export async function deleteFeed(feed: string, ip: string, access: FeedAccess): 
   if (!(await removeWholeFeed(feed))) throw new NotFoundError("no such feed");
 }
 
-export const MAX_ATTACHMENTS = 10;
+export { MAX_ATTACHMENTS }; // defined in shared/links.ts: the web box holds to it too
 
 // A picture sent with a markdown text: `name` is the file name the text refers to it by (`![](name)`), kept with the stored note.
 export type Picture = { name: string; body: Uint8Array; mediaType: string; alt?: string };

@@ -12,12 +12,12 @@ const summary = "cursor-pointer select-none text-muted hover:text-ink";
 // Edit and delete for a note, through the generated API client, with refusals shown inline (`error` is a first message to show).
 export function NoteActions({ feed, id, kind, markdown, title: savedTitle, alt: savedAlt, error: initialError }: { feed: string; id: string; kind: string; markdown: string; title: string; alt: string; error?: string }) {
   const page = `/${feed}`;
-  const { run, error, setError, pending, setPending, router } = useApiForm(page, initialError, withPictures(noteErrorMessage));
+  const images = usePendingImages();
+  const { run, error, setError, pending, setPending, router } = useApiForm(page, initialError, withPictures(noteErrorMessage, images.pending.length > 0));
   const [text, setText] = useState(markdown);
   const [title, setTitle] = useState(savedTitle); // the title set by hand: empty means the one the text gives
   const [alt, setAlt] = useState(savedAlt);
   const image = kind === "image";
-  const images = usePendingImages();
   const [editing, setEditing] = useState(!!initialError);
   const base = `${page}/${id}`;
 
@@ -69,6 +69,7 @@ export function NoteActions({ feed, id, kind, markdown, title: savedTitle, alt: 
               className="font-mono"
               pending={images.pending}
               onPendingChange={images.setPending}
+              onMessage={setError}
             />
           )}
           <label htmlFor="edit-title" className="mt-2 block text-muted">

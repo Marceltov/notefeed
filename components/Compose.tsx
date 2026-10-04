@@ -16,8 +16,8 @@ import { TAGS_HINT, TAGS_PATTERN } from "@/shared/tags";
 // usePendingImages), the text and the pictures in one multipart request, so nothing is half-posted.
 // `isNew`: a feed that doesn't exist yet, so the box offers to protect it with a password.
 export function Compose({ feed, action, error: initialError, isNew, sender }: { feed: string; action: string; error?: string; isNew?: boolean; sender?: boolean }) {
-  const { run, error, pending, router } = useApiForm(action, initialError, withPictures(errorMessage));
   const images = usePendingImages();
+  const { run, error, setError, pending, router } = useApiForm(action, initialError, withPictures(errorMessage, images.pending.length > 0));
   const [text, setText] = useState("");
   const [password, setPassword] = useState("");
   const [tags, setTags] = useState("");
@@ -59,6 +59,7 @@ export function Compose({ feed, action, error: initialError, isNew, sender }: { 
         describedBy="compose-hint compose-error"
         pending={images.pending}
         onPendingChange={images.setPending}
+        onMessage={setError}
       >
         <label htmlFor="note-title" className="sr-only">
           Title (optional, otherwise taken from the text)

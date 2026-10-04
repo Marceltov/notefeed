@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { errorMessage, feedDetailsErrorMessage, feedErrorMessage, imageErrorMessage, noteErrorMessage, withPictures } from "./messages";
+import { TOO_MANY_PICTURES, errorMessage, feedDetailsErrorMessage, feedErrorMessage, imageErrorMessage, noteErrorMessage, withPictures } from "./messages";
 
 test("an inherited property name in the URL is an unknown code, not a crash", () => {
   for (const fn of [errorMessage, noteErrorMessage, feedErrorMessage, feedDetailsErrorMessage])
@@ -26,4 +26,17 @@ test("withPictures words a refusal that names a picture as an image refusal, wit
   expect(message("too_large", null, 'attachment "big.png": image exceeds the size limit')).toBe("big.png: That image is too large.");
   expect(message("too_large", null, "note exceeds 100 KB")).toBe("The note is over 100 KB.");
   expect(message("rate_limited", "5")).toBe("Too many requests, try again in 5 seconds.");
+});
+
+test("withPictures words a too-large refusal of a request with pictures as the note and its pictures together", () => {
+  const message = withPictures(errorMessage, true);
+  expect(message("too_large", null, "note exceeds 100 KB")).toBe("The note and its pictures are too large together.");
+  expect(message("too_large", null, 'attachment "big.png": image exceeds the size limit')).toBe("big.png: That image is too large.");
+  expect(message("rate_limited", "5")).toBe("Too many requests, try again in 5 seconds.");
+  expect(withPictures(noteErrorMessage, true)("too_large")).toBe("The note and its pictures are too large together.");
+  expect(withPictures(errorMessage, false)("too_large", null, "note exceeds 100 KB")).toBe("The note is over 100 KB.");
+});
+
+test("the message for more pictures than a note takes names the limit", () => {
+  expect(TOO_MANY_PICTURES).toBe("A note can have at most 10 pictures.");
 });

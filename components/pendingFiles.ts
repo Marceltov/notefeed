@@ -1,8 +1,15 @@
 // Pictures dropped, pasted or picked in a note box wait in the browser until the note is posted. While they wait, the text refers to
 // each by a local name (the token); the note is posted with them in one request, and the server swaps each token for the stored file's name.
+import { MAX_ATTACHMENTS } from "@/shared/links";
 
 /** A picture waiting to be posted; `token` is the name the text refers to it by, `preview` an object URL of the file to show it by. */
 export type Pending = { key: string; file: File; token: string; preview: string };
+
+/** What of `files` still fits in a box that holds `pending` (a note takes MAX_ATTACHMENTS pictures), and whether some were left out. */
+export function fitPending<T>(pending: readonly unknown[], files: readonly T[]): { fit: T[]; leftOut: boolean } {
+  const fit = files.slice(0, Math.max(0, MAX_ATTACHMENTS - pending.length));
+  return { fit, leftOut: fit.length < files.length };
+}
 
 let counter = 0;
 /** In an event handler only (it makes the object URL); release it with `URL.revokeObjectURL(preview)` when the picture is taken out. */

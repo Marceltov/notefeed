@@ -64,6 +64,15 @@ test("dropped images wait in the box; removing one takes its reference out; post
   await loaded(page.locator("ol > li img")).toBeGreaterThan(0);
 });
 
+test("more than 10 pictures: the first 10 wait in the box, and the box says why the rest do not", async ({ page }) => {
+  await page.goto(`/${feedName()}`);
+  await drop(page, ...Array.from({ length: 11 }, (_, i) => `p${i}.png`));
+  await expect(page.getByRole("list", { name: "Images to post" }).getByRole("listitem")).toHaveCount(10);
+  await expect(page.getByRole("alert").filter({ hasText: "A note can have at most 10 pictures." })).toBeVisible();
+  await expect(note(page)).toHaveValue(/p9\.png/);
+  await expect(note(page)).not.toHaveValue(/p10\.png/);
+});
+
 test("leaving the page without posting uploads nothing", async ({ page }) => {
   const name = feedName();
   const uploads: string[] = [];
