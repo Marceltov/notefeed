@@ -2,7 +2,9 @@
 // (no in-memory index): uniqueness is a constraint, counts are queries, so several containers stay consistent.
 import { sql, type Kysely } from "kysely";
 import { NotFoundError, ReadIdTakenError } from "../../errors";
+import { logger } from "../../log";
 import { noteFeedSize } from "../../metrics";
+import { newKey, type ImageStore } from "../images/types";
 import { applyPatch, hasMeta, parseMeta } from "../meta";
 import { parseSettings, serializeSettings } from "../settings";
 import { FeedGoneError, type Meta, type Storage } from "../types";
@@ -10,6 +12,12 @@ import { migrate, type Kind } from "./migrations";
 import type { Schema } from "./schema";
 
 export type SqlStorage = Storage & { close(): Promise<void> };
+
+/** Where the bytes of the notes with an `external` extension go, instead of the row. Without it, every note's bytes are in its row. */
+export type Images = { store: ImageStore; external: (ext: string) => boolean };
+
+const log = logger("storage");
+const EMPTY = Buffer.alloc(0);
 
 const NAME_RE = /^([A-Za-z0-9_-]{1,128})\.([A-Za-z0-9]{1,16})$/;
 const code = (e: unknown) => String((e as { code?: unknown })?.code ?? "");
@@ -19,8 +27,27 @@ const changed = (n: bigint | number | undefined) => Number(n ?? 0) > 0;
 const bytes = (content: string | Uint8Array) => (typeof content === "string" ? Buffer.from(content) : Buffer.from(content));
 
 // `kind` picks the dialect-specific migration; `connect` is called once, on first use.
-export function createSqlStorage(connect: () => Promise<Kysely<Schema>>, kind: Kind = "sqlite"): SqlStorage {
+export function createSqlStorage(connect: () => Promise<Kysely<Schema>>, kind: Kind = "sqlite", images?: Images): SqlStorage {
   let opened: Promise<Kysely<Schema>> | undefined;
+
+  // After the row is gone (or never came to be), its object is only storage: a failure to remove it is logged, never the caller's error.
+  // No feed or key in the line: a feed's name is its secret.
+  const drop = async (keys: (string | null | undefined)[]) => {
+    for (const key of keys) {
+      if (key && images) await images.store.delete(key).catch((err) => log.warn({ err }, "could not remove an image from the image store; it stays there unreferenced"));
+    }
+  };
+  // The bytes of a row: its own, or the object its key names. null when the object is gone.
+  const bytesOf = async (row: { content: Buffer | Uint8Array; blob_key: string | null }): Promise<Buffer | null> => {
+    if (row.blob_key === null) return Buffer.from(row.content);
+    if (!images) {
+      log.error("a note's image is in an image store, but NOTEFEED_IMAGES names none");
+      return null;
+    }
+    const found = await images.store.get(row.blob_key);
+    if (!found) log.error("a note's image is missing from the image store");
+    return found;
+  };
 
   function open(): Promise<Kysely<Schema>> {
     if (opened) return opened;
@@ -45,22 +72,28 @@ export function createSqlStorage(connect: () => Promise<Kysely<Schema>>, kind: K
   const metaOf = (raw: string | null): Meta => (raw ? parseMeta(raw) : {});
 
   return {
+    // With an image store, the object is written first and the row second: a row never names bytes that are not there. If the row
+    // does not come to be, the object is removed again.
     async writeNote(feed, base, ext, content, meta) {
       const db = await open();
       const now = Date.now();
-      for (let n = 1; ; n++) {
-        const id = n === 1 ? base : `${base}-${n}`;
-        try {
+      const data = bytes(content);
+      const key = images?.external(ext) ? newKey() : null;
+      if (key) await images!.store.put(key, data);
+      try {
+        for (let n = 1; ; n++) {
+          const id = n === 1 ? base : `${base}-${n}`;
           const r = await db
             .insertInto("notes")
-            .values({ feed, id, ext, content: bytes(content), metadata: hasMeta(meta) ? JSON.stringify(meta) : null, created_at: now, updated_at: now })
+            .values({ feed, id, ext, content: key ? EMPTY : data, blob_key: key, size: data.byteLength, metadata: hasMeta(meta) ? JSON.stringify(meta) : null, created_at: now, updated_at: now })
             .onConflict((oc) => oc.columns(["feed", "id"]).doNothing())
             .executeTakeFirst();
           if (changed(r.numInsertedOrUpdatedRows)) return id;
-        } catch (e) {
-          if (isForeignKey(e)) throw new FeedGoneError();
-          throw e;
         }
+      } catch (e) {
+        await drop([key]);
+        if (isForeignKey(e)) throw new FeedGoneError();
+        throw e;
       }
     },
 
@@ -75,17 +108,18 @@ export function createSqlStorage(connect: () => Promise<Kysely<Schema>>, kind: K
       const db = await open();
       const row = await db
         .selectFrom("notes")
-        .select(["ext", "metadata", "updated_at", sql<number | string>`octet_length(content)`.as("size")])
+        .select(["ext", "metadata", "updated_at", "size"])
         .where("feed", "=", feed)
         .where("id", "=", id)
         .where("ext", "in", exts)
         .executeTakeFirst();
       if (!row) return null;
-      let content = Buffer.alloc(0);
+      let content: Buffer = EMPTY;
       if (withContent(row.ext)) {
-        const full = await db.selectFrom("notes").select("content").where("feed", "=", feed).where("id", "=", id).executeTakeFirst();
-        if (!full) return null; // deleted since the first read
-        content = Buffer.from(full.content);
+        const full = await db.selectFrom("notes").select(["content", "blob_key"]).where("feed", "=", feed).where("id", "=", id).executeTakeFirst();
+        const found = full && (await bytesOf(full));
+        if (!found) return null; // deleted since the first read, or its object is gone
+        content = found;
       }
       return { ext: row.ext, content, size: Number(row.size), meta: metaOf(row.metadata), mtime: new Date(Number(row.updated_at)) };
     },
@@ -95,10 +129,37 @@ export function createSqlStorage(connect: () => Promise<Kysely<Schema>>, kind: K
       return row ? metaOf(row.metadata) : null;
     },
 
+    // A note that belongs in the image store gets a new object, then the row is pointed at it, then the old object goes: a reader
+    // meets the old bytes or the new ones, never a key without an object. The update names the key it replaces, so of two
+    // replacements at once each removes the object it took out of the row, and none is removed twice or left behind.
     async replaceNote(feed, id, exts, content) {
       if (exts.length === 0) return false;
-      const r = await (await open()).updateTable("notes").set({ content: bytes(content), updated_at: Date.now() }).where("feed", "=", feed).where("id", "=", id).where("ext", "in", exts).executeTakeFirst();
-      return changed(r.numUpdatedRows);
+      const db = await open();
+      const data = bytes(content);
+      let key: string | null = null;
+      try {
+        for (;;) {
+          const row = await db.selectFrom("notes").select(["ext", "blob_key"]).where("feed", "=", feed).where("id", "=", id).where("ext", "in", exts).executeTakeFirst();
+          if (!row) break;
+          if (!key && images?.external(row.ext)) await images.store.put((key = newKey()), data);
+          const r = await db
+            .updateTable("notes")
+            .set({ content: key ? EMPTY : data, blob_key: key, size: data.byteLength, updated_at: Date.now() })
+            .where("feed", "=", feed)
+            .where("id", "=", id)
+            .where("ext", "=", row.ext)
+            .where("blob_key", row.blob_key === null ? "is" : "=", row.blob_key)
+            .executeTakeFirst();
+          if (!changed(r.numUpdatedRows)) continue; // replaced or deleted meanwhile: look again
+          await drop([row.blob_key]);
+          return true;
+        }
+      } catch (e) {
+        await drop([key]);
+        throw e;
+      }
+      await drop([key]);
+      return false;
     },
 
     async updateMeta(feed, id, exts, patch) {
@@ -114,15 +175,16 @@ export function createSqlStorage(connect: () => Promise<Kysely<Schema>>, kind: K
 
     async deleteNote(feed, id, exts) {
       if (exts.length === 0) return false;
-      const r = await (await open()).deleteFrom("notes").where("feed", "=", feed).where("id", "=", id).where("ext", "in", exts).executeTakeFirst();
-      return changed(r.numDeletedRows);
+      const rows = await (await open()).deleteFrom("notes").where("feed", "=", feed).where("id", "=", id).where("ext", "in", exts).returning("blob_key").execute();
+      await drop(rows.map((r) => r.blob_key)); // the row first: a crash in between leaves an object, never a note without its image
+      return rows.length > 0;
     },
 
     async readFile(feed, name) {
       const m = NAME_RE.exec(name);
       if (!m) return null;
-      const row = await (await open()).selectFrom("notes").select("content").where("feed", "=", feed).where("id", "=", m[1]).where("ext", "=", m[2]).executeTakeFirst();
-      return row ? Buffer.from(row.content) : null;
+      const row = await (await open()).selectFrom("notes").select(["content", "blob_key"]).where("feed", "=", feed).where("id", "=", m[1]).where("ext", "=", m[2]).executeTakeFirst();
+      return row ? bytesOf(row) : null;
     },
 
     async readSettings(feed) {
@@ -158,8 +220,13 @@ export function createSqlStorage(connect: () => Promise<Kysely<Schema>>, kind: K
       }
     },
     async deleteFeed(feed) {
-      const r = await (await open()).deleteFrom("feeds").where("name", "=", feed).executeTakeFirst(); // the notes go with it (cascade)
-      return changed(r.numDeletedRows);
+      const db = await open();
+      // The keys are read before the rows go with the feed (cascade). An image posted in between leaves its object unreferenced.
+      const keys = await db.selectFrom("notes").select("blob_key").where("feed", "=", feed).where("blob_key", "is not", null).execute();
+      const r = await db.deleteFrom("feeds").where("name", "=", feed).executeTakeFirst();
+      if (!changed(r.numDeletedRows)) return false;
+      await drop(keys.map((k) => k.blob_key));
+      return true;
     },
     async forgetFeed() {
       // Nothing to drop: the rows are the truth, and a feed that is there is not "gone".

@@ -18,6 +18,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/server": "2.2.0",
+    "aws4fetch": "^1.0.20",
     "better-sqlite3": "^13.0.3",
     "kysely": "^0.29.6",
     "lucide-react": "^1.49.0",

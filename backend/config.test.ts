@@ -1,12 +1,14 @@
 import { afterEach, expect, test } from "vitest";
 import { config } from "./config";
 
+const S3_VARS = ["NOTEFEED_S3_ENDPOINT", "NOTEFEED_S3_BUCKET", "NOTEFEED_S3_REGION", "NOTEFEED_S3_ACCESS_KEY", "NOTEFEED_S3_SECRET_KEY"];
+
 afterEach(() => {
   delete process.env.NOTEFEED_MAX_IMAGES_PER_FEED;
   delete process.env.NOTEFEED_MAX_NOTES_PER_FEED;
   delete process.env.NOTEFEED_METRICS;
   delete process.env.NOTEFEED_METRICS_TOKEN;
-  for (const k of ["NOTEFEED_STORAGE", "NOTEFEED_DATABASE_URL", "NOTEFEED_SECRET", "DATA_DIR"]) delete process.env[k];
+  for (const k of ["NOTEFEED_STORAGE", "NOTEFEED_DATABASE_URL", "NOTEFEED_SECRET", "DATA_DIR", "NOTEFEED_IMAGES", "NOTEFEED_IMAGES_DIR", ...S3_VARS]) delete process.env[k];
 });
 
 test("metrics are on only for NOTEFEED_METRICS=1; the token is empty when unset", () => {
@@ -70,5 +72,93 @@ test("validateStorage: sqlite and postgres need a 32-byte NOTEFEED_SECRET", () =
 });
 
 test("validateStorage: fs needs no secret and no URL", () => {
+  expect(() => config.validateStorage()).not.toThrow();
+});
+
+test("images default to db and accept fs and s3", () => {
+  expect(config.images()).toBe("db");
+  process.env.NOTEFEED_IMAGES = "FS";
+  expect(config.images()).toBe("fs");
+  process.env.NOTEFEED_IMAGES = "s3";
+  expect(config.images()).toBe("s3");
+});
+
+test("images throws on any other value, naming NOTEFEED_IMAGES", () => {
+  process.env.NOTEFEED_IMAGES = "gcs";
+  expect(() => config.images()).toThrow(/NOTEFEED_IMAGES/);
+});
+
+test("imagesDir defaults to a folder in DATA_DIR", () => {
+  process.env.DATA_DIR = "/srv/nf/";
+  expect(config.imagesDir()).toBe("/srv/nf/images");
+  process.env.NOTEFEED_IMAGES_DIR = "/mnt/img";
+  expect(config.imagesDir()).toBe("/mnt/img");
+});
+
+test("s3: the region defaults to us-east-1 and the endpoint loses its trailing slash", () => {
+  process.env.NOTEFEED_S3_ENDPOINT = "https://s3.example.com/";
+  expect(config.s3().region).toBe("us-east-1");
+  expect(config.s3().endpoint).toBe("https://s3.example.com");
+  process.env.NOTEFEED_S3_REGION = "fsn1";
+  expect(config.s3().region).toBe("fsn1");
+});
+
+test("validateStorage: images outside the database need a database backend", () => {
+  for (const images of ["fs", "s3"]) {
+    process.env.NOTEFEED_IMAGES = images;
+    expect(() => config.validateStorage()).toThrow(/NOTEFEED_IMAGES/);
+  }
+  process.env.NOTEFEED_IMAGES = "db";
+  expect(() => config.validateStorage()).not.toThrow();
+});
+
+test("validateStorage: an unknown NOTEFEED_IMAGES is refused on every backend", () => {
+  process.env.NOTEFEED_IMAGES = "gcs";
+  expect(() => config.validateStorage()).toThrow(/NOTEFEED_IMAGES/);
+});
+
+test("validateStorage: s3 names the missing setting and no value", () => {
+  process.env.NOTEFEED_STORAGE = "sqlite";
+  process.env.NOTEFEED_SECRET = "x".repeat(32);
+  process.env.NOTEFEED_IMAGES = "s3";
+  const all: Record<string, string> = {
+    NOTEFEED_S3_ENDPOINT: "https://s3.example.com",
+    NOTEFEED_S3_BUCKET: "bucket-b",
+    NOTEFEED_S3_ACCESS_KEY: "access-a",
+    NOTEFEED_S3_SECRET_KEY: "secret-s",
+  };
+  for (const missing of Object.keys(all)) {
+    for (const [k, v] of Object.entries(all)) process.env[k] = v;
+    delete process.env[missing];
+    const err = (() => {
+      try {
+        config.validateStorage();
+      } catch (e) {
+        return e as Error;
+      }
+    })();
+    expect(err?.message).toContain(missing);
+    for (const v of Object.values(all)) expect(err?.message).not.toContain(v);
+  }
+  for (const [k, v] of Object.entries(all)) process.env[k] = v;
+  expect(() => config.validateStorage()).not.toThrow();
+});
+
+test("validateStorage: an endpoint that is not an http(s) URL is refused without being shown", () => {
+  process.env.NOTEFEED_STORAGE = "sqlite";
+  process.env.NOTEFEED_SECRET = "x".repeat(32);
+  process.env.NOTEFEED_IMAGES = "s3";
+  process.env.NOTEFEED_S3_ENDPOINT = "s3.example.com";
+  process.env.NOTEFEED_S3_BUCKET = "b";
+  process.env.NOTEFEED_S3_ACCESS_KEY = "a";
+  process.env.NOTEFEED_S3_SECRET_KEY = "s";
+  expect(() => config.validateStorage()).toThrow(/NOTEFEED_S3_ENDPOINT/);
+  expect(() => config.validateStorage()).not.toThrow(/s3\.example\.com/);
+});
+
+test("validateStorage: images in a folder need nothing more", () => {
+  process.env.NOTEFEED_STORAGE = "sqlite";
+  process.env.NOTEFEED_SECRET = "x".repeat(32);
+  process.env.NOTEFEED_IMAGES = "fs";
   expect(() => config.validateStorage()).not.toThrow();
 });

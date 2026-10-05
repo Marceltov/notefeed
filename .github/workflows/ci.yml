@@ -29,9 +29,18 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npm run typecheck
+      # An S3-compatible store for the image store's tests (backend/storage/images/s3.test.ts), which checks the request signatures.
+      # Started here and not as a service, because it needs arguments. Any answer, a 403 included, means it is up.
+      - run: |
+          docker run -d --name s3 -p 7070:7070 -e ROOT_ACCESS_KEY=notefeed -e ROOT_SECRET_KEY=notefeed-secret versity/versitygw:v1.8.0 posix /tmp
+          for i in $(seq 1 30); do curl -s -o /dev/null http://localhost:7070 && exit 0; sleep 1; done
+          docker logs s3; exit 1
       - run: npm test
         env:
           NOTEFEED_TEST_POSTGRES_URL: postgres://postgres:pw@localhost:5432/postgres
+          NOTEFEED_TEST_S3_ENDPOINT: http://localhost:7070
+          NOTEFEED_TEST_S3_ACCESS_KEY: notefeed
+          NOTEFEED_TEST_S3_SECRET_KEY: notefeed-secret
 
   # The committed openapi.json and the clients generated from it must match the route table.
   generate:

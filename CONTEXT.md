@@ -31,7 +31,7 @@ A feed's title, description, title image and whether the sender is shown.
 _Avoid_: Feed config, feed metadata
 
 **Title image**:
-The picture shown at the top of a feed, chosen in the feed settings.
+The image shown at the top of a feed, chosen in the feed settings.
 _Avoid_: Icon, cover, banner
 
 **Protected feed**:
@@ -49,15 +49,15 @@ _Avoid_: System feed, official feed
 ### Notes
 
 **Note**:
-One posted item in a feed: a piece of markdown text or a picture, stored exactly as posted.
+One posted item in a feed: a piece of markdown text or an image, stored exactly as posted.
 _Avoid_: Post, message, entry, item
 
-**Picture**:
+**Image**:
 A note whose content is an image file. Anyone with the read link can see it.
-_Avoid_: Image, photo, media
+_Avoid_: Picture, photo, media
 
 **Attachment**:
-A picture posted together with a text note in the same request and referred to from that text.
+An image posted together with a text note in the same request and referred to from that text.
 _Avoid_: Upload, embed
 
 **Metadata**:
@@ -103,9 +103,13 @@ The optional way for a person to prove who they are, so that their notes carry a
 _Avoid_: Login, accounts, user management
 
 **Cap**:
-An operator-set upper limit on how much an instance stores: feeds, notes per feed, pictures per feed, and the size of a picture.
+An operator-set upper limit on how much an instance stores: feeds, notes per feed, images per feed, and the size of an image.
 _Avoid_: Quota, limit
 
 **Storage backend**:
 Where an instance keeps its feeds and notes: the file system or a database.
 _Avoid_: Data layer, persistence, store
+
+**Image store**:
+Where an instance on a database keeps the bytes of its images: in the database, in a folder, or in an object store.
+_Avoid_: Blob store, file store, media storage, bucket

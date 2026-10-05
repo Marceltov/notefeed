@@ -17,6 +17,9 @@ export interface Schema {
     id: string;
     ext: string;
     content: Buffer;
+    // The key of the bytes in the image store; null when they are in `content`.
+    blob_key: string | null;
+    size: Time;
     metadata: string | null;
     created_at: Time;
     updated_at: Time;
