@@ -2,7 +2,9 @@
 FROM node:22-alpine AS build
 WORKDIR /app
 COPY package.json package-lock.json ./
-RUN npm ci
+# No install scripts: better-sqlite3 has a binding.gyp, so npm would compile it with node-gyp, and Alpine has no compiler. Its prebuilt
+# musl binaries (x64 and arm64) are in the package and are what it loads; nothing else in the build needs a script (unrs-resolver is for eslint).
+RUN npm ci --ignore-scripts
 COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN npm run build
