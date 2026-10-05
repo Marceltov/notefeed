@@ -11,7 +11,17 @@ import { FeedGoneError, type Meta, type Storage } from "../types";
 import { migrate, type Kind } from "./migrations";
 import type { Schema } from "./schema";
 
-export type SqlStorage = Storage & { close(): Promise<void> };
+export type SqlStorage = Storage & {
+  close(): Promise<void>;
+  /**
+   * The operator's clean-up: the objects in the image store that no note names, and, with `remove`, their deletion. An object written
+   * less than `olderThanMs` ago is left alone and only counted (`tooRecent`): its note's row may not be there yet. `missing` counts
+   * the notes whose object is not in the store. null: this instance has no image store.
+   */
+  sweepImages(o: { remove: boolean; olderThanMs: number }): Promise<Sweep | null>;
+};
+
+export type Sweep = { unreferenced: { count: number; bytes: number }; deleted: { count: number; bytes: number }; failed: number; tooRecent: number; missing: number };
 
 /** Where the bytes of the notes with an `external` extension go, instead of the row. Without it, every note's bytes are in its row. */
 export type Images = { store: ImageStore; external: (ext: string) => boolean };
@@ -255,6 +265,43 @@ export function createSqlStorage(connect: () => Promise<Kysely<Schema>>, kind: K
     async feedCount() {
       const r = await (await open()).selectFrom("feeds").select(sql<number | string>`count(*)`.as("n")).executeTakeFirstOrThrow();
       return Number(r.n);
+    },
+
+    // The store is listed first and the rows are read after it. An object old enough to count was written before its row, so a row
+    // that names it is there by the time the rows are read; a note posted meanwhile has a young object, which is passed over.
+    async sweepImages({ remove, olderThanMs }) {
+      if (!images) return null;
+      const db = await open();
+      const started = Date.now();
+      const old = new Map<string, number>();
+      const inStore = new Set<string>();
+      let tooRecent = 0;
+      for await (const o of images.store.list()) {
+        inStore.add(o.key);
+        if (o.modified.getTime() <= started - olderThanMs) old.set(o.key, o.size);
+        else tooRecent++;
+      }
+      const rows = await db.selectFrom("notes").select(["blob_key", "updated_at"]).where("blob_key", "is not", null).execute();
+      let missing = 0;
+      for (const row of rows) {
+        old.delete(row.blob_key!);
+        // A row written since the listing began names an object the listing may not have seen.
+        if (!inStore.has(row.blob_key!) && Number(row.updated_at) < started) missing++;
+      }
+      const sweep: Sweep = { unreferenced: { count: old.size, bytes: [...old.values()].reduce((a, b) => a + b, 0) }, deleted: { count: 0, bytes: 0 }, failed: 0, tooRecent, missing };
+      if (!remove) return sweep;
+      for (const [key, size] of old) {
+        try {
+          await images.store.delete(key);
+          sweep.deleted.count++;
+          sweep.deleted.bytes += size;
+        } catch (err) {
+          sweep.failed++;
+          log.warn({ err }, "could not remove an unreferenced image from the image store");
+        }
+      }
+      log.info({ deleted: sweep.deleted.count, bytes: sweep.deleted.bytes, failed: sweep.failed }, "unreferenced images removed from the image store");
+      return sweep;
     },
 
     async close() {

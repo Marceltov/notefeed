@@ -98,6 +98,9 @@ export const config = {
   // "1" turns on GET /metrics (Prometheus format); with a token set it needs `Authorization: Bearer <token>`.
   metrics: () => env("NOTEFEED_METRICS") === "1",
   metricsToken: () => env("NOTEFEED_METRICS_TOKEN"),
+  // The bearer of the operator's endpoints (backend/http/operator.ts), which can delete: at least 32 bytes, or they stay off (404).
+  operatorToken: () => (Buffer.byteLength(env("NOTEFEED_OPERATOR_TOKEN")) >= 32 ? env("NOTEFEED_OPERATOR_TOKEN") : ""),
+  operatorTokenTooShort: () => env("NOTEFEED_OPERATOR_TOKEN") !== "" && Buffer.byteLength(env("NOTEFEED_OPERATOR_TOKEN")) < 32,
   maxNotesPerFeed: () => Math.max(0, int("NOTEFEED_MAX_NOTES_PER_FEED", 0)),
   // Bytes per uploaded image; 0 or below means the default, and nothing above 10 MiB: Next's proxy buffers a request
   // body only up to that, so a larger image would arrive cut. Images per feed: 0 or below, no cap.

@@ -27,7 +27,7 @@ export default defineConfig({
     { name: "sqlite", testMatch: ["notes.spec.ts", "images.spec.ts"], use: { baseURL: "http://localhost:3102" } },
     // The pictures spec with the images in an S3-compatible store (a stand-in started by e2e/s3-setup.ts). The built app's fetch is
     // Next's, not plain Node's, and only this run sends an upload through it.
-    { name: "s3", testMatch: "images.spec.ts", use: { baseURL: "http://localhost:3103" } },
+    { name: "s3", testMatch: ["images.spec.ts", "operator.spec.ts"], use: { baseURL: "http://localhost:3103" } },
   ],
   globalSetup: "./e2e/s3-setup.ts",
   webServer: [
@@ -42,6 +42,7 @@ export default defineConfig({
       NOTEFEED_S3_BUCKET: "e2e-images",
       NOTEFEED_S3_ACCESS_KEY: "e2e-access",
       NOTEFEED_S3_SECRET_KEY: "e2e-secret",
+      NOTEFEED_OPERATOR_TOKEN: "e2e-operator-token-".padEnd(32, "x"),
     }),
     server(3102, { NOTEFEED_STORAGE: "sqlite", NOTEFEED_DATABASE_URL: "file:test-results/e2e-3102.db", NOTEFEED_IMAGES: "fs", NOTEFEED_IMAGES_DIR: "test-results/e2e-3102-images", NOTEFEED_SECRET: "e2e-sqlite-secret-".padEnd(32, "x") }),
   ],

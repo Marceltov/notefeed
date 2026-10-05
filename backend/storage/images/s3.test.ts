@@ -69,6 +69,39 @@ test("the stand-in refuses an upload sent as a stream, as S3 stores do", async (
   expect(res.status).toBe(411);
 });
 
+test("a listing longer than one page is followed to its end, and what is not named like a key is left out", async () => {
+  const f = await fake();
+  const store = storeOn(f, { pageSize: 2 });
+  const keys = [newKey(), newKey(), newKey(), newKey(), newKey()];
+  for (const key of keys) await store.put(key, Buffer.from("x"));
+  f.objects.set("images/someone-elses&file.txt", Buffer.from("not ours"));
+  f.requests.length = 0;
+  const listed = [];
+  for await (const o of store.list()) listed.push(o.key);
+  expect(listed.sort()).toEqual([...keys].sort());
+  expect(f.requests).toHaveLength(3);
+});
+
+test("a listing gives each object's own time of writing", async () => {
+  const f = await fake();
+  const store = storeOn(f);
+  const key = newKey();
+  await store.put(key, Buffer.from("x"));
+  f.modified.set(`images/${key}`, new Date("2026-01-02T03:04:05.000Z"));
+  for await (const o of store.list()) expect(o).toEqual({ key, size: 1, modified: new Date("2026-01-02T03:04:05.000Z") });
+});
+
+test("a listing of a bucket that is not there fails, and a failure names no address", async () => {
+  const f = await fake([]);
+  const all = async (s: ReturnType<typeof storeOn>) => {
+    for await (const o of s.list()) void o;
+  };
+  await expect(all(storeOn(f))).rejects.toThrow("image store: list failed (404)");
+  const g = await fake();
+  g.failNext(500);
+  await expect(all(storeOn(g))).rejects.toThrow("image store: list failed (500)");
+});
+
 test("a wrong access key is an error, not a missing object", async () => {
   const f = await fake();
   const store = storeOn(f, { accessKey: "someone-else" });
