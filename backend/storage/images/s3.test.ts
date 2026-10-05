@@ -44,6 +44,31 @@ test("a failure names the operation and the status, and nothing of the endpoint,
   }
 });
 
+// A Next server's fetch rebuilds a Request object from its body stream, and the upload then has no Content-Length (issue #130).
+test("an upload is given to fetch as a URL and bytes, never as a Request, and says its length", async () => {
+  const f = await fake();
+  const real = globalThis.fetch;
+  const seen: unknown[][] = [];
+  globalThis.fetch = ((...args: Parameters<typeof fetch>) => (seen.push(args), real(...args))) as typeof fetch;
+  try {
+    await storeOn(f).put(newKey(), Buffer.from("x"));
+  } finally {
+    globalThis.fetch = real;
+  }
+  expect(seen).toHaveLength(1);
+  expect(typeof seen[0][0]).toBe("string");
+  expect((seen[0][1] as RequestInit).body).toBeInstanceOf(Uint8Array);
+});
+
+test("the stand-in refuses an upload sent as a stream, as S3 stores do", async () => {
+  const f = await fake();
+  const { AwsClient } = await import("aws4fetch");
+  const client = new AwsClient({ accessKeyId: "access-a", secretAccessKey: "secret-s", service: "s3", region: "us-east-1", retries: 0 });
+  const stream = new Blob(["x"]).stream();
+  const res = await client.fetch(`${f.endpoint}/images/${newKey()}`, { method: "PUT", body: stream, duplex: "half" } as RequestInit);
+  expect(res.status).toBe(411);
+});
+
 test("a wrong access key is an error, not a missing object", async () => {
   const f = await fake();
   const store = storeOn(f, { accessKey: "someone-else" });

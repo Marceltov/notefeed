@@ -1,5 +1,6 @@
 // A stand-in for an S3-compatible store, for tests: objects in a map, served over HTTP path-style. It checks that a request is
 // signed (an AWS4-HMAC-SHA256 Authorization header naming the access key) but not the signature itself; a real store does that in CI.
+// Like a real store, it refuses an upload that does not say its length (411): that is what a body sent as a stream looks like.
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 
@@ -13,7 +14,7 @@ export type FakeS3 = {
   close(): Promise<void>;
 };
 
-export async function startFakeS3(accessKey: string, buckets: string[] = []): Promise<FakeS3> {
+export async function startFakeS3(accessKey: string, buckets: string[] = [], port = 0): Promise<FakeS3> {
   const objects = new Map<string, Buffer>();
   const known = new Set(buckets);
   const requests: string[] = [];
@@ -46,6 +47,7 @@ export async function startFakeS3(accessKey: string, buckets: string[] = []): Pr
       if (!known.has(bucket)) return answer(404, "<Error><Code>NoSuchBucket</Code></Error>");
       const id = `${bucket}/${key}`;
       if (req.method === "PUT") {
+        if (req.headers["content-length"] === undefined) return answer(411, "<Error><Code>MissingContentLength</Code></Error>");
         objects.set(id, Buffer.concat(chunks));
         return answer(200);
       }
@@ -57,7 +59,7 @@ export async function startFakeS3(accessKey: string, buckets: string[] = []): Pr
       answer(405);
     });
   });
-  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  await new Promise<void>((resolve) => server.listen(port, "127.0.0.1", resolve));
   return {
     endpoint: `http://127.0.0.1:${(server.address() as AddressInfo).port}`,
     objects,
