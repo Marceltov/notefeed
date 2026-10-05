@@ -42,6 +42,9 @@ export function MarkdownInput({ id, name, label, value, onChange, rows, placehol
     const tail = after && !after.startsWith("\n") ? "\n" : "";
     const cursor = before.length + head.length + text.length;
     requestAnimationFrame(() => {
+      // The frame can come late. If the writer is in another field by then (the title, the tags), what they type next belongs there.
+      const active = document.activeElement;
+      if (active && active !== ta && active.matches("input:not([type=file]), textarea, select")) return;
       ta.focus();
       ta.setSelectionRange(cursor, cursor);
     });

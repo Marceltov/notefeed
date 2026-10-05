@@ -70,11 +70,13 @@ jobs:
       - run: npm ci
       - run: npx playwright install --with-deps chromium
       - run: npm run test:e2e
+      # Kept for a run that passed too: a test that failed once and passed on its retry leaves its trace only here.
       - uses: actions/upload-artifact@v4
-        if: failure()
+        if: ${{ !cancelled() }}
         with:
-          name: playwright-report
+          name: playwright-report-${{ github.event_name }}
           path: playwright-report/
+          retention-days: 14
 
   # Main pushes build :main + :latest; vX.Y.Z tags build :X.Y.Z/:X.Y/:X + :latest and a
   # GitHub release (same scheme as the MCP repos). The client packages release from the
