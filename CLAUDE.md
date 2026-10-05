@@ -15,3 +15,17 @@ CI is still the gate, and I decide when a branch is finished and when it is merg
 ## Releases
 
 A `vX.Y.Z` tag is a release: see the `release` skill (`.claude/skills/release/SKILL.md`) before bumping versions or tagging.
+
+## Agent skills
+
+### Issue tracker
+
+Issues are tracked in GitHub Issues (`Marceltov/notefeed`) with the `gh` CLI. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+The five default triage labels, unchanged. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: `CONTEXT.md` at the repo root and ADRs in `docs/adr/`. See `docs/agents/domain.md`.
