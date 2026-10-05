@@ -327,6 +327,27 @@ test("the title image can be picked from the feed's images, and goes when its no
   await expect(page.locator("header img:not([src=\"/icon.svg\"])")).toHaveCount(0);
 });
 
+// The note box takes the focus back one animation frame after a picture is added, so that typing goes on behind it. A frame can come
+// late (a busy machine), and by then the writer may be in the title field: what they type next must stay there, not land in the note.
+test("adding a picture does not pull the focus out of a field the writer has moved to since", async ({ page }) => {
+  // Animation frames wait until the test lets them through.
+  await page.addInitScript(() => {
+    const held: FrameRequestCallback[] = [];
+    window.requestAnimationFrame = (cb) => held.push(cb);
+    (window as unknown as { runFrames: () => void }).runFrames = () => held.splice(0).forEach((cb) => cb(performance.now()));
+  });
+  await page.goto(`/${feedName()}`);
+  await choose(page, "Add image", PNG);
+  await expect(note(page)).toHaveValue("![](pixel.png)");
+  const title = page.getByLabel("Title (optional, otherwise taken from the text)");
+  await title.focus();
+  await page.evaluate(() => (window as unknown as { runFrames: () => void }).runFrames());
+  await expect(title).toBeFocused();
+  await page.keyboard.insertText("Café");
+  await expect(title).toHaveValue("Café");
+  await expect(note(page)).toHaveValue("![](pixel.png)");
+});
+
 test("a title and tags typed with only pictures go on the pictures, accents included", async ({ page }) => {
   const name = feedName();
   await page.goto(`/${name}`);
