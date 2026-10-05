@@ -34,6 +34,15 @@ const migrations = (kind: Kind): Record<string, Migration> => ({
       await db.schema.createIndex("notes_by_time").on("notes").columns(["feed", "created_at"]).execute();
     },
   },
+  // Image bytes may live in an image store (storage/images): the row then holds the key and an empty `content`, which stays NOT NULL
+  // because SQLite cannot drop that without rebuilding the table. `size` is the content's, wherever it is.
+  "002_image_store": {
+    async up(db: Kysely<any>) {
+      await db.schema.alterTable("notes").addColumn("blob_key", "text").execute();
+      await db.schema.alterTable("notes").addColumn("size", "bigint", (c) => c.notNull().defaultTo(0)).execute();
+      await sql`update notes set size = octet_length(content)`.execute(db);
+    },
+  },
 });
 
 // A migration table that names one this code does not have: the database was made by a newer notefeed.
