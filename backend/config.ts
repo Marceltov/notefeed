@@ -28,9 +28,40 @@ const dataDir = () => env("DATA_DIR") || "/data";
 // SQLite defaults to a file next to where `fs` keeps its data, so the same volume works.
 const databaseUrl = () => env("NOTEFEED_DATABASE_URL") || (storageKind() === "sqlite" ? `file:${dataDir().replace(/\/+$/, "")}/notefeed.db` : "");
 
-// At startup, so a wrong setting shows then and not on the first signed cookie. The URL itself is never in a message.
+// Where a database backend keeps image bytes: in the row, in a folder, or in an S3-compatible object store.
+export const IMAGE_STORES = ["db", "fs", "s3"] as const;
+export type ImageStoreKind = (typeof IMAGE_STORES)[number];
+
+function imageStoreKind(): ImageStoreKind {
+  const v = env("NOTEFEED_IMAGES").trim().toLowerCase();
+  if (v === "") return "db";
+  if ((IMAGE_STORES as readonly string[]).includes(v)) return v as ImageStoreKind;
+  throw new Error(`NOTEFEED_IMAGES must be one of ${IMAGE_STORES.join(", ")}, got "${v}"`);
+}
+
+const imagesDir = () => env("NOTEFEED_IMAGES_DIR") || `${dataDir().replace(/\/+$/, "")}/images`;
+
+// Any S3-compatible store: the endpoint is required, there is no default provider. Stores without regions expect us-east-1.
+const s3 = () => ({
+  endpoint: env("NOTEFEED_S3_ENDPOINT").trim().replace(/\/+$/, ""),
+  bucket: env("NOTEFEED_S3_BUCKET").trim(),
+  region: env("NOTEFEED_S3_REGION").trim() || "us-east-1",
+  accessKey: env("NOTEFEED_S3_ACCESS_KEY"),
+  secretKey: env("NOTEFEED_S3_SECRET_KEY"),
+});
+
+// At startup, so a wrong setting shows then and not on the first signed cookie. The URL itself is never in a message,
+// nor is the endpoint or a key of the image store.
 function validateStorage(): void {
   const kind = storageKind();
+  const images = imageStoreKind();
+  if (kind === "fs" && images !== "db") throw new Error(`NOTEFEED_IMAGES=${images} needs NOTEFEED_STORAGE=sqlite or postgres: the file system backend keeps images in the feed's folder`);
+  if (images === "s3") {
+    const { endpoint, bucket, accessKey, secretKey } = s3();
+    const missing = Object.entries({ NOTEFEED_S3_ENDPOINT: endpoint, NOTEFEED_S3_BUCKET: bucket, NOTEFEED_S3_ACCESS_KEY: accessKey, NOTEFEED_S3_SECRET_KEY: secretKey }).flatMap(([k, v]) => (v === "" ? [k] : []));
+    if (missing.length) throw new Error(`NOTEFEED_IMAGES=s3 needs ${missing.join(", ")}`);
+    if (!/^https?:\/\//i.test(endpoint) || !URL.canParse(endpoint)) throw new Error("NOTEFEED_S3_ENDPOINT must be an http(s) URL");
+  }
   if (kind === "fs") return;
   if (kind === "postgres" && databaseUrl() === "") throw new Error("NOTEFEED_STORAGE=postgres needs NOTEFEED_DATABASE_URL");
   if (Buffer.byteLength(env("NOTEFEED_SECRET")) < 32) {
@@ -43,6 +74,9 @@ export const config = {
   storage: storageKind,
   databaseUrl,
   validateStorage,
+  images: imageStoreKind,
+  imagesDir,
+  s3,
   // Empty means unset: compose passes ${NOTEFEED_PASSWORD:-} and ${NOTEFEED_SECRET:-}.
   password: () => env("NOTEFEED_PASSWORD"),
   secret: () => env("NOTEFEED_SECRET"),
