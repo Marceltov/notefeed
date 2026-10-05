@@ -28,6 +28,15 @@ test("the startup fields: features and caps, never a secret", () => {
   expect(JSON.stringify(startupReport())).not.toMatch(/pw-value|the-secret|ann@x\.com/);
 });
 
+test("an operator token that is too short is warned about, without its value", () => {
+  const warned = () => startupReport().warnings.filter(([, m]) => m.includes("NOTEFEED_OPERATOR_TOKEN"));
+  vi.stubEnv("NOTEFEED_OPERATOR_TOKEN", "too-short");
+  expect(JSON.stringify(warned())).not.toContain("too-short");
+  expect(warned()).toEqual([["startup", "NOTEFEED_OPERATOR_TOKEN is shorter than 32 bytes; the operator endpoints stay off", {}]]);
+  vi.stubEnv("NOTEFEED_OPERATOR_TOKEN", "x".repeat(32));
+  expect(warned()).toEqual([]);
+});
+
 test("metrics on without a token are warned about, with no values; with a token, or off, there is no warning", () => {
   const warned = () => startupReport().warnings.filter(([, m]) => m.includes("NOTEFEED_METRICS_TOKEN"));
   expect(warned()).toEqual([]);

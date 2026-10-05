@@ -15,6 +15,7 @@ type Metrics = {
   parse: Histogram;
   timeouts: Counter;
   waiting: Gauge;
+  images?: { count: Gauge; bytes: Gauge; missing: Gauge; at: Gauge };
 };
 
 // One set for all route bundles (see processState), created on first use: with metrics off it never exists.
@@ -43,6 +44,8 @@ export async function renderMetrics(): Promise<{ contentType: string; body: stri
 export function resetMetricsForTest(): void {
   const m = metrics();
   for (const metric of [m.duration, m.dirs, m.files, m.parse, m.timeouts, m.waiting]) metric.reset();
+  for (const name of ["notefeed_images_unreferenced", "notefeed_images_unreferenced_bytes", "notefeed_images_missing", "notefeed_images_checked_timestamp_seconds"]) m.register.removeSingleMetric(name);
+  m.images = undefined;
 }
 
 export type FeedSize = "none" | "lt10" | "lt100" | "lt1000" | "gte1000";
@@ -99,4 +102,22 @@ export const observeParse = (seconds: number): void => void (config.metrics() &&
 /** One text was refused for time. */
 export const parseTimedOut = (): void => void (config.metrics() && metrics().timeouts.inc());
 /** The number of texts waiting for a worker now. */
+// What the last clean-up of the image store found (backend/http/operator.ts). Counting means listing the whole store, far too much
+// for every scrape, so these say what the last run saw and when it was. Made on the first run: before it they are absent, not 0.
+export function imagesSwept(left: { count: number; bytes: number; missing: number }, now = Date.now()): void {
+  if (!config.metrics()) return;
+  const m = metrics();
+  const { register } = m;
+  const g = (m.images ??= {
+    count: new Gauge({ name: "notefeed_images_unreferenced", help: "Objects in the image store that no note names, as of the last clean-up or report", registers: [register] }),
+    bytes: new Gauge({ name: "notefeed_images_unreferenced_bytes", help: "Their size in bytes", registers: [register] }),
+    missing: new Gauge({ name: "notefeed_images_missing", help: "Image notes whose object is not in the image store, as of the last clean-up or report", registers: [register] }),
+    at: new Gauge({ name: "notefeed_images_checked_timestamp_seconds", help: "When the image store was last checked for unreferenced objects", registers: [register] }),
+  });
+  g.count.set(left.count);
+  g.bytes.set(left.bytes);
+  g.missing.set(left.missing);
+  g.at.set(Math.floor(now / 1000));
+}
+
 export const setParseWaiting = (n: number): void => void (config.metrics() && metrics().waiting.set(n));

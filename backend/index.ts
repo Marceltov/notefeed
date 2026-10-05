@@ -19,6 +19,7 @@ export { feedPath, publicUrl, readPath, rssPath, safeNext, settingsPath } from "
 export { dispatch } from "./http/api";
 export { measured } from "./metrics";
 export { metricsRoute } from "./http/metrics";
+export { unreferencedImagesRoute } from "./http/operator";
 export { feedCookieName, feedUnlocked } from "./feedlock";
 export { feedDeleteRoute, feedSettingsRoute } from "./http/feedforms";
 export { feedAccessRoute } from "./http/feedsession";

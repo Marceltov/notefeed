@@ -99,9 +99,45 @@ How available your images are is up to the store. If it is unreachable, images f
 ### Things to know
 
 - **Changing the setting.** Going from `db` to `fs` or `s3` works at any time: images already in the database stay there and are still served, new ones go out. Going between `fs` and `s3`, or back to `db`, is not supported: notefeed does not move images, and those already moved out would show as broken until you switch back.
-- **Unreferenced files.** The image is written first and its note second, and a note is deleted before its image. If notefeed is stopped between the two steps, or the store fails to delete, a file or object is left that no note refers to. It cannot be reached by anyone and only takes up space. There is no clean-up command yet.
+- **Unreferenced files.** The image is written first and its note second, and a note is deleted before its image. If notefeed is stopped between the two steps, or the store fails to delete, a file or object is left that no note refers to. It cannot be reached by anyone and only takes up space. [Cleaning up the image store](#cleaning-up-the-image-store) finds and removes them.
+- **One folder or bucket per instance.** The clean-up removes every image-named file or object that this instance's database does not know. Two instances sharing one bucket would delete each other's images.
 - **A missing file or object** shows as a broken image; the note is still listed and can be deleted.
 - **Backups** are the database plus the folder or the bucket. See [Backups](backups.md).
+
+### Cleaning up the image store
+
+Set `NOTEFEED_OPERATOR_TOKEN` (at least 32 characters, `openssl rand -hex 32`) to turn on the operator's endpoint. Without it the endpoint answers `404`.
+
+```sh
+# What is there that no note refers to? Nothing is changed.
+curl -H "Authorization: Bearer $NOTEFEED_OPERATOR_TOKEN" https://notes.example.com/api/operator/images/unreferenced
+
+# The same, and those files or objects are removed.
+curl -X DELETE -H "Authorization: Bearer $NOTEFEED_OPERATOR_TOKEN" https://notes.example.com/api/operator/images/unreferenced
+```
+
+```json
+{ "store": "s3", "unreferenced": { "count": 3, "bytes": 482113 }, "deleted": { "count": 3, "bytes": 482113 }, "failed": 0, "too_recent": 1, "missing": 0 }
+```
+
+| Field | Meaning |
+|---|---|
+| `unreferenced` | Files or objects, older than an hour, that no note refers to |
+| `deleted`, `failed` | Only on `DELETE`: how many of them were removed, and how many the store refused to remove (see the log) |
+| `too_recent` | Written within the last hour and so left alone: an image being posted right now has its object before its note |
+| `missing` | Image notes whose file or object is not in the store. They show as broken images; nothing is changed about them |
+
+Things to know:
+
+- It reads the whole folder or bucket listing and every image note's key, so on a large store it takes a while. It is meant for an occasional run, not for every minute.
+- Only names that look like notefeed's image keys (32 hexadecimal characters) are ever counted or removed. Anything else in the folder or bucket is left alone.
+- With `NOTEFEED_IMAGES=db`, or on the file system backend, there is no image store and the endpoint answers `409`. On the file system backend an image is the note's own file, so nothing can be left unreferenced.
+- Wrong tokens are limited per address like wrong passwords.
+- With [metrics](metrics.md) on, each run updates `notefeed_images_unreferenced`, `notefeed_images_unreferenced_bytes`, `notefeed_images_missing` and `notefeed_images_checked_timestamp_seconds`. They say what the last run found (after a `DELETE`, what it left), and are absent until the first run. A daily report keeps them current:
+
+    ```sh
+    0 4 * * * curl -fsS -H "Authorization: Bearer <token>" https://notes.example.com/api/operator/images/unreferenced >/dev/null
+    ```
 
 ## Images and other files
 

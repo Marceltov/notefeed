@@ -5,6 +5,7 @@
 import { afterEach, describe, expect, test } from "vitest";
 import { describeStorage } from "../contract";
 import { createS3ImageStore } from "../images/s3";
+import { newKey } from "../images/types";
 import { connect } from "./connect";
 import { createSqlStorage, type Images, type SqlStorage } from ".";
 
@@ -57,6 +58,27 @@ describe.skipIf(!base || !supported)("postgres", () => {
       const made = await new AwsClient({ accessKeyId: o.accessKey, secretAccessKey: o.secretKey, service: "s3", region: o.region }).fetch(`${o.endpoint.replace(/\/+$/, "")}/${o.bucket}`, { method: "PUT" });
       if (!made.ok && made.status !== 409) throw new Error(`could not make the test bucket (${made.status})`);
       return { storage: fresh({ store: createS3ImageStore(o), external: (ext) => ext === "png" }), cleanup: async () => {} };
+    });
+
+    // In a bucket of its own: the clean-up removes whatever no note names, and the other tests' objects are in the shared one.
+    test("the clean-up removes an object no note names from a real store, and keeps a note's image", async () => {
+      await resetSchema();
+      const mine = { ...o, bucket: `${o.bucket}-sweep` };
+      const { AwsClient } = await import("aws4fetch");
+      const made = await new AwsClient({ accessKeyId: o.accessKey, secretAccessKey: o.secretKey, service: "s3", region: o.region }).fetch(`${o.endpoint.replace(/\/+$/, "")}/${mine.bucket}`, { method: "PUT" });
+      if (!made.ok && made.status !== 409) throw new Error(`could not make the test bucket (${made.status})`);
+      const store = createS3ImageStore(mine);
+      const s = fresh({ store, external: (ext) => ext === "png" });
+      await s.sweepImages({ remove: true, olderThanMs: 0 }); // what an earlier run left
+      await s.createFeed("f", "rid-f");
+      await s.writeNote("f", "p", "png", Buffer.from("kept"), {});
+      const orphan = newKey();
+      await store.put(orphan, Buffer.from("12345"));
+      expect(await s.sweepImages({ remove: false, olderThanMs: 0 })).toMatchObject({ unreferenced: { count: 1, bytes: 5 }, deleted: { count: 0 }, missing: 0 });
+      expect(await s.sweepImages({ remove: false, olderThanMs: 3_600_000 })).toMatchObject({ unreferenced: { count: 0 }, tooRecent: 2 });
+      expect(await s.sweepImages({ remove: true, olderThanMs: 0 })).toMatchObject({ deleted: { count: 1, bytes: 5 }, failed: 0 });
+      expect(await store.get(orphan)).toBeNull();
+      expect((await s.readFile("f", "p.png"))?.toString()).toBe("kept");
     });
   });
 

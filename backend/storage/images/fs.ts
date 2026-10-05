@@ -1,8 +1,8 @@
 // Images in a folder: one file per key, in a subfolder named by the key's first two characters so no folder grows without bound.
 import { randomBytes } from "node:crypto";
-import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { assertKey, type ImageStore } from "./types";
+import { assertKey, isKey, type ImageStore } from "./types";
 
 const isMissing = (e: unknown) => (e as NodeJS.ErrnoException)?.code === "ENOENT";
 
@@ -35,6 +35,19 @@ export function createFsImageStore(dir: string): ImageStore {
     },
     async delete(key) {
       await rm(pathOf(key), { force: true });
+    },
+    // A file being written (`<key>.<random>.tmp`), or anything else someone put in the folder, is not named like a key and is passed over.
+    async *list() {
+      const folders = await readdir(/*turbopackIgnore: true*/ dir).catch((e) => (isMissing(e) ? [] : Promise.reject(e)));
+      for (const folder of folders) {
+        if (!/^[0-9a-f]{2}$/.test(folder)) continue;
+        const names = await readdir(join(/*turbopackIgnore: true*/ dir, folder)).catch((e) => (isMissing(e) || (e as NodeJS.ErrnoException)?.code === "ENOTDIR" ? [] : Promise.reject(e)));
+        for (const key of names) {
+          if (!isKey(key) || !key.startsWith(folder)) continue;
+          const info = await stat(join(/*turbopackIgnore: true*/ dir, folder, key)).catch((e) => (isMissing(e) ? null : Promise.reject(e))); // deleted since the listing
+          if (info?.isFile()) yield { key, size: info.size, modified: info.mtime };
+        }
+      }
     },
   };
 }

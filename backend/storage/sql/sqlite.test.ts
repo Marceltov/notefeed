@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -26,8 +27,9 @@ async function fresh(file = "test.db", images?: Images) {
 function recording() {
   const objects = new Map<string, Buffer>();
   const calls: string[] = [];
-  const failing = new Set<"put" | "get" | "delete">();
-  const check = (op: "put" | "get" | "delete") => {
+  const failing = new Set<"put" | "get" | "delete" | "list">();
+  const modified = new Map<string, Date>();
+  const check = (op: "put" | "get" | "delete" | "list") => {
     calls.push(op);
     if (failing.has(op)) throw new Error(`image store: ${op} failed (500)`);
   };
@@ -35,6 +37,7 @@ function recording() {
     async put(key, bytes) {
       check("put");
       objects.set(key, Buffer.from(bytes));
+      modified.set(key, new Date());
     },
     async get(key) {
       check("get");
@@ -44,8 +47,14 @@ function recording() {
       check("delete");
       objects.delete(key);
     },
+    async *list() {
+      check("list");
+      for (const [key, bytes] of objects) yield { key, size: bytes.byteLength, modified: modified.get(key) ?? new Date() };
+    },
   };
-  return { objects, calls, failing, images: { store, external: (ext: string) => ext === "png" } satisfies Images };
+  /** Makes an object look as if it was written `ms` ago. */
+  const age = (key: string, ms: number) => void modified.set(key, new Date(Date.now() - ms));
+  return { objects, calls, failing, age, images: { store, external: (ext: string) => ext === "png" } satisfies Images };
 }
 const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x00, 0xff, 0x00]);
 const ALL = ["md", "png"];
@@ -272,6 +281,95 @@ describe.skipIf(!supported)("sqlite", () => {
       expect(await s.listNoteRefs("f")).toHaveLength(2);
       expect(await s.readMeta("f", { id: "p", ext: "png" })).toEqual({});
       expect((await s.readFile("f", "t.md"))?.toString()).toBe("text");
+    });
+
+    describe("the clean-up", () => {
+      const HOUR = 3_600_000;
+      const orphan = (rec: { objects: Map<string, Buffer>; age: (key: string, ms: number) => void }, bytes: string, ageMs: number) => {
+        const key = randomBytes(16).toString("hex");
+        rec.objects.set(key, Buffer.from(bytes));
+        rec.age(key, ageMs);
+        return key;
+      };
+
+      test("reports the objects no note names, by count and size, and removes nothing", async () => {
+        const t = await setup();
+        await t.s.writeNote("f", "p", "png", PNG, {});
+        for (const key of t.objects.keys()) t.age(key, 2 * HOUR);
+        orphan(t, "12345", 2 * HOUR);
+        orphan(t, "123", 3 * HOUR);
+        expect(await t.s.sweepImages({ remove: false, olderThanMs: HOUR })).toEqual({ unreferenced: { count: 2, bytes: 8 }, deleted: { count: 0, bytes: 0 }, failed: 0, tooRecent: 0, missing: 0 });
+        expect(t.objects.size).toBe(3);
+        expect(t.calls).not.toContain("delete");
+      });
+
+      test("removes exactly those, and every note's image is still there", async () => {
+        const t = await setup();
+        await t.s.createFeed("g", "rid-g");
+        await t.s.writeNote("f", "p", "png", PNG, {});
+        await t.s.writeNote("g", "q", "png", Buffer.from("g's"), {});
+        for (const key of t.objects.keys()) t.age(key, 2 * HOUR);
+        const gone = [orphan(t, "12345", 2 * HOUR), orphan(t, "123", 30 * 24 * HOUR)];
+        expect(await t.s.sweepImages({ remove: true, olderThanMs: HOUR })).toEqual({ unreferenced: { count: 2, bytes: 8 }, deleted: { count: 2, bytes: 8 }, failed: 0, tooRecent: 0, missing: 0 });
+        for (const key of gone) expect(t.objects.has(key)).toBe(false);
+        expect(t.objects.size).toBe(2);
+        expect(await t.s.readFile("f", "p.png")).toEqual(PNG);
+        expect((await t.s.readFile("g", "q.png"))?.toString()).toBe("g's");
+        expect(await t.s.sweepImages({ remove: true, olderThanMs: HOUR })).toMatchObject({ unreferenced: { count: 0, bytes: 0 }, deleted: { count: 0, bytes: 0 } });
+      });
+
+      test("an object written a moment ago is left alone and counted: its note may not be there yet", async () => {
+        const t = await setup();
+        const young = orphan(t, "being posted", 5 * 60_000);
+        const oldOne = orphan(t, "left behind", 2 * HOUR);
+        expect(await t.s.sweepImages({ remove: true, olderThanMs: HOUR })).toEqual({ unreferenced: { count: 1, bytes: 11 }, deleted: { count: 1, bytes: 11 }, failed: 0, tooRecent: 1, missing: 0 });
+        expect(t.objects.has(young)).toBe(true);
+        expect(t.objects.has(oldOne)).toBe(false);
+      });
+
+      test("a note whose object is gone is counted as missing, and stays", async () => {
+        const t = await setup();
+        await t.s.writeNote("f", "p", "png", PNG, {});
+        await t.s.writeNote("f", "q", "png", PNG, {});
+        t.objects.delete([...t.objects.keys()][0]);
+        await new Promise((r) => setTimeout(r, 5)); // the rows are from before this clean-up began
+        expect(await t.s.sweepImages({ remove: true, olderThanMs: HOUR })).toMatchObject({ unreferenced: { count: 0 }, missing: 1 });
+        expect(await t.s.listNoteRefs("f")).toHaveLength(2);
+      });
+
+      test("an image that is in its row, and a text note, are neither unreferenced nor missing", async () => {
+        const plain = await fresh();
+        await plain.storage.createFeed("f", "rid-f");
+        await plain.storage.writeNote("f", "old", "png", PNG, {});
+        await plain.storage.writeNote("f", "t", "md", "text", {});
+        await plain.storage.close();
+        const rec = recording();
+        const s = createSqlStorage(() => connect("sqlite", plain.url), "sqlite", rec.images);
+        open.push({ storage: s, root: plain.root });
+        expect(await s.sweepImages({ remove: true, olderThanMs: HOUR })).toEqual({ unreferenced: { count: 0, bytes: 0 }, deleted: { count: 0, bytes: 0 }, failed: 0, tooRecent: 0, missing: 0 });
+      });
+
+      test("an object the store will not delete is counted as failed and logged without its key; the others still go", async () => {
+        const t = await setup();
+        const keys = [orphan(t, "a", 2 * HOUR), orphan(t, "b", 2 * HOUR)];
+        t.failing.add("delete");
+        const logs = await logsOf(async () => expect(await t.s.sweepImages({ remove: true, olderThanMs: HOUR })).toMatchObject({ unreferenced: { count: 2 }, deleted: { count: 0 }, failed: 2 }));
+        expect(logs.filter((l) => l.level === "warn")).toHaveLength(2);
+        for (const key of keys) expect(JSON.stringify(logs)).not.toContain(key);
+      });
+
+      test("a store that cannot be listed fails the clean-up and removes nothing", async () => {
+        const t = await setup();
+        orphan(t, "a", 2 * HOUR);
+        t.failing.add("list");
+        await expect(t.s.sweepImages({ remove: true, olderThanMs: HOUR })).rejects.toThrow("image store: list failed (500)");
+        expect(t.objects.size).toBe(1);
+      });
+
+      test("an instance without an image store has nothing to clean up", async () => {
+        const { storage } = await fresh();
+        expect(await storage.sweepImages({ remove: true, olderThanMs: HOUR })).toBeNull();
+      });
     });
 
     test("a row that names a key is not read as an empty image when no store is configured", async () => {

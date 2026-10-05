@@ -43,6 +43,22 @@ export function describeImageStore(name: string, make: () => Promise<ImageStore>
       await s.delete(a);
       expect((await s.get(b))?.toString()).toBe("b");
     });
+    test("list gives every object once, with its size and a time of writing, and none that was deleted", async () => {
+      const s = await make();
+      const before = Date.now() - 2000; // a store keeps whole seconds
+      const keys = [newKey(), newKey(), newKey()];
+      const mine = new Set(keys);
+      for (const [i, key] of keys.entries()) await s.put(key, Buffer.alloc(i + 1));
+      await s.delete(keys[1]);
+      // A store that outlives a test (a real bucket) holds other tests' objects too.
+      const listed = [];
+      for await (const o of s.list()) if (mine.has(o.key)) listed.push(o);
+      expect(listed.map((o) => [o.key, o.size]).sort()).toEqual([[keys[0], 1], [keys[2], 3]].sort());
+      for (const o of listed) {
+        expect(o.modified.getTime()).toBeGreaterThanOrEqual(before);
+        expect(o.modified.getTime()).toBeLessThanOrEqual(Date.now() + 2000);
+      }
+    });
     test("anything that is not a key is refused", async () => {
       const s = await make();
       for (const bad of ["", "../x", "a/b", "ABCDEF0123456789ABCDEF0123456789", "x".repeat(32)]) {
