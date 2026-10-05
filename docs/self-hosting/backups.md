@@ -7,3 +7,5 @@ tar czf notefeed-notes.tgz -C data .
 ```
 
 With a [database](storage.md#databases) instead of files, back up the database: `pg_dump` for PostgreSQL, the file (or `sqlite3 notefeed.db ".backup out.db"`) for SQLite. Keep your `NOTEFEED_SECRET` with the backup: it is not in the database.
+
+With [image bytes outside the database](storage.md#image-bytes-outside-the-database) (`NOTEFEED_IMAGES=fs` or `s3`), back up the images folder or the bucket as well. Take the database backup first and the images second: an image that is in the second but not the first is only an unused file, while a note in the database whose image is missing from the backup shows as broken.

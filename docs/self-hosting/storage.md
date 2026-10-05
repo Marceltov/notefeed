@@ -38,7 +38,7 @@ By default notefeed keeps everything as files, as described above. With `NOTEFEE
 | Containers | one | one | several |
 | Back up with | copy the folder | copy the file while notefeed is stopped, or `sqlite3 notefeed.db ".backup out.db"` | `pg_dump` |
 
-Two tables hold it all: `feeds` (name, read id, password hash and settings) and `notes` (feed, id, extension, content, metadata). A picture is a note, so its bytes are in `notes.content`; there is no separate file store. The tables are created, and updated when notefeed is upgraded, when it starts. A database made by a newer notefeed is refused with a message saying so.
+Two tables hold it all: `feeds` (name, read id, password hash and settings) and `notes` (feed, id, extension, content, metadata). An image is a note, so its bytes are in `notes.content`, unless you [move image bytes out of the database](#image-bytes-outside-the-database). The tables are created, and updated when notefeed is upgraded, when it starts. A database made by a newer notefeed is refused with a message saying so.
 
 Things that differ from files:
 
@@ -49,6 +49,59 @@ Things that differ from files:
 `sqlite` and `postgres` need Node 22 or later when you run from source (the Docker image has it); `fs` runs on any Node version notefeed supports.
 
 A PostgreSQL setup with Docker Compose is in [PostgreSQL](postgres.md#postgresql).
+
+## Which setup for which instance
+
+| Instance | Feeds and notes | Image bytes |
+|---|---|---|
+| One container for yourself or a small group | `fs` (default) or `sqlite` | with the notes |
+| One container plus PostgreSQL | `postgres` | in the database, or in a folder (`NOTEFEED_IMAGES=fs`) if there are many |
+| Several containers behind a load balancer | `postgres` | an S3-compatible object store (`NOTEFEED_IMAGES=s3`) |
+
+Feeds, text notes and metadata stay small on any instance. Image bytes are what grows, so they are what can be moved out.
+
+## Image bytes outside the database
+
+With `sqlite` or `postgres`, `NOTEFEED_IMAGES` says where the bytes of image notes go. Everything else about an image (its id, metadata, size and feed) stays in the database, and text notes always stay there too. Nothing changes for readers: images are still served by notefeed under the feed's read link, never straight from the folder or the bucket.
+
+| `NOTEFEED_IMAGES` | Where the bytes are | Use it when |
+|---|---|---|
+| `db` (default) | in the note's row | the instance is small; one thing to back up |
+| `fs` | one file per image in `NOTEFEED_IMAGES_DIR` (default `DATA_DIR/images`) | one container with many images, and you want a small database |
+| `s3` | one object per image in a bucket of an S3-compatible store | several containers, which must all reach every image |
+
+The setting is for the database backends only. With `NOTEFEED_STORAGE=fs` images are files in the feed's folder, and `NOTEFEED_IMAGES=fs` or `s3` stops notefeed from starting.
+
+### An S3-compatible object store
+
+Any store that speaks the S3 protocol works: a hosted one (Hetzner Object Storage, IONOS, OVHcloud, Scaleway, Cloudflare R2, AWS S3) or one you run (MinIO, Garage). notefeed only puts, gets and deletes single objects, addressed as `<endpoint>/<bucket>/<object>`, so nothing provider-specific is needed. Create the bucket yourself, keep it private, and give notefeed a key that may read, write and delete objects in it.
+
+```yaml
+services:
+  notefeed:
+    image: ghcr.io/marceltov/notefeed:latest
+    environment:
+      NOTEFEED_STORAGE: postgres
+      NOTEFEED_DATABASE_URL: postgres://notefeed:change-me@db:5432/notefeed
+      NOTEFEED_SECRET: <openssl rand -hex 32>
+      NOTEFEED_IMAGES: s3
+      NOTEFEED_S3_ENDPOINT: https://s3.example.com
+      NOTEFEED_S3_BUCKET: notefeed-images
+      NOTEFEED_S3_REGION: us-east-1        # what your store calls its region; many accept us-east-1
+      NOTEFEED_S3_ACCESS_KEY: <access key>
+      NOTEFEED_S3_SECRET_KEY: <secret key>
+```
+
+There is no default endpoint. notefeed refuses to start unless the endpoint, the bucket and both keys are set, and it never logs any of them. Objects are named by a random key, so the bucket shows neither feed names nor note ids.
+
+How available your images are is up to the store. If it is unreachable, images fail to load and posting an image answers with an error; text notes, the feed pages and RSS keep working.
+
+### Things to know
+
+- **Changing the setting.** Going from `db` to `fs` or `s3` works at any time: images already in the database stay there and are still served, new ones go out. Going between `fs` and `s3`, or back to `db`, is not supported: notefeed does not move images, and those already moved out would show as broken until you switch back.
+- **Unreferenced files.** The image is written first and its note second, and a note is deleted before its image. If notefeed is stopped between the two steps, or the store fails to delete, a file or object is left that no note refers to. It cannot be reached by anyone and only takes up space. There is no clean-up command yet.
+- **A missing file or object** shows as a broken image; the note is still listed and can be deleted.
+- **Backups** are the database plus the folder or the bucket. See [Backups](backups.md).
 
 ## Images and other files
 
