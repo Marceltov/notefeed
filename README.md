@@ -2,7 +2,7 @@
 
 [![Hosted at notefeed.me](https://img.shields.io/badge/Hosted-notefeed.me-beige)](https://notefeed.me)
 [![Documentation at docs.notefeed.me](https://img.shields.io/badge/Documentation-docs.notefeed.me-brown)](https://docs.notefeed.me)
-[![Container image on ghcr.io](https://img.shields.io/badge/ghcr.io-container-violet)](https://github.com/notefeed/notefeed/pkgs/container/notefeed)
+[![Container image on ghcr.io](https://img.shields.io/badge/ghcr.io-notefeed-violet)](https://github.com/notefeed/notefeed/pkgs/container/notefeed)
 [![npm version](https://img.shields.io/npm/v/notefeed?color=red)](https://www.npmjs.com/package/notefeed)
 [![PyPI version](https://img.shields.io/pypi/v/notefeed?color=blue)](https://pypi.org/project/notefeed/)
 [![M8ven Score](https://m8ven.ai/badge/mcp/notefeed-notefeed-1y7zvn)](https://m8ven.ai/mcp/notefeed-notefeed-1y7zvn?s=readme)
