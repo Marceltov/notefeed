@@ -157,7 +157,7 @@ jobs:
           # compose.yaml
           services:
             notefeed:
-              image: ghcr.io/marceltov/notefeed:__VERSION__
+              image: ghcr.io/notefeed/notefeed:__VERSION__
               restart: unless-stopped
               ports:
                 - "3000:3000"

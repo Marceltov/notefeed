@@ -1,6 +1,6 @@
 # notefeed
 
-Post and read markdown notes on a [notefeed](https://github.com/Marceltov/notefeed) server from Node or the command line. No dependencies; Node 20 or newer.
+Post and read markdown notes on a [notefeed](https://github.com/notefeed/notefeed) server from Node or the command line. No dependencies; Node 20 or newer.
 
 ```sh
 npm install notefeed

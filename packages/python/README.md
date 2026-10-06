@@ -1,6 +1,6 @@
 # notefeed
 
-Post and read markdown notes on a [notefeed](https://github.com/Marceltov/notefeed) server from Python or the command line. Python 3.11 or newer.
+Post and read markdown notes on a [notefeed](https://github.com/notefeed/notefeed) server from Python or the command line. Python 3.11 or newer.
 
 ```sh
 pip install notefeed

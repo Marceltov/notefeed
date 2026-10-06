@@ -36,12 +36,12 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Marceltov/notefeed.git",
+    "url": "git+https://github.com/notefeed/notefeed.git",
     "directory": "packages/js"
   },
   "homepage": "https://docs.notefeed.me/integrations/clients/",
   "bugs": {
-    "url": "https://github.com/Marceltov/notefeed/issues"
+    "url": "https://github.com/notefeed/notefeed/issues"
   },
   "devDependencies": {
     "@types/node": "^20",

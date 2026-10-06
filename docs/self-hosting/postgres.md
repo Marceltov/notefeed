@@ -6,7 +6,7 @@ To keep feeds and notes in PostgreSQL instead of files, set `NOTEFEED_STORAGE=po
 # compose.yaml
 services:
   notefeed:
-    image: ghcr.io/marceltov/notefeed:latest
+    image: ghcr.io/notefeed/notefeed:latest
     restart: unless-stopped
     ports:
       - "3000:3000"

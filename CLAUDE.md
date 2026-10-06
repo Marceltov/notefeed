@@ -20,7 +20,7 @@ A `vX.Y.Z` tag is a release: see the `release` skill (`.claude/skills/release/SK
 
 ### Issue tracker
 
-Issues are tracked in GitHub Issues (`Marceltov/notefeed`) with the `gh` CLI. See `docs/agents/issue-tracker.md`.
+Issues are tracked in GitHub Issues (`notefeed/notefeed`) with the `gh` CLI. See `docs/agents/issue-tracker.md`.
 
 ### Triage labels
 
