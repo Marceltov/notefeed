@@ -1,6 +1,6 @@
 services:
   notefeed:
-    image: ghcr.io/marceltov/notefeed:latest
+    image: ghcr.io/notefeed/notefeed:latest
     build: .
     restart: unless-stopped
     ports:

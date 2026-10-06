@@ -1,8 +1,8 @@
 site_name: notefeed
 site_description: Post markdown notes over HTTP, read them back as RSS.
 site_url: https://docs.notefeed.me/
-repo_url: https://github.com/Marceltov/notefeed
-repo_name: Marceltov/notefeed
+repo_url: https://github.com/notefeed/notefeed
+repo_name: notefeed/notefeed
 edit_uri: edit/main/docs/
 
 # docs/superpowers/ holds local working notes (gitignored); never publish them.

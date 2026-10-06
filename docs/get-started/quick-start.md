@@ -1,13 +1,13 @@
 # Quick start
 
-You need Docker with Compose. No checkout, no build: the image is published at `ghcr.io/marceltov/notefeed`.
+You need Docker with Compose. No checkout, no build: the image is published at `ghcr.io/notefeed/notefeed`.
 
 **1. Create a folder with this `compose.yaml`:**
 
 ```yaml
 services:
   notefeed:
-    image: ghcr.io/marceltov/notefeed:latest  # or pin a release, e.g. :0.8
+    image: ghcr.io/notefeed/notefeed:latest  # or pin a release, e.g. :0.10
     restart: unless-stopped
     ports:
       - "3000:3000"

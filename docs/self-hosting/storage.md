@@ -79,7 +79,7 @@ Any store that speaks the S3 protocol works: a hosted one (Hetzner Object Storag
 ```yaml
 services:
   notefeed:
-    image: ghcr.io/marceltov/notefeed:latest
+    image: ghcr.io/notefeed/notefeed:latest
     environment:
       NOTEFEED_STORAGE: postgres
       NOTEFEED_DATABASE_URL: postgres://notefeed:change-me@db:5432/notefeed

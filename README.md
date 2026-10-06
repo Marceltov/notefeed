@@ -1,7 +1,7 @@
 # notefeed
 
 [![](https://img.shields.io/badge/Hosted-notefeed.me-beige)](notefeed.me)
-[![](https://img.shields.io/badge/Documentation-docs.notefeed.me-brown)]([docs.notefeed.me](https://github.com/Marceltov/notefeed/pkgs/container/notefeed))
+[![](https://img.shields.io/badge/Documentation-docs.notefeed.me-brown)]([docs.notefeed.me](https://github.com/notefeed/notefeed/pkgs/container/notefeed))
 [![](https://img.shields.io/badge/ghcr.io-container-violet)](notefeed.me)
 ![NPM Version](https://img.shields.io/npm/v/notefeed?color=red)
 ![PyPi Version](https://img.shields.io/pypi/v/notefeed?color=blue)
@@ -9,7 +9,7 @@
 
 Post short markdown notes to a named feed — from a script over HTTP, or by hand in a small web UI — and read them back as RSS. Like [ntfy](https://ntfy.sh), but for notes: there are no accounts, a feed is just a name, and each note is a plain `.md` file on disk. Built as an inbox for dashboards like Glance and Dynacat, which can read RSS but have nowhere to post to.
 
-- **Self-host: [Check releases](https://github.com/Marceltov/notefeed/releases)** or **[GHCR](https://github.com/Marceltov/notefeed/pkgs/container/notefeed)**   
+- **Self-host: [Check releases](https://github.com/notefeed/notefeed/releases)** or **[GHCR](https://github.com/notefeed/notefeed/pkgs/container/notefeed)**   
 - **Hosted version: https://notefeed.me**  
 - **Documentation: https://docs.notefeed.me/**
 
@@ -27,7 +27,7 @@ Save this as `compose.yaml`, create the data folder, and start it:
 ```yaml
 services:
   notefeed:
-    image: ghcr.io/marceltov/notefeed:latest
+    image: ghcr.io/notefeed/notefeed:latest
     restart: unless-stopped
     ports:
       - "3000:3000"
