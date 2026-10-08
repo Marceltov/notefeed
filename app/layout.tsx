@@ -35,6 +35,9 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
             <a href="https://docs.notefeed.me/" className="hover:text-ink hover:underline">
               Docs
             </a>
+            <a href="https://github.com/notefeed/notefeed" className="hover:text-ink hover:underline">
+              GitHub
+            </a>
             {imprint && (
               <Link href="/imprint" className="hover:text-ink hover:underline">
                 Imprint

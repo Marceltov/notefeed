@@ -29,6 +29,7 @@ test("without the files, neither page exists and the footer has no link to them"
   await page.goto(WITHOUT + "/");
   const footer = page.getByRole("contentinfo");
   await expect(footer.getByRole("link", { name: "Docs" })).toBeVisible();
+  await expect(footer.getByRole("link", { name: "GitHub" })).toHaveAttribute("href", "https://github.com/notefeed/notefeed");
   await expect(footer.getByRole("link", { name: "Imprint" })).toHaveCount(0);
   await expect(footer.getByRole("link", { name: "Data privacy" })).toHaveCount(0);
 });
