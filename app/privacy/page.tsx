@@ -32,9 +32,10 @@ export default function Privacy() {
           The instance runs on servers of Hetzner Online GmbH, Industriestr.
           25, 91710 Gunzenhausen, Germany, in a data centre in Germany. Hetzner
           stores the data on my behalf under a data processing agreement (Art.
-          28 GDPR) and is the only processor. Requests reach the server
-          directly, with no other company in between, and no data is
-          transferred to third countries.
+          28 GDPR) and is the only processor of what you post. Requests reach
+          the server directly, with no other company in between. Notes, feeds,
+          images and logs are not transferred to third countries; e-mail you
+          send me is the one exception, see below.
         </p>
         <h2 className="pt-2 font-bold">Notes, feeds and images</h2>
         <p>
@@ -98,6 +99,21 @@ export default function Privacy() {
           failed password attempts (same legal basis). That is kept in memory
           only, for about a minute, and is never written to disk.
         </p>
+        <h2 className="pt-2 font-bold">E-mail</h2>
+        <p>
+          <strong>What:</strong> if you write to an address at notefeed.me,
+          your message with your address is received by Cloudflare, Inc., which
+          routes mail for the domain, and forwarded to my mailbox at Google
+          (Gmail). Both are companies in the USA, so your message is
+          transferred there.
+          <br />
+          <strong>Why and legal basis:</strong> to read and answer what you
+          wrote (Art. 6 (1) (f) GDPR, legitimate interest; Art. 6 (1) (b) if it
+          is about a contract).
+          <br />
+          <strong>Retention:</strong> until the matter is settled, and longer
+          only where the law requires keeping business mail.
+        </p>
         <h2 className="pt-2 font-bold">Cookies</h2>
         <p>
           If the instance or a feed is password-protected, a cookie keeps you
@@ -110,7 +126,8 @@ export default function Privacy() {
         <h2 className="pt-2 font-bold">Recipients and automated decisions</h2>
         <p>
           Your data is not passed on to anyone except the hosting provider
-          named above, which stores it on my behalf. There is no automated
+          named above, which stores it on my behalf, and, for e-mail you send
+          me, the two mail providers named above. There is no automated
           decision-making or profiling.
         </p>
         <h2 className="pt-2 font-bold">Your rights</h2>
