@@ -2,6 +2,7 @@
 // (instrumentation.ts). Names of variables only, never their values.
 import { config, LOG_LEVELS, type StorageKind } from "./config";
 import { reservedFeedProblems, RESERVED_FEEDS } from "./feeds";
+import { unreadableLegalSettings } from "./legal";
 import { logger } from "./log";
 import { missingVars, providers } from "./oidc/config";
 import { storage } from "./storage";
@@ -71,6 +72,11 @@ export async function reservedFolderWarnings(): Promise<Warning[]> {
 }
 
 // Throws only for a wrong storage setting; any other failure here must not keep the server from starting.
+// An imprint or privacy page that was asked for and cannot be shown: the visitor would only see that the link is missing.
+export async function legalFileWarnings(): Promise<Warning[]> {
+  return (await unreadableLegalSettings()).map((setting) => ["startup", "a page's file cannot be read (missing, not a file, or larger than 256 KiB); the page is not shown", { setting }]);
+}
+
 export async function logStartup(): Promise<void> {
   config.validateStorage(); // a wrong storage setting keeps the server from starting; the one failure not caught below
   const warn = (warnings: Warning[]) => warnings.forEach(([component, msg, f]) => logger(component).warn(f, msg));
@@ -78,6 +84,7 @@ export async function logStartup(): Promise<void> {
     const { fields, warnings } = startupReport();
     logger("startup").info(fields, "notefeed started");
     warn(warnings);
+    warn(await legalFileWarnings());
     warn(await reservedFolderWarnings());
     warn(await reservedFeedWarnings()); // loads the feed index, which creates missing reserved feeds
   } catch (e) {

@@ -34,7 +34,7 @@ describe("checkFeed", () => {
   test("metrics is reserved: /metrics is the scrape route", () => expect(checkFeed("metrics")).toBe("reserved"));
   test("reserved names", () => {
     const names = [...RESERVED_FEEDS].filter((n) => FEED_RE.test(n));
-    expect(names).toHaveLength(11);
+    expect(names).toHaveLength(13);
     for (const n of names) expect(checkFeed(n)).toBe("reserved");
   });
 });

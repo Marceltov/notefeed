@@ -6,7 +6,7 @@ import { hashPassword } from "./feedlock";
 import { readIdOf, reservedFeedProblems, resetFeedsForTests } from "./feeds";
 import { logsOf, logTo } from "./log";
 import { createNote } from "./notes";
-import { logStartup, reservedFeedWarnings, reservedFolderWarnings, reservedHint, startupReport } from "./startup";
+import { legalFileWarnings, logStartup, reservedFeedWarnings, reservedFolderWarnings, reservedHint, startupReport } from "./startup";
 
 let dir: string;
 beforeEach(async () => {
@@ -35,6 +35,16 @@ test("an operator token that is too short is warned about, without its value", (
   expect(warned()).toEqual([["startup", "NOTEFEED_OPERATOR_TOKEN is shorter than 32 bytes; the operator endpoints stay off", {}]]);
   vi.stubEnv("NOTEFEED_OPERATOR_TOKEN", "x".repeat(32));
   expect(warned()).toEqual([]);
+});
+
+test("an imprint or privacy file that cannot be read is warned about by its setting's name, never its path", async () => {
+  expect(await legalFileWarnings()).toEqual([]);
+  await writeFile(join(dir, "imprint.md"), "# Imprint");
+  vi.stubEnv("NOTEFEED_IMPRINT_FILE", join(dir, "imprint.md"));
+  vi.stubEnv("NOTEFEED_PRIVACY_FILE", join(dir, "no-such-file.md"));
+  const warnings = await legalFileWarnings();
+  expect(warnings).toEqual([["startup", "a page's file cannot be read (missing, not a file, or larger than 256 KiB); the page is not shown", { setting: "NOTEFEED_PRIVACY_FILE" }]]);
+  expect(JSON.stringify(warnings)).not.toContain(dir);
 });
 
 test("metrics on without a token are warned about, with no values; with a token, or off, there is no warning", () => {

@@ -45,4 +45,4 @@ Take them off the allow-list (`NOTEFEED_OIDC_ALLOW`, or `NOTEFEED_OIDC_<NAME>_AL
 
 ## Privacy page and imprint
 
-A sender name or e-mail address is personal data, and as the operator you are its controller. Before you switch sign-in on, check that your privacy page and imprint say that notes carry the signed-in person's name, e-mail or other identifier, as configured, that it is shown on the public read link and in RSS unless the feed hides it, and how a person can have it removed.
+A sender name or e-mail address is personal data, and as the operator you are its controller. Before you switch sign-in on, check that your [privacy page and imprint](../legal-pages.md) say that notes carry the signed-in person's name, e-mail or other identifier, as configured, that it is shown on the public read link and in RSS unless the feed hides it, and how a person can have it removed.

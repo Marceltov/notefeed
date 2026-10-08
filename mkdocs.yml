@@ -85,6 +85,7 @@ nav:
   - Self-hosting:
       - Configuration: self-hosting/configuration.md
       - Passwords and access: self-hosting/access.md
+      - Imprint and privacy page: self-hosting/legal-pages.md
       - Reserved feeds: self-hosting/reserved-feeds.md
       - OAuth for MCP: self-hosting/oauth.md
       - Rate limits and caps: self-hosting/limits.md
