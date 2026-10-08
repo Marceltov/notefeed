@@ -85,6 +85,8 @@ export const config = {
   // The operator's own imprint and privacy page: Markdown files (see legal.ts). Empty: the page does not exist.
   imprintFile: () => env("NOTEFEED_IMPRINT_FILE"),
   privacyFile: () => env("NOTEFEED_PRIVACY_FILE"),
+  // The operator's notice on the start page, a Markdown file too. Empty: no notice.
+  noticeFile: () => env("NOTEFEED_NOTICE_FILE"),
   trustProxy: () => env("NOTEFEED_TRUST_PROXY") === "1",
   // Per minute and IP; 0 or below turns it off.
   rateLimit: () => int("NOTEFEED_RATE_LIMIT", 60),
