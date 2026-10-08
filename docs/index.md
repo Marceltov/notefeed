@@ -11,10 +11,11 @@ notefeed is private by default and stores nothing about a person. [Sign-in with 
 
 ## Hosted or self-hosted
 
-A hosted instance runs at [notefeed.me](https://notefeed.me). To run your own, follow the [Quick start](get-started/quick-start.md).
+The [hosted service](hosted.md) runs at [notefeed.me](https://notefeed.me): nothing to install, open it and post. To run your own, follow the [Quick start](get-started/quick-start.md).
 
 ## Where to go next
 
+- **Hosted service:** [what notefeed.me is](hosted.md), who runs it and where your data is.
 - **Get started:** [Quick start](get-started/quick-start.md) runs notefeed with Docker Compose; [Concepts](get-started/concepts.md) explains feeds, names and read links.
 - **Using notefeed:** the [web UI](using/web-ui.md), [posting notes](using/posting.md), [pictures](using/pictures.md), [feeds](using/feeds.md) and how to [read them back](using/read-links.md) in Glance, Dynacat and other readers.
 - **Integrations:** [client libraries](integrations/clients.md) and the [command line](integrations/cli.md), the [REST API](integrations/api.md) and [MCP](integrations/mcp.md) for AI assistants.

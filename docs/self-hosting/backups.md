@@ -9,3 +9,9 @@ tar czf notefeed-notes.tgz -C data .
 With a [database](storage.md#databases) instead of files, back up the database: `pg_dump` for PostgreSQL, the file (or `sqlite3 notefeed.db ".backup out.db"`) for SQLite. Keep your `NOTEFEED_SECRET` with the backup: it is not in the database.
 
 With [image bytes outside the database](storage.md#image-bytes-outside-the-database) (`NOTEFEED_IMAGES=fs` or `s3`), back up the images folder or the bucket as well. Take the database backup first and the images second: an image that is in the second but not the first is only an unused file, while a note in the database whose image is missing from the backup shows as broken.
+
+## How long a backup keeps what was deleted
+
+A backup still holds every feed and note that was deleted after it was made. So how long you keep backups is how long deleted notes live on, and the times add up when one backup holds another: database dumps kept 1 day on a server whose disk is backed up for 7 days are 8 days, not 7.
+
+On a public instance, decide that number and say it on your [privacy page](legal-pages.md#what-to-write). Change the two together.
