@@ -16,7 +16,7 @@ export default function Privacy() {
         <h1 className="text-xl font-bold tracking-tight">Data privacy</h1>
         <p>
           This explains which personal data this notefeed instance processes
-          and why, as required by the GDPR (DSGVO). Last updated: 2 October
+          and why, as required by the GDPR (DSGVO). Last updated: 8 October
           2026.
         </p>
         <h2 className="pt-2 font-bold">Controller (Verantwortlicher)</h2>
@@ -29,9 +29,12 @@ export default function Privacy() {
         </p>
         <h2 className="pt-2 font-bold">Hosting</h2>
         <p>
-          The instance runs on my own server in Germany. No hosting provider or
-          other processor has access to the data, and no data is transferred to
-          third countries.
+          The instance runs on servers of Hetzner Online GmbH, Industriestr.
+          25, 91710 Gunzenhausen, Germany, in a data centre in Germany. Hetzner
+          stores the data on my behalf under a data processing agreement (Art.
+          28 GDPR) and is the only processor. Requests reach the server
+          directly, with no other company in between, and no data is
+          transferred to third countries.
         </p>
         <h2 className="pt-2 font-bold">Notes, feeds and images</h2>
         <p>
@@ -77,9 +80,13 @@ export default function Privacy() {
         )}
         <h2 className="pt-2 font-bold">Server logs and IP addresses</h2>
         <p>
-          <strong>What:</strong> when you visit, the web server logs your IP
-          address, the time, the requested path, the status code and your
-          browser&apos;s user agent.
+          <strong>What:</strong> for every request the web server logs the
+          time, the kind of request (for example &quot;a post to a feed&quot;,
+          never which feed or note), the status code and a shortened IP
+          address: its last part is removed before the line is written, so it
+          names a network of many connections, not yours. Your full IP
+          address, your browser&apos;s user agent, cookies and the names of
+          feeds are not logged.
           <br />
           <strong>Why and legal basis:</strong> to keep the service secure and
           to find and stop abuse (Art. 6 (1) (f) GDPR, legitimate interest).
@@ -89,7 +96,7 @@ export default function Privacy() {
         <p>
           Separately, notefeed uses your IP address to rate-limit posting and
           failed password attempts (same legal basis). That is kept in memory
-          only, for about a minute, and is not written to disk by notefeed.
+          only, for about a minute, and is never written to disk.
         </p>
         <h2 className="pt-2 font-bold">Cookies</h2>
         <p>
@@ -102,7 +109,8 @@ export default function Privacy() {
         </p>
         <h2 className="pt-2 font-bold">Recipients and automated decisions</h2>
         <p>
-          Your data is not passed on to anyone. There is no automated
+          Your data is not passed on to anyone except the hosting provider
+          named above, which stores it on my behalf. There is no automated
           decision-making or profiling.
         </p>
         <h2 className="pt-2 font-bold">Your rights</h2>
