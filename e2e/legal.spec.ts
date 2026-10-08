@@ -1,9 +1,10 @@
 // The imprint and the privacy page are the operator's own files. The "locked" server (port 3101) has both set, to the
-// fixtures here; the "open" one (3100) has neither.
+// fixtures here; the "open" one (3100) has neither. The notice on the start page is the same kind of file, set on 3102.
 import { expect, test } from "@playwright/test";
 
 const WITH = "http://localhost:3101";
 const WITHOUT = "http://localhost:3100";
+const WITH_NOTICE = "http://localhost:3102";
 
 test("with the files set, both pages show them, need no login, and the footer links to them", async ({ page }) => {
   await page.goto(`${WITH}/imprint`);
@@ -28,6 +29,7 @@ test("without the files, neither page exists and the footer has no link to them"
   await page.goto(WITHOUT + "/");
   const footer = page.getByRole("contentinfo");
   await expect(footer.getByRole("link", { name: "Docs" })).toBeVisible();
+  await expect(footer.getByRole("link", { name: "GitHub" })).toHaveAttribute("href", "https://github.com/notefeed/notefeed");
   await expect(footer.getByRole("link", { name: "Imprint" })).toHaveCount(0);
   await expect(footer.getByRole("link", { name: "Data privacy" })).toHaveCount(0);
 });
@@ -38,4 +40,20 @@ test("the two names cannot be taken as feeds", async ({ request }) => {
     expect(res.status()).toBe(400);
     expect((await res.json()).code).toBe("reserved_feed");
   }
+});
+
+test("with a notice file, the start page shows it above the introduction; without one there is no notice", async ({ page }) => {
+  await page.goto(WITH_NOTICE + "/");
+  const notice = page.getByRole("complementary", { name: "Notice" });
+  await expect(notice.getByText("This instance is a test.")).toBeVisible();
+  await expect(notice.getByRole("link", { name: "promised" })).toHaveAttribute("href", "https://example.com/terms");
+  // Raw HTML in the file is shown as text, never run.
+  await expect(notice.getByText("<script>window.fromTheNotice = true</script>")).toBeVisible();
+  expect(await page.evaluate(() => (window as unknown as { fromTheNotice?: boolean }).fromTheNotice)).toBeUndefined();
+  const intro = page.getByText("A feed is a list of markdown notes with a name.");
+  expect((await notice.boundingBox())!.y).toBeLessThan((await intro.boundingBox())!.y);
+
+  await page.goto(WITHOUT + "/");
+  await expect(intro).toBeVisible();
+  await expect(page.getByRole("complementary", { name: "Notice" })).toHaveCount(0);
 });

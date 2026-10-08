@@ -72,9 +72,9 @@ export async function reservedFolderWarnings(): Promise<Warning[]> {
 }
 
 // Throws only for a wrong storage setting; any other failure here must not keep the server from starting.
-// An imprint or privacy page that was asked for and cannot be shown: the visitor would only see that the link is missing.
+// An imprint, privacy page or notice that was asked for and cannot be shown: the visitor would only see that it is missing.
 export async function legalFileWarnings(): Promise<Warning[]> {
-  return (await unreadableLegalSettings()).map((setting) => ["startup", "a page's file cannot be read (missing, not a file, or larger than 256 KiB); the page is not shown", { setting }]);
+  return (await unreadableLegalSettings()).map((setting) => ["startup", "a page's or the notice's file cannot be read (missing, not a file, or larger than 256 KiB); it is not shown", { setting }]);
 }
 
 export async function logStartup(): Promise<void> {

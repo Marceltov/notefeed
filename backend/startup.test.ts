@@ -37,13 +37,15 @@ test("an operator token that is too short is warned about, without its value", (
   expect(warned()).toEqual([]);
 });
 
-test("an imprint or privacy file that cannot be read is warned about by its setting's name, never its path", async () => {
+test("an imprint, privacy or notice file that cannot be read is warned about by its setting's name, never its path", async () => {
   expect(await legalFileWarnings()).toEqual([]);
   await writeFile(join(dir, "imprint.md"), "# Imprint");
   vi.stubEnv("NOTEFEED_IMPRINT_FILE", join(dir, "imprint.md"));
   vi.stubEnv("NOTEFEED_PRIVACY_FILE", join(dir, "no-such-file.md"));
+  vi.stubEnv("NOTEFEED_NOTICE_FILE", join(dir, "no-notice.md"));
   const warnings = await legalFileWarnings();
-  expect(warnings).toEqual([["startup", "a page's file cannot be read (missing, not a file, or larger than 256 KiB); the page is not shown", { setting: "NOTEFEED_PRIVACY_FILE" }]]);
+  const msg = "a page's or the notice's file cannot be read (missing, not a file, or larger than 256 KiB); it is not shown";
+  expect(warnings).toEqual([["startup", msg, { setting: "NOTEFEED_PRIVACY_FILE" }], ["startup", msg, { setting: "NOTEFEED_NOTICE_FILE" }]]);
   expect(JSON.stringify(warnings)).not.toContain(dir);
 });
 

@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { MAX_LEGAL_BYTES, hasLegalPage, readLegalPage, unreadableLegalSettings } from "./legal";
+import { MAX_LEGAL_BYTES, hasLegalPage, readLegalPage, readNotice, unreadableLegalSettings } from "./legal";
 
 let dir: string;
 beforeEach(async () => {
@@ -69,4 +69,23 @@ test("a link to a file is followed: the operator chose the path", async () => {
   await symlink(join(dir, "real.md"), join(dir, "link.md"));
   vi.stubEnv("NOTEFEED_IMPRINT_FILE", join(dir, "link.md"));
   expect(await readLegalPage("imprint")).toBe("linked");
+});
+
+test("the notice is its own file, and there is none without the setting, without the file or without text in it", async () => {
+  vi.stubEnv("NOTEFEED_NOTICE_FILE", "");
+  expect(await readNotice()).toBeNull();
+  expect(await unreadableLegalSettings()).toEqual([]);
+
+  vi.stubEnv("NOTEFEED_NOTICE_FILE", join(dir, "notice.md"));
+  expect(await readNotice()).toBeNull();
+  expect(await unreadableLegalSettings()).toEqual(["NOTEFEED_NOTICE_FILE"]);
+
+  await writeFile(join(dir, "notice.md"), " \n\n");
+  expect(await readNotice()).toBeNull(); // emptied to take the notice down, which is not a mistake in the setting
+  expect(await unreadableLegalSettings()).toEqual([]);
+
+  await writeFile(join(dir, "notice.md"), "**Beta.** No promise of availability.\n");
+  expect(await readNotice()).toBe("**Beta.** No promise of availability.\n");
+  await writeFile(join(dir, "notice.md"), "x".repeat(MAX_LEGAL_BYTES + 1));
+  expect(await readNotice()).toBeNull();
 });

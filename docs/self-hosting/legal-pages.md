@@ -25,6 +25,22 @@ services:
 
 `imprint` and `privacy` are [reserved feed names](../using/feeds.md), with or without the files.
 
+## A notice on the start page
+
+`NOTEFEED_NOTICE_FILE` names a third Markdown file. Its text is shown as a red warning banner on the start page, above the introduction: the place to say that the service is still being built, that a maintenance window is coming, or what you do not promise.
+
+```yaml
+services:
+  notefeed:
+    environment:
+      NOTEFEED_NOTICE_FILE: /legal/notice.md
+```
+
+- **The same rules as for the two pages:** Markdown shown the way a note is, read on every request, at most 256 KiB, and the start-up log says when the setting is there but its file cannot be read.
+- **Only the start page shows it.** Feed pages, read links, RSS and the API do not, and on an instance with a [password](access.md#the-password) it is seen after logging in.
+- **To take it down,** remove the setting or empty the file.
+- **It is not a contract.** What you promise, or do not, belongs on a page people can link to; the notice can point there.
+
 ## What to write
 
 That is yours to decide, and for a public service worth a lawyer's look. As a start, a privacy page usually says who is responsible and how to reach them, where the instance is hosted and by whom, what is stored (notes, feeds, images; [what the logs hold](logs.md#logs)), for how long, [how long backups keep what was deleted](backups.md#how-long-a-backup-keeps-what-was-deleted), and which rights a person has. If you switch on [sign-in](sign-in/sender.md#privacy-page-and-imprint), say what is stored about the people who sign in.

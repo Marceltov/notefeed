@@ -18,7 +18,7 @@ export { feedPath, publicUrl, readPath, rssPath, safeNext, settingsPath } from "
 // Every write is one of these HTTP handlers; the frontend only mounts them and renders.
 export { dispatch } from "./http/api";
 export { measured } from "./metrics";
-export { hasLegalPage, readLegalPage, type LegalPage } from "./legal";
+export { hasLegalPage, readLegalPage, readNotice, type LegalPage } from "./legal";
 export { metricsRoute } from "./http/metrics";
 export { unreferencedImagesRoute } from "./http/operator";
 export { feedCookieName, feedUnlocked } from "./feedlock";
