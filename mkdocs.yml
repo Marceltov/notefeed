@@ -63,6 +63,7 @@ validation:
 
 nav:
   - Home: index.md
+  - Hosted service: hosted.md
   - Get started:
       - Quick start: get-started/quick-start.md
       - Concepts: get-started/concepts.md
