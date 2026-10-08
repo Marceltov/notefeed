@@ -23,6 +23,8 @@ export default defineConfig({
     { name: "images", testMatch: "images.spec.ts", use: { baseURL: "http://localhost:3100" } },
     { name: "metrics", testMatch: "metrics.spec.ts", use: { baseURL: "http://localhost:3100" } },
     { name: "locked", testMatch: "locked.spec.ts", use: { baseURL: "http://localhost:3101" } },
+    // The operator's imprint and privacy page: set on the locked server, unset on the open one.
+    { name: "legal", testMatch: "legal.spec.ts" },
     // The same notes and pictures specs on the SQLite backend with its images in a folder (needs Node 22, like the app itself).
     { name: "sqlite", testMatch: ["notes.spec.ts", "images.spec.ts"], use: { baseURL: "http://localhost:3102" } },
     // The pictures spec with the images in an S3-compatible store (a stand-in started by e2e/s3-setup.ts). The built app's fetch is
@@ -32,7 +34,7 @@ export default defineConfig({
   globalSetup: "./e2e/s3-setup.ts",
   webServer: [
     server(3100, { NOTEFEED_METRICS: "1" }),
-    server(3101, { NOTEFEED_PASSWORD: "e2e" }),
+    server(3101, { NOTEFEED_PASSWORD: "e2e", NOTEFEED_IMPRINT_FILE: "e2e/fixtures/imprint.md", NOTEFEED_PRIVACY_FILE: "e2e/fixtures/privacy.md" }),
     server(3103, {
       NOTEFEED_STORAGE: "sqlite",
       NOTEFEED_DATABASE_URL: "file:test-results/e2e-3103.db",
