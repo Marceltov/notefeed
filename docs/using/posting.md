@@ -69,4 +69,4 @@ Without a password set, the header isn't needed and is ignored.
 | `500` | The note could not be written. No partial file is left behind. |
 | `507` | A cap is reached: a new feed when there are already `NOTEFEED_MAX_FEEDS` feeds, or a note to a feed that already has `NOTEFEED_MAX_NOTES_PER_FEED` notes, or an image to a feed that already has `NOTEFEED_MAX_IMAGES_PER_FEED` images |
 
-Error responses are JSON: `{"error": "<short reason>", "code": "<code>"}`. The reason is for people; match on the status or the `code` (`invalid_feed`, `reserved_feed`, `auth`, `rate_limited`, `too_many_attempts`, `feed_limit`, `note_limit`, `image_limit`, `empty_note`, `too_large`, `unsupported_type`, `invalid_body`, `feed_exists`, `taken`).
+Error responses are JSON: `{"error": "<short reason>", "code": "<code>"}`. The reason is for people; match on the status or the `code` (`invalid_feed`, `reserved_feed`, `auth`, `rate_limited`, `too_many_attempts`, `feed_limit`, `note_limit`, `image_limit`, `images_off`, `empty_note`, `too_large`, `unsupported_type`, `invalid_body`, `feed_exists`, `taken`).

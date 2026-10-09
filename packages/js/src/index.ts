@@ -2,6 +2,7 @@ export {
   AuthError,
   Client,
   ConfigError,
+  ImagesOffError,
   InvalidRequestError,
   LimitReachedError,
   NotefeedError,

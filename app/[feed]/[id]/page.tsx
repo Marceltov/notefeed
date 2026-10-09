@@ -5,7 +5,7 @@ import { NoteArticle } from "@/components/NoteList";
 import { NoteActions } from "@/components/NoteActions";
 import { UnlockForm } from "@/components/UnlockForm";
 import { noteErrorMessage } from "@/app/_lib/messages";
-import { feedCookieName, feedPath, feedUnlocked, getFeedNote, readIdOf, readPath } from "@/backend";
+import { feedCookieName, feedPath, feedUnlocked, getFeedNote, imageUploadsOn, readIdOf, readPath } from "@/backend";
 
 export const dynamic = "force-dynamic";
 
@@ -33,7 +33,7 @@ export default async function NotePage({ params, searchParams }: PageProps<"/[fe
         </p>
       )}
       <NoteArticle note={note} back={feedPath(feed)} imageBase={readId ? `${readPath(readId)}/` : undefined} />
-      <NoteActions key={`${note.content}\n${note.meta.title}\n${note.alt}`} feed={feed} id={id} kind={note.type.startsWith("image/") ? "image" : "markdown"} markdown={note.content ?? ""} title={note.meta.title ?? ""} alt={note.alt ?? ""} error={noteErrorMessage(error, retry)} />
+      <NoteActions key={`${note.content}\n${note.meta.title}\n${note.alt}`} feed={feed} id={id} kind={note.type.startsWith("image/") ? "image" : "markdown"} markdown={note.content ?? ""} title={note.meta.title ?? ""} alt={note.alt ?? ""} error={noteErrorMessage(error, retry)} images={imageUploadsOn()} />
     </>
   );
 }

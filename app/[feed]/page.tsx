@@ -8,7 +8,7 @@ import { NoteList, TagFilter } from "@/components/NoteList";
 import { UnlockForm } from "@/components/UnlockForm";
 import { curlFor } from "@/app/_lib/curl";
 import { errorMessage, feedErrorMessage } from "@/app/_lib/messages";
-import { checkFeed, feedCookieName, feedPath, feedUnlocked, getFeed, IDENTITY_COOKIE, identitySender, measured, publicUrl, readPath, rssPath, settingsPath } from "@/backend";
+import { checkFeed, feedCookieName, feedPath, feedUnlocked, getFeed, IDENTITY_COOKIE, identitySender, imageUploadsOn, measured, publicUrl, readPath, rssPath, settingsPath } from "@/backend";
 
 export const dynamic = "force-dynamic";
 
@@ -63,7 +63,7 @@ export default async function FeedPage({ params, searchParams }: PageProps<"/[fe
         </p>
       )}
       <Compose key={String(posted)} feed={feed} action={feedPath(feed)} error={errorMessage(error, retry)}
-        isNew={access === "open" && !exists} sender={identitySender(jar.get(IDENTITY_COOKIE)?.value) !== undefined}
+        isNew={access === "open" && !exists} sender={identitySender(jar.get(IDENTITY_COOKIE)?.value) !== undefined} images={imageUploadsOn()}
       />
       {tag && <TagFilter tag={tag} base={feedPath(feed)} />}
       {tag && notes.length === 0 ? (

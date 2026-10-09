@@ -9,6 +9,7 @@ from notefeed import (
     Client,
     ConfigError,
     Created,
+    ImagesOffError,
     InvalidRequestError,
     LimitReachedError,
     NotefeedError,
@@ -166,6 +167,7 @@ def test_a_base_url_with_a_prefix_and_trailing_slash_keeps_the_prefix(server):
         ("feed_limit", 507, LimitReachedError),
         ("note_limit", 507, LimitReachedError),
         ("image_limit", 507, LimitReachedError),
+        ("images_off", 403, ImagesOffError),
         ("too_large", 413, NoteTooLargeError),
         ("invalid_feed", 400, InvalidRequestError),
         ("reserved_feed", 400, InvalidRequestError),
@@ -451,7 +453,7 @@ def test_per_call_feed_and_password_win_and_a_refused_file_maps_to_the_usual_err
     with pytest.raises(ConfigError):
         Client(server.url).post(b"x", type="image/png")
     for status, code, cls in [(415, "unsupported_type", InvalidRequestError), (413, "too_large", NoteTooLargeError),
-                              (507, "image_limit", LimitReachedError), (404, "not_found", NotFoundError)]:
+                              (507, "image_limit", LimitReachedError), (403, "images_off", ImagesOffError), (404, "not_found", NotFoundError)]:
         server.reply(status, {"error": code, "code": code})
         with pytest.raises(cls):
             Client(server.url, "inbox").post(b"x", type="image/png")
