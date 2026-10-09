@@ -25,7 +25,7 @@ Chosen option: "pino", because it writes JSON lines by default, is small and fas
 * **Levels:** `NOTEFEED_LOG_LEVEL` is `error`, `warn`, `info` (default), `debug` or `silent`; any other value counts as `info` and the start-up log warns about it. `info` holds the start-up line, successful sign-ins and granted MCP authorizations; `warn` holds what an operator should look at (failed sign-ins and logins, caps reached, configuration mistakes); `debug` holds rate limits and wrong bearer passwords.
 * **Never logged:** note content, feed names (they work like passwords, ADR 0001), passwords, tokens, secrets, codes, `state`, `nonce`, cookies, e-mail addresses, names and other claim values, an MCP client's self-chosen name, client IP addresses, request headers and bodies. A sign-in success names the provider, never the person. The names of reserved feeds (ADR 0012) are the one exception: the operator chose them and they are public by intent.
 * **Redaction is a safety net:** pino's `redact` replaces fields such as `password`, `token`, `code`, `state`, `nonce`, `email` and `name` with `[redacted]` (its wildcards reach one level down, not into deeper objects or arrays), but call sites still never pass those values. String fields are capped at 200 characters and stripped of control characters, so a value can't fake another line.
-* **No access log:** the reverse proxy already has one.
+* **No access log:** the reverse proxy already has one. (Superseded by [ADR 0025](0025-request-log-from-the-http-server.md): the proxy's log holds the feed name.)
 * **Logging never changes behaviour:** a failing output is swallowed, and no status code, body, redirect or rate-limit count depends on a log call.
 
 ### Consequences

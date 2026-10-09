@@ -3,16 +3,49 @@
 notefeed writes its logs to standard output as JSON lines: one object per line, with the level as a word (`level`), an ISO time (`time`), the part of notefeed that logged it (`component`), a fixed message (`msg`) and fields with the details. For example, the line at start-up:
 
 ```json
-{"level":"info","time":"2026-10-02T09:00:00.120Z","component":"startup","node":"v22.23.3","dataDir":"/data","passwordSet":true,"oidcProviders":1,"publicUrlSet":true,"trustProxy":true,"maxFeeds":0,"maxNotesPerFeed":0,"maxImagesPerFeed":0,"logLevel":"info","metrics":false,"msg":"notefeed started"}
+{"level":"info","time":"2026-10-02T09:00:00.120Z","component":"startup","node":"v22.23.3","dataDir":"/data","passwordSet":true,"oidcProviders":1,"publicUrlSet":true,"trustProxy":true,"maxFeeds":0,"maxNotesPerFeed":0,"maxImagesPerFeed":0,"logLevel":"info","logRequests":true,"metrics":false,"msg":"notefeed started"}
 ```
 
 `NOTEFEED_LOG_LEVEL` sets how much is logged: `error`, `warn`, `info` (the default), `debug` or `silent`. Each level includes the ones before it. A value that isn't a level counts as `info`, and the start-up log warns about it.
 
-Read the logs with `docker compose logs notefeed`, or your container runtime's equivalent; `docker compose logs -f notefeed` follows them. For lines a person can read, pipe them through pino-pretty, which `npx` fetches on first use: `docker compose logs --no-log-prefix notefeed | npx pino-pretty`. To pick lines out, filter on the JSON, for example `docker compose logs --no-log-prefix notefeed | grep '"level":"warn"'`, or with `jq`. Next.js prints a few plain lines of its own when the server starts.
+Read the logs with `docker compose logs notefeed`, or your container runtime's equivalent; `docker compose logs -f notefeed` follows them. For lines a person can read, pipe them through pino-pretty, which `npx` fetches on first use: `docker compose logs --no-log-prefix notefeed | npx pino-pretty`. To pick lines out, filter on the JSON, for example `docker compose logs --no-log-prefix notefeed | grep '"level":"warn"'`, or with `jq`. Next.js prints a few plain lines of its own when the server starts, and a plain line for an error of its own; its error for a reader who left while a page was being sent (`The destination stream closed early.`) is left out, because the request line already says `aborted`.
+
+## The request line
+
+Every request notefeed answers gets one line, written by notefeed itself when the response is done:
+
+```json
+{"level":"info","time":"2026-10-09T10:00:00.120Z","component":"http","req":"q0Zr1fJx","method":"POST","route":"/api/v1/feeds/[feed]/notes","status":201,"ms":12,"bytes":412,"msg":"request"}
+```
+
+| Field | Example | What it is |
+|---|---|---|
+| `req` | `q0Zr1fJx` | A random id for this request. Every other line logged while the request was answered has the same `req`, so a `note posted` or a `request failed` can be matched to its request. |
+| `method` | `GET` | The request's method. |
+| `route` | `/[feed]`, `/api/v1/feeds/[feed]/notes`, `/r/[readId]/feed.xml`, `/mcp` | The pattern of the route that answered, never the path that was asked for. A post to `/<feed>` is logged as the API operation it is, `/api/v1/feeds/[feed]/notes`. Absent for a path that is none of notefeed's. |
+| `status` | `200` | The status of the answer. |
+| `ms` | `12` | The time from the request's arrival to the end of the answer, in milliseconds. |
+| `bytes` | `4312` | The bytes sent for the answer, its headers included. |
+| `outcome` | `rate_limited`, `auth`, `not_found` | Only for a refusal: why. It is the `code` of the API's error body (`auth`, `rate_limited`, `too_many_attempts`, `not_found`, `invalid_feed`, `too_large` and so on); `auth` too when a locked instance sends a visitor to the login page; `method_not_allowed`; `error` for an unexpected failure (a `500`, which has its own `request failed` line); `aborted` when the client went away before the answer was complete. |
+
+The line never holds the path, the query, the feed name, a read id, the client's address, the user agent, the referrer, a header or anything of the body.
+
+The app's own scripts, styles and icons (`"route":"/_next/*"` and `"route":"/[file]"`) and the scrape of `/metrics` are logged at `debug`, so that `info` shows what people and scripts do. `NOTEFEED_LOG_REQUESTS=0` turns the request line off and leaves every other line as it is; `NOTEFEED_LOG_LEVEL=warn` hides it together with the other `info` lines.
+
+### Your reverse proxy's access log
+
+With the request line you do not need the proxy's access log to see what the instance does, and the proxy's log is the risky one: the proxy sees the whole path, and the path holds the feed name, which works like a password. Stored next to the client's address, it says who reads and posts to which feed. Turn the proxy's access log off, or make it leave out the path, the query and the client's address. Replacing feed names by patterns in the proxy is fragile: the patterns have to follow every route notefeed adds.
+
+## The other lines
 
 | Level | `component` | `msg` | When |
 |---|---|---|---|
-| `info` | `startup` | `notefeed started` | Once, at start-up, with the Node version, `DATA_DIR`, whether the instance password, `PUBLIC_URL` and `NOTEFEED_TRUST_PROXY` are set, the number of sign-in providers, the caps and the log level. |
+| `info` | `http` | `request` | Every request: see [The request line](#the-request-line). `debug` for static files and `/metrics`. |
+| `info` | `feeds` | `feed created`, `feed deleted` | A feed came to exist with its first note, or was deleted with everything in it; `protected` says whether it was created with a feed password. Never its name. |
+| `info` | `notes` | `note posted`, `note deleted` | A note was stored or deleted. `kind` is `markdown` or `image`, and a posted note has its size in `bytes`; a picture sent with a text is a `note posted` of its own. Never the feed, the note's id or its title. |
+| `info` | `storage` | `image stored in the image store`, `image deleted from the image store` | With [image bytes kept outside the database](storage.md#image-bytes-outside-the-database): an image's bytes were written to the image store (`bytes` is their size) or removed from it, when its note was posted, replaced or deleted or its feed was deleted. Never the object's key. |
+| `info` | `auth` | `password login succeeded` | The instance password was right on the login page. |
+| `info` | `startup` | `notefeed started` | Once, at start-up, with the Node version, `DATA_DIR`, whether the instance password, `PUBLIC_URL` and `NOTEFEED_TRUST_PROXY` are set, the number of sign-in providers, the caps, the log level and whether requests are logged. |
 | `warn` | `startup` | `sign-in provider configured partially; it stays off` | At start-up, for each [sign-in provider](sign-in/index.md) with some but not all of its four variables set; `missing` names the variables that are missing. |
 | `warn` | `startup` | `sign-in is on without PUBLIC_URL: the redirect URI comes from each request's Host header` | At start-up, when sign-in is on and `PUBLIC_URL` is not set. |
 | `warn` | `startup` | `NOTEFEED_LOG_LEVEL is not a level; using info` | At start-up. |
@@ -31,4 +64,4 @@ Read the logs with `docker compose logs notefeed`, or your container runtime's e
 | `debug` | `limits` | `rate limit reached` | A request over `NOTEFEED_RATE_LIMIT`; `kind` is `post` or `password`. |
 | `debug` | `auth` | `password bearer refused` | A script sent a wrong instance password as its bearer token. |
 
-What is never logged: note content, feed names (they work like passwords; a reserved feed's name, which you chose, is the one exception), passwords, tokens, secrets, authorization codes, `state` and `nonce` values, cookies, e-mail addresses, names and other claim values, the name an MCP client gave itself, client IP addresses, and request headers or bodies. There is no line per request: your reverse proxy's access log has that.
+What is never logged: note content, feed names (they work like passwords; a reserved feed's name, which you chose, is the one exception), passwords, tokens, secrets, authorization codes, `state` and `nonce` values, cookies, e-mail addresses, names and other claim values, the name an MCP client gave itself, client IP addresses, and request headers or bodies. The request line holds a route's pattern, never its path.

@@ -60,6 +60,7 @@ export function login(password: string, ip: string): string {
     if (e instanceof AuthError) log.warn({ page: "login" }, "password login failed"); // not the too-many-attempts refusals
     throw e;
   }
+  log.info({ page: "login" }, "password login succeeded");
   return sessionValue();
 }
 

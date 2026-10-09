@@ -5,6 +5,7 @@ import * as z from "zod";
 import { InvalidRequestError, NotFoundError } from "../errors";
 import { logger } from "../log";
 import { measured } from "../metrics";
+import { noteOutcome, noteRoute } from "../requestscope";
 import { errorReply } from "./errors";
 
 const log = logger("http");
@@ -114,12 +115,15 @@ export function createDispatcher(ops: AnyOp[], prefix: string): (req: Request, s
   return async (req, segments) => {
     const m = matchOps(ops, prefix, segments);
     if (!m) return Response.json(errorReply(new NotFoundError("no such endpoint")).body, { status: 404 });
+    // The request line names the operation's own path, not the catch-all it is mounted on (and not the /<feed> a post came by).
+    noteRoute(m.ops[0].path.replace(/\{(\w+)\}/g, "[$1]"));
     // Next answers HEAD by calling the GET export with the request as is; it drops the body itself.
     const method = req.method === "HEAD" ? "GET" : req.method;
     const entry = m.ops.find((o) => o.method === method);
     if (!entry) {
       const methods = m.ops.map((o) => o.method);
       const allow = (methods.includes("GET") ? [...methods, "HEAD"] : methods).sort().join(", ");
+      noteOutcome("method_not_allowed");
       return Response.json({ error: "method not allowed" }, { status: 405, headers: { Allow: allow } });
     }
     return measured(kindOf(entry, req), async () => {

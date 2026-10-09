@@ -18,6 +18,7 @@ import {
   UnsupportedTypeError,
 } from "../errors";
 import { logger } from "../log";
+import { noteOutcome } from "../requestscope";
 
 const log = logger("http");
 
@@ -46,8 +47,10 @@ export type ErrorReply = { status: number; body: { error: string; code?: ErrorCo
 export function errorReply(e: unknown): ErrorReply {
   if (!(e instanceof NotefeedError)) {
     log.error({ err: e }, "request failed");
+    noteOutcome("error");
     return { status: 500, body: { error: "internal error" } };
   }
+  noteOutcome(e.code);
   const headers = e instanceof RateLimitedError ? { "Retry-After": String(e.retryAfter) } : undefined;
   return { status: statusOf(e), body: { error: e.message, code: e.code }, headers };
 }

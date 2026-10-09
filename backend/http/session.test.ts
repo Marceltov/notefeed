@@ -59,6 +59,10 @@ test("too many wrong passwords: the wait, even for the right one", async () => {
   expect((await login({ password: "pw" })).headers.get("location")).toMatch(/^\/login\?error=too_many_attempts&retry=\d+&next=%2F$/);
 });
 
+test("a login that worked is an info line without password or address", async () => {
+  expect(await logsOf(() => login({ password: "pw" }))).toEqual([{ level: "info", component: "auth", msg: "password login succeeded", page: "login" }]);
+});
+
 test("a wrong password logs a warning without password or address; the too-many-attempts refusal is only a debug line", async () => {
   process.env.NOTEFEED_RATE_LIMIT = "1";
   process.env.NOTEFEED_TRUST_PROXY = "1";

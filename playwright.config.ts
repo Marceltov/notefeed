@@ -1,9 +1,11 @@
 // End-to-end tests against the production build (`npm run test:e2e` builds first).
 // The password is read at startup, so open and locked behaviour each get their own server.
 import { defineConfig } from "@playwright/test";
+import { SERVER_LOG } from "./e2e/serverlog";
 
-const server = (port: number, env: Record<string, string>) => ({
-  command: `next start -p ${port}`,
+// `logFile`: the server's log lines go there instead of to the terminal, for the spec that reads them (e2e/requestlog.spec.ts).
+const server = (port: number, env: Record<string, string>, logFile?: string) => ({
+  command: `next start -p ${port}${logFile ? ` > '${logFile}'` : ""}`,
   url: `http://localhost:${port}`,
   reuseExistingServer: !process.env.CI,
   env: { DATA_DIR: `test-results/data-${port}`, NOTEFEED_RATE_LIMIT: "0", ...env },
@@ -22,6 +24,7 @@ export default defineConfig({
     { name: "feeds", testMatch: "feeds.spec.ts", use: { baseURL: "http://localhost:3100" } },
     { name: "images", testMatch: "images.spec.ts", use: { baseURL: "http://localhost:3100" } },
     { name: "metrics", testMatch: "metrics.spec.ts", use: { baseURL: "http://localhost:3100" } },
+    { name: "requestlog", testMatch: "requestlog.spec.ts", use: { baseURL: "http://localhost:3100" } },
     { name: "locked", testMatch: "locked.spec.ts", use: { baseURL: "http://localhost:3101" } },
     // The operator's imprint and privacy page: set on the locked server, unset on the open one. Their notice: on the SQLite one.
     { name: "legal", testMatch: "legal.spec.ts" },
@@ -33,7 +36,7 @@ export default defineConfig({
   ],
   globalSetup: "./e2e/s3-setup.ts",
   webServer: [
-    server(3100, { NOTEFEED_METRICS: "1" }),
+    server(3100, { NOTEFEED_METRICS: "1" }, SERVER_LOG),
     server(3101, { NOTEFEED_PASSWORD: "e2e", NOTEFEED_IMPRINT_FILE: "e2e/fixtures/imprint.md", NOTEFEED_PRIVACY_FILE: "e2e/fixtures/privacy.md" }),
     server(3103, {
       NOTEFEED_STORAGE: "sqlite",

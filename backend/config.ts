@@ -100,6 +100,8 @@ export const config = {
   allowCustomIds: () => env("NOTEFEED_ALLOW_CUSTOM_IDS") !== "0",
   // How long reading a text to place its pictures may take, in ms (it runs in a worker, so a slow text costs only its sender that time).
   parseTimeoutMs: () => positive("NOTEFEED_PARSE_TIMEOUT_MS", 10_000),
+  // The request line (backend/http/requestlog.ts) is on unless this is "0".
+  logRequests: () => env("NOTEFEED_LOG_REQUESTS").trim() !== "0",
   // "1" turns on GET /metrics (Prometheus format); with a token set it needs `Authorization: Bearer <token>`.
   metrics: () => env("NOTEFEED_METRICS") === "1",
   metricsToken: () => env("NOTEFEED_METRICS_TOKEN"),

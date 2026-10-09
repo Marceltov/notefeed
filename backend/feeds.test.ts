@@ -236,8 +236,9 @@ describe("per-feed read ids", () => {
     expect(await readIdOf("secretbroken")).toBeNull();
     expect(await feedForReadId(derivedReadId("secretbroken"))).toBeNull(); // not the derived id: that would change its link
     expect(await ensureFeed("secretbroken")).toBeNull();
-    expect(logs).toHaveLength(1);
-    expect(JSON.parse(logs[0])).toMatchObject({ level: "error", component: "feeds", err: { code: "EISDIR" } });
+    // Besides the failure: the feed and the note this test made, each an `info` line.
+    expect(logs.map((l) => JSON.parse(l).level)).toEqual(["info", "info", "error"]);
+    expect(JSON.parse(logs[2])).toMatchObject({ level: "error", component: "feeds", err: { code: "EISDIR" } });
     expect(logs.join(" ")).not.toContain("secret");
   });
 
