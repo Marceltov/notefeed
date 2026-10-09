@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { IDENTITY_COOKIE, SESSION_COOKIE, locked, publicUrl, sessionOk } from "@/backend";
+import { IDENTITY_COOKIE, SESSION_COOKIE, locked, noteOutcome, publicUrl, sessionOk } from "@/backend";
 
 // Exactly one segment, after stripping one trailing slash. Kept percent-encoded: the route's
 // [feed] param is decoded by Next and the handler rejects anything outside FEED_RE ("a%2Fb" → "a/b" → 400).
@@ -46,6 +46,7 @@ export function proxy(req: NextRequest) {
   if (sessionOk(req.cookies.get(SESSION_COOKIE)?.value, req.cookies.get(IDENTITY_COOKIE)?.value)) return NextResponse.next();
   // Must be absolute (Next rejects a relative Location here); built from the public base,
   // not req.url, so it is right behind a reverse proxy.
+  noteOutcome("auth");
   const login = new URL("/login", publicUrl(req.headers));
   if (pathname !== "/") login.searchParams.set("next", pathname + search); // checked by safeNext after login
   return NextResponse.redirect(login);

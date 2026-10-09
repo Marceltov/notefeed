@@ -252,9 +252,10 @@ describe("tools", () => {
     vi.spyOn(storage(), "readNote").mockRejectedValueOnce(Object.assign(new Error(`ELOOP: too many symbolic links encountered, open '${file}'`), { code: "ELOOP" }));
     const r = await call("get_note", { feed: "myfeed", id: note.id });
     expect(r.content[0].text).toBe("internal error");
-    expect(logs).toHaveLength(1);
-    expect(JSON.parse(logs[0])).toMatchObject({ level: "error", component: "mcp", msg: "tool failed", err: { code: "ELOOP", message: expect.stringContaining(`${dir}/<path>`) } });
-    expect(logs[0]).not.toMatch(/myfeed|quarterly-layoffs-plan|Quarterly/);
+    // Besides the failure: the feed and the note this test made, each an `info` line.
+    expect(logs.map((l) => JSON.parse(l).msg)).toEqual(["feed created", "note posted", "tool failed"]);
+    expect(JSON.parse(logs[2])).toMatchObject({ level: "error", component: "mcp", msg: "tool failed", err: { code: "ELOOP", message: expect.stringContaining(`${dir}/<path>`) } });
+    expect(logs.join(" ")).not.toMatch(/myfeed|quarterly-layoffs-plan|Quarterly/);
   });
 
   test("empty note and rate limit", async () => {

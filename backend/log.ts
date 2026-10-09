@@ -1,4 +1,4 @@
-// The one logger: pino, one JSON object per line on stdout (level label, ISO time, component, msg, fields), no
+// The one logger: pino, one JSON object per line on stdout (level label, ISO time, component, msg, fields; `req` inside a request), no
 // transports. NOTEFEED_LOG_LEVEL sets the level. Never log note content, feed names (they work like passwords),
 // passwords, tokens, secrets, codes, state, nonce, cookies, e-mail addresses, names, claim values, client IP
 // addresses, request headers or bodies. An Error goes in `err`, which errorFields() scrubs. The redaction below is
@@ -7,6 +7,7 @@ import { realpathSync } from "node:fs";
 import { join, resolve } from "node:path";
 import pino, { type DestinationStream, type Logger } from "pino";
 import { config } from "./config";
+import { requestScope } from "./requestscope";
 import { processState } from "./state";
 
 // A safety net only: pino's `*.x` wildcards match one level down, so a value nested deeper or inside an array passes.
@@ -39,6 +40,11 @@ export function createLogger(destination: DestinationStream, level: string = con
       base: undefined, // no pid or hostname
       timestamp: pino.stdTimeFunctions.isoTime,
       serializers: { err: errorFields },
+      // Every line logged while a request is answered carries the request's id, which its request line has too.
+      mixin: () => {
+        const id = requestScope()?.id;
+        return id ? { req: id } : {};
+      },
       // `log.warn(error)` would make the error's (unscrubbed) message the msg: it goes into `err`, and msg is its type.
       hooks: {
         logMethod(args, method) {

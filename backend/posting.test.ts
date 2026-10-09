@@ -10,7 +10,7 @@ import { logsOf } from "./log";
 import * as notes from "./notes";
 import { countNotes, createImageNote, createNote, getNote, MarkdownNote } from "./notes";
 import { planInWorker } from "./place";
-import { editContent, editWithPictures, MAX_ATTACHMENTS, type Picture, type PostBundle, postNote, postWithPictures } from "./posting";
+import { deleteFeed, deleteNote, editContent, editWithPictures, MAX_ATTACHMENTS, type Picture, type PostBundle, postNote, postWithPictures } from "./posting";
 
 // The text's write is the call after the pictures: a test makes it fail to see the pictures removed again.
 vi.mock("./notes", async (original) => {
@@ -269,4 +269,23 @@ describe("editWithPictures", () => {
     expect(await countNotes("f")).toBe(1);
     expect(await markdownOf(note.id)).toBe("old");
   });
+});
+
+test("what happens to feeds and notes is logged at info: the kind and the size, never the feed's name, the note's id or its title", async () => {
+  const logs = await logsOf(async () => {
+    const { note } = await post({ text: "# Secret title\n\n![](a.png)", pictures: [pic("a.png")] }, "secretfeed");
+    await post({ text: "more", pictures: [] }, "secretprotected", { password: "feed-password" });
+    await deleteNote("secretfeed", note.id, "ip", {});
+    await deleteFeed("secretfeed", "ip", {});
+  }, "info");
+  expect(logs).toEqual([
+    { level: "info", component: "feeds", msg: "feed created", protected: false },
+    { level: "info", component: "notes", msg: "note posted", kind: "image", bytes: 9 },
+    { level: "info", component: "notes", msg: "note posted", kind: "markdown", bytes: expect.any(Number) },
+    { level: "info", component: "feeds", msg: "feed created", protected: true },
+    { level: "info", component: "notes", msg: "note posted", kind: "markdown", bytes: 4 },
+    { level: "info", component: "notes", msg: "note deleted", kind: "markdown" },
+    { level: "info", component: "feeds", msg: "feed deleted" },
+  ]);
+  expect(JSON.stringify(logs)).not.toMatch(/secret|Secret|password/);
 });

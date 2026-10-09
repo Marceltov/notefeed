@@ -48,6 +48,7 @@ export function startupReport(env: NodeJS.ProcessEnv = process.env): { fields: F
     maxNotesPerFeed: config.maxNotesPerFeed(),
     maxImagesPerFeed: config.maxImagesPerFeed(),
     logLevel: config.logLevel(),
+    logRequests: config.logRequests(),
     metrics: config.metrics(),
   };
   return { fields, warnings };

@@ -44,8 +44,17 @@ export function createSqlStorage(connect: () => Promise<Kysely<Schema>>, kind: K
   // No feed or key in the line: a feed's name is its secret.
   const drop = async (keys: (string | null | undefined)[]) => {
     for (const key of keys) {
-      if (key && images) await images.store.delete(key).catch((err) => log.warn({ err }, "could not remove an image from the image store; it stays there unreferenced"));
+      if (!key || !images) continue;
+      await images.store.delete(key).then(
+        () => log.info("image deleted from the image store"),
+        (err) => log.warn({ err }, "could not remove an image from the image store; it stays there unreferenced"),
+      );
     }
+  };
+  // Never the key in the line: only that an object went in, and its size.
+  const stored = async (key: string, data: Buffer) => {
+    await images!.store.put(key, data);
+    log.info({ bytes: data.byteLength }, "image stored in the image store");
   };
   // The bytes of a row: its own, or the object its key names. null when the object is gone.
   const bytesOf = async (row: { content: Buffer | Uint8Array; blob_key: string | null }): Promise<Buffer | null> => {
@@ -89,7 +98,7 @@ export function createSqlStorage(connect: () => Promise<Kysely<Schema>>, kind: K
       const now = Date.now();
       const data = bytes(content);
       const key = images?.external(ext) ? newKey() : null;
-      if (key) await images!.store.put(key, data);
+      if (key) await stored(key, data);
       try {
         for (let n = 1; ; n++) {
           const id = n === 1 ? base : `${base}-${n}`;
@@ -151,7 +160,7 @@ export function createSqlStorage(connect: () => Promise<Kysely<Schema>>, kind: K
         for (;;) {
           const row = await db.selectFrom("notes").select(["ext", "blob_key"]).where("feed", "=", feed).where("id", "=", id).where("ext", "in", exts).executeTakeFirst();
           if (!row) break;
-          if (!key && images?.external(row.ext)) await images.store.put((key = newKey()), data);
+          if (!key && images?.external(row.ext)) await stored((key = newKey()), data);
           const r = await db
             .updateTable("notes")
             .set({ content: key ? EMPTY : data, blob_key: key, size: data.byteLength, updated_at: Date.now() })

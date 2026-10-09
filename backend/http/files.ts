@@ -4,6 +4,7 @@
 import { createHash } from "node:crypto";
 import { feedForReadId } from "../feeds";
 import { measured } from "../metrics";
+import { noteRoute } from "../requestscope";
 import { storage } from "../storage";
 import { IMAGE_EXTS, contentTypeOf } from "../../shared/images";
 
@@ -15,6 +16,7 @@ export const fileRoute = (readId: string, file: string, ifNoneMatch?: string | n
   measured("feed_file", () => serveFile(readId, file, ifNoneMatch), (r) => r.status);
 
 async function serveFile(readId: string, file: string, ifNoneMatch?: string | null): Promise<Response> {
+  noteRoute("/r/[readId]/files/[file]"); // reached by a rewrite: the path has the shape of a note's page
   const feed = await feedForReadId(readId);
   const ext = NAME_RE.exec(file)?.[1];
   const bytes = feed && ext ? await storage().readFile(feed, file) : null;

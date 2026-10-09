@@ -3,6 +3,7 @@ import { randomBytes } from "node:crypto";
 import { idStamp } from "../shared/notes";
 import { InvalidBodyError, UnsupportedTypeError } from "./errors";
 import { assertFeed, checkFeed, ensureFeed, forgetFeed } from "./feeds";
+import { logger } from "./log";
 import { storage } from "./storage";
 import { FeedGoneError, type Meta, type NoteRef } from "./storage/types";
 import { sniffImage } from "../shared/images";
@@ -100,6 +101,7 @@ export async function createNoteOf(feed: string, type: NoteType, ext: string, bo
   const name = cleanName(opts.name);
   const meta: Meta = { ...(sender !== undefined && { sender }), ...(tags.length && { tags }), ...(title && { title }), ...(alt && { alt }), ...(name && { name }) };
   const { id, readId } = await store(feed, { ext, content: body, meta }, now, opts.wantedReadId);
+  logger("notes").info({ kind: type.name, bytes: body.length }, "note posted"); // never the feed, the id or the title
   return { note: type.read({ id, ext, meta, createdAt: stampOf(id)!, size: body.length }, Buffer.from(body)), readId };
 }
 
@@ -205,5 +207,13 @@ export async function changeMeta(feed: string, id: string, edit: { title?: strin
 }
 
 export async function removeNote(feed: string, id: string): Promise<boolean> {
-  return !checkFeed(feed) && isValidId(id) && (await storage().deleteNote(feed, id, NOTE_EXTS));
+  if (checkFeed(feed) || !isValidId(id)) return false;
+  // Asked per kind, so the log can say which kind went (the storage only says whether something did).
+  let removed = false;
+  for (const type of NOTE_TYPES) {
+    if (!(await storage().deleteNote(feed, id, type.exts))) continue;
+    removed = true;
+    logger("notes").info({ kind: type.name }, "note deleted");
+  }
+  return removed;
 }

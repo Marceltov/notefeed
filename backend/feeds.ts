@@ -5,12 +5,15 @@ import { randomBytes } from "node:crypto";
 import { config } from "./config";
 import { InvalidBodyError, NotFoundError, ReadIdTakenError, ReservedFeedError } from "./errors";
 import { checkFeed, CUSTOM_READ_ID_RE, heldBack, isHeldBack, isReadId } from "./feednames";
+import { logger } from "./log";
 import { resetSecretForTests } from "./secret";
 import { storage, resetStorageForTests } from "./storage";
 import type { Storage } from "./storage/types";
 
 export { assertFeed, checkFeed, CUSTOM_READ_ID_RE, FEED_RE, isHeldBack, isReadId, READ_ID_RE, RESERVED_FEEDS } from "./feednames";
 export { derivedReadId, secret } from "./secret";
+
+const log = logger("feeds");
 
 const newReadId = () => randomBytes(16).toString("base64url");
 
@@ -58,7 +61,7 @@ export async function ensureFeed(feed: string, wanted?: string): Promise<string 
   if (known !== undefined) return known;
   if (isHeldBack(feed)) throw new ReservedFeedError();
   if (wanted !== undefined) checkReadId(wanted);
-  await s.createFeed(feed, wanted ?? newReadId());
+  if ((await s.createFeed(feed, wanted ?? newReadId())).created) log.info({ protected: false }, "feed created"); // never its name
   return (await s.feedReadId(feed)) ?? null;
 }
 
@@ -66,12 +69,16 @@ export async function ensureFeed(feed: string, wanted?: string): Promise<string 
 export async function createProtectedFeed(feed: string, hash: string, wanted?: string): Promise<boolean> {
   const s = await prepared();
   if (wanted !== undefined) checkReadId(wanted);
-  return (await s.createFeed(feed, wanted ?? newReadId(), hash)).created;
+  const { created } = await s.createFeed(feed, wanted ?? newReadId(), hash);
+  if (created) log.info({ protected: true }, "feed created");
+  return created;
 }
 
 // Removes a feed with everything in it: false when there is no such feed.
 export async function deleteFeed(feed: string): Promise<boolean> {
-  return (await prepared()).deleteFeed(feed);
+  const deleted = await (await prepared()).deleteFeed(feed);
+  if (deleted) log.info("feed deleted");
+  return deleted;
 }
 
 // For a writer that found a listed feed gone (deleted a moment ago, or removed by hand): drops the entry, unless the name was
