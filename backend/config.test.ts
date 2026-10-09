@@ -5,10 +5,17 @@ const S3_VARS = ["NOTEFEED_S3_ENDPOINT", "NOTEFEED_S3_BUCKET", "NOTEFEED_S3_REGI
 
 afterEach(() => {
   delete process.env.NOTEFEED_MAX_IMAGES_PER_FEED;
+  delete process.env.NOTEFEED_REPORT_URL;
   delete process.env.NOTEFEED_MAX_NOTES_PER_FEED;
   delete process.env.NOTEFEED_METRICS;
   delete process.env.NOTEFEED_METRICS_TOKEN;
   for (const k of ["NOTEFEED_STORAGE", "NOTEFEED_DATABASE_URL", "NOTEFEED_SECRET", "DATA_DIR", "NOTEFEED_IMAGES", "NOTEFEED_IMAGES_DIR", ...S3_VARS]) delete process.env[k];
+});
+
+test("the report URL template is empty unless set, and trimmed", () => {
+  expect(config.reportUrl()).toBe("");
+  process.env.NOTEFEED_REPORT_URL = " https://r.example/?r={read_id} ";
+  expect(config.reportUrl()).toBe("https://r.example/?r={read_id}");
 });
 
 test("metrics are on only for NOTEFEED_METRICS=1; the token is empty when unset", () => {

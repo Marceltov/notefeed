@@ -8,7 +8,7 @@ import { NoteList, TagFilter } from "@/components/NoteList";
 import { UnlockForm } from "@/components/UnlockForm";
 import { curlFor } from "@/app/_lib/curl";
 import { errorMessage, feedErrorMessage } from "@/app/_lib/messages";
-import { checkFeed, feedCookieName, feedPath, feedUnlocked, getFeed, IDENTITY_COOKIE, identitySender, measured, publicUrl, readPath, rssPath, settingsPath } from "@/backend";
+import { checkFeed, feedCookieName, feedPath, feedUnlocked, getFeed, IDENTITY_COOKIE, identitySender, measured, publicUrl, readPath, reportTemplate, rssPath, settingsPath } from "@/backend";
 
 export const dynamic = "force-dynamic";
 
@@ -17,6 +17,8 @@ export const dynamic = "force-dynamic";
 // one, the metadata's unfiltered read is a feed_page sample of its own and the filtered read a feed_page_tag one.
 const loaded = (feed: string, tag?: string) => measured(tag ? "feed_page_tag" : "feed_page", () => getFeed(feed, tag), (data) => (data ? 200 : 404));
 const feedData = cache((feed: string) => loaded(feed));
+// The "Report" link needs the template and the feed's read id (a feed without a read link has no link; it has no notes either).
+const report = (readId: string | null) => (readId && reportTemplate() ? { template: reportTemplate(), readId } : undefined);
 
 export async function generateMetadata({ params }: PageProps<"/[feed]">): Promise<Metadata> {
   const { feed } = await params;
@@ -74,7 +76,7 @@ export default async function FeedPage({ params, searchParams }: PageProps<"/[fe
           <pre className="mt-3 overflow-x-auto font-mono text-sm text-ink">{curlExample}</pre>
         </section>
       ) : (
-        <NoteList notes={notes} base={feedPath(feed)} imageBase={readId ? `${readPath(readId)}/` : undefined} posted={typeof posted === "string" ? posted : undefined} />
+        <NoteList notes={notes} base={feedPath(feed)} imageBase={readId ? `${readPath(readId)}/` : undefined} posted={typeof posted === "string" ? posted : undefined} report={report(readId)} />
       )}
     </>
   );

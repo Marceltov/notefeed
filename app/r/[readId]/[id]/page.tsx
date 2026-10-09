@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { Header } from "@/components/Header";
 import { NoteArticle } from "@/components/NoteList";
-import { getReadNote, instanceTitle, readPath, rssPath } from "@/backend";
+import { getReadNote, instanceTitle, readPath, reportTemplate, rssPath } from "@/backend";
 
 export const dynamic = "force-dynamic";
 
@@ -17,7 +17,7 @@ export default async function ReadNotePage({ params }: PageProps<"/r/[readId]/[i
   return (
     <>
       <Header rss={rssPath(readId)} />
-      <NoteArticle note={note} back={readPath(readId)} imageBase={`${readPath(readId)}/`} />
+      <NoteArticle note={note} back={readPath(readId)} imageBase={`${readPath(readId)}/`} report={reportTemplate() ? { template: reportTemplate(), readId } : undefined} />
     </>
   );
 }

@@ -36,6 +36,8 @@ Images in notes load lazily and are never wider than the note. They are as publi
 
 Once the feed has a note, the buttons at the top right link to the read-only view (**Read-only**) and to the feed (**RSS**). The read link itself, with a copy button, is on the settings page under **Read link**. Give it to feed readers and to people who should see the notes but not post. See [Read links](read-links.md).
 
+An instance can show a **Report** link next to every note, on the feed page and in the read-only view: it leads to the operator's form or mailbox with the note's ids filled in, so a reader can say which note should not be there. notefeed stores nothing of the report. See [A report link on every note](../self-hosting/legal-pages.md#a-report-link-on-every-note).
+
 ### Reading notes
 
 Notes are listed newest first, grouped by day, with the time on the left. Times use the server's time zone (see [`TZ`](../self-hosting/configuration.md)). Click a title to open the note on its own page, `/<feed>/<id>`.
