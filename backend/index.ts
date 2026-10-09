@@ -12,7 +12,7 @@ import { imagePath } from "./urls";
 export { ImageNote, MarkdownNote };
 export type { Note };
 export { IDENTITY_COOKIE, SESSION_COOKIE, identitySender, locked, sessionOk } from "./auth";
-export { checkFeed, isHeldBack as isReservedFeed, readIdOf } from "./feeds";
+export { checkFeed, isHeldBack as isReservedFeed, isRemovedFeed, isRemovedReadId, readIdOf } from "./feeds";
 export { identityOn };
 export { feedPath, publicUrl, readPath, rssPath, safeNext, settingsPath } from "./urls";
 // Every write is one of these HTTP handlers; the frontend only mounts them and renders.
@@ -21,7 +21,7 @@ export { measured } from "./metrics";
 export { noteOutcome } from "./requestscope";
 export { hasLegalPage, readLegalPage, readNotice, type LegalPage } from "./legal";
 export { metricsRoute } from "./http/metrics";
-export { unreferencedImagesRoute } from "./http/operator";
+export { takedownRoute, unreferencedImagesRoute } from "./http/operator";
 export { feedCookieName, feedUnlocked } from "./feedlock";
 export { feedDeleteRoute, feedSettingsRoute } from "./http/feedforms";
 export { feedAccessRoute } from "./http/feedsession";

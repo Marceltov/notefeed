@@ -49,7 +49,7 @@ class RateLimitedError(NotefeedError):
 
 
 class NotFoundError(NotefeedError):
-    """No such note, or a malformed read id."""
+    """No such note, or a malformed read id; also a feed the operator removed for good (`removed`, 410)."""
 
 
 class LimitReachedError(NotefeedError):
@@ -61,7 +61,7 @@ class NoteTooLargeError(NotefeedError):
 
 
 class InvalidRequestError(NotefeedError):
-    """The server refused the request itself: invalid or reserved feed, empty note, bad body or parameter."""
+    """The server refused the request itself: invalid or reserved feed, empty note, bad body or parameter, or an image on the instance's blocklist (`blocked`, 451)."""
 
 
 _BY_CODE: dict[str, type[NotefeedError]] = {
@@ -80,6 +80,8 @@ _BY_CODE: dict[str, type[NotefeedError]] = {
     "invalid_request": InvalidRequestError,
     "feed_exists": InvalidRequestError,
     "taken": InvalidRequestError,
+    "removed": NotFoundError,
+    "blocked": InvalidRequestError,
     "unsupported_type": InvalidRequestError,
 }
 

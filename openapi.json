@@ -195,6 +195,16 @@
               }
             }
           },
+          "410": {
+            "description": "The operator removed this feed for good (`removed`): its name cannot be used again",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
           "413": {
             "description": "Markdown over 102400 bytes, or an image over NOTEFEED_MAX_IMAGE_BYTES (each picture of a multipart body too), or a multipart body over 102400 bytes plus 10 images plus 64 KiB",
             "content": {
@@ -225,6 +235,16 @@
                 }
               }
             },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "451": {
+            "description": "An image the operator removed, which may not be posted again in any feed (`blocked`)",
             "content": {
               "application/json": {
                 "schema": {
@@ -636,6 +656,16 @@
                 }
               }
             },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "451": {
+            "description": "An image the operator removed, which may not be posted again in any feed (`blocked`)",
             "content": {
               "application/json": {
                 "schema": {
@@ -1958,7 +1988,9 @@
               "invalid_request",
               "not_found",
               "feed_exists",
-              "taken"
+              "taken",
+              "removed",
+              "blocked"
             ]
           }
         },

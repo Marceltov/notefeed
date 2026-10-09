@@ -28,6 +28,7 @@ export const ROUTES = [
   "/api/oidc/callback",
   "/api/oidc/start",
   "/api/operator/images/unreferenced",
+  "/api/operator/takedown",
   "/api/v1/[...path]",
   "/imprint",
   "/login",

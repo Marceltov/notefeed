@@ -3,6 +3,7 @@ from enum import StrEnum
 
 class ErrorCode(StrEnum):
     AUTH = "auth"
+    BLOCKED = "blocked"
     EMPTY_NOTE = "empty_note"
     FEED_EXISTS = "feed_exists"
     FEED_LIMIT = "feed_limit"
@@ -13,6 +14,7 @@ class ErrorCode(StrEnum):
     NOTE_LIMIT = "note_limit"
     NOT_FOUND = "not_found"
     RATE_LIMITED = "rate_limited"
+    REMOVED = "removed"
     RESERVED_FEED = "reserved_feed"
     TAKEN = "taken"
     TOO_LARGE = "too_large"

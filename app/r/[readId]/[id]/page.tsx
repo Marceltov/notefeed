@@ -2,7 +2,8 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { Header } from "@/components/Header";
 import { NoteArticle } from "@/components/NoteList";
-import { getReadNote, instanceTitle, readPath, rssPath } from "@/backend";
+import { Removed } from "@/components/Removed";
+import { getReadNote, instanceTitle, isRemovedReadId, readPath, rssPath } from "@/backend";
 
 export const dynamic = "force-dynamic";
 
@@ -12,6 +13,14 @@ export const generateMetadata = (): Metadata => ({ title: { absolute: instanceTi
 export default async function ReadNotePage({ params }: PageProps<"/r/[readId]/[id]">) {
   const { readId, id } = await params;
   const note = await getReadNote(readId, id);
+  if (!note && (await isRemovedReadId(readId))) {
+    return (
+      <>
+        <Header rss={rssPath(readId)} />
+        <Removed />
+      </>
+    );
+  }
   if (!note) notFound();
 
   return (

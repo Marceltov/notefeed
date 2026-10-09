@@ -2,7 +2,7 @@
 // link (no password, even on a locked instance; proxy.ts skips /r/). Every file is served except dot files (the feed's own files and the
 // notes' sidecars). The type comes from the extension and nothing else, whatever follows the header; what is not an image or text is a download.
 import { createHash } from "node:crypto";
-import { feedForReadId } from "../feeds";
+import { feedForReadId, isRemovedReadId } from "../feeds";
 import { measured } from "../metrics";
 import { noteRoute } from "../requestscope";
 import { storage } from "../storage";
@@ -20,6 +20,7 @@ async function serveFile(readId: string, file: string, ifNoneMatch?: string | nu
   const feed = await feedForReadId(readId);
   const ext = NAME_RE.exec(file)?.[1];
   const bytes = feed && ext ? await storage().readFile(feed, file) : null;
+  if (!feed && (await isRemovedReadId(readId))) return new Response("removed by the operator", { status: 410 });
   if (!bytes || !ext) return new Response("not found", { status: 404 });
   const image = (IMAGE_EXTS as string[]).includes(ext);
   const etag = `"${createHash("sha1").update(bytes).digest("base64url")}"`;

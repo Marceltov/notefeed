@@ -1,7 +1,7 @@
 // GET /r/<readId>/feed.xml. Public even on a locked instance (proxy.ts skips /r/). Unknown ids get an
 // empty feed, so a reader can subscribe before the first note and ids can't be probed for existence.
 import { config } from "../config";
-import { isReadId, feedForReadId } from "../feeds";
+import { isReadId, feedForReadId, isRemovedReadId } from "../feeds";
 import { forReaders, getSettings } from "../feedsettings";
 import { measured } from "../metrics";
 import { listNotes } from "../notes";
@@ -14,6 +14,7 @@ async function feedXml(req: Request, readId: string): Promise<Response> {
   if (!isReadId(readId)) return new Response("not found", { status: 404 });
   const tag = new URL(req.url).searchParams.get("tag")?.toLowerCase(); // an unknown tag is an empty feed, like an unknown read id
   const feed = await feedForReadId(readId);
+  if (!feed && (await isRemovedReadId(readId))) return new Response("removed by the operator", { status: 410 });
   const settings = feed ? await getSettings(feed) : { title: "", description: "", image: "", showSender: true };
   const title = settings.title || config.title();
   const xml = renderFeed(feed ? forReaders(await listNotes(feed, 50, undefined, tag), settings) : [], {

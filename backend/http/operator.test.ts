@@ -1,4 +1,4 @@
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { mkdir, mkdtemp, readdir, rm, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -9,7 +9,7 @@ import { logsOf } from "../log";
 import { renderMetrics, resetMetricsForTest } from "../metrics";
 import { resetStorageForTests, storage } from "../storage";
 import type { SqlStorage } from "../storage/sql";
-import { unreferencedImagesRoute } from "./operator";
+import { takedownRoute, unreferencedImagesRoute } from "./operator";
 
 const TOKEN = "operator-token-".padEnd(40, "x");
 const node22 = Number(process.versions.node.split(".")[0]) >= 22; // better-sqlite3 and kysely need it
@@ -140,4 +140,20 @@ test.skipIf(!node22)("an image folder that cannot be read: 502 and a log line, w
     expect(JSON.stringify(await res.json())).not.toContain(root);
   });
   expect(logs.filter((l) => l.level === "error")).toHaveLength(1);
+});
+
+// POST /api/operator/takedown (#155) on the database backend with the images in a folder: the objects go and their keys are named.
+test.skipIf(!node22)("takedown: removes the rows and the image objects, names the keys, blocks the image", async () => {
+  const s = storage();
+  await s.createFeed("bad", "rid-bad");
+  await s.writeNote("bad", "t", "md", "# text", {});
+  await s.writeNote("bad", "p", "png", Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1]), {});
+  const [key] = await files();
+  const res = await takedownRoute(new Request("http://localhost:3000/api/operator/takedown", { method: "POST", body: JSON.stringify({ target: "https://x.test/r/rid-bad/p.png" }), headers: { "content-type": "application/json", authorization: `Bearer ${TOKEN}` } }));
+  expect(res.status).toBe(200);
+  expect(await res.json()).toEqual({ removed: true, already_removed: false, notes: 2, images: 1, blocked: 1, image_keys: [key] });
+  expect(await files()).toEqual([]);
+  expect(await s.isRemoved({ readId: "rid-bad" })).toBe(true);
+  expect(await s.isBlockedImage(createHash("sha256").update(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1])).digest("hex"))).toBe(true);
+  expect((await (s as Partial<SqlStorage>).sweepImages!({ remove: true, olderThanMs: 0 }))).toMatchObject({ unreferenced: { count: 0 }, missing: 0 });
 });

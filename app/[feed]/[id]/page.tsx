@@ -3,15 +3,24 @@ import { notFound } from "next/navigation";
 import { Header } from "@/components/Header";
 import { NoteArticle } from "@/components/NoteList";
 import { NoteActions } from "@/components/NoteActions";
+import { Removed } from "@/components/Removed";
 import { UnlockForm } from "@/components/UnlockForm";
 import { noteErrorMessage } from "@/app/_lib/messages";
-import { feedCookieName, feedPath, feedUnlocked, getFeedNote, readIdOf, readPath } from "@/backend";
+import { feedCookieName, feedPath, feedUnlocked, getFeedNote, isRemovedFeed, readIdOf, readPath } from "@/backend";
 
 export const dynamic = "force-dynamic";
 
 export default async function NotePage({ params, searchParams }: PageProps<"/[feed]/[id]">) {
   const { feed, id } = await params;
   const { edited, error, retry } = await searchParams;
+  if (await isRemovedFeed(feed)) {
+    return (
+      <>
+        <Header feed={feed} />
+        <Removed />
+      </>
+    );
+  }
   if ((await feedUnlocked(feed, (await cookies()).get(feedCookieName(feed))?.value)) === "locked") {
     return (
       <>

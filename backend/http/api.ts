@@ -56,6 +56,8 @@ const MULTIPART =
   "and a failed write removes what the request stored: all or nothing. `X-Note-Alt` and `X-Note-Name` are 400. " +
   "The answer has `attachments`, the stored pictures in the order of the `file` parts. ";
 const UNAUTHORIZED = err("The instance has a password, or the feed has its own, and it is missing or wrong");
+const REMOVED = err("The operator removed this feed for good (`removed`): its name cannot be used again");
+const BLOCKED = err("An image the operator removed, which may not be posted again in any feed (`blocked`)");
 
 // For the Feeds reads: the password first (a locked instance tells strangers nothing else), then the name.
 // postNote does its own, because a browser form gets a redirect to the login page instead of a 401.
@@ -157,9 +159,11 @@ const OPS: AnyOp[] = [
       ),
       401: UNAUTHORIZED,
       409: err("A password was sent for a feed that already exists without one: it can't be claimed; or the chosen read id is taken"),
+      410: REMOVED,
       413: err(`Markdown over ${MAX_BYTES} bytes, or an image over NOTEFEED_MAX_IMAGE_BYTES (each picture of a multipart body too), or a multipart body over ${MAX_BYTES} bytes plus ${MAX_ATTACHMENTS} images plus ${MULTIPART_SLACK / 1024} KiB`),
       415: err("Content-Type missing or not one of the accepted types, or the body (or a multipart body's picture) is not what it declares"),
       429: { ...err("Too many posts, or wrong passwords, from this client"), headers: RETRY },
+      451: BLOCKED,
       507: err("NOTEFEED_MAX_FEEDS, NOTEFEED_MAX_NOTES_PER_FEED or NOTEFEED_MAX_IMAGES_PER_FEED reached"),
     },
   }).handle(({ req, params }) => handlePostNote(req, params.feed)),
@@ -237,6 +241,7 @@ const OPS: AnyOp[] = [
       413: err(`Markdown over ${MAX_BYTES} bytes, or an image over NOTEFEED_MAX_IMAGE_BYTES (each picture of a multipart body too), or a multipart body over ${MAX_BYTES} bytes plus ${MAX_ATTACHMENTS} images plus ${MULTIPART_SLACK / 1024} KiB`),
       415: err("Content-Type missing, not accepted or not the note's own type (a multipart body is for a markdown note), or the body (or a picture) is not what it declares"),
       429: { ...err("Too many posts, edits and deletes, or wrong passwords, from this client"), headers: RETRY },
+      451: BLOCKED,
       507: err("NOTEFEED_MAX_IMAGES_PER_FEED reached"),
     },
     before: passwordAndFeed,

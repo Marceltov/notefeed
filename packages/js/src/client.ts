@@ -41,13 +41,13 @@ export class RateLimitedError extends NotefeedError {
     super(message, status, code);
   }
 }
-/** No such note, or a malformed read id. */
+/** No such note, or a malformed read id; also a feed the operator removed for good (`removed`, 410). */
 export class NotFoundError extends NotefeedError {}
 /** The instance's feed or note limit, or the feed's image limit, is reached. */
 export class LimitReachedError extends NotefeedError {}
 /** The note or image is over the server's size limit. */
 export class NoteTooLargeError extends NotefeedError {}
-/** The server refused the request itself: invalid or reserved feed, empty note, bad body or parameter. */
+/** The server refused the request itself: invalid or reserved feed, empty note, bad body or parameter, or an image on the instance's blocklist (`blocked`, 451). */
 export class InvalidRequestError extends NotefeedError {}
 
 const BY_CODE: Partial<Record<ErrorCode, typeof NotefeedError>> = {
@@ -64,6 +64,8 @@ const BY_CODE: Partial<Record<ErrorCode, typeof NotefeedError>> = {
   invalid_request: InvalidRequestError,
   feed_exists: InvalidRequestError,
   taken: InvalidRequestError,
+  removed: NotFoundError,
+  blocked: InvalidRequestError,
   unsupported_type: InvalidRequestError,
 };
 

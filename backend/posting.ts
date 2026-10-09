@@ -4,10 +4,11 @@ import { config } from "./config";
 import { idStamp } from "../shared/notes";
 import { applyImages, type ImagePlan } from "../shared/imagePlan.mjs";
 import { isAttachmentName, MAX_ATTACHMENTS, safeName } from "../shared/links";
-import { FeedExistsError, FeedLimitError, ImageLimitError, ImageTooLargeError, InvalidBodyError, NotefeedError, NotFoundError, NoteLimitError, RateLimitedError, UnsupportedTypeError } from "./errors";
+import { BlockedImageError, FeedExistsError, FeedLimitError, ImageLimitError, ImageTooLargeError, InvalidBodyError, NotefeedError, NotFoundError, NoteLimitError, RateLimitedError, RemovedFeedError, UnsupportedTypeError } from "./errors";
 import { type FeedAccess, checkFeedAccess, createProtected } from "./feedlock";
 import { type FeedSettings, checkSettings, getStoredSettings, saveSettings } from "./feedsettings";
-import { assertFeed, deleteFeed as removeWholeFeed, feedCount, hasFeed, isHeldBack, readIdOf, setReadId } from "./feeds";
+import { assertFeed, deleteFeed as removeWholeFeed, feedCount, hasFeed, isHeldBack, isRemovedFeed, readIdOf, setReadId } from "./feeds";
+import { isBlockedImage } from "./takedown";
 import { capReached, rateLimit } from "./limits";
 import { logger } from "./log";
 import { MEDIA_TYPES } from "./note/media";
@@ -23,10 +24,16 @@ const log = logger("posting");
 // protection can only be changed by a request that proved the password: no second access check after `read()`, unlike a post.
 async function admit(feed: string, ip: string, access: FeedAccess): Promise<boolean> {
   assertFeed(feed);
+  if (await isRemovedFeed(feed)) throw new RemovedFeedError(); // the operator took the name out of use (issue #155): before any password is looked at
   const proved = await checkFeedAccess(feed, access, ip);
   const wait = rateLimit(ip);
   if (wait !== null) throw new RateLimitedError(wait);
   return proved;
+}
+
+// An image the operator removed may not come back, in any feed (issue #155).
+async function refuseBlocked(body: Uint8Array): Promise<void> {
+  if (await isBlockedImage(body)) throw new BlockedImageError();
 }
 
 // NOTEFEED_MAX_FEEDS, for a post that would create the feed. Whether the feed exists.
@@ -94,6 +101,7 @@ export async function postNote(
   // Before createProtected: a refused note must not leave a protected, empty feed.
   if (!type.verify(input.body, ext)) throw new UnsupportedTypeError(`the body is not ${parsed.mediaType}`);
   type.checkBody(input.body);
+  if (type.name === "image") await refuseBlocked(input.body);
   checkLine("title", input.title, MAX_NOTE_TITLE);
   if (checkLine("alt", input.alt, MAX_ALT) && !type.hasAlt) throw new InvalidBodyError("alt is for image notes");
   const tags = checkTags(input.tags);
@@ -112,6 +120,7 @@ export async function editContent(feed: string, id: string, ip: string, read: ()
   await admit(feed, ip, access);
   if (!(await getNote(feed, id))) throw new NotFoundError("no such note"); // before the body is read: a missing note is 404 whatever the body
   const { body, mediaType } = await read();
+  if (parseMediaType(mediaType)?.type.name === "image") await refuseBlocked(body);
   const note = await replaceContent(feed, id, body, mediaType);
   if (!note) throw new NotFoundError("no such note");
   return note;
@@ -235,6 +244,7 @@ export async function postWithPictures(
   const exists = await feedCapped(feed);
   const { text, title, ...input } = await read();
   const pictures = checkPictures(input.pictures);
+  for (const p of pictures) await refuseBlocked(p.body);
   if (text === undefined && pictures.length === 0) throw new InvalidBodyError("send a text, pictures or both");
   const plan = text === undefined ? undefined : await checkText(text, pictures);
   checkLine("title", title, MAX_NOTE_TITLE);
@@ -269,6 +279,7 @@ export async function editWithPictures(
   if (note.type !== MARKDOWN_TYPE) throw new UnsupportedTypeError(`this note is ${note.type}: send that Content-Type`);
   const input = await read();
   const pictures = checkPictures(input.pictures);
+  for (const p of pictures) await refuseBlocked(p.body);
   const plan = await checkText(input.text, pictures);
   const tags = checkTags(input.tags);
   await checkCap(feed, "image", pictures.length);
