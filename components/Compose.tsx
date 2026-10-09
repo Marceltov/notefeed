@@ -14,8 +14,8 @@ import { TAGS_HINT, TAGS_PATTERN } from "@/shared/tags";
 // The compose box posts through the API client generated from openapi.json (the session cookie rides along same-origin) and
 // shows refusals inline: the text as a raw markdown post, or, with pictures dropped, pasted or picked (they wait in the box,
 // usePendingImages), the text and the pictures in one multipart request, so nothing is half-posted.
-// `isNew`: a feed that doesn't exist yet, so the box offers to protect it with a password.
-export function Compose({ feed, action, error: initialError, isNew, sender }: { feed: string; action: string; error?: string; isNew?: boolean; sender?: boolean }) {
+// `isNew`: a feed that doesn't exist yet, so the box offers to protect it with a password. `imageBase`: the feed's read link, for the preview's stored pictures.
+export function Compose({ feed, action, error: initialError, isNew, sender, imageBase }: { feed: string; action: string; error?: string; isNew?: boolean; sender?: boolean; imageBase?: string }) {
   const images = usePendingImages();
   const { run, error, setError, pending, router } = useApiForm(action, initialError, withPictures(errorMessage, images.pending.length > 0));
   const [text, setText] = useState("");
@@ -60,6 +60,7 @@ export function Compose({ feed, action, error: initialError, isNew, sender }: { 
         pending={images.pending}
         onPendingChange={images.setPending}
         onMessage={setError}
+        imageBase={imageBase}
       >
         <label htmlFor="note-title" className="sr-only">
           Title (optional, otherwise taken from the text)

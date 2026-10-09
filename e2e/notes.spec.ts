@@ -115,3 +115,24 @@ test("saving an edit sends only what changed: nothing, the title, or the text", 
   await expect(page.getByText("more text", { exact: true })).toBeVisible();
   expect(writes).toEqual(["PATCH", "PUT"]);
 });
+
+test("Preview renders the markdown as the note will show; Write brings the text back unchanged", async ({ page }) => {
+  const name = feedName();
+  await page.goto(`/${name}`);
+  await page.getByLabel("Note in markdown").fill("# Seen first\n\n- one\n- **two**\n\n<b>raw</b>");
+  await page.getByRole("tab", { name: "Preview" }).click();
+  await expect(page.getByRole("tabpanel")).toBeVisible();
+  await expect(page.getByRole("tabpanel").getByRole("heading", { name: "Seen first" })).toBeVisible();
+  await expect(page.getByRole("tabpanel").locator("strong")).toHaveText("two");
+  await expect(page.getByRole("tabpanel")).toContainText("<b>raw</b>"); // raw HTML stays text
+  await expect(page.getByLabel("Note in markdown")).toBeHidden();
+  await page.getByRole("tab", { name: "Write" }).click();
+  await expect(page.getByLabel("Note in markdown")).toHaveValue("# Seen first\n\n- one\n- **two**\n\n<b>raw</b>");
+  await page.getByRole("button", { name: "Post note" }).click();
+  await page.getByRole("link", { name: "Seen first" }).click();
+  // The editor has the same tabs, and an empty box says so.
+  await page.getByText("Edit", { exact: true }).click();
+  await page.getByLabel("Note in markdown").fill("");
+  await page.getByRole("tab", { name: "Preview" }).click();
+  await expect(page.getByRole("tabpanel")).toHaveText("Nothing to preview.");
+});
