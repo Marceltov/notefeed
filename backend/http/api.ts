@@ -3,9 +3,9 @@
 // generated from. Each handler is typed from its own declared responses (see op() in dispatch.ts).
 import * as z from "zod";
 import { config } from "../config";
-import { InvalidBodyError, NotFoundError } from "../errors";
+import { InvalidBodyError, NotFoundError, RemovedFeedError } from "../errors";
 import { changePassword, checkFeedAccess, protectedFeed, removePassword } from "../feedlock";
-import { isReadId, assertFeed, feedForReadId, hasFeed, readIdOf } from "../feeds";
+import { isReadId, assertFeed, feedForReadId, hasFeed, isRemovedReadId, readIdOf } from "../feeds";
 import { forReaders, getSettings } from "../feedsettings";
 import { clientIp } from "../limits";
 import { MAX_BYTES, countNotes, getNote, listNotes, type Note } from "../notes";
@@ -57,6 +57,7 @@ const MULTIPART =
   "The answer has `attachments`, the stored pictures in the order of the `file` parts. ";
 const UNAUTHORIZED = err("The instance has a password, or the feed has its own, and it is missing or wrong");
 const REMOVED = err("The operator removed this feed for good (`removed`): its name cannot be used again");
+const REMOVED_READ = err("The operator removed the feed this read id belonged to (`removed`)");
 const BLOCKED = err("An image the operator removed, which may not be posted again in any feed (`blocked`)");
 const IMAGES_OFF = err("Image uploads are off on this instance (`NOTEFEED_IMAGE_UPLOADS=0`, code `images_off`): an image body, a picture replaced, or a multipart body with pictures. Stored pictures are still served");
 
@@ -89,6 +90,14 @@ const noteJson = (n: Note, base: string, files: string | null): NoteJson => ({
   ...(n.sender !== undefined && { sender: n.sender }),
   tags: n.tags,
 });
+
+// The feed a read id shows, or null for one nobody has. A read id the operator removed is 410 (issue #159), as on the pages,
+// the RSS feed and the file route: a tombstone is public knowledge there already, so it gives nothing away here.
+async function readFeed(readId: string): Promise<string | null> {
+  const feed = await feedForReadId(readId);
+  if (!feed && (await isRemovedReadId(readId))) throw new RemovedFeedError();
+  return feed;
+}
 
 // Where a feed's files are served from (by its name, for the Feeds API), or null while it has no read link.
 async function filesOf(feed: string, headers: Headers): Promise<string | null> {
@@ -459,16 +468,17 @@ const OPS: AnyOp[] = [
     summary: "Get a feed's title and description by its read id",
     description:
       "Public, even on an instance with a password, and never reveals the feed's name. " +
-      "An unknown read id has an empty title and description, so read ids can't be probed.",
+      "An unknown read id has an empty title and description, so read ids can't be probed; one the operator removed is `410`.",
     tags: ["Read"],
     params: { readId: ReadIdParam },
     responses: {
       200: { description: "The feed's public settings", schema: ReadFeedJson },
       404: err("Malformed read id"),
+      410: REMOVED_READ,
     },
   }).handle(async ({ req, params }) => {
     if (!isReadId(params.readId)) throw new NotFoundError("malformed read id");
-    const feed = await feedForReadId(params.readId);
+    const feed = await readFeed(params.readId);
     const { title, description, image } = feed ? await getSettings(feed) : { title: "", description: "", image: "" };
     return { status: 200, body: { title, description, image_url: image ? publicUrl(req.headers) + imagePath(params.readId, image) : null } };
   }),
@@ -480,7 +490,7 @@ const OPS: AnyOp[] = [
     summary: "List a feed's notes by its read id",
     description:
       "Public, even on an instance with a password, and never reveals the feed's name. " +
-      "An unknown read id is an empty list, so read ids can't be probed. The same notes as the read link's RSS.",
+      "An unknown read id is an empty list, so read ids can't be probed; one the operator removed is `410`. The same notes as the read link's RSS.",
     tags: ["Read"],
     params: { readId: ReadIdParam },
     query: PageQuery,
@@ -488,10 +498,11 @@ const OPS: AnyOp[] = [
       200: { description: "A page of notes", schema: NoteList },
       400: err("A bad `limit` / `before`"),
       404: err("Malformed read id"),
+      410: REMOVED_READ,
     },
   }).handle(async ({ req, params, query }) => {
     if (!isReadId(params.readId)) throw new NotFoundError("malformed read id");
-    const feed = await feedForReadId(params.readId);
+    const feed = await readFeed(params.readId);
     const settings = feed ? await getSettings(feed) : null;
     const notes = async (l: number, b?: string, t?: string) => (feed && settings ? forReaders(await listNotes(feed, l, b, t), settings) : []);
     return page(notes, query, publicUrl(req.headers) + readPath(params.readId), `${publicUrl(req.headers)}${readPath(params.readId)}/`);
@@ -502,15 +513,16 @@ const OPS: AnyOp[] = [
     path: `${API_PREFIX}/read/{readId}/notes/{id}`,
     operationId: "getReadNote",
     summary: "Get one note by its feed's read id",
-    description: "Public, like the read link.",
+    description: "Public, like the read link. A read id the operator removed is `410`.",
     tags: ["Read"],
     params: { readId: ReadIdParam, id: NoteIdParam },
     responses: {
       200: { description: "The note", schema: NoteJson },
       404: err("No such note, or a malformed or unknown read id"),
+      410: REMOVED_READ,
     },
   }).handle(async ({ req, params }) => {
-    const feed = await feedForReadId(params.readId);
+    const feed = await readFeed(params.readId);
     const found = feed ? await getNote(feed, params.id) : null;
     if (!feed || !found) throw new NotFoundError("no such note");
     const [note] = forReaders([found], await getSettings(feed));

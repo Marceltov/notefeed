@@ -40,6 +40,11 @@ def _parse_response(
 
         return response_404
 
+    if response.status_code == 410:
+        response_410 = Error.from_dict(response.json())
+
+        return response_410
+
     if client.raise_on_unexpected_status:
         raise errors.UnexpectedStatus(response.status_code, response.content)
     else:
@@ -65,7 +70,7 @@ def sync_detailed(
 ) -> Response[Error | Note]:
     """Get one note by its feed's read id
 
-     Public, like the read link.
+     Public, like the read link. A read id the operator removed is `410`.
 
     Args:
         read_id (str):
@@ -99,7 +104,7 @@ def sync(
 ) -> Error | Note | None:
     """Get one note by its feed's read id
 
-     Public, like the read link.
+     Public, like the read link. A read id the operator removed is `410`.
 
     Args:
         read_id (str):
@@ -128,7 +133,7 @@ async def asyncio_detailed(
 ) -> Response[Error | Note]:
     """Get one note by its feed's read id
 
-     Public, like the read link.
+     Public, like the read link. A read id the operator removed is `410`.
 
     Args:
         read_id (str):
@@ -160,7 +165,7 @@ async def asyncio(
 ) -> Error | Note | None:
     """Get one note by its feed's read id
 
-     Public, like the read link.
+     Public, like the read link. A read id the operator removed is `410`.
 
     Args:
         read_id (str):
