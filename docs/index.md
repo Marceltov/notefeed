@@ -16,7 +16,7 @@ The [hosted service](hosted.md) runs at [notefeed.me](https://notefeed.me): noth
 ## Where to go next
 
 - **Hosted service:** [what notefeed.me is](hosted.md), who runs it and where your data is.
-- **Get started:** [Quick start](get-started/quick-start.md) runs notefeed with Docker Compose; [Concepts](get-started/concepts.md) explains feeds, names and read links.
+- **Get started:** [Quick start](get-started/quick-start.md) runs notefeed with Docker Compose; [Concepts](get-started/concepts.md) explains feeds, names and read links; [Compared to other tools](get-started/comparison.md) says when to use notefeed, ntfy or both.
 - **Using notefeed:** the [web UI](using/web-ui.md), [posting notes](using/posting.md), [pictures](using/pictures.md), [feeds](using/feeds.md) and how to [read them back](using/read-links.md) in Glance, Dynacat and other readers.
 - **Integrations:** [client libraries](integrations/clients.md) and the [command line](integrations/cli.md), the [REST API](integrations/api.md) and [MCP](integrations/mcp.md) for AI assistants.
 - **Self-hosting:** [configuration](self-hosting/configuration.md), [passwords and access](self-hosting/access.md), a [reverse proxy](self-hosting/reverse-proxy.md), [storage](self-hosting/storage.md), [backups](self-hosting/backups.md), [metrics](self-hosting/metrics.md) and [logs](self-hosting/logs.md).

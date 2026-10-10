@@ -67,6 +67,7 @@ nav:
   - Get started:
       - Quick start: get-started/quick-start.md
       - Concepts: get-started/concepts.md
+      - Compared to other tools: get-started/comparison.md
   - Using notefeed:
       - Web UI: using/web-ui.md
       - Posting notes: using/posting.md
