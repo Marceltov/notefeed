@@ -327,25 +327,21 @@ test("the title image can be picked from the feed's images, and goes when its no
   await expect(page.locator("header img:not([src=\"/icon.svg\"])")).toHaveCount(0);
 });
 
-// The note box takes the focus back one animation frame after a picture is added, so that typing goes on behind it. A frame can come
-// late (a busy machine), and by then the writer may be in the title field: what they type next must stay there, not land in the note.
-test("adding a picture does not pull the focus out of a field the writer has moved to since", async ({ page }) => {
-  // Animation frames wait until the test lets them through.
-  await page.addInitScript(() => {
-    const held: FrameRequestCallback[] = [];
-    window.requestAnimationFrame = (cb) => held.push(cb);
-    (window as unknown as { runFrames: () => void }).runFrames = () => held.splice(0).forEach((cb) => cb(performance.now()));
-  });
+// The note box takes the focus and puts the cursor behind a picture's reference in the same step as the reference goes in (#164), so
+// that typing goes on behind it, and a selection made or a field moved to afterwards is never undone by a step coming late.
+test("adding a picture puts the cursor behind its reference at once; typing goes on from there, and in another field stays there", async ({ page }) => {
   await page.goto(`/${feedName()}`);
   await choose(page, "Add image", PNG);
   await expect(note(page)).toHaveValue("![](pixel.png)");
+  await expect(note(page)).toBeFocused();
+  expect(await note(page).evaluate((ta: HTMLTextAreaElement) => [ta.selectionStart, ta.selectionEnd])).toEqual([14, 14]);
+  await page.keyboard.type("\nafter");
+  await expect(note(page)).toHaveValue("![](pixel.png)\nafter");
   const title = page.getByLabel("Title (optional, otherwise taken from the text)");
   await title.focus();
-  await page.evaluate(() => (window as unknown as { runFrames: () => void }).runFrames());
-  await expect(title).toBeFocused();
   await page.keyboard.insertText("Café");
   await expect(title).toHaveValue("Café");
-  await expect(note(page)).toHaveValue("![](pixel.png)");
+  await expect(note(page)).toHaveValue("![](pixel.png)\nafter");
 });
 
 test("a title and tags typed with only pictures go on the pictures, accents included", async ({ page }) => {
