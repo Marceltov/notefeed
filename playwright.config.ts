@@ -28,6 +28,8 @@ export default defineConfig({
     // The "Report" link (issue #154): the open server has NOTEFEED_REPORT_URL, the locked one (3101) has not.
     { name: "report", testMatch: "report.spec.ts", use: { baseURL: "http://localhost:3100" } },
     { name: "locked", testMatch: "locked.spec.ts", use: { baseURL: "http://localhost:3101" } },
+    // The locked server also runs with NOTEFEED_IMAGE_UPLOADS=0 (issue #152): the open one has to take pictures.
+    { name: "images-off", testMatch: "images-off.spec.ts", use: { baseURL: "http://localhost:3101" } },
     // The operator's imprint and privacy page: set on the locked server, unset on the open one. Their notice: on the SQLite one.
     { name: "legal", testMatch: "legal.spec.ts" },
     // The same notes and pictures specs on the SQLite backend with its images in a folder (needs Node 22, like the app itself).
@@ -39,7 +41,7 @@ export default defineConfig({
   globalSetup: "./e2e/s3-setup.ts",
   webServer: [
     server(3100, { NOTEFEED_METRICS: "1", NOTEFEED_REPORT_URL: "https://report.example.com/?r={read_id}&n={note_id}&f={file}" }, SERVER_LOG),
-    server(3101, { NOTEFEED_PASSWORD: "e2e", NOTEFEED_IMPRINT_FILE: "e2e/fixtures/imprint.md", NOTEFEED_PRIVACY_FILE: "e2e/fixtures/privacy.md" }),
+    server(3101, { NOTEFEED_PASSWORD: "e2e", NOTEFEED_IMAGE_UPLOADS: "0", NOTEFEED_IMPRINT_FILE: "e2e/fixtures/imprint.md", NOTEFEED_PRIVACY_FILE: "e2e/fixtures/privacy.md" }),
     server(3103, {
       NOTEFEED_STORAGE: "sqlite",
       NOTEFEED_DATABASE_URL: "file:test-results/e2e-3103.db",

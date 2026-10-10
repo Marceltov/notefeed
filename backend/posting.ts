@@ -4,7 +4,7 @@ import { config } from "./config";
 import { idStamp } from "../shared/notes";
 import { applyImages, type ImagePlan } from "../shared/imagePlan.mjs";
 import { isAttachmentName, MAX_ATTACHMENTS, safeName } from "../shared/links";
-import { FeedExistsError, FeedLimitError, ImageLimitError, ImageTooLargeError, InvalidBodyError, NotefeedError, NotFoundError, NoteLimitError, RateLimitedError, UnsupportedTypeError } from "./errors";
+import { FeedExistsError, FeedLimitError, ImageLimitError, ImagesOffError, ImageTooLargeError, InvalidBodyError, NotefeedError, NotFoundError, NoteLimitError, RateLimitedError, UnsupportedTypeError } from "./errors";
 import { type FeedAccess, checkFeedAccess, createProtected } from "./feedlock";
 import { type FeedSettings, checkSettings, getStoredSettings, saveSettings } from "./feedsettings";
 import { assertFeed, deleteFeed as removeWholeFeed, feedCount, hasFeed, isHeldBack, readIdOf, setReadId } from "./feeds";
@@ -61,6 +61,12 @@ async function recheck(feed: string, ip: string, access: FeedAccess, proved: boo
   if (!proved && !((access.password ?? given) || undefined)) await checkFeedAccess(feed, {}, ip);
 }
 
+// NOTEFEED_IMAGE_UPLOADS=0 (issue #152): no image is stored, whichever way it comes. Before the caps and before anything is
+// written, after the access checks: who may not post is told that first.
+function refuseImages(images: boolean): void {
+  if (images && !config.imageUploads()) throw new ImagesOffError();
+}
+
 // The caps are per type: images have their own, the notes limit counts the markdown ones. `adding` notes of that type; a feed that does not exist yet counts as empty.
 async function checkCap(feed: string, typeName: string, adding: number): Promise<void> {
   const image = typeName === "image";
@@ -90,6 +96,7 @@ export async function postNote(
   const parsed = parseMediaType(input.mediaType);
   if (!parsed) throw new UnsupportedTypeError();
   const { type, ext } = parsed;
+  refuseImages(type.name === "image");
   if (exists) await checkCap(feed, type.name, 1);
   // Before createProtected: a refused note must not leave a protected, empty feed.
   if (!type.verify(input.body, ext)) throw new UnsupportedTypeError(`the body is not ${parsed.mediaType}`);
@@ -110,7 +117,9 @@ export async function postNote(
 // Replacing a note's content, and changing its title or alt text: the same gate as posting, minus the caps.
 export async function editContent(feed: string, id: string, ip: string, read: () => Promise<{ body: Uint8Array; mediaType: string }>, access: FeedAccess): Promise<Note> {
   await admit(feed, ip, access);
-  if (!(await getNote(feed, id))) throw new NotFoundError("no such note"); // before the body is read: a missing note is 404 whatever the body
+  const current = await getNote(feed, id);
+  if (!current) throw new NotFoundError("no such note"); // before the body is read: a missing note is 404 whatever the body
+  refuseImages(current.type.startsWith("image/")); // replacing a picture's bytes is an upload too
   const { body, mediaType } = await read();
   const note = await replaceContent(feed, id, body, mediaType);
   if (!note) throw new NotFoundError("no such note");
@@ -165,6 +174,7 @@ const IMAGE_TYPES = MEDIA_TYPES.filter((m) => m.mediaType.startsWith("image/")).
 
 // Every check a picture gets before anything is stored; a refusal names it (safeName: a refused name is not echoed as sent).
 function checkPictures(pictures: Picture[]): (Picture & { type: NoteType; ext: string })[] {
+  refuseImages(pictures.length > 0);
   if (pictures.length > MAX_ATTACHMENTS) throw new InvalidBodyError(`at most ${MAX_ATTACHMENTS} attachments`);
   const seen = new Set<string>();
   return pictures.map((p) => {

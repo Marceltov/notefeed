@@ -67,6 +67,13 @@ export class ImageLimitError extends LimitReachedError {
   }
 }
 
+/** NOTEFEED_IMAGE_UPLOADS=0: no image is stored, whichever way it comes (issue #152). */
+export class ImagesOffError extends NotefeedError {
+  constructor() {
+    super("images_off", "image uploads are off on this instance");
+  }
+}
+
 /** A feed password was asked for (set, change, remove) on a feed that exists and has none. */
 export class FeedExistsError extends NotefeedError {
   constructor() {
