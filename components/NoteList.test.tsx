@@ -37,6 +37,18 @@ test("a markdown note is listed as before: title link, then the rest of the text
   expect(html).toContain("<em>text</em>");
 });
 
+test("a Report link per note fills the template with the read id, the note id and the file; none without a template (#154)", () => {
+  const at = new Date("2026-09-30T10:00:00Z");
+  const report = { template: "https://r.example/?r={read_id}&n={note_id}&f={file}", readId: "rid" };
+  const html = renderToStaticMarkup(<NoteList notes={[mdNote({ id: "m1", markdown: "# Hi", createdAt: at }), imgNote({ id: "p1", ext: "jpg", createdAt: at })]} base="/feed" imageBase="/r/rid/" report={report} />);
+  expect(html).toContain('href="https://r.example/?r=rid&amp;n=m1&amp;f=m1.md" rel="nofollow noopener"');
+  expect(html).toContain('href="https://r.example/?r=rid&amp;n=p1&amp;f=p1.jpg"');
+  expect(html.match(/>Report<\/a>/g)).toHaveLength(2);
+  expect(list([mdNote({ id: "m1", markdown: "# Hi", createdAt: at })])).not.toContain("Report");
+  const article = renderToStaticMarkup(<NoteArticle note={mdNote({ id: "m2", markdown: "# Hi", createdAt: at })} back="/feed" report={report} />);
+  expect(article).toContain('href="https://r.example/?r=rid&amp;n=m2&amp;f=m2.md"');
+});
+
 test("the note page shows the picture large, with its title", () => {
   const html = renderToStaticMarkup(<NoteArticle note={imgNote({ id: "p1", ext: "webp", title: "Cat", createdAt: new Date("2026-09-30T10:00:00Z") })} back="/feed" imageBase="/r/rid/" />);
   expect(html).toMatch(/<img src="\/r\/rid\/p1\.webp"/);

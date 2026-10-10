@@ -2,6 +2,7 @@ import Link from "next/link";
 import { NoteView } from "@/components/NoteView";
 import type { Note } from "@/backend";
 import { bodyAfterTitle } from "@/shared/notes";
+import { reportUrl } from "@/shared/report";
 
 // Times use the server's TZ (set TZ in compose.yaml).
 const dayKey = (d: Date) => d.toLocaleDateString("en-CA");
@@ -38,6 +39,18 @@ function Tags({ tags, base }: { tags: string[]; base: string }) {
   ));
 }
 
+// Where a reader reports a note (issue #154): the operator's URL template with the read id, never the feed name, so the link is the
+// same on the feed page and in the read-only view. `report` is unset while the instance has no template, or the feed no read link.
+export type Report = { template: string; readId: string };
+function ReportLink({ note, report }: { note: Note; report?: Report }) {
+  if (!report) return null;
+  return (
+    <a href={reportUrl(report.template, { readId: report.readId, noteId: note.id, file: note.file })} rel="nofollow noopener" className="ml-2 text-sm text-muted hover:text-carbon hover:underline">
+      Report
+    </a>
+  );
+}
+
 // An image note's picture, from the feed's current read link (`imageBase`), so it follows a changed read id. The text alternative is
 // the note's own, else its title, else none: a picture without a description is decoration to a screen reader, not a file name.
 function Picture({ note, imageBase, className }: { note: Note; imageBase?: string; className: string }) {
@@ -46,7 +59,7 @@ function Picture({ note, imageBase, className }: { note: Note; imageBase?: strin
 }
 
 // Notes grouped by day; each title links to `${base}/${id}`. `imageBase` is where a note's relative image links point.
-export function NoteList({ notes, base, imageBase, posted }: { notes: Note[]; base: string; imageBase?: string; posted?: string }) {
+export function NoteList({ notes, base, imageBase, posted, report }: { notes: Note[]; base: string; imageBase?: string; posted?: string; report?: Report }) {
   return groupByDay(notes).map(([day, items]) => (
     <section key={day} aria-labelledby={`day-${dayKey(items[0].createdAt)}`} className="mb-10">
       <h2 id={`day-${dayKey(items[0].createdAt)}`} className="mb-3 border-b border-rule pb-1 font-bold">
@@ -80,6 +93,7 @@ export function NoteList({ notes, base, imageBase, posted }: { notes: Note[]; ba
               )}
               {n.sender && <span className="ml-2 text-sm text-muted">by {n.sender}</span>}
               <Tags tags={n.tags} base={base} />
+              <ReportLink note={n} report={report} />
               {bodyAfterTitle(n.content ?? "") && (
                 <div className="mt-1">
                   <NoteView markdown={bodyAfterTitle(n.content ?? "")} imageBase={imageBase} />
@@ -93,7 +107,7 @@ export function NoteList({ notes, base, imageBase, posted }: { notes: Note[]; ba
   ));
 }
 
-export function NoteArticle({ note, back, imageBase }: { note: Note; back: string; imageBase?: string }) {
+export function NoteArticle({ note, back, imageBase, report }: { note: Note; back: string; imageBase?: string; report?: Report }) {
   return (
     <>
       <article>
@@ -102,6 +116,7 @@ export function NoteArticle({ note, back, imageBase }: { note: Note; back: strin
         </time>
         {note.sender && <span className="text-sm text-muted"> by {note.sender}</span>}
         <Tags tags={note.tags} base={back} />
+        <ReportLink note={note} report={report} />
         <div className="mt-2">
           {note.type.startsWith("image/") ? (
             <>

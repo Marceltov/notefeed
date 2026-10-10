@@ -87,6 +87,8 @@ export const config = {
   privacyFile: () => env("NOTEFEED_PRIVACY_FILE"),
   // The operator's notice on the start page, a Markdown file too. Empty: no notice.
   noticeFile: () => env("NOTEFEED_NOTICE_FILE"),
+  // A URL template for the "Report" link on every note (shared/report.ts fills {read_id}, {note_id} and {file}). Empty: no link.
+  reportUrl: () => env("NOTEFEED_REPORT_URL").trim(),
   trustProxy: () => env("NOTEFEED_TRUST_PROXY") === "1",
   // Per minute and IP; 0 or below turns it off.
   rateLimit: () => int("NOTEFEED_RATE_LIMIT", 60),
