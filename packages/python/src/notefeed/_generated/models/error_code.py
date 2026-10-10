@@ -7,6 +7,7 @@ class ErrorCode(StrEnum):
     EMPTY_NOTE = "empty_note"
     FEED_EXISTS = "feed_exists"
     FEED_LIMIT = "feed_limit"
+    IMAGES_OFF = "images_off"
     IMAGE_LIMIT = "image_limit"
     INVALID_BODY = "invalid_body"
     INVALID_FEED = "invalid_feed"

@@ -395,6 +395,14 @@ describe("post_note attachments", () => {
     expect((await listNotes("f", 10)).length).toBe(3);
     expect(await getNote("f", b.id)).toMatchObject({ type: "image/png", alt: "B" });
   });
+  test("NOTEFEED_IMAGE_UPLOADS=0: attachments are refused with images_off and nothing is posted, a text alone goes through", async () => {
+    vi.stubEnv("NOTEFEED_IMAGE_UPLOADS", "0");
+    const r = await call("post_note", { feed: "f", markdown: "hi ![](a.png)", attachments: [att("a.png")] });
+    expect(r.isError).toBe(true);
+    expect(r.content[0].text).toContain("image uploads are off on this instance");
+    expect(await listNotes("f", 10)).toEqual([]);
+    expect((await call("post_note", { feed: "f", markdown: "hi" })).isError).toBeUndefined();
+  });
   test("without attachments the answer has an empty list", async () => {
     expect((await call("post_note", { feed: "f", markdown: "x" })).structuredContent.attachments).toEqual([]);
   });
@@ -478,6 +486,14 @@ describe("post_file", () => {
     expect(n.content).toBeUndefined();
     const f = await call("update_feed", { feed: "i", title: "", description: "", image: r.file });
     expect(f.structuredContent.image_url).toBe(r.url);
+  });
+  test("NOTEFEED_IMAGE_UPLOADS=0 refuses a picture, not a text file", async () => {
+    vi.stubEnv("NOTEFEED_IMAGE_UPLOADS", "0");
+    const r = await call("post_file", { feed: "i", type: "image/png", data: png });
+    expect(r.isError).toBe(true);
+    expect(r.content[0].text).toContain("image uploads are off on this instance");
+    expect(await listNotes("i", 10)).toEqual([]);
+    expect((await call("post_file", { feed: "i", type: "text/markdown", data: Buffer.from("# Hi").toString("base64") })).isError).toBeUndefined();
   });
   test("a text file can be posted too: the type is the file's, not the tool's", async () => {
     const r = (await call("post_file", { feed: "t", type: "text/markdown", data: Buffer.from("# From a file").toString("base64") })).structuredContent;

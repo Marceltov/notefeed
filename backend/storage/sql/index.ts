@@ -8,6 +8,7 @@ import { newKey, type ImageStore } from "../images/types";
 import { applyPatch, hasMeta, parseMeta } from "../meta";
 import { parseSettings, serializeSettings } from "../settings";
 import { FeedGoneError, type Meta, type Storage } from "../types";
+import { IMAGE_EXTS } from "../../../shared/images";
 import { migrate, type Kind } from "./migrations";
 import type { Schema } from "./schema";
 
@@ -19,7 +20,25 @@ export type SqlStorage = Storage & {
    * the notes whose object is not in the store. null: this instance has no image store.
    */
   sweepImages(o: { remove: boolean; olderThanMs: number }): Promise<Sweep | null>;
+  /**
+   * The operator's move of image bytes into the configured store (issue #128): from the rows (`from` "db") or from another store, at
+   * most `limit` notes per call, newest first, from behind the cursor `after` (the previous call's `next`); `left` says how many rows
+   * are still to look at. Each note is moved whole and in a safe order (the new copy first, the row next, the old bytes last), so a run
+   * can stop anywhere and start again. A note whose bytes are nowhere is counted as `missing` and left alone; one the store refused as
+   * `failed`. Throws when `from` is the configured store itself (a probe object put into the target is found in the source), since the
+   * move would delete what it moved.
+   */
+  moveImages(o: { from: ImageStore | "db"; limit: number; after?: string }): Promise<Move>;
 };
+
+/** `skipped`: rows that changed meanwhile or were moved by an earlier run. `next`: the cursor for the next call, null when nothing is left. */
+export type Move = { moved: { count: number; bytes: number }; skipped: number; missing: number; failed: number; left: number; next: string | null };
+
+// A cursor is "<created_at>:<id>" of the last row a call examined; anything else counts as the start.
+function parseCursor(c: string): { at: number; id: string } | null {
+  const m = /^(\d+):(.+)$/.exec(c);
+  return m ? { at: Number(m[1]), id: m[2] } : null;
+}
 
 export type Sweep = { unreferenced: { count: number; bytes: number }; deleted: { count: number; bytes: number }; failed: number; tooRecent: number; missing: number };
 
@@ -95,6 +114,8 @@ export function createSqlStorage(connect: () => Promise<Kysely<Schema>>, kind: K
   }
 
   const metaOf = (raw: string | null): Meta => (raw ? parseMeta(raw) : {});
+  // The extensions whose bytes belong in the image store, for the move's "rows still holding their bytes" query.
+  const EXTERNAL_EXTS = () => (IMAGE_EXTS as readonly string[]).filter((e) => images?.external(e));
 
   return {
     // With an image store, the object is written first and the row second: a row never names bytes that are not there. If the row
@@ -346,6 +367,86 @@ export function createSqlStorage(connect: () => Promise<Kysely<Schema>>, kind: K
       }
       log.info({ deleted: sweep.deleted.count, bytes: sweep.deleted.bytes, failed: sweep.failed }, "unreferenced images removed from the image store");
       return sweep;
+    },
+
+    // Nothing here changes a note's id, ext or metadata: the move is about where the bytes are, and a reader meets the old place or
+    // the new one. Rows are walked newest first behind a cursor (`after`, the last row the previous call examined), so a call that
+    // finds a row changed meanwhile (replaced, deleted, already moved) passes it over and the next call goes on behind it.
+    async moveImages({ from, limit, after }) {
+      const db = await open();
+      const target = images?.store ?? null;
+      if (from === "db" && !target) throw new Error("nothing to move: the images are in the database and NOTEFEED_IMAGES is db");
+      if (from !== "db" && target) {
+        // The same store under two names would delete what it moved: a probe written to the target must not show up in the source.
+        const probe = newKey();
+        await target.put(probe, Buffer.from("probe"));
+        try {
+          if (await from.get(probe)) throw new Error("nothing to move: the source is the configured store itself");
+        } finally {
+          await target.delete(probe).catch(() => {});
+        }
+      }
+      const move: Move = { moved: { count: 0, bytes: 0 }, skipped: 0, missing: 0, failed: 0, left: 0, next: null };
+      const cursor = after ? parseCursor(after) : null;
+      const pending = (before: { at: number; id: string } | null) => {
+        let q = from === "db" ? db.selectFrom("notes").where("blob_key", "is", null).where("ext", "in", EXTERNAL_EXTS()) : db.selectFrom("notes").where("blob_key", "is not", null);
+        if (before) q = q.where((eb) => eb.or([eb("created_at", "<", before.at), eb.and([eb("created_at", "=", before.at), eb("id", "<", before.id)])]));
+        return q;
+      };
+      const rows = await pending(cursor).select(["feed", "id", "blob_key", "content", "created_at"]).orderBy("created_at", "desc").orderBy("id", "desc").limit(limit).execute();
+      for (const row of rows) {
+        try {
+          if (from === "db") {
+            // Row to store: the object first, the row next; a row that is gone or already moved leaves the object to be removed again.
+            const key = newKey();
+            const data = Buffer.from(row.content);
+            await stored(key, data);
+            const r = await db.updateTable("notes").set({ content: EMPTY, blob_key: key }).where("feed", "=", row.feed).where("id", "=", row.id).where("blob_key", "is", null).executeTakeFirst();
+            if (!changed(r.numUpdatedRows)) {
+              await drop([key]);
+              move.skipped++;
+              continue;
+            }
+            move.moved.count++;
+            move.moved.bytes += data.byteLength;
+          } else {
+            const key = row.blob_key!;
+            const data = await from.get(key);
+            if (!data) {
+              // Store to store leaves the row as it is, so a row whose object is already in the target was moved by an earlier run.
+              if (target && (await target.get(key))) move.skipped++;
+              else move.missing++;
+              continue;
+            }
+            if (target) {
+              // Store to store, under the same key: the row needs no change, and a run stopped after the copy only copies again.
+              await stored(key, data);
+            } else {
+              // Store to row: the bytes into the row, then the object goes.
+              const r = await db.updateTable("notes").set({ content: data, blob_key: null }).where("feed", "=", row.feed).where("id", "=", row.id).where("blob_key", "=", key).executeTakeFirst();
+              if (!changed(r.numUpdatedRows)) {
+                move.skipped++;
+                continue;
+              }
+            }
+            await from.delete(key);
+            move.moved.count++;
+            move.moved.bytes += data.byteLength;
+          }
+        } catch (err) {
+          move.failed++;
+          log.warn({ err }, "an image could not be moved");
+        }
+      }
+      if (rows.length === limit) {
+        const last = rows[rows.length - 1];
+        const at = { at: Number(last.created_at), id: last.id };
+        const r = await pending(at).select(sql<number | string>`count(*)`.as("n")).executeTakeFirstOrThrow();
+        move.left = Number(r.n);
+        move.next = move.left > 0 ? `${at.at}:${at.id}` : null;
+      }
+      log.info({ moved: move.moved.count, bytes: move.moved.bytes, skipped: move.skipped, missing: move.missing, failed: move.failed, left: move.left }, "images moved to the configured store");
+      return move;
     },
 
     async close() {

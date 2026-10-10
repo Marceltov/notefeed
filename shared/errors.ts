@@ -9,6 +9,7 @@ export const ERROR_CODES = [
   "feed_limit",
   "note_limit",
   "image_limit",
+  "images_off",
   "empty_note",
   "too_large",
   "unsupported_type",

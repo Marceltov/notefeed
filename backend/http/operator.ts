@@ -6,7 +6,10 @@
 //     DELETE  the same, and those objects are removed
 //   /api/operator/takedown (issue #155)
 //     POST    removes the feed a read link, a read id or an image URL names, for good, and blocklists its images
+//   /api/operator/images/move (issue #128)
+//     POST    moves image bytes into the configured store, from the rows or from another store named in the JSON body
 import { createHash, timingSafeEqual } from "node:crypto";
+import { z } from "zod";
 import { config } from "../config";
 import { authFailed, authWait, clientIp } from "../limits";
 import { logger } from "../log";
@@ -14,6 +17,9 @@ import { imagesSwept } from "../metrics";
 import { storage } from "../storage";
 import { NotefeedError } from "../errors";
 import { statusOf } from "./errors";
+import { createFsImageStore } from "../storage/images/fs";
+import { createS3ImageStore } from "../storage/images/s3";
+import type { ImageStore } from "../storage/images/types";
 import type { SqlStorage } from "../storage/sql";
 import { takedown } from "../takedown";
 
@@ -79,4 +85,33 @@ export async function takedownRoute(req: Request): Promise<Response> {
     log.error({ err: e }, "the takedown failed");
     return json({ error: "the takedown failed; see the log" }, 500);
   }
+}
+
+// What the move takes from: the rows (`db`), a folder, or an S3-compatible store with its settings. The source's secrets travel in the
+// body of this one request and are never logged or answered back.
+const MoveBody = z.discriminatedUnion("from", [
+  z.object({ from: z.literal("db") }),
+  z.object({ from: z.literal("fs"), dir: z.string().min(1) }),
+  z.object({ from: z.literal("s3"), endpoint: z.string().url(), bucket: z.string().min(1), region: z.string().min(1).default("us-east-1"), access_key: z.string().min(1), secret_key: z.string().min(1) }),
+]).and(z.object({ limit: z.number().int().min(1).max(10_000).default(100), after: z.string().min(1).optional() }));
+
+export async function moveImagesRoute(req: Request): Promise<Response> {
+  const refused = gate(req);
+  if (refused) return refused;
+  const parsed = MoveBody.safeParse(await req.json().catch(() => undefined));
+  if (!parsed.success) return json({ error: 'the body is JSON with "from": "db", "fs" (with "dir") or "s3" (with "endpoint", "bucket", "access_key", "secret_key", optional "region"), and an optional "limit"' }, 400);
+  const body = parsed.data;
+  const from: ImageStore | "db" = body.from === "db" ? "db" : body.from === "fs" ? createFsImageStore(body.dir) : createS3ImageStore({ endpoint: body.endpoint, bucket: body.bucket, region: body.region, accessKey: body.access_key, secretKey: body.secret_key });
+  const s = storage() as Partial<SqlStorage>;
+  if (!s.moveImages) return json({ error: "this instance has no database: NOTEFEED_STORAGE is fs, and an image is the note's own file" }, 409);
+  let move;
+  try {
+    move = await s.moveImages({ from, limit: body.limit, after: body.after });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (/nothing to move/.test(message)) return json({ error: message }, 409);
+    log.error({ err }, "images could not be moved");
+    return json({ error: "the images could not be moved; see the log" }, 502);
+  }
+  return json({ store: config.images(), from: body.from, moved: move.moved, skipped: move.skipped, missing: move.missing, failed: move.failed, left: move.left, next: move.next });
 }

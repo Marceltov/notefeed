@@ -203,7 +203,7 @@ export type Error = {
     /**
      * Stable machine-readable code; absent only on a 500
      */
-    code?: 'invalid_feed' | 'reserved_feed' | 'auth' | 'rate_limited' | 'too_many_attempts' | 'feed_limit' | 'note_limit' | 'image_limit' | 'empty_note' | 'too_large' | 'unsupported_type' | 'invalid_body' | 'invalid_request' | 'not_found' | 'feed_exists' | 'taken' | 'removed' | 'blocked';
+    code?: 'invalid_feed' | 'reserved_feed' | 'auth' | 'rate_limited' | 'too_many_attempts' | 'feed_limit' | 'note_limit' | 'image_limit' | 'images_off' | 'empty_note' | 'too_large' | 'unsupported_type' | 'invalid_body' | 'invalid_request' | 'not_found' | 'feed_exists' | 'taken' | 'removed' | 'blocked';
 };
 
 export type NoteMeta = {
@@ -400,6 +400,10 @@ export type PostNoteErrors = {
      * The instance has a password, or the feed has its own, and it is missing or wrong
      */
     401: Error;
+    /**
+     * Image uploads are off on this instance (`NOTEFEED_IMAGE_UPLOADS=0`, code `images_off`): an image body, a picture replaced, or a multipart body with pictures. Stored pictures are still served
+     */
+    403: Error;
     /**
      * A password was sent for a feed that already exists without one: it can't be claimed; or the chosen read id is taken
      */
@@ -639,6 +643,10 @@ export type EditNoteErrors = {
      * The instance has a password, or the feed has its own, and it is missing or wrong
      */
     401: Error;
+    /**
+     * Image uploads are off on this instance (`NOTEFEED_IMAGE_UPLOADS=0`, code `images_off`): an image body, a picture replaced, or a multipart body with pictures. Stored pictures are still served
+     */
+    403: Error;
     /**
      * No such note
      */

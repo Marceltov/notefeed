@@ -13,6 +13,9 @@ export const SENDER_NOTICE = "Your name is shown on your notes, including on the
 // In a note box, when more pictures are dropped, pasted or picked than a note takes: the ones that fit are added.
 export const TOO_MANY_PICTURES = `A note can have at most ${MAX_ATTACHMENTS} pictures.`;
 
+// In a note box instead of the "Add image" button while NOTEFEED_IMAGE_UPLOADS=0, and the server's refusal of an image.
+export const IMAGES_OFF = "Images can't be posted on this instance.";
+
 // sign_in_failed is no API code: only the OIDC callback's ?error= (backend/oidc/routes.ts).
 const MESSAGES: Record<ErrorCode | "sign_in_failed", string> = {
   invalid_feed: "Invalid feed name.",
@@ -23,6 +26,7 @@ const MESSAGES: Record<ErrorCode | "sign_in_failed", string> = {
   feed_limit: "This instance has reached its feed limit.",
   note_limit: "This feed has reached its note limit.",
   image_limit: "This feed has reached its image limit.",
+  images_off: IMAGES_OFF,
   empty_note: "The note is empty.",
   too_large: "The note is over 100 KB.",
   unsupported_type: "The note could not be read.",

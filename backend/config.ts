@@ -87,6 +87,8 @@ export const config = {
   privacyFile: () => env("NOTEFEED_PRIVACY_FILE"),
   // The operator's notice on the start page, a Markdown file too. Empty: no notice.
   noticeFile: () => env("NOTEFEED_NOTICE_FILE"),
+  // A URL template for the "Report" link on every note (shared/report.ts fills {read_id}, {note_id} and {file}). Empty: no link.
+  reportUrl: () => env("NOTEFEED_REPORT_URL").trim(),
   trustProxy: () => env("NOTEFEED_TRUST_PROXY") === "1",
   // Per minute and IP; 0 or below turns it off.
   rateLimit: () => int("NOTEFEED_RATE_LIMIT", 60),
@@ -113,6 +115,9 @@ export const config = {
   // body only up to that, so a larger image would arrive cut. Images per feed: 0 or below, no cap.
   maxImageBytes: () => Math.min(positive("NOTEFEED_MAX_IMAGE_BYTES", 5242880), 10485760),
   maxImagesPerFeed: () => Math.max(0, int("NOTEFEED_MAX_IMAGES_PER_FEED", 0)),
+  // "0" refuses every image upload (API, MCP, web UI; an image note, a replaced one or a picture sent with a text) with
+  // `images_off`; stored images keep being served. Anything else is on.
+  imageUploads: () => env("NOTEFEED_IMAGE_UPLOADS").trim() !== "0",
   // Unset, empty or not a level → info (the startup line warns about the last).
   logLevel: (): LogLevel => ((l) => (LOG_LEVELS as readonly string[]).includes(l) ? (l as LogLevel) : "info")(env("NOTEFEED_LOG_LEVEL").trim().toLowerCase()),
   // Optional OIDC sign-in (see oidc/config.ts): one provider per set of variables. `name` "" is the unprefixed

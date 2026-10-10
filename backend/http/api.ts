@@ -58,6 +58,7 @@ const MULTIPART =
 const UNAUTHORIZED = err("The instance has a password, or the feed has its own, and it is missing or wrong");
 const REMOVED = err("The operator removed this feed for good (`removed`): its name cannot be used again");
 const BLOCKED = err("An image the operator removed, which may not be posted again in any feed (`blocked`)");
+const IMAGES_OFF = err("Image uploads are off on this instance (`NOTEFEED_IMAGE_UPLOADS=0`, code `images_off`): an image body, a picture replaced, or a multipart body with pictures. Stored pictures are still served");
 
 // For the Feeds reads: the password first (a locked instance tells strangers nothing else), then the name.
 // postNote does its own, because a browser form gets a redirect to the login page instead of a 401.
@@ -158,6 +159,7 @@ const OPS: AnyOp[] = [
           `a multipart body with an unexpected part, no \`text\` and no \`file\`, more than ${MAX_ATTACHMENTS} files, a bad or repeated file name, a text sent with pictures that takes too long to read (\`NOTEFEED_PARSE_TIMEOUT_MS\`), or \`X-Note-Alt\` / \`X-Note-Name\``,
       ),
       401: UNAUTHORIZED,
+      403: IMAGES_OFF,
       409: err("A password was sent for a feed that already exists without one: it can't be claimed; or the chosen read id is taken"),
       410: REMOVED,
       413: err(`Markdown over ${MAX_BYTES} bytes, or an image over NOTEFEED_MAX_IMAGE_BYTES (each picture of a multipart body too), or a multipart body over ${MAX_BYTES} bytes plus ${MAX_ATTACHMENTS} images plus ${MULTIPART_SLACK / 1024} KiB`),
@@ -237,6 +239,7 @@ const OPS: AnyOp[] = [
           `a multipart body with an unexpected part, no \`text\`, more than ${MAX_ATTACHMENTS} files, a bad or repeated file name, a text sent with pictures that takes too long to read (\`NOTEFEED_PARSE_TIMEOUT_MS\`), or \`X-Note-Alt\` / \`X-Note-Name\``,
       ),
       401: UNAUTHORIZED,
+      403: IMAGES_OFF,
       404: err("No such note"),
       413: err(`Markdown over ${MAX_BYTES} bytes, or an image over NOTEFEED_MAX_IMAGE_BYTES (each picture of a multipart body too), or a multipart body over ${MAX_BYTES} bytes plus ${MAX_ATTACHMENTS} images plus ${MULTIPART_SLACK / 1024} KiB`),
       415: err("Content-Type missing, not accepted or not the note's own type (a multipart body is for a markdown note), or the body (or a picture) is not what it declares"),

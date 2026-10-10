@@ -3,6 +3,7 @@ import {
   AuthError,
   Client,
   ConfigError,
+  ImagesOffError,
   InvalidRequestError,
   LimitReachedError,
   NotefeedError,
@@ -235,6 +236,7 @@ describe("pictures", () => {
       [415, "unsupported_type", InvalidRequestError],
       [413, "too_large", NoteTooLargeError],
       [507, "image_limit", LimitReachedError],
+      [403, "images_off", ImagesOffError],
       [404, "not_found", NotFoundError],
     ] as const) {
       server.reply(status, { error: code, code });
@@ -263,6 +265,7 @@ describe("errors map from the response's code", () => {
     ["image_limit", 507, LimitReachedError],
     ["removed", 410, NotFoundError],
     ["blocked", 451, InvalidRequestError],
+    ["images_off", 403, ImagesOffError],
     ["too_large", 413, NoteTooLargeError],
     ["invalid_feed", 400, InvalidRequestError],
     ["reserved_feed", 400, InvalidRequestError],

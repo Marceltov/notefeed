@@ -384,6 +384,84 @@ describe.skipIf(!supported)("sqlite", () => {
     });
   });
 
+  describe("moveImages (#128)", () => {
+    const seed = async (storage: SqlStorage, n: number) => {
+      await storage.createFeed("f", "rid-f");
+      const ids = [];
+      for (let i = 0; i < n; i++) ids.push(await storage.writeNote("f", `p${i}`, "png", Buffer.concat([PNG, Buffer.from(String(i))]), {}));
+      await storage.writeNote("f", "t", "md", "# text", {});
+      return ids;
+    };
+    const served = async (storage: SqlStorage, id: string) => (await storage.readNote("f", id, ALL, () => true))?.content.toString("latin1");
+
+    test("from the rows into the store: the bytes go out, each row points at its object, text stays; a stop and a second run finish the job", async () => {
+      const { storage, url } = await fresh("a.db"); // images in the rows
+      const ids = await seed(storage, 3);
+      await storage.close();
+      const rec = recording();
+      const moving = createSqlStorage(() => connect("sqlite", url), "sqlite", rec.images);
+      open.push({ storage: moving, root: "" });
+      const first = await moving.moveImages({ from: "db", limit: 2 });
+      expect(first).toMatchObject({ moved: { count: 2, bytes: 16 }, skipped: 0, missing: 0, failed: 0, left: 1 });
+      expect(first.next).toMatch(/^\d+:p/);
+      const second = await moving.moveImages({ from: "db", limit: 2, after: first.next! });
+      expect(second).toEqual({ moved: { count: 1, bytes: 8 }, skipped: 0, missing: 0, failed: 0, left: 0, next: null });
+      expect(rec.objects.size).toBe(3);
+      const rows = await rawRows(url);
+      expect(rows.filter((r) => r.ext === "png").every((r) => r.blob_key !== null && r.inline === 0 && r.size === 8)).toBe(true);
+      expect(rows.find((r) => r.ext === "md")).toMatchObject({ blob_key: null, inline: 6 });
+      for (const [i, id] of ids.entries()) expect(await served(moving, id)).toBe(PNG.toString("latin1") + i);
+    });
+
+    test("from a store back into the rows, and from one store to another under the same key; a missing object is counted and left", async () => {
+      const a = recording();
+      const { storage, url } = await fresh("b.db", a.images);
+      const [p0, p1] = await seed(storage, 2);
+      const keyOf = async (id: string) => (await rawRows(url)).find((r) => r.id === id)!.blob_key!;
+      const k0 = await keyOf(p0);
+      a.objects.delete(await keyOf(p1)); // gone from the store by hand
+      await storage.close();
+      // To another store.
+      const b = recording();
+      const toB = createSqlStorage(() => connect("sqlite", url), "sqlite", b.images);
+      open.push({ storage: toB, root: "" });
+      expect(await toB.moveImages({ from: a.images.store, limit: 10 })).toEqual({ moved: { count: 1, bytes: 8 }, skipped: 0, missing: 1, failed: 0, left: 0, next: null });
+      expect([...b.objects.keys()]).toEqual([k0]);
+      // Run again: the moved one is already in the target (skipped), the lost one is still missing, nothing is deleted.
+      expect(await toB.moveImages({ from: a.images.store, limit: 10 })).toMatchObject({ moved: { count: 0, bytes: 0 }, skipped: 1, missing: 1 });
+      expect([...b.objects.keys()]).toEqual([k0]);
+      expect(a.objects.has(k0)).toBe(false);
+      expect(await keyOf(p0)).toBe(k0);
+      expect(await served(toB, p0)).toBe(PNG.toString("latin1") + "0");
+      await toB.close();
+      // Back into the rows.
+      const toDb = createSqlStorage(() => connect("sqlite", url), "sqlite");
+      open.push({ storage: toDb, root: "" });
+      expect(await toDb.moveImages({ from: b.images.store, limit: 10 })).toEqual({ moved: { count: 1, bytes: 8 }, skipped: 0, missing: 1, failed: 0, left: 0, next: null });
+      expect(b.objects.size).toBe(0);
+      expect((await rawRows(url)).find((r) => r.id === p0)).toMatchObject({ blob_key: null, inline: 8 });
+      expect(await served(toDb, p0)).toBe(PNG.toString("latin1") + "0");
+    });
+
+    test("the configured store as the source is refused before anything moves; db to db has nothing to move; a store that refuses counts failed", async () => {
+      const a = recording();
+      const { storage } = await fresh("c.db", a.images);
+      await seed(storage, 1);
+      await expect(storage.moveImages({ from: a.images.store, limit: 10 })).rejects.toThrow(/nothing to move/);
+      expect(a.objects.size).toBe(1); // the probe is gone, the image is there
+      const { storage: plain, url } = await fresh("d.db");
+      await seed(plain, 1);
+      await expect(plain.moveImages({ from: "db", limit: 10 })).rejects.toThrow(/nothing to move/);
+      await plain.close();
+      const b = recording();
+      b.failing.add("put");
+      const toB = createSqlStorage(() => connect("sqlite", url), "sqlite", b.images);
+      open.push({ storage: toB, root: "" });
+      expect(await toB.moveImages({ from: "db", limit: 10 })).toEqual({ moved: { count: 0, bytes: 0 }, skipped: 0, missing: 0, failed: 1, left: 0, next: null });
+      expect((await rawRows(url)).find((r) => r.ext === "png")).toMatchObject({ blob_key: null, inline: 8 }); // untouched
+    });
+  });
+
   test("a second start on the same database migrates nothing and keeps the data", async () => {
     const a = await fresh();
     await a.storage.createFeed("f", "rid-f");

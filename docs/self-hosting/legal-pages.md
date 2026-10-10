@@ -44,3 +44,29 @@ services:
 ## What to write
 
 That is yours to decide, and for a public service worth a lawyer's look. As a start, a privacy page usually says who is responsible and how to reach them, where the instance is hosted and by whom, what is stored (notes, feeds, images; [what the logs hold](logs.md#logs)), for how long, [how long backups keep what was deleted](backups.md#how-long-a-backup-keeps-what-was-deleted), and which rights a person has. If you switch on [sign-in](sign-in/sender.md#privacy-page-and-imprint), say what is stored about the people who sign in.
+
+## A report link on every note
+
+A public instance has to give readers a way to report content that should not be there, and the report has to say which note is meant without guessing. `NOTEFEED_REPORT_URL` puts a **Report** link on every note, on the feed page, the note page and the read-only view. It is a URL template; three placeholders are filled in, percent-encoded:
+
+| Placeholder | Value |
+|---|---|
+| `{read_id}` | The feed's read id: what the read link and the image URLs carry. Never the feed name, which is the key to posting |
+| `{note_id}` | The note's id |
+| `{file}` | The note's file name, `<id>.md` or the picture's `<id>.png` and so on: what an image URL ends in |
+
+```yaml
+services:
+  notefeed:
+    environment:
+      # A form the operator runs:
+      NOTEFEED_REPORT_URL: "https://report.example.com/?read_id={read_id}&note_id={note_id}"
+      # or plain e-mail:
+      # NOTEFEED_REPORT_URL: "mailto:abuse@example.com?subject=Report%20{read_id}/{note_id}"
+```
+
+- **Unset, nothing changes:** no link anywhere.
+- **notefeed stores no reports.** The link only leads away: to a form you run, or to a mailbox. What you do with a report, and how fast, is yours.
+- **The RSS feed carries no report link:** a feed reader shows the item's link, which opens the note in the read-only view, and the link is there.
+- **Say so on the privacy page** when the form or the mailbox keeps a reporter's address or message: what is stored, for how long, and why (handling the report), the same way the page explains e-mail. A report is the one thing an anonymous instance may hold that names a person.
+- **The feed's read link is the link to the content.** `{read_id}` and `{note_id}` are enough to open `/r/<read id>/<note id>` and to find the feed in the data; an operator's takedown takes a read link or an image URL.

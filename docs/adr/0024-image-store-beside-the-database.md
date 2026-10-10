@@ -45,4 +45,4 @@ Chosen option: an image store beside the database. The database stays the only s
 * Good, because one contract suite runs on every combination, in CI against a real S3-compatible server that checks the request signatures.
 * Bad, because an image is now in two places that are written one after the other: unreferenced objects can be left behind, and a backup is two things.
 * Bad, because image traffic still passes through notefeed, and an image is held in memory for the length of a request (bounded by `NOTEFEED_MAX_IMAGE_BYTES`).
-* Bad, because moving images between stores is not built: only `db` to `fs` or `s3` works without it.
+* Bad, because moving images between stores is not built: only `db` to `fs` or `s3` works without it. *(Amended by issue #128: the operator's `POST /api/operator/images/move` moves the bytes into the configured store, from the rows or from another store, in the same safe order as a replacement: the copy first, the row next, the old bytes last.)*

@@ -47,6 +47,8 @@ export class NotFoundError extends NotefeedError {}
 export class LimitReachedError extends NotefeedError {}
 /** The note or image is over the server's size limit. */
 export class NoteTooLargeError extends NotefeedError {}
+/** The instance takes no pictures (`NOTEFEED_IMAGE_UPLOADS=0`): an image, a replaced picture or attachments were refused. */
+export class ImagesOffError extends NotefeedError {}
 /** The server refused the request itself: invalid or reserved feed, empty note, bad body or parameter, or an image on the instance's blocklist (`blocked`, 451). */
 export class InvalidRequestError extends NotefeedError {}
 
@@ -56,6 +58,7 @@ const BY_CODE: Partial<Record<ErrorCode, typeof NotefeedError>> = {
   feed_limit: LimitReachedError,
   note_limit: LimitReachedError,
   image_limit: LimitReachedError,
+  images_off: ImagesOffError,
   too_large: NoteTooLargeError,
   invalid_feed: InvalidRequestError,
   reserved_feed: InvalidRequestError,

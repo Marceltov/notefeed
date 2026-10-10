@@ -4,7 +4,7 @@ import { cache } from "react";
 import { Header } from "@/components/Header";
 import { NoteList, TagFilter } from "@/components/NoteList";
 import { Removed } from "@/components/Removed";
-import { getReadFeed, instanceTitle, isRemovedReadId, readPath, rssPath } from "@/backend";
+import { getReadFeed, instanceTitle, isRemovedReadId, readPath, reportTemplate, rssPath } from "@/backend";
 
 export const dynamic = "force-dynamic";
 
@@ -49,7 +49,7 @@ export default async function ReadPage({ params, searchParams }: PageProps<"/r/[
       {notes.length === 0 ? (
         <p className="text-muted">{tag ? "No notes with this tag." : "No notes yet."}</p>
       ) : (
-        <NoteList notes={notes} base={readPath(readId)} imageBase={`${readPath(readId)}/`} />
+        <NoteList notes={notes} base={readPath(readId)} imageBase={`${readPath(readId)}/`} report={reportTemplate() ? { template: reportTemplate(), readId } : undefined} />
       )}
     </>
   );

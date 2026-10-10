@@ -21,7 +21,7 @@ export { measured } from "./metrics";
 export { noteOutcome } from "./requestscope";
 export { hasLegalPage, readLegalPage, readNotice, type LegalPage } from "./legal";
 export { metricsRoute } from "./http/metrics";
-export { takedownRoute, unreferencedImagesRoute } from "./http/operator";
+export { moveImagesRoute, takedownRoute, unreferencedImagesRoute } from "./http/operator";
 export { feedCookieName, feedUnlocked } from "./feedlock";
 export { feedDeleteRoute, feedSettingsRoute } from "./http/feedforms";
 export { feedAccessRoute } from "./http/feedsession";
@@ -42,6 +42,11 @@ export const passwordSet = () => config.password() !== "";
 
 /** Whether a feed's owner may choose its read id (NOTEFEED_ALLOW_CUSTOM_IDS); otherwise only a random one. */
 export const customIdsOn = config.allowCustomIds;
+
+/** The template of the "Report" link on every note (NOTEFEED_REPORT_URL, issue #154), or "" for no link. */
+export const reportTemplate = config.reportUrl;
+/** Whether pictures can be posted (NOTEFEED_IMAGE_UPLOADS); off, the note boxes show no image control (issue #152). */
+export const imageUploadsOn = config.imageUploads;
 
 const PAGE = 50;
 

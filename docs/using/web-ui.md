@@ -22,6 +22,10 @@ Post with **Post note**, or press ++ctrl+enter++ (++cmd+enter++ on a Mac). The n
 
 The **Settings** button at the top right opens the feed's [settings page](feeds.md#feed-settings-in-the-web-ui), which also has a ready-to-copy `curl` command for this feed. A feed without notes shows the command right under the box.
 
+### Preview
+
+Two tabs sit above the box: **Write** and **Preview**. Preview shows the text rendered the way the feed will show the note, with the same renderer, so what you see is what is posted: headings, lists, tables, links, and the pictures you added, shown from the files waiting in the box before anything is uploaded. Raw HTML stays text, as in a note. The title and the tags are their own fields and are not part of the preview. The note editor has the same tabs. Without JavaScript there is only the box.
+
 ### Adding an image
 
 The compose box has an **Add image** button. Choose PNG, JPEG, GIF or WebP files, or paste an image into the box, or drop files on it. Each one waits in the box, with a small preview and a remove button, and `![](name)` goes into the text at the cursor, with the file's own name. Nothing is uploaded yet, so leaving the page uploads nothing. When you **Post note**, the text and the pictures are sent in [one request](pictures.md#posting-a-note-with-its-pictures), and the server swaps the names in your text for the new notes' files. If the text holds only the pictures, no text note is made (the request has no text part), and each picture gets the alt text its reference carries (`![a cat](cat.png)`; the first non-empty one when a picture is referred to twice; a note with text keeps its alt texts in the text). If something is refused (not an image, too large, too many requests), the page says why and keeps your text and your pictures; nothing is half-posted, so posting again never makes a picture twice. The note editor sends its text and pictures the same way, as one `PUT` (it saves a changed title first, so a retry never duplicates pictures), and a feed that does not exist yet takes pictures too: the first post creates it, with its password.
@@ -35,6 +39,8 @@ Images in notes load lazily and are never wider than the note. They are as publi
 ### The read link
 
 Once the feed has a note, the buttons at the top right link to the read-only view (**Read-only**) and to the feed (**RSS**). The read link itself, with a copy button, is on the settings page under **Read link**. Give it to feed readers and to people who should see the notes but not post. See [Read links](read-links.md).
+
+An instance can show a **Report** link next to every note, on the feed page and in the read-only view: it leads to the operator's form or mailbox with the note's ids filled in, so a reader can say which note should not be there. notefeed stores nothing of the report. See [A report link on every note](../self-hosting/legal-pages.md#a-report-link-on-every-note).
 
 ### Reading notes
 

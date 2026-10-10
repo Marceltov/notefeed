@@ -185,6 +185,16 @@
               }
             }
           },
+          "403": {
+            "description": "Image uploads are off on this instance (`NOTEFEED_IMAGE_UPLOADS=0`, code `images_off`): an image body, a picture replaced, or a multipart body with pictures. Stored pictures are still served",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
           "409": {
             "description": "A password was sent for a feed that already exists without one: it can't be claimed; or the chosen read id is taken",
             "content": {
@@ -608,6 +618,16 @@
           },
           "401": {
             "description": "The instance has a password, or the feed has its own, and it is missing or wrong",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Image uploads are off on this instance (`NOTEFEED_IMAGE_UPLOADS=0`, code `images_off`): an image body, a picture replaced, or a multipart body with pictures. Stored pictures are still served",
             "content": {
               "application/json": {
                 "schema": {
@@ -1981,6 +2001,7 @@
               "feed_limit",
               "note_limit",
               "image_limit",
+              "images_off",
               "empty_note",
               "too_large",
               "unsupported_type",
