@@ -98,7 +98,7 @@ How available your images are is up to the store. If it is unreachable, images f
 
 ### Things to know
 
-- **Changing the setting.** Going from `db` to `fs` or `s3` works at any time: images already in the database stay there and are still served, new ones go out. Going between `fs` and `s3`, or back to `db`, is not supported: notefeed does not move images, and those already moved out would show as broken until you switch back.
+- **Changing the setting.** Going from `db` to `fs` or `s3` works at any time: images already in the database stay there and are still served, new ones go out. Going between `fs` and `s3`, or back to `db`, strands the images already in the old place (they show as broken) until they are moved: see [Moving images between stores](#moving-images-between-stores).
 - **Unreferenced files.** The image is written first and its note second, and a note is deleted before its image. If notefeed is stopped between the two steps, or the store fails to delete, a file or object is left that no note refers to. It cannot be reached by anyone and only takes up space. [Cleaning up the image store](#cleaning-up-the-image-store) finds and removes them.
 - **One folder or bucket per instance.** The clean-up removes every image-named file or object that this instance's database does not know. Two instances sharing one bucket would delete each other's images.
 - **A missing file or object** shows as a broken image; the note is still listed and can be deleted.
@@ -138,6 +138,43 @@ Things to know:
     ```sh
     0 4 * * * curl -fsS -H "Authorization: Bearer <token>" https://notes.example.com/api/operator/images/unreferenced >/dev/null
     ```
+
+### Moving images between stores
+
+The same token opens `POST /api/operator/images/move`, which moves image bytes into the store `NOTEFEED_IMAGES` names now, from wherever they are: the database rows, or the folder or bucket of a previous setting. Set the new `NOTEFEED_IMAGES` (and its settings), restart, then move:
+
+```sh
+# From the rows of the database (the images posted while NOTEFEED_IMAGES was db):
+curl -X POST -H "Authorization: Bearer $NOTEFEED_OPERATOR_TOKEN" -H "Content-Type: application/json" \
+  -d '{"from": "db"}' https://notes.example.com/api/operator/images/move
+
+# From a folder (a previous NOTEFEED_IMAGES=fs; the path as the container sees it):
+curl -X POST ... -d '{"from": "fs", "dir": "/data/images"}' https://notes.example.com/api/operator/images/move
+
+# From an S3-compatible store (a previous NOTEFEED_IMAGES=s3), with its own keys:
+curl -X POST ... -d '{"from": "s3", "endpoint": "https://old.example.com", "bucket": "images", "access_key": "…", "secret_key": "…"}' \
+  https://notes.example.com/api/operator/images/move
+```
+
+```json
+{ "store": "s3", "from": "db", "moved": { "count": 100, "bytes": 48211300 }, "skipped": 0, "missing": 0, "failed": 0, "left": 412, "next": "1759900000000:20260930T100000Z-…" }
+```
+
+| Field | Meaning |
+|---|---|
+| `moved` | Notes whose bytes are now in the configured store, and their size |
+| `skipped` | Notes that needed nothing: already in the configured store (an earlier run), or changed meanwhile |
+| `missing` | Notes whose bytes were in neither place: they stay as they are and show as broken images |
+| `failed` | Notes the store refused (see the log); run again |
+| `left`, `next` | How many notes are still to look at, and the cursor to send as `"after"` in the next call; `next` is `null` when nothing is left |
+
+Things to know:
+
+- **One call looks at `limit` notes** (100 unless the body says otherwise, up to 10000), newest first, so a call stays short; send its `next` as `"after"` in the following call until `next` is `null`. Posting goes on meanwhile, and a note posted during the move goes straight to the configured store.
+- **Safe to stop.** Each image is copied first, the note pointed at the copy next, and the old bytes removed last, so a stop anywhere leaves at most a copy to make again. Moving to `db` puts the bytes back into the row; between two stores the key stays the same.
+- **The source's settings are in the request**, not in the environment: a folder path, or an endpoint with its keys. They are not logged and not answered back. Send them over HTTPS.
+- **Moving into the store the setting already names is refused** (`409`), as is `"from": "db"` while `NOTEFEED_IMAGES` is `db`.
+- **The file system backend has no image store** (`NOTEFEED_STORAGE=fs`): the endpoint answers `409`. Moving a whole instance from the file system to a database is not built.
 
 ## Images and other files
 
