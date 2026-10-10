@@ -9,3 +9,8 @@ test("a relative image link is shown from the feed's current read link, others s
   expect(srcs(md, "/r/new/")).toEqual(["/r/new/a.png", "https://x.test/b.png", "/r/old/c.png", "//x.test/d.png"]);
   expect(srcs(md)[0]).toBe("a.png"); // no read link yet: nothing to resolve against
 });
+
+test("a resolver wins for the links it knows, the rest resolve as before (#146)", () => {
+  const html = renderToStaticMarkup(<NoteView markdown="![](cat.png) ![](b.png)" imageBase="/r/rid/" resolve={(s) => (s === "cat.png" ? "blob:cat" : undefined)} />);
+  expect([...html.matchAll(/<img src="([^"]*)"/g)].map((m) => m[1])).toEqual(["blob:cat", "/r/rid/b.png"]);
+});

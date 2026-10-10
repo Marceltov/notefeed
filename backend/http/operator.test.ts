@@ -9,7 +9,7 @@ import { logsOf } from "../log";
 import { renderMetrics, resetMetricsForTest } from "../metrics";
 import { resetStorageForTests, storage } from "../storage";
 import type { SqlStorage } from "../storage/sql";
-import { unreferencedImagesRoute } from "./operator";
+import { moveImagesRoute, unreferencedImagesRoute } from "./operator";
 
 const TOKEN = "operator-token-".padEnd(40, "x");
 const node22 = Number(process.versions.node.split(".")[0]) >= 22; // better-sqlite3 and kysely need it
@@ -140,4 +140,45 @@ test.skipIf(!node22)("an image folder that cannot be read: 502 and a log line, w
     expect(JSON.stringify(await res.json())).not.toContain(root);
   });
   expect(logs.filter((l) => l.level === "error")).toHaveLength(1);
+});
+
+// POST /api/operator/images/move (#128): the same gate, a JSON body naming the source.
+const move = (body: unknown, authorization: string | null = `Bearer ${TOKEN}`) =>
+  moveImagesRoute(new Request("http://localhost:3000/api/operator/images/move", { method: "POST", body: typeof body === "string" ? body : JSON.stringify(body), headers: { "content-type": "application/json", ...(authorization === null ? {} : { authorization }) } }));
+
+test("move: the gate is the same (404 without a token, 401 with a wrong one)", async () => {
+  expect((await move({ from: "db" }, "Bearer wrong")).status).toBe(401);
+  vi.stubEnv("NOTEFEED_OPERATOR_TOKEN", "");
+  expect((await move({ from: "db" })).status).toBe(404);
+});
+
+test.skipIf(!node22)("move: a body that names no source is 400; the rows go into the folder; the folder itself as the source is 409", async () => {
+  for (const body of ["not json", {}, { from: "nowhere" }, { from: "fs" }, { from: "s3", endpoint: "x" }, { from: "db", limit: 0 }]) expect((await move(body)).status, JSON.stringify(body)).toBe(400);
+  // Images posted while NOTEFEED_IMAGES was db: their rows hold the bytes.
+  vi.stubEnv("NOTEFEED_IMAGES", "db");
+  resetStorageForTests();
+  const plain = storage();
+  await plain.createFeed("f", "rid-f");
+  const id = await plain.writeNote("f", "p", "png", Buffer.from("picture bytes"), {});
+  await (plain as Partial<SqlStorage>).close?.();
+  vi.stubEnv("NOTEFEED_IMAGES", "fs");
+  resetStorageForTests();
+  const res = await move({ from: "db" });
+  expect(res.status).toBe(200);
+  expect(await res.json()).toEqual({ store: "fs", from: "db", moved: { count: 1, bytes: 13 }, skipped: 0, missing: 0, failed: 0, left: 0, next: null });
+  expect(await files()).toHaveLength(1);
+  expect((await storage().readNote("f", id, ["png"], () => true))?.content.toString()).toBe("picture bytes");
+  const same = await move({ from: "fs", dir: join(root, "images") });
+  expect(same.status).toBe(409);
+  expect(await files()).toHaveLength(1);
+  const again = await move({ from: "db" }); // nothing left in the rows is not an error
+  expect(again.status).toBe(200);
+  expect(await again.json()).toMatchObject({ moved: { count: 0, bytes: 0 }, left: 0 });
+});
+
+test("move: on the file system backend there is no database, 409", async () => {
+  vi.stubEnv("NOTEFEED_STORAGE", "fs");
+  vi.stubEnv("NOTEFEED_IMAGES", "db");
+  resetStorageForTests();
+  expect((await move({ from: "db" })).status).toBe(409);
 });

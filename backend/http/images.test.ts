@@ -216,7 +216,7 @@ describe("GET /r/{readId}/{file}", () => {
     expect(new Uint8Array(await res.arrayBuffer())).toEqual(PNG);
     expect(res.headers.get("content-type")).toBe("image/png");
     expect(res.headers.get("x-content-type-options")).toBe("nosniff");
-    expect(res.headers.get("cache-control")).toBe("no-cache"); // a picture can be replaced: the cache asks again (ETag)
+    expect(res.headers.get("cache-control")).toBe("private, no-cache"); // a picture can be replaced or taken down: the browser asks again (ETag), no shared cache keeps it
     expect(res.headers.get("etag")).toMatch(/^"[A-Za-z0-9_-]+"$/);
     expect(res.headers.get("content-security-policy")).toBe("default-src 'none'; sandbox");
   });
@@ -245,7 +245,7 @@ describe("GET /r/{readId}/{file}", () => {
     expect(md.status).toBe(200);
     expect(await md.text()).toBe("# Hi");
     expect(md.headers.get("content-type")).toBe("text/plain; charset=utf-8");
-    expect(md.headers.get("cache-control")).toBe("no-cache");
+    expect(md.headers.get("cache-control")).toBe("private, no-cache");
     expect(md.headers.get("content-disposition")).toBeNull();
     const pdf = await get(rid, "report.pdf");
     expect(pdf.status).toBe(200);

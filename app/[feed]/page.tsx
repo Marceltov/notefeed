@@ -63,7 +63,7 @@ export default async function FeedPage({ params, searchParams }: PageProps<"/[fe
         </p>
       )}
       <Compose key={String(posted)} feed={feed} action={feedPath(feed)} error={errorMessage(error, retry)}
-        isNew={access === "open" && !exists} sender={identitySender(jar.get(IDENTITY_COOKIE)?.value) !== undefined} images={imageUploadsOn()}
+        isNew={access === "open" && !exists} sender={identitySender(jar.get(IDENTITY_COOKIE)?.value) !== undefined} images={imageUploadsOn()} imageBase={readId ? `${readPath(readId)}/` : undefined}
       />
       {tag && <TagFilter tag={tag} base={feedPath(feed)} />}
       {tag && notes.length === 0 ? (
