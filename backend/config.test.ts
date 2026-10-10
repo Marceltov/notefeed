@@ -9,12 +9,17 @@ afterEach(() => {
   delete process.env.NOTEFEED_IMAGE_UPLOADS;
   delete process.env.NOTEFEED_MAX_NOTES_PER_FEED;
   delete process.env.NOTEFEED_METRICS;
+  delete process.env.NOTEFEED_REPORT_ENDPOINT;
   delete process.env.NOTEFEED_METRICS_TOKEN;
   for (const k of ["NOTEFEED_STORAGE", "NOTEFEED_DATABASE_URL", "NOTEFEED_SECRET", "DATA_DIR", "NOTEFEED_IMAGES", "NOTEFEED_IMAGES_DIR", ...S3_VARS]) delete process.env[k];
 });
 
-test("the report URL template is empty unless set, and trimmed", () => {
+test("the report URL template is empty unless set, and trimmed; with an endpoint and no template, the link opens the built-in page", () => {
   expect(config.reportUrl()).toBe("");
+  expect(config.reportEndpoint()).toBe("");
+  process.env.NOTEFEED_REPORT_ENDPOINT = " https://inbox.example/f/notefeed-report ";
+  expect(config.reportEndpoint()).toBe("https://inbox.example/f/notefeed-report");
+  expect(config.reportUrl()).toBe("/report?read_id={read_id}&note_id={note_id}&file={file}");
   process.env.NOTEFEED_REPORT_URL = " https://r.example/?r={read_id} ";
   expect(config.reportUrl()).toBe("https://r.example/?r={read_id}");
 });
