@@ -23,4 +23,13 @@ environment:
   NOTEFEED_MAX_IMAGES_PER_FEED: 200
 ```
 
+## No pictures at all
+
+The caps bound how many pictures a feed takes; `NOTEFEED_IMAGE_UPLOADS=0` takes none. Every picture is then refused with `403` (`images_off`), whichever way it comes: an image note, a picture replaced with `PUT`, a note posted with pictures (nothing of that note is stored), from the API, MCP and the web UI alike. The compose box and the note editor show no **Add image** button and say that images can't be posted; a file dropped or pasted into them is refused with the same words. What is already stored is untouched: pictures keep being served, a title image stays, deleting notes and feeds and the operator's [clean-up](storage.md#cleaning-up-the-image-store) work as before. The hosted service runs with it until pictures become a paid feature.
+
+```yaml
+environment:
+  NOTEFEED_IMAGE_UPLOADS: 0
+```
+
 Over a cap, posting answers `507`. The caps are checked, not locked, so several posts at the same moment can overshoot by a few. Delete notes or feeds to make room (see [Deleting notes and feeds](deleting.md)).

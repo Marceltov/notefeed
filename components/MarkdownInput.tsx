@@ -4,7 +4,7 @@ import { useLayoutEffect, useRef, useState, useSyncExternalStore, type Clipboard
 import { ImagePlus, X } from "lucide-react";
 import { NoteView } from "@/components/NoteView";
 import { type Pending, fitPending, newPending, removeReference, uniqueToken } from "@/components/pendingFiles";
-import { TOO_MANY_PICTURES } from "@/app/_lib/messages";
+import { IMAGES_OFF, TOO_MANY_PICTURES } from "@/app/_lib/messages";
 
 const ACCEPT = "image/png,image/jpeg,image/gif,image/webp";
 
@@ -16,7 +16,8 @@ const ACCEPT = "image/png,image/jpeg,image/gif,image/webp";
 // Two tabs above the box, Write and Preview (issue #146): the preview renders the text with the components the note pages use, so it
 // cannot differ from the posted note, with the waiting pictures shown from their files and the stored ones from `imageBase` (the feed's
 // read link). The textarea is hidden, not unmounted, while previewing, so the text, the cursor and the form's submit stay as they are.
-export function MarkdownInput({ id, name, label, value, onChange, rows, placeholder, describedBy, className = "", pending, onPendingChange, onMessage, imageBase, children }: {
+// `images` false (NOTEFEED_IMAGE_UPLOADS=0, issue #152): no button, and a dropped or pasted file is refused with the reason in its place.
+export function MarkdownInput({ id, name, label, value, onChange, rows, placeholder, describedBy, className = "", pending, onPendingChange, onMessage, images = true, imageBase, children }: {
   id: string;
   name: string;
   label: string;
@@ -29,6 +30,7 @@ export function MarkdownInput({ id, name, label, value, onChange, rows, placehol
   pending: Pending[];
   onPendingChange: (pending: Pending[]) => void;
   onMessage: (update: (shown: string | undefined) => string | undefined) => void; // a state setter: the message the parent shows
+  images?: boolean;
   imageBase?: string; // where the text's relative image links point, for the preview
   children?: ReactNode; // more controls, rendered on the same row as the "Add image" button
 }) {
@@ -71,6 +73,7 @@ export function MarkdownInput({ id, name, label, value, onChange, rows, placehol
   }
 
   function add(files: File[]) {
+    if (!images) return onMessage(() => IMAGES_OFF);
     const { fit, leftOut } = fitPending(pending, files);
     if (leftOut) onMessage(() => TOO_MANY_PICTURES);
     if (!fit.length) return;
@@ -158,9 +161,10 @@ export function MarkdownInput({ id, name, label, value, onChange, rows, placehol
           ))}
         </ul>
       )}
-      {(hydrated || children) && (
+      {(hydrated || children || !images) && (
         <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
-          {hydrated && (
+          {!images && <span className="text-muted">{IMAGES_OFF}</span>}
+          {hydrated && images && (
             <>
               <input
                 ref={picker}

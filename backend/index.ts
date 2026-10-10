@@ -43,6 +43,9 @@ export const passwordSet = () => config.password() !== "";
 /** Whether a feed's owner may choose its read id (NOTEFEED_ALLOW_CUSTOM_IDS); otherwise only a random one. */
 export const customIdsOn = config.allowCustomIds;
 
+/** Whether pictures can be posted (NOTEFEED_IMAGE_UPLOADS); off, the note boxes show no image control (issue #152). */
+export const imageUploadsOn = config.imageUploads;
+
 const PAGE = 50;
 
 /**

@@ -21,7 +21,7 @@ beforeEach(async () => {
   process.env.NOTEFEED_SECRET = "test-secret-".padEnd(32, "x");
   resetFeedsForTests();
   resetRateLimitsForTests();
-  for (const k of ["NOTEFEED_PASSWORD", "NOTEFEED_RATE_LIMIT", "PUBLIC_URL", "NOTEFEED_TITLE", "NOTEFEED_MAX_IMAGE_BYTES", "NOTEFEED_MAX_IMAGES_PER_FEED"]) delete process.env[k];
+  for (const k of ["NOTEFEED_PASSWORD", "NOTEFEED_RATE_LIMIT", "PUBLIC_URL", "NOTEFEED_TITLE", "NOTEFEED_MAX_IMAGE_BYTES", "NOTEFEED_MAX_IMAGES_PER_FEED", "NOTEFEED_IMAGE_UPLOADS"]) delete process.env[k];
 });
 
 const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3, 4]);
@@ -153,6 +153,55 @@ describe("upload: body edge cases", () => {
     const res = await upload("pics", PNG);
     expect(res.status).toBe(201);
     expect((await res.json()).file_url).toContain(`/r/${await readIdOf("pics")}/`);
+  });
+});
+
+describe("NOTEFEED_IMAGE_UPLOADS=0 refuses every upload with 403 images_off (#152)", () => {
+  const png = (name: string) => new File([PNG as BlobPart], name, { type: "image/png" });
+  const multipart = (parts: [string, string | File][], feed = "pics") => {
+    const f = new FormData();
+    for (const [k, v] of parts) f.append(k, v);
+    return call("POST", `/feeds/${feed}/notes`, { body: f });
+  };
+  test("an image note is refused and nothing is written; a markdown note still posts", async () => {
+    await createNote("pics", "# x");
+    process.env.NOTEFEED_IMAGE_UPLOADS = "0";
+    const res = await upload("pics", PNG);
+    expect(res.status).toBe(403);
+    expect(await res.json()).toEqual({ error: "image uploads are off on this instance", code: "images_off" });
+    expect(await imageFiles("pics")).toEqual([]);
+    expect((await upload("ghost", PNG)).status).toBe(403);
+    expect(await hasFeed("ghost")).toBe(false); // the first picture of a feed creates nothing
+    expect((await call("POST", "/feeds/pics/notes", { body: "# text", headers: { "content-type": "text/markdown" } })).status).toBe(201);
+  });
+  test("a multipart post with pictures is refused whole; one with only a text goes through", async () => {
+    process.env.NOTEFEED_IMAGE_UPLOADS = "0";
+    const res = await multipart([["text", "# Hi ![](a.png)"], ["file", png("a.png")]]);
+    expect(res.status).toBe(403);
+    expect((await res.json()).code).toBe("images_off");
+    expect(await listNotes("pics", 10)).toEqual([]);
+    expect((await multipart([["text", "# Hi"]])).status).toBe(201);
+  });
+  test("replacing a picture's bytes is refused; its title can still change, and it is still served and deleted", async () => {
+    const { id, file } = await (await upload("pics", PNG)).json();
+    process.env.NOTEFEED_IMAGE_UPLOADS = "0";
+    const put = await call("PUT", `/feeds/pics/notes/${id}`, { body: PNG as BodyInit, headers: { "content-type": "image/png" } });
+    expect(put.status).toBe(403);
+    expect((await put.json()).code).toBe("images_off");
+    expect((await call("PATCH", `/feeds/pics/notes/${id}`, { body: JSON.stringify({ title: "Cat" }), headers: { "content-type": "application/json" } })).status).toBe(200);
+    expect((await get((await readIdOf("pics"))!, file)).status).toBe(200);
+    expect((await call("DELETE", `/feeds/pics/notes/${id}`)).status).toBe(204);
+  });
+  test("the access checks come first: a wrong password is 401, not 403", async () => {
+    await createProtected("locked", "hunter22");
+    process.env.NOTEFEED_IMAGE_UPLOADS = "0";
+    expect((await upload("locked", PNG)).status).toBe(401);
+  });
+  test("anything but 0 leaves uploads on", async () => {
+    for (const v of ["", "1", "off", "false"]) {
+      process.env.NOTEFEED_IMAGE_UPLOADS = v;
+      expect((await upload("pics", PNG)).status).toBe(201);
+    }
   });
 });
 
