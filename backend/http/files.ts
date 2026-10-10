@@ -11,7 +11,9 @@ import { IMAGE_EXTS, contentTypeOf } from "../../shared/images";
 const NAME_RE = /^[A-Za-z0-9_-]{1,128}\.([A-Za-z0-9]{1,16})$/;
 
 // A file can be replaced under the same name (a note's `PUT`), so nothing is cached for good: the cache asks again with the ETag, a hash of the
-// bytes, and gets a bodyless 304 while the file is unchanged. `ifNoneMatch` is the request's header, if any.
+// bytes, and gets a bodyless 304 while the file is unchanged. `private`: only the reader's own browser may keep a copy, so a file the
+// operator removes (a takedown, issue #153) is gone from everywhere but that browser, which asks again at its next load and gets the 404.
+// `ifNoneMatch` is the request's header, if any.
 export const fileRoute = (readId: string, file: string, ifNoneMatch?: string | null): Promise<Response> =>
   measured("feed_file", () => serveFile(readId, file, ifNoneMatch), (r) => r.status);
 
@@ -26,7 +28,7 @@ async function serveFile(readId: string, file: string, ifNoneMatch?: string | nu
   const headers = {
     "Content-Type": contentTypeOf(ext),
     "X-Content-Type-Options": "nosniff",
-    "Cache-Control": "no-cache",
+    "Cache-Control": "private, no-cache",
     ETag: etag,
     "Content-Security-Policy": "default-src 'none'; sandbox",
     ...(!image && ext !== "md" && { "Content-Disposition": "attachment" }),
