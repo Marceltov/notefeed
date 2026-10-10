@@ -69,6 +69,9 @@ function validateStorage(): void {
   }
 }
 
+/** The built-in report page's link template (issue #156): the ids go into the page's hidden fields. */
+export const REPORT_PAGE = "/report?read_id={read_id}&note_id={note_id}&file={file}";
+
 export const config = {
   dataDir,
   storage: storageKind,
@@ -87,8 +90,12 @@ export const config = {
   privacyFile: () => env("NOTEFEED_PRIVACY_FILE"),
   // The operator's notice on the start page, a Markdown file too. Empty: no notice.
   noticeFile: () => env("NOTEFEED_NOTICE_FILE"),
-  // A URL template for the "Report" link on every note (shared/report.ts fills {read_id}, {note_id} and {file}). Empty: no link.
-  reportUrl: () => env("NOTEFEED_REPORT_URL").trim(),
+  // Where the built-in report page (/report) posts a report: the endpoint of a form in an inbox such as noticebox.
+  // Empty: there is no page.
+  reportEndpoint: () => env("NOTEFEED_REPORT_ENDPOINT").trim(),
+  // A URL template for the "Report" link on every note (shared/report.ts fills {read_id}, {note_id} and {file}).
+  // Unset with an endpoint set, the link opens the built-in page; unset without one, there is no link.
+  reportUrl: () => env("NOTEFEED_REPORT_URL").trim() || (env("NOTEFEED_REPORT_ENDPOINT").trim() ? REPORT_PAGE : ""),
   trustProxy: () => env("NOTEFEED_TRUST_PROXY") === "1",
   // Per minute and IP; 0 or below turns it off.
   rateLimit: () => int("NOTEFEED_RATE_LIMIT", 60),

@@ -44,6 +44,7 @@ export const ROUTES = [
   "/r/[readId]/[id]",
   "/r/[readId]/feed.xml",
   "/r/[readId]/files/[file]",
+  "/report",
 ];
 
 const ASSETS = "/_next/*";

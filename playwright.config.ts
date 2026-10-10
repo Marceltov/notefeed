@@ -25,7 +25,8 @@ export default defineConfig({
     { name: "images", testMatch: "images.spec.ts", use: { baseURL: "http://localhost:3100" } },
     { name: "metrics", testMatch: "metrics.spec.ts", use: { baseURL: "http://localhost:3100" } },
     { name: "requestlog", testMatch: "requestlog.spec.ts", use: { baseURL: "http://localhost:3100" } },
-    // The "Report" link (issue #154): the open server has NOTEFEED_REPORT_URL, the locked one (3101) has not.
+    // The "Report" link (issue #154) and the report page (issue #156): the open server has NOTEFEED_REPORT_URL and an endpoint
+    // for the page (a stand-in the spec starts), the locked one (3101) has neither.
     { name: "report", testMatch: "report.spec.ts", use: { baseURL: "http://localhost:3100" } },
     { name: "locked", testMatch: "locked.spec.ts", use: { baseURL: "http://localhost:3101" } },
     // The locked server also runs with NOTEFEED_IMAGE_UPLOADS=0 (issue #152): the open one has to take pictures.
@@ -40,7 +41,7 @@ export default defineConfig({
   ],
   globalSetup: "./e2e/s3-setup.ts",
   webServer: [
-    server(3100, { NOTEFEED_METRICS: "1", NOTEFEED_REPORT_URL: "https://report.example.com/?r={read_id}&n={note_id}&f={file}" }, SERVER_LOG),
+    server(3100, { NOTEFEED_METRICS: "1", NOTEFEED_REPORT_URL: "https://report.example.com/?r={read_id}&n={note_id}&f={file}", NOTEFEED_REPORT_ENDPOINT: "http://127.0.0.1:3198/f/notefeed-report" }, SERVER_LOG),
     server(3101, { NOTEFEED_PASSWORD: "e2e", NOTEFEED_IMAGE_UPLOADS: "0", NOTEFEED_IMPRINT_FILE: "e2e/fixtures/imprint.md", NOTEFEED_PRIVACY_FILE: "e2e/fixtures/privacy.md" }),
     server(3103, {
       NOTEFEED_STORAGE: "sqlite",

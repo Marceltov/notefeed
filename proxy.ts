@@ -33,9 +33,10 @@ export function proxy(req: NextRequest) {
   // redirecting them to /login would turn a script's 401 into a success-looking 307.
   // Icons, the manifest and the share image are public too, so the login page and link previews have them.
   // /privacy and /imprint are public so the footer links work before signing in (the imprint must be easy to reach,
-  // and the privacy page says what signing in stores).
+  // and the privacy page says what signing in stores). /report is reached from the read-only views, which are public.
   const exempt =
     pathname === "/login" ||
+    pathname === "/report" ||
     pathname === "/mcp" ||
     pathname === "/metrics" ||
     pathname === "/privacy" ||

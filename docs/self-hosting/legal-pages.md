@@ -70,3 +70,16 @@ services:
 - **The RSS feed carries no report link:** a feed reader shows the item's link, which opens the note in the read-only view, and the link is there.
 - **Say so on the privacy page** when the form or the mailbox keeps a reporter's address or message: what is stored, for how long, and why (handling the report), the same way the page explains e-mail. A report is the one thing an anonymous instance may hold that names a person.
 - **The feed's read link is the link to the content.** `{read_id}` and `{note_id}` are enough to open `/r/<read id>/<note id>` and to find the feed in the data; an operator's takedown takes a read link or an image URL.
+
+### The built-in report page
+
+notefeed can show the form itself, at `/report`, and still store nothing: set `NOTEFEED_REPORT_ENDPOINT` to the endpoint of a form in an inbox you run, and the page posts there, with the note's ids in hidden fields and a reason, a text and an optional email address. With the endpoint set and no `NOTEFEED_REPORT_URL`, the **Report** link opens this page. The page is public on a locked instance too, like the read-only views it is linked from.
+
+```yaml
+services:
+  notefeed:
+    environment:
+      NOTEFEED_REPORT_ENDPOINT: "https://inbox.example.com/f/notefeed-report"
+```
+
+The inbox has to take posts from this instance's origin and send the browser back to `https://notes.example.com/report?sent=1` afterwards; a refused post comes back to `/report` with the errors. [noticebox](https://github.com/noticebox/noticebox) is such an inbox: its `notefeed-report` form has the fields the page sends, states for each report, and a record of every decision.

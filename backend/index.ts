@@ -45,6 +45,8 @@ export const customIdsOn = config.allowCustomIds;
 
 /** The template of the "Report" link on every note (NOTEFEED_REPORT_URL, issue #154), or "" for no link. */
 export const reportTemplate = config.reportUrl;
+/** Where the built-in report page posts (NOTEFEED_REPORT_ENDPOINT, issue #156), or "" for no page. */
+export const reportEndpoint = config.reportEndpoint;
 /** Whether pictures can be posted (NOTEFEED_IMAGE_UPLOADS); off, the note boxes show no image control (issue #152). */
 export const imageUploadsOn = config.imageUploads;
 
