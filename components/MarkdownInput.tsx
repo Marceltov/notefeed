@@ -1,7 +1,8 @@
 "use client";
 
-import { useLayoutEffect, useRef, useSyncExternalStore, type ClipboardEvent, type DragEvent, type ReactNode } from "react";
+import { useLayoutEffect, useRef, useState, useSyncExternalStore, type ClipboardEvent, type DragEvent, type ReactNode } from "react";
 import { ImagePlus, X } from "lucide-react";
+import { NoteView } from "@/components/NoteView";
 import { type Pending, fitPending, newPending, removeReference, uniqueToken } from "@/components/pendingFiles";
 import { TOO_MANY_PICTURES } from "@/app/_lib/messages";
 
@@ -12,7 +13,10 @@ const ACCEPT = "image/png,image/jpeg,image/gif,image/webp";
 // name made from the file's (uniqueToken: safe to write in a link, and unlike the others'). Nothing is uploaded here, so leaving the page uploads nothing. The button and the list only exist once hydrated,
 // so without JavaScript only the textarea renders. A note takes a limited number of pictures (MAX_ATTACHMENTS): of more,
 // the ones that fit are added and `onMessage` sets the reason, for the parent to show where it shows its errors; removing a picture clears it.
-export function MarkdownInput({ id, name, label, value, onChange, rows, placeholder, describedBy, className = "", pending, onPendingChange, onMessage, children }: {
+// Two tabs above the box, Write and Preview (issue #146): the preview renders the text with the components the note pages use, so it
+// cannot differ from the posted note, with the waiting pictures shown from their files and the stored ones from `imageBase` (the feed's
+// read link). The textarea is hidden, not unmounted, while previewing, so the text, the cursor and the form's submit stay as they are.
+export function MarkdownInput({ id, name, label, value, onChange, rows, placeholder, describedBy, className = "", pending, onPendingChange, onMessage, imageBase, children }: {
   id: string;
   name: string;
   label: string;
@@ -25,11 +29,17 @@ export function MarkdownInput({ id, name, label, value, onChange, rows, placehol
   pending: Pending[];
   onPendingChange: (pending: Pending[]) => void;
   onMessage: (update: (shown: string | undefined) => string | undefined) => void; // a state setter: the message the parent shows
+  imageBase?: string; // where the text's relative image links point, for the preview
   children?: ReactNode; // more controls, rendered on the same row as the "Add image" button
 }) {
   const area = useRef<HTMLTextAreaElement>(null);
   const picker = useRef<HTMLInputElement>(null);
   const hydrated = useSyncExternalStore(() => () => {}, () => true, () => false);
+  const [tab, setTab] = useState<"write" | "preview">("write");
+  const previewing = hydrated && tab === "preview";
+  // A waiting picture, by the name the text calls it (its token): shown from its file, before anything is uploaded.
+  const resolve = (src: string) => pending.find((p) => p.token === src)?.preview;
+  const tabClass = (own: "write" | "preview") => `-mb-px border-b-2 px-3 py-1.5 ${tab === own ? "border-carbon font-bold text-ink" : "border-transparent text-muted hover:text-ink"}`;
   const cursor = useRef<number | null>(null); // where the cursor goes once the text `insert` made is rendered
 
   // The textarea is controlled, so the cursor can only be placed once React has rendered the text with the reference in it: in the
@@ -101,8 +111,24 @@ export function MarkdownInput({ id, name, label, value, onChange, rows, placehol
       <label htmlFor={id} className="sr-only">
         {label}
       </label>
+      {hydrated && (
+        <div role="tablist" aria-label="Write or preview" className="mb-2 flex border-b border-rule text-sm">
+          <button type="button" role="tab" id={`${id}-tab-write`} aria-selected={tab === "write"} aria-controls={`${id}-write`} onClick={() => setTab("write")} className={tabClass("write")}>
+            Write
+          </button>
+          <button type="button" role="tab" id={`${id}-tab-preview`} aria-selected={tab === "preview"} aria-controls={`${id}-preview`} onClick={() => setTab("preview")} className={tabClass("preview")}>
+            Preview
+          </button>
+        </div>
+      )}
+      {previewing && (
+        <div id={`${id}-preview`} role="tabpanel" aria-labelledby={`${id}-tab-preview`} className="min-h-32 rounded-sm border border-rule p-3">
+          {value.trim() ? <NoteView markdown={value} imageBase={imageBase} resolve={resolve} /> : <p className="text-muted">Nothing to preview.</p>}
+        </div>
+      )}
       <textarea
         ref={area}
+        hidden={previewing}
         id={id}
         name={name}
         value={value}

@@ -356,3 +356,13 @@ test("a title and tags typed with only pictures go on the pictures, accents incl
   await expect(page.getByRole("link", { name: "cats" })).toBeVisible();
   await expect(page.locator("ol > li")).toHaveCount(1); // no text note
 });
+
+test("the preview shows a dropped picture from its file, before it is uploaded", async ({ page }) => {
+  await page.goto(`/${feedName()}`);
+  await note(page).fill("# With a picture");
+  await drop(page, "cat.png");
+  await page.getByRole("tab", { name: "Preview" }).click();
+  const img = page.getByRole("tabpanel").locator("img");
+  await expect(img).toHaveAttribute("src", /^blob:/);
+  await loaded(img).toBeGreaterThan(0);
+});

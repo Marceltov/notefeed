@@ -33,7 +33,7 @@ export default async function NotePage({ params, searchParams }: PageProps<"/[fe
         </p>
       )}
       <NoteArticle note={note} back={feedPath(feed)} imageBase={readId ? `${readPath(readId)}/` : undefined} />
-      <NoteActions key={`${note.content}\n${note.meta.title}\n${note.alt}`} feed={feed} id={id} kind={note.type.startsWith("image/") ? "image" : "markdown"} markdown={note.content ?? ""} title={note.meta.title ?? ""} alt={note.alt ?? ""} error={noteErrorMessage(error, retry)} />
+      <NoteActions key={`${note.content}\n${note.meta.title}\n${note.alt}`} feed={feed} id={id} kind={note.type.startsWith("image/") ? "image" : "markdown"} markdown={note.content ?? ""} title={note.meta.title ?? ""} alt={note.alt ?? ""} error={noteErrorMessage(error, retry)} imageBase={readId ? `${readPath(readId)}/` : undefined} />
     </>
   );
 }
