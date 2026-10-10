@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, useSyncExternalStore, type ClipboardEvent, type DragEvent, type ReactNode } from "react";
+import { useLayoutEffect, useRef, useState, useSyncExternalStore, type ClipboardEvent, type DragEvent, type ReactNode } from "react";
 import { ImagePlus, X } from "lucide-react";
 import { NoteView } from "@/components/NoteView";
 import { type Pending, fitPending, newPending, removeReference, uniqueToken } from "@/components/pendingFiles";
@@ -40,8 +40,24 @@ export function MarkdownInput({ id, name, label, value, onChange, rows, placehol
   // A waiting picture, by the name the text calls it (its token): shown from its file, before anything is uploaded.
   const resolve = (src: string) => pending.find((p) => p.token === src)?.preview;
   const tabClass = (own: "write" | "preview") => `-mb-px border-b-2 px-3 py-1.5 ${tab === own ? "border-carbon font-bold text-ink" : "border-transparent text-muted hover:text-ink"}`;
+  const cursor = useRef<number | null>(null); // where the cursor goes once the text `insert` made is rendered
 
-  // `text` goes in at the cursor, on a line of its own.
+  // The textarea is controlled, so the cursor can only be placed once React has rendered the text with the reference in it: in the
+  // layout effect of that render, which runs in the same task as the change, so nothing done in between can be lost to a late step
+  // (a frame-later callback once let a selection made since collapse, #164).
+  useLayoutEffect(() => {
+    const ta = area.current;
+    if (!ta || cursor.current === null) return;
+    const at = Math.min(cursor.current, value.length);
+    cursor.current = null;
+    // If the writer is in another field (the title, the tags), what they type next belongs there.
+    const active = document.activeElement;
+    if (active && active !== ta && active.matches("input:not([type=file]), textarea, select")) return;
+    ta.focus();
+    ta.setSelectionRange(at, at);
+  });
+
+  // `text` goes in at the cursor, on a line of its own; the cursor ends up behind it.
   function insert(text: string, current: string) {
     const ta = area.current;
     if (!ta) return current + text;
@@ -50,14 +66,7 @@ export function MarkdownInput({ id, name, label, value, onChange, rows, placehol
     const after = current.slice(e);
     const head = before && !before.endsWith("\n") ? "\n" : "";
     const tail = after && !after.startsWith("\n") ? "\n" : "";
-    const cursor = before.length + head.length + text.length;
-    requestAnimationFrame(() => {
-      // The frame can come late. If the writer is in another field by then (the title, the tags), what they type next belongs there.
-      const active = document.activeElement;
-      if (active && active !== ta && active.matches("input:not([type=file]), textarea, select")) return;
-      ta.focus();
-      ta.setSelectionRange(cursor, cursor);
-    });
+    cursor.current = before.length + head.length + text.length;
     return before + head + text + tail + after;
   }
 
