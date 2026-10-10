@@ -35,7 +35,7 @@ curl -X POST -H "Authorization: Bearer $NOTEFEED_OPERATOR_TOKEN" -H "Content-Typ
 
 `target` is a read link (`/r/<read id>`, with or without `/feed.xml` or a note's id), an image URL (`/r/<read id>/<file>`) or a bare read id. What happens, in this order:
 
-1. **A tombstone** is written with the feed's name and its read id. From that moment the feed is found by neither: the feed page, the read-only view and the RSS feed answer *removed by the operator* (`410`), posting to the name answers `410` (`removed`), and no feed can ever be created with that name or given that read id.
+1. **A tombstone** is written with the feed's name and its read id. From that moment the feed is found by neither: the feed page, the read-only view, the RSS feed and the files answer *removed by the operator* (`410`), the read API (`/api/v1/read/<read id>…`) and posting to the name answer `410` (`removed`), and no feed can ever be created with that name or given that read id.
 2. **The notes and the image bytes go**, from the database rows and from the image store alike (on the file system backend, the folder). `image_keys` names the image store objects that went, for the purge of backups.
 3. **The hashes of the images** go on the instance's blocklist: the same bytes are refused with `451` (`blocked`) in every feed, as an image note, a replaced picture or a picture sent with a text.
 

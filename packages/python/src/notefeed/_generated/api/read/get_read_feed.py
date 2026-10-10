@@ -38,6 +38,11 @@ def _parse_response(
 
         return response_404
 
+    if response.status_code == 410:
+        response_410 = Error.from_dict(response.json())
+
+        return response_410
+
     if client.raise_on_unexpected_status:
         raise errors.UnexpectedStatus(response.status_code, response.content)
     else:
@@ -63,7 +68,7 @@ def sync_detailed(
     """Get a feed's title and description by its read id
 
      Public, even on an instance with a password, and never reveals the feed's name. An unknown read id
-    has an empty title and description, so read ids can't be probed.
+    has an empty title and description, so read ids can't be probed; one the operator removed is `410`.
 
     Args:
         read_id (str):
@@ -95,7 +100,7 @@ def sync(
     """Get a feed's title and description by its read id
 
      Public, even on an instance with a password, and never reveals the feed's name. An unknown read id
-    has an empty title and description, so read ids can't be probed.
+    has an empty title and description, so read ids can't be probed; one the operator removed is `410`.
 
     Args:
         read_id (str):
@@ -122,7 +127,7 @@ async def asyncio_detailed(
     """Get a feed's title and description by its read id
 
      Public, even on an instance with a password, and never reveals the feed's name. An unknown read id
-    has an empty title and description, so read ids can't be probed.
+    has an empty title and description, so read ids can't be probed; one the operator removed is `410`.
 
     Args:
         read_id (str):
@@ -152,7 +157,7 @@ async def asyncio(
     """Get a feed's title and description by its read id
 
      Public, even on an instance with a password, and never reveals the feed's name. An unknown read id
-    has an empty title and description, so read ids can't be probed.
+    has an empty title and description, so read ids can't be probed; one the operator removed is `410`.
 
     Args:
         read_id (str):

@@ -162,21 +162,21 @@ export const changeFeedPassword = <ThrowOnError extends boolean = false>(options
 /**
  * Get a feed's title and description by its read id
  *
- * Public, even on an instance with a password, and never reveals the feed's name. An unknown read id has an empty title and description, so read ids can't be probed.
+ * Public, even on an instance with a password, and never reveals the feed's name. An unknown read id has an empty title and description, so read ids can't be probed; one the operator removed is `410`.
  */
 export const getReadFeed = <ThrowOnError extends boolean = false>(options: Options<GetReadFeedData, ThrowOnError>): RequestResult<GetReadFeedResponses, GetReadFeedErrors, ThrowOnError> => (options.client ?? client).get<GetReadFeedResponses, GetReadFeedErrors, ThrowOnError>({ url: '/api/v1/read/{readId}', ...options });
 
 /**
  * List a feed's notes by its read id
  *
- * Public, even on an instance with a password, and never reveals the feed's name. An unknown read id is an empty list, so read ids can't be probed. The same notes as the read link's RSS.
+ * Public, even on an instance with a password, and never reveals the feed's name. An unknown read id is an empty list, so read ids can't be probed; one the operator removed is `410`. The same notes as the read link's RSS.
  */
 export const listReadNotes = <ThrowOnError extends boolean = false>(options: Options<ListReadNotesData, ThrowOnError>): RequestResult<ListReadNotesResponses, ListReadNotesErrors, ThrowOnError> => (options.client ?? client).get<ListReadNotesResponses, ListReadNotesErrors, ThrowOnError>({ url: '/api/v1/read/{readId}/notes', ...options });
 
 /**
  * Get one note by its feed's read id
  *
- * Public, like the read link.
+ * Public, like the read link. A read id the operator removed is `410`.
  */
 export const getReadNote = <ThrowOnError extends boolean = false>(options: Options<GetReadNoteData, ThrowOnError>): RequestResult<GetReadNoteResponses, GetReadNoteErrors, ThrowOnError> => (options.client ?? client).get<GetReadNoteResponses, GetReadNoteErrors, ThrowOnError>({ url: '/api/v1/read/{readId}/notes/{id}', ...options });
 

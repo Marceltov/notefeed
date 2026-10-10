@@ -945,6 +945,10 @@ export type GetReadFeedErrors = {
      * Malformed read id
      */
     404: Error;
+    /**
+     * The operator removed the feed this read id belonged to (`removed`)
+     */
+    410: Error;
 };
 
 export type GetReadFeedError = GetReadFeedErrors[keyof GetReadFeedErrors];
@@ -992,6 +996,10 @@ export type ListReadNotesErrors = {
      * Malformed read id
      */
     404: Error;
+    /**
+     * The operator removed the feed this read id belonged to (`removed`)
+     */
+    410: Error;
 };
 
 export type ListReadNotesError = ListReadNotesErrors[keyof ListReadNotesErrors];
@@ -1026,6 +1034,10 @@ export type GetReadNoteErrors = {
      * No such note, or a malformed or unknown read id
      */
     404: Error;
+    /**
+     * The operator removed the feed this read id belonged to (`removed`)
+     */
+    410: Error;
 };
 
 export type GetReadNoteError = GetReadNoteErrors[keyof GetReadNoteErrors];

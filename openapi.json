@@ -1422,7 +1422,7 @@
       "get": {
         "operationId": "getReadFeed",
         "summary": "Get a feed's title and description by its read id",
-        "description": "Public, even on an instance with a password, and never reveals the feed's name. An unknown read id has an empty title and description, so read ids can't be probed.",
+        "description": "Public, even on an instance with a password, and never reveals the feed's name. An unknown read id has an empty title and description, so read ids can't be probed; one the operator removed is `410`.",
         "tags": [
           "Read"
         ],
@@ -1459,6 +1459,16 @@
                 }
               }
             }
+          },
+          "410": {
+            "description": "The operator removed the feed this read id belonged to (`removed`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -1467,7 +1477,7 @@
       "get": {
         "operationId": "listReadNotes",
         "summary": "List a feed's notes by its read id",
-        "description": "Public, even on an instance with a password, and never reveals the feed's name. An unknown read id is an empty list, so read ids can't be probed. The same notes as the read link's RSS.",
+        "description": "Public, even on an instance with a password, and never reveals the feed's name. An unknown read id is an empty list, so read ids can't be probed; one the operator removed is `410`. The same notes as the read link's RSS.",
         "tags": [
           "Read"
         ],
@@ -1545,6 +1555,16 @@
                 }
               }
             }
+          },
+          "410": {
+            "description": "The operator removed the feed this read id belonged to (`removed`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -1553,7 +1573,7 @@
       "get": {
         "operationId": "getReadNote",
         "summary": "Get one note by its feed's read id",
-        "description": "Public, like the read link.",
+        "description": "Public, like the read link. A read id the operator removed is `410`.",
         "tags": [
           "Read"
         ],
@@ -1593,6 +1613,16 @@
           },
           "404": {
             "description": "No such note, or a malformed or unknown read id",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "The operator removed the feed this read id belonged to (`removed`)",
             "content": {
               "application/json": {
                 "schema": {

@@ -68,6 +68,13 @@ describe("a feed taken down by its image URL", () => {
     expect(await feedForReadId(rid)).toBeNull();
     expect((await rssRoute(new Request(`${BASE}/r/${rid}/feed.xml`), rid)).status).toBe(410);
     expect((await fileRoute(rid, pic.file)).status).toBe(410);
+    // The read API says so too (#159): a client can tell a removed feed from a read id nobody has.
+    for (const path of [`/read/${rid}`, `/read/${rid}/notes`, `/read/${rid}/notes/${pic.id}`]) {
+      const read = await call("GET", path);
+      expect(read.status).toBe(410);
+      expect(await read.json()).toEqual({ error: "this feed was removed by the operator", code: "removed" });
+    }
+    expect((await call("GET", `/read/${"A".repeat(22)}/notes`)).status).toBe(200);
     expect((await readdir(root)).filter((n) => !n.startsWith("."))).toEqual([]);
     expect((await readFile(join(root, ".tombstones"), "utf8")).trim()).toMatch(/^\{"feed":"bad","readId":"/);
 
