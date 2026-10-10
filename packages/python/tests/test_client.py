@@ -167,6 +167,8 @@ def test_a_base_url_with_a_prefix_and_trailing_slash_keeps_the_prefix(server):
         ("feed_limit", 507, LimitReachedError),
         ("note_limit", 507, LimitReachedError),
         ("image_limit", 507, LimitReachedError),
+        ("removed", 410, NotFoundError),
+        ("blocked", 451, InvalidRequestError),
         ("images_off", 403, ImagesOffError),
         ("too_large", 413, NoteTooLargeError),
         ("invalid_feed", 400, InvalidRequestError),

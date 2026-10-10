@@ -203,7 +203,7 @@ export type Error = {
     /**
      * Stable machine-readable code; absent only on a 500
      */
-    code?: 'invalid_feed' | 'reserved_feed' | 'auth' | 'rate_limited' | 'too_many_attempts' | 'feed_limit' | 'note_limit' | 'image_limit' | 'images_off' | 'empty_note' | 'too_large' | 'unsupported_type' | 'invalid_body' | 'invalid_request' | 'not_found' | 'feed_exists' | 'taken';
+    code?: 'invalid_feed' | 'reserved_feed' | 'auth' | 'rate_limited' | 'too_many_attempts' | 'feed_limit' | 'note_limit' | 'image_limit' | 'images_off' | 'empty_note' | 'too_large' | 'unsupported_type' | 'invalid_body' | 'invalid_request' | 'not_found' | 'feed_exists' | 'taken' | 'removed' | 'blocked';
 };
 
 export type NoteMeta = {
@@ -409,6 +409,10 @@ export type PostNoteErrors = {
      */
     409: Error;
     /**
+     * The operator removed this feed for good (`removed`): its name cannot be used again
+     */
+    410: Error;
+    /**
      * Markdown over 102400 bytes, or an image over NOTEFEED_MAX_IMAGE_BYTES (each picture of a multipart body too), or a multipart body over 102400 bytes plus 10 images plus 64 KiB
      */
     413: Error;
@@ -420,6 +424,10 @@ export type PostNoteErrors = {
      * Too many posts, or wrong passwords, from this client
      */
     429: Error;
+    /**
+     * An image the operator removed, which may not be posted again in any feed (`blocked`)
+     */
+    451: Error;
     /**
      * NOTEFEED_MAX_FEEDS, NOTEFEED_MAX_NOTES_PER_FEED or NOTEFEED_MAX_IMAGES_PER_FEED reached
      */
@@ -655,6 +663,10 @@ export type EditNoteErrors = {
      * Too many posts, edits and deletes, or wrong passwords, from this client
      */
     429: Error;
+    /**
+     * An image the operator removed, which may not be posted again in any feed (`blocked`)
+     */
+    451: Error;
     /**
      * NOTEFEED_MAX_IMAGES_PER_FEED reached
      */

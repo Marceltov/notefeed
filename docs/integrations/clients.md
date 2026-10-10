@@ -108,9 +108,9 @@ Every error is a `NotefeedError` with `status` (the HTTP status) and `code` (the
 | Type | Codes | When |
 |---|---|---|
 | `ConfigError` | – | Empty URL; no feed given; an invalid feed name; a password with control characters (the password itself is never shown); no content and no attachments; invalid `attachments`: a name given twice, not a picture, a note that is not a markdown string, or `alt`/`name` given together with attachments (give each attachment its own `alt`). All of it is checked before any request. What a file name may be is not checked here: the server does, and a name it refuses is an `InvalidRequestError` |
-| `InvalidRequestError` | `invalid_feed`, `reserved_feed`, `empty_note`, `invalid_body`, `invalid_request`, `unsupported_type` | The server refused the request itself |
+| `InvalidRequestError` | `invalid_feed`, `reserved_feed`, `empty_note`, `invalid_body`, `invalid_request`, `unsupported_type`, `blocked` | The server refused the request itself; `blocked` (`451`) is an image the operator removed and that may not come back |
 | `AuthError` | `auth` | The instance or the feed has a password and it's missing or wrong |
-| `NotFoundError` | `not_found` | No such note (also for `edit` and `delete`), no such feed (for `feed_info`, `update_feed` and `delete_feed`), or a malformed read id |
+| `NotFoundError` | `not_found`, `removed` | No such note (also for `edit` and `delete`), no such feed (for `feed_info`, `update_feed` and `delete_feed`), or a malformed read id; `removed` (`410`) is a feed the operator removed, whose name cannot be used again |
 | `NoteTooLargeError` | `too_large` | A note over 100 KB, or an image over the size limit |
 | `RateLimitedError` | `rate_limited`, `too_many_attempts` | Too many posts or wrong passwords. `retry_after` / `retryAfter` is the wait in seconds from `Retry-After`, or `None`/`null` |
 | `LimitReachedError` | `feed_limit`, `note_limit`, `image_limit` | The instance's feed cap, or the feed's note or image cap, is reached |

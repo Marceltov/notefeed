@@ -1,6 +1,6 @@
 // A feed on disk is a directory `<DATA_DIR>/<feed>/`.
 import { randomBytes } from "node:crypto";
-import { mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { logger } from "../../log";
 import { feedDir, isErrno, orMissing, root } from "./fs";
@@ -12,6 +12,41 @@ const log = logger("feeds");
 export async function listFeedDirs(): Promise<string[]> {
   const entries = await orMissing(readdir(/*turbopackIgnore: true*/ root(), { withFileTypes: true }), []);
   return entries.filter((e) => e.isDirectory()).map((e) => e.name);
+}
+
+// The operator's takedown (issue #155): `.tombstones` holds one JSON line per removed feed (name, read id, when) and `.blocklist` one
+// hash per line. Both are appended to (a line is small, and append is atomic for one), read once when the index loads, and never
+// a feed: a feed is a directory and its name cannot start with a dot.
+const tombstonesFile = () => join(root(), ".tombstones");
+const blocklistFile = () => join(root(), ".blocklist");
+
+export type Tombstone = { feed: string; readId: string | null; at: number };
+
+export async function readTombstones(): Promise<Tombstone[]> {
+  const raw = await orMissing(readFile(/*turbopackIgnore: true*/ tombstonesFile(), "utf8"), "");
+  return raw.split("\n").flatMap((line) => {
+    if (!line.trim()) return [];
+    try {
+      const t = JSON.parse(line);
+      return typeof t.feed === "string" ? [{ feed: t.feed, readId: typeof t.readId === "string" ? t.readId : null, at: Number(t.at) || 0 }] : [];
+    } catch {
+      log.warn("a line of .tombstones is not JSON and is skipped");
+      return [];
+    }
+  });
+}
+export async function appendTombstone(t: Tombstone): Promise<void> {
+  await mkdir(/*turbopackIgnore: true*/ root(), { recursive: true });
+  await appendFile(/*turbopackIgnore: true*/ tombstonesFile(), JSON.stringify(t) + "\n", { mode: 0o600 });
+}
+export async function readBlocklist(): Promise<string[]> {
+  const raw = await orMissing(readFile(/*turbopackIgnore: true*/ blocklistFile(), "utf8"), "");
+  return raw.split("\n").map((l) => l.trim()).filter((l) => /^[0-9a-f]{64}$/.test(l));
+}
+export async function appendBlocklist(hashes: string[]): Promise<void> {
+  if (!hashes.length) return;
+  await mkdir(/*turbopackIgnore: true*/ root(), { recursive: true });
+  await appendFile(/*turbopackIgnore: true*/ blocklistFile(), hashes.map((h) => h + "\n").join(""), { mode: 0o600 });
 }
 
 // A feed created after per-feed read ids has `.readid` (a random id); older feeds have none and keep

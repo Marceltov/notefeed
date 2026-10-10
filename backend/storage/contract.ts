@@ -1,6 +1,6 @@
 // The tests every Storage backend must pass. A backend's test file calls describeStorage() with a factory for a fresh, empty store.
 import { describe, expect, test } from "vitest";
-import { NotFoundError, ReadIdTakenError } from "../errors";
+import { NotFoundError, ReadIdTakenError, RemovedFeedError } from "../errors";
 import { FeedGoneError, type Storage } from "./types";
 
 export type Harness = {
@@ -215,6 +215,38 @@ export function describeStorage(name: string, make: () => Promise<Harness>): voi
         expect(await s.feedForReadId(id)).toBe(name);
         await s.writeNote(name, "a", "md", "x", {});
         expect(await s.listNoteRefs(name)).toEqual([{ id: "a", ext: "md" }]);
+      });
+      t("takedown (#155): the tombstone keeps the name and the read id out of use, the content goes, the blocklist holds", async ({ storage: s }) => {
+        await s.writeNote("f", "a", "md", "x", {});
+        await s.writeNote("f", "p", "png", new Uint8Array([0x89, 0x50, 1]), {});
+        expect(await s.isRemoved({ feed: "f" })).toBe(false);
+        const gone = await s.takedownFeed("f", "rid-f");
+        expect(gone.removed).toBe(true);
+        expect(await s.feedReadId("f")).toBeUndefined();
+        expect(await s.feedForReadId("rid-f")).toBeNull();
+        expect(await s.listNoteRefs("f")).toEqual([]);
+        expect(await s.readFile("f", "p.png")).toBeNull();
+        expect(await s.isRemoved({ feed: "f" })).toBe(true);
+        expect(await s.isRemoved({ readId: "rid-f" })).toBe(true);
+        expect(await s.isRemoved({ feed: "g", readId: "rid-g" })).toBe(false);
+        await expect(s.createFeed("f", "fresh-id-1")).rejects.toBeInstanceOf(RemovedFeedError);
+        await expect(s.createFeed("g", "rid-f")).rejects.toBeInstanceOf(ReadIdTakenError);
+        await s.createFeed("g", "rid-g");
+        await expect(s.setReadId("g", "rid-f")).rejects.toBeInstanceOf(ReadIdTakenError);
+        expect(await s.feedCount()).toBe(1);
+        expect(await s.listFeeds()).toEqual(["g"]);
+        // Again, and for a feed that never was: a tombstone all the same, and no error.
+        expect((await s.takedownFeed("f", "rid-f")).removed).toBe(false);
+        expect((await s.takedownFeed("never", "rid-never")).removed).toBe(false);
+        expect(await s.isRemoved({ readId: "rid-never" })).toBe(true);
+        const h = "a".repeat(64);
+        expect(await s.isBlockedImage(h)).toBe(false);
+        await s.blockImages([h, "b".repeat(64)]);
+        await s.blockImages([h]); // twice is fine
+        await s.blockImages([]);
+        expect(await s.isBlockedImage(h)).toBe(true);
+        expect(await s.isBlockedImage("b".repeat(64))).toBe(true);
+        expect(await s.isBlockedImage("c".repeat(64))).toBe(false);
       });
       t("forgetFeed never removes a feed that is still there under another id", async ({ storage: s }) => {
         await s.writeNote("f", "a", "md", "x", {});

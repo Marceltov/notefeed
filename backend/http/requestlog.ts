@@ -29,6 +29,7 @@ export const ROUTES = [
   "/api/oidc/start",
   "/api/operator/images/move",
   "/api/operator/images/unreferenced",
+  "/api/operator/takedown",
   "/api/v1/[...path]",
   "/imprint",
   "/login",

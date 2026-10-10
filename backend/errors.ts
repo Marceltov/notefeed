@@ -67,6 +67,18 @@ export class ImageLimitError extends LimitReachedError {
   }
 }
 
+/** The feed, by its name or its read id, was removed by the operator and neither can be used again (issue #155). */
+export class RemovedFeedError extends NotefeedError {
+  constructor() {
+    super("removed", "this feed was removed by the operator");
+  }
+}
+/** The image's bytes are on the instance's blocklist: they were removed by the operator and may not come back. */
+export class BlockedImageError extends NotefeedError {
+  constructor() {
+    super("blocked", "this image may not be posted here");
+  }
+}
 /** NOTEFEED_IMAGE_UPLOADS=0: no image is stored, whichever way it comes (issue #152). */
 export class ImagesOffError extends NotefeedError {
   constructor() {

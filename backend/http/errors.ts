@@ -2,6 +2,7 @@
 import type { ErrorCode } from "../../shared/errors";
 import {
   AuthError,
+  BlockedImageError,
   EmptyNoteError,
   FeedExistsError,
   ImagesOffError,
@@ -15,6 +16,7 @@ import {
   NotFoundError,
   NotefeedError,
   RateLimitedError,
+  RemovedFeedError,
   ReservedFeedError,
   UnsupportedTypeError,
 } from "../errors";
@@ -34,10 +36,12 @@ const STATUS: [new (...args: never[]) => NotefeedError, number][] = [
   [NotFoundError, 404],
   [FeedExistsError, 409],
   [ReadIdTakenError, 409],
+  [RemovedFeedError, 410],
   [NoteTooLargeError, 413],
   [ImageTooLargeError, 413],
   [UnsupportedTypeError, 415],
   [RateLimitedError, 429], // and TooManyAttemptsError
+  [BlockedImageError, 451],
   [LimitReachedError, 507],
 ];
 

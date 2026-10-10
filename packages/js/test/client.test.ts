@@ -263,6 +263,8 @@ describe("errors map from the response's code", () => {
     ["feed_limit", 507, LimitReachedError],
     ["note_limit", 507, LimitReachedError],
     ["image_limit", 507, LimitReachedError],
+    ["removed", 410, NotFoundError],
+    ["blocked", 451, InvalidRequestError],
     ["images_off", 403, ImagesOffError],
     ["too_large", 413, NoteTooLargeError],
     ["invalid_feed", 400, InvalidRequestError],

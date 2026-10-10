@@ -2,10 +2,10 @@
 // feeds, which answers "does it exist", "how many", "which feed has this read id" and "what is this feed's read id" in O(1).
 // A feed's read id is a random one stored in its `.readid`; feeds from before that have none and keep the id derived from
 // their name (HMAC with the server secret), so no existing read link changes.
-import { NotFoundError, ReadIdTakenError } from "../../errors";
+import { NotFoundError, ReadIdTakenError, RemovedFeedError } from "../../errors";
 import { logger } from "../../log";
 import type { Storage } from "../types";
-import { createFeedDir, deleteFeedDir, listFeedDirs, readReadId, removeLeftovers, writeReadId } from "./feeds";
+import { appendBlocklist, appendTombstone, createFeedDir, deleteFeedDir, listFeedDirs, readBlocklist, readReadId, readTombstones, removeLeftovers, writeReadId } from "./feeds";
 import { isErrno } from "./fs";
 
 const log = logger("feeds");
@@ -18,9 +18,11 @@ export type FeedDeps = {
 };
 
 // `byFeed` holds null for a feed without a read link (its `.readid` can't be read, or its id belongs to another feed).
-type Index = { dir: string; byReadId: Map<string, string>; byFeed: Map<string, string | null> };
+// `removed` and `removedIds`: the tombstones (issue #155), `blocked`: the image hashes that may not come back; all three loaded from
+// their files with the index and kept current by the methods that append to them.
+type Index = { dir: string; byReadId: Map<string, string>; byFeed: Map<string, string | null>; removed: Set<string>; removedIds: Set<string>; blocked: Set<string> };
 
-type FeedMethods = Pick<Storage, "createFeed" | "deleteFeed" | "forgetFeed" | "setReadId" | "feedReadId" | "feedForReadId" | "listFeeds" | "listFeedNames" | "feedCount">;
+type FeedMethods = Pick<Storage, "createFeed" | "deleteFeed" | "forgetFeed" | "setReadId" | "feedReadId" | "feedForReadId" | "listFeeds" | "listFeedNames" | "feedCount" | "takedownFeed" | "isRemoved" | "blockImages" | "isBlockedImage">;
 
 export function createFeedMethods(deps: FeedDeps, dataDir: () => string): FeedMethods {
   // The index is read from disk once and then kept current by createFeed(), deleteFeed() and forgetFeed(), the only code that
@@ -74,9 +76,19 @@ export function createFeedMethods(deps: FeedDeps, dataDir: () => string): FeedMe
   // One file at a time (a read per feed under Promise.all runs out of file descriptors with many feeds);
   // sorted, so which of two feeds sharing an id keeps it is the same on every start.
   async function load(dir: string): Promise<Index> {
-    const idx: Index = { dir, byFeed: new Map(), byReadId: new Map() };
+    const idx: Index = { dir, byFeed: new Map(), byReadId: new Map(), removed: new Set(), removedIds: new Set(), blocked: new Set() };
     await removeLeftovers();
-    for (const n of (await listFeedDirs()).filter(deps.isFeedName).sort()) register(idx, n, await idOnDisk(n));
+    for (const t of await readTombstones()) {
+      idx.removed.add(t.feed);
+      if (t.readId !== null) idx.removedIds.add(t.readId);
+    }
+    for (const h of await readBlocklist()) idx.blocked.add(h);
+    // A removed feed's directory that is still there (a crash between the tombstone and the removal, or a copy restored by hand) is
+    // not a feed: it is removed again here, and never registered.
+    for (const n of (await listFeedDirs()).filter(deps.isFeedName).sort()) {
+      if (idx.removed.has(n)) await deleteFeedDir(n);
+      else register(idx, n, await idOnDisk(n));
+    }
     return idx;
   }
 
@@ -98,7 +110,8 @@ export function createFeedMethods(deps: FeedDeps, dataDir: () => string): FeedMe
     // The id is taken in the index before the first await, so two feeds asking for it at once can't both get it.
     async createFeed(feed, readId, hash) {
       const idx = await index();
-      if (idx.byReadId.has(readId)) throw new ReadIdTakenError();
+      if (idx.removed.has(feed)) throw new RemovedFeedError();
+      if (idx.byReadId.has(readId) || idx.removedIds.has(readId)) throw new ReadIdTakenError();
       idx.byReadId.set(readId, feed);
       let made = false;
       try {
@@ -144,7 +157,7 @@ export function createFeedMethods(deps: FeedDeps, dataDir: () => string): FeedMe
         const old = idx.byFeed.get(feed);
         if (old === undefined) throw new NotFoundError("no such feed");
         if (readId === old) return;
-        if (idx.byReadId.has(readId)) throw new ReadIdTakenError();
+        if (idx.byReadId.has(readId) || idx.removedIds.has(readId)) throw new ReadIdTakenError();
         idx.byReadId.set(readId, feed);
         try {
           await writeReadId(feed, readId);
@@ -175,6 +188,35 @@ export function createFeedMethods(deps: FeedDeps, dataDir: () => string): FeedMe
     },
     async feedCount() {
       return (await index()).byFeed.size;
+    },
+
+    // The tombstone is written and taken into the index first, so the feed is found by neither identifier from here on; then the
+    // directory goes as in deleteFeed. A feed the index does not know (removed by hand) still gets its tombstone.
+    async takedownFeed(feed, readId) {
+      const idx = await index();
+      const id = readId ?? idx.byFeed.get(feed) ?? null;
+      if (!idx.removed.has(feed)) {
+        await appendTombstone({ feed, readId: id, at: Date.now() });
+        idx.removed.add(feed);
+        if (id !== null) idx.removedIds.add(id);
+      }
+      const known = idx.byFeed.get(feed);
+      if (known !== undefined) unregister(idx, feed);
+      const removed = await deleteFeedDir(feed);
+      return { removed, keys: [] }; // on the file system an image is the note's own file, gone with the directory
+    },
+    async isRemoved({ feed, readId }) {
+      const idx = await index();
+      return (feed !== undefined && idx.removed.has(feed)) || (readId !== undefined && idx.removedIds.has(readId));
+    },
+    async blockImages(hashes) {
+      const idx = await index();
+      const fresh = hashes.filter((h) => !idx.blocked.has(h));
+      await appendBlocklist(fresh);
+      for (const h of fresh) idx.blocked.add(h);
+    },
+    async isBlockedImage(hash) {
+      return (await index()).blocked.has(hash);
     },
   };
 }

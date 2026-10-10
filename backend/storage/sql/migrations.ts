@@ -43,7 +43,28 @@ const migrations = (kind: Kind): Record<string, Migration> => ({
       await sql`update notes set size = octet_length(content)`.execute(db);
     },
   },
+  // The operator's takedown (issue #155): tombstones hold the name and the read id of a removed feed for good, blocked_images the
+  // hashes of images that may not come back.
+  "003_takedown": {
+    async up(db: Kysely<any>) {
+      await db.schema
+        .createTable("tombstones")
+        .addColumn("name", "text", (c) => c.primaryKey())
+        .addColumn("read_id", "text")
+        .addColumn("removed_at", "bigint", (c) => c.notNull())
+        .execute();
+      await db.schema.createIndex("tombstones_by_read_id").on("tombstones").column("read_id").execute();
+      await db.schema
+        .createTable("blocked_images")
+        .addColumn("hash", "text", (c) => c.primaryKey())
+        .addColumn("added_at", "bigint", (c) => c.notNull())
+        .execute();
+    },
+  },
 });
+
+/** Every migration's name, in order; the tests check the count the migrator recorded against it, so a new one changes no test. */
+export const MIGRATION_NAMES: readonly string[] = Object.keys(migrations("sqlite"));
 
 // A migration table that names one this code does not have: the database was made by a newer notefeed.
 export const NEWER = "the database was made by a newer notefeed than this one; upgrade notefeed, do not point an older one at it";

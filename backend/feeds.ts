@@ -120,6 +120,14 @@ export async function hasFeed(feed: string): Promise<boolean> {
   return checkFeed(feed) === null && (await (await prepared()).feedReadId(feed)) !== undefined;
 }
 
+/** Whether the operator removed a feed of this name, or the feed this read id belonged to (issue #155): neither comes back. */
+export async function isRemovedFeed(feed: string): Promise<boolean> {
+  return checkFeed(feed) === null && (await prepared()).isRemoved({ feed });
+}
+export async function isRemovedReadId(id: string): Promise<boolean> {
+  return isReadId(id) && (await prepared()).isRemoved({ readId: id });
+}
+
 export async function feedForReadId(id: string): Promise<string | null> {
   if (!isReadId(id)) return null;
   return (await prepared()).feedForReadId(id);

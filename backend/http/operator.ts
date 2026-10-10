@@ -1,9 +1,11 @@
-// The operator's endpoints for the image store. Off (404) unless NOTEFEED_OPERATOR_TOKEN is set (32 bytes or more); then each needs
+// The operator's endpoints. Off (404) unless NOTEFEED_OPERATOR_TOKEN is set (32 bytes or more); then each needs
 // `Authorization: Bearer <token>`. They are under /api, which proxy.ts leaves to its handlers, and not in the public API description:
 // they are the operator's, as /metrics is.
 //   /api/operator/images/unreferenced (issue #127)
 //     GET     what is in the store that no note names (count and bytes), without touching it
 //     DELETE  the same, and those objects are removed
+//   /api/operator/takedown (issue #155)
+//     POST    removes the feed a read link, a read id or an image URL names, for good, and blocklists its images
 //   /api/operator/images/move (issue #128)
 //     POST    moves image bytes into the configured store, from the rows or from another store named in the JSON body
 import { createHash, timingSafeEqual } from "node:crypto";
@@ -13,10 +15,13 @@ import { authFailed, authWait, clientIp } from "../limits";
 import { logger } from "../log";
 import { imagesSwept } from "../metrics";
 import { storage } from "../storage";
+import { NotefeedError } from "../errors";
+import { statusOf } from "./errors";
 import { createFsImageStore } from "../storage/images/fs";
 import { createS3ImageStore } from "../storage/images/s3";
 import type { ImageStore } from "../storage/images/types";
 import type { SqlStorage } from "../storage/sql";
+import { takedown } from "../takedown";
 
 // An object younger than this is never counted or removed: its note's row may still be on its way (the object is written first).
 export const MIN_AGE_MS = 3_600_000;
@@ -64,6 +69,22 @@ export async function unreferencedImagesRoute(req: Request): Promise<Response> {
     too_recent: sweep.tooRecent,
     missing: sweep.missing,
   });
+}
+
+// The body names the feed: `{"target": "<read link | read id | image URL>"}`. The answer says what went and never the feed's name;
+// `image_keys` are the image store objects removed, for the operator's purge of backups.
+export async function takedownRoute(req: Request): Promise<Response> {
+  const refused = gate(req);
+  if (refused) return refused;
+  const body = (await req.json().catch(() => undefined)) as { target?: unknown } | undefined;
+  if (typeof body?.target !== "string" || !body.target.trim()) return json({ error: 'the body is JSON with "target": a read link, a read id or an image URL' }, 400);
+  try {
+    return json(await takedown(body.target));
+  } catch (e) {
+    if (e instanceof NotefeedError) return json({ error: e.message, code: e.code }, statusOf(e));
+    log.error({ err: e }, "the takedown failed");
+    return json({ error: "the takedown failed; see the log" }, 500);
+  }
 }
 
 // What the move takes from: the rows (`db`), a folder, or an S3-compatible store with its settings. The source's secrets travel in the

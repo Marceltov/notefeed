@@ -24,4 +24,13 @@ export interface Schema {
     created_at: Time;
     updated_at: Time;
   };
+  tombstones: {
+    name: string;
+    read_id: string | null;
+    removed_at: Time;
+  };
+  blocked_images: {
+    hash: string;
+    added_at: Time;
+  };
 }

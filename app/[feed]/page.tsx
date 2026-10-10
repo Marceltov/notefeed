@@ -5,10 +5,11 @@ import { notFound } from "next/navigation";
 import { Compose } from "@/components/Compose";
 import { Header } from "@/components/Header";
 import { NoteList, TagFilter } from "@/components/NoteList";
+import { Removed } from "@/components/Removed";
 import { UnlockForm } from "@/components/UnlockForm";
 import { curlFor } from "@/app/_lib/curl";
 import { errorMessage, feedErrorMessage } from "@/app/_lib/messages";
-import { checkFeed, feedCookieName, feedPath, feedUnlocked, getFeed, IDENTITY_COOKIE, identitySender, imageUploadsOn, measured, publicUrl, readPath, reportTemplate, rssPath, settingsPath } from "@/backend";
+import { checkFeed, feedCookieName, feedPath, feedUnlocked, getFeed, IDENTITY_COOKIE, identitySender, imageUploadsOn, isRemovedFeed, measured, publicUrl, readPath, reportTemplate, rssPath, settingsPath } from "@/backend";
 
 export const dynamic = "force-dynamic";
 
@@ -32,6 +33,14 @@ export default async function FeedPage({ params, searchParams }: PageProps<"/[fe
   const { feed } = await params;
   const { posted, deleted, error, retry, tag: tagParam } = await searchParams;
   const tag = typeof tagParam === "string" ? tagParam.toLowerCase() : undefined;
+  if (!checkFeed(feed) && (await isRemovedFeed(feed))) {
+    return (
+      <>
+        <Header feed={feed} />
+        <Removed />
+      </>
+    );
+  }
   const jar = await cookies();
   const access = await feedUnlocked(feed, jar.get(feedCookieName(feed))?.value);
   // A locked feed shows nothing of itself: no notes, no read link.

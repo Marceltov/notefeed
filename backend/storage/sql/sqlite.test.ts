@@ -92,7 +92,8 @@ describe.skipIf(!supported)("sqlite", () => {
     await a.storage.close();
     const Database = (await import("better-sqlite3")).default;
     const raw = new Database(a.url.slice("file:".length));
-    raw.exec("alter table notes drop column blob_key; alter table notes drop column size; delete from kysely_migration where name = '002_image_store'");
+    // Back to the schema of 001: the later migrations' columns and tables go, and so do their records, in order.
+    raw.exec("alter table notes drop column blob_key; alter table notes drop column size; drop table tombstones; drop table blocked_images; delete from kysely_migration where name in ('002_image_store', '003_takedown')");
     raw.close();
     const again = createSqlStorage(() => connect("sqlite", a.url));
     open.push({ storage: again, root: a.root });

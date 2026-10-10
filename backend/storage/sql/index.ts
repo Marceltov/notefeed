@@ -1,7 +1,7 @@
 // The database backend: SQLite and PostgreSQL through Kysely, one implementation for both. The database is the only source of truth
 // (no in-memory index): uniqueness is a constraint, counts are queries, so several containers stay consistent.
 import { sql, type Kysely } from "kysely";
-import { NotFoundError, ReadIdTakenError } from "../../errors";
+import { NotFoundError, ReadIdTakenError, RemovedFeedError } from "../../errors";
 import { logger } from "../../log";
 import { noteFeedSize } from "../../metrics";
 import { newKey, type ImageStore } from "../images/types";
@@ -54,6 +54,12 @@ const isForeignKey = (e: unknown) => code(e) === "23503" || code(e) === "SQLITE_
 const isUnique = (e: unknown) => code(e) === "23505" || code(e) === "SQLITE_CONSTRAINT_UNIQUE" || code(e) === "SQLITE_CONSTRAINT_PRIMARYKEY";
 const changed = (n: bigint | number | undefined) => Number(n ?? 0) > 0;
 const bytes = (content: string | Uint8Array) => (typeof content === "string" ? Buffer.from(content) : Buffer.from(content));
+
+// A name or a read id of a removed feed may not come back (issue #155).
+async function refuseRemoved(db: Kysely<Schema>, feed: string | undefined, readId: string): Promise<void> {
+  if (feed !== undefined && (await db.selectFrom("tombstones").select("name").where("name", "=", feed).executeTakeFirst())) throw new RemovedFeedError();
+  if (await db.selectFrom("tombstones").select("name").where("read_id", "=", readId).executeTakeFirst()) throw new ReadIdTakenError();
+}
 
 // `kind` picks the dialect-specific migration; `connect` is called once, on first use.
 export function createSqlStorage(connect: () => Promise<Kysely<Schema>>, kind: Kind = "sqlite", images?: Images): SqlStorage {
@@ -247,6 +253,7 @@ export function createSqlStorage(connect: () => Promise<Kysely<Schema>>, kind: K
     },
 
     async createFeed(feed, readId, hash) {
+      await refuseRemoved(await open(), feed, readId);
       try {
         const r = await (await open())
           .insertInto("feeds")
@@ -272,6 +279,7 @@ export function createSqlStorage(connect: () => Promise<Kysely<Schema>>, kind: K
       // Nothing to drop: the rows are the truth, and a feed that is there is not "gone".
     },
     async setReadId(feed, readId) {
+      await refuseRemoved(await open(), undefined, readId);
       try {
         const r = await (await open()).updateTable("feeds").set({ read_id: readId }).where("name", "=", feed).executeTakeFirst();
         if (!changed(r.numUpdatedRows)) throw new NotFoundError("no such feed");
@@ -295,6 +303,33 @@ export function createSqlStorage(connect: () => Promise<Kysely<Schema>>, kind: K
     async feedCount() {
       const r = await (await open()).selectFrom("feeds").select(sql<number | string>`count(*)`.as("n")).executeTakeFirstOrThrow();
       return Number(r.n);
+    },
+
+    // The tombstone goes in first, in its own statement, so a crash after it leaves a feed that is found by neither identifier
+    // and removed by the next run; the rows go with the feed (cascade), the objects last, as in deleteFeed.
+    async takedownFeed(feed, readId) {
+      const db = await open();
+      const id = readId ?? (await db.selectFrom("feeds").select("read_id").where("name", "=", feed).executeTakeFirst())?.read_id ?? null;
+      await db.insertInto("tombstones").values({ name: feed, read_id: id, removed_at: Date.now() }).onConflict((oc) => oc.column("name").doNothing()).execute();
+      const keys = (await db.selectFrom("notes").select("blob_key").where("feed", "=", feed).where("blob_key", "is not", null).execute()).map((k) => k.blob_key!);
+      const r = await db.deleteFrom("feeds").where("name", "=", feed).executeTakeFirst();
+      if (!changed(r.numDeletedRows)) return { removed: false, keys: [] };
+      await drop(keys);
+      return { removed: true, keys };
+    },
+    async isRemoved({ feed, readId }) {
+      const db = await open();
+      if (feed !== undefined && (await db.selectFrom("tombstones").select("name").where("name", "=", feed).executeTakeFirst())) return true;
+      if (readId !== undefined && (await db.selectFrom("tombstones").select("name").where("read_id", "=", readId).executeTakeFirst())) return true;
+      return false;
+    },
+    async blockImages(hashes) {
+      if (hashes.length === 0) return;
+      const now = Date.now();
+      await (await open()).insertInto("blocked_images").values(hashes.map((hash) => ({ hash, added_at: now }))).onConflict((oc) => oc.column("hash").doNothing()).execute();
+    },
+    async isBlockedImage(hash) {
+      return !!(await (await open()).selectFrom("blocked_images").select("hash").where("hash", "=", hash).executeTakeFirst());
     },
 
     // The store is listed first and the rows are read after it. An object old enough to count was written before its row, so a row

@@ -59,4 +59,14 @@ export interface Storage {
   /** Every stored feed name, valid or not, for the start-up warning about names that collide with routes. */
   listFeedNames(): Promise<string[]>;
   feedCount(): Promise<number>;
+
+  // The operator's takedown (issue #155). A tombstone holds a feed's name and its read id for good: createFeed refuses the name
+  // (RemovedFeedError) and the id (ReadIdTakenError), setReadId the id. The blocklist holds the hashes (SHA-256, hex) of images that
+  // may not come back; the check is the caller's (backend/posting.ts). Both are part of the data, so a backup restores them.
+  /** Records the tombstone first (the feed stops being found by either identifier), then removes the feed with everything in it.
+   *  `removed` false: there was no such feed; the tombstone is recorded all the same. `keys`: the image store objects removed, for the operator's purge. */
+  takedownFeed(feed: string, readId: string | null): Promise<{ removed: boolean; keys: string[] }>;
+  isRemoved(q: { feed?: string; readId?: string }): Promise<boolean>;
+  blockImages(hashes: string[]): Promise<void>;
+  isBlockedImage(hash: string): Promise<boolean>;
 }

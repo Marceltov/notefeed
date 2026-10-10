@@ -3,7 +3,8 @@ import { notFound } from "next/navigation";
 import { cache } from "react";
 import { Header } from "@/components/Header";
 import { NoteList, TagFilter } from "@/components/NoteList";
-import { getReadFeed, instanceTitle, readPath, reportTemplate, rssPath } from "@/backend";
+import { Removed } from "@/components/Removed";
+import { getReadFeed, instanceTitle, isRemovedReadId, readPath, reportTemplate, rssPath } from "@/backend";
 
 export const dynamic = "force-dynamic";
 
@@ -25,6 +26,14 @@ export default async function ReadPage({ params, searchParams }: PageProps<"/r/[
   const tag = typeof tagParam === "string" ? tagParam.toLowerCase() : undefined;
   const data = tag ? await getReadFeed(readId, tag) : await readFeed(readId);
   if (!data) notFound();
+  if (data.notes.length === 0 && (await isRemovedReadId(readId))) {
+    return (
+      <>
+        <Header rss={rssPath(readId)} />
+        <Removed />
+      </>
+    );
+  }
   const { notes, title, description } = data;
 
   return (
