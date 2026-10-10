@@ -63,6 +63,9 @@ const migrations = (kind: Kind): Record<string, Migration> => ({
   },
 });
 
+/** Every migration's name, in order; the tests check the count the migrator recorded against it, so a new one changes no test. */
+export const MIGRATION_NAMES: readonly string[] = Object.keys(migrations("sqlite"));
+
 // A migration table that names one this code does not have: the database was made by a newer notefeed.
 export const NEWER = "the database was made by a newer notefeed than this one; upgrade notefeed, do not point an older one at it";
 

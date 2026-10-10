@@ -7,6 +7,7 @@ import { describeStorage } from "../contract";
 import { createS3ImageStore } from "../images/s3";
 import { newKey } from "../images/types";
 import { connect } from "./connect";
+import { MIGRATION_NAMES } from "./migrations";
 import { createSqlStorage, type Images, type SqlStorage } from ".";
 
 const base = process.env.NOTEFEED_TEST_POSTGRES_URL ?? "";
@@ -91,7 +92,7 @@ describe.skipIf(!base || !supported)("postgres", () => {
     await client.connect();
     const r = await client.query("select count(*)::int as n from nf_test.kysely_migration");
     await client.end();
-    expect(r.rows[0].n).toBe(2);
+    expect(r.rows[0].n).toBe(MIGRATION_NAMES.length);
   });
 
   test("an unreachable database says NOTEFEED_DATABASE_URL and not the address", async () => {
